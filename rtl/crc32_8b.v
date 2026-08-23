@@ -8,7 +8,8 @@ module crc32_8b (
     input  wire       init,     // 1 拍脉冲: 寄存器复位为全 1
     input  wire       en,       // 本拍字节参与计算
     input  wire [7:0] d,
-    output reg  [31:0] crc
+    output reg  [31:0] crc,
+    output wire [31:0] crc_nxt  // 组合: 本拍(含 d)的下一值, init 优先; 供当拍取终值用
 );
     function [31:0] step8;
         input [31:0] crc_in;
@@ -30,8 +31,9 @@ module crc32_8b (
         end
     endfunction
 
+    assign crc_nxt = init ? 32'hFFFFFFFF : (en ? step8(crc, d) : crc);
+
     always @(posedge clk) begin
-        if (init)      crc <= 32'hFFFFFFFF;
-        else if (en)   crc <= step8(crc, d);
+        crc <= crc_nxt;
     end
 endmodule
