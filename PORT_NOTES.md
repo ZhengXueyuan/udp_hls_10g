@@ -74,3 +74,34 @@
   etl2txt 输出 UTF-16; 用"网卡计数器差值"做对照时注意空闲窗也有背景广播。
 - **P0+P1 全部完成**: 10G-ready 64bit 字流 MAC RX/TX 在 1G RGMII 板上全链验证。
   下一步 (P2): 头解析器 (parser) → 分类 → UDP fast path。
+
+## 2026-08-23 P2 开工 (UDP fast path) — 设计决策先行
+
+GitHub 仓库已建: https://github.com/ZhengXueyuan/udp_hls_10g (public, master 已推)。
+
+**字节布局 (无 VLAN, 左对齐字, 帧首=tdata[63:56])**:
+- w0 = dst_mac[6] + src_mac[0..1]; w1 = src_mac[2..5] + ethertype + ver/ihl + dscp
+- w2 = total_len + id + flags/frag + ttl + proto; w3 = ip_csum + src_ip[4]
+- w4 = dst_ip[0..1] + src_port + dst_port + udp_len; w5 = udp_csum + 载荷[0..5]
+- 载荷从字节 42 起 = 5 整字 + **2 字节偏移** → 载荷流 = 源字流移位 2 字节
+  (输出字 i = {src[i-1][47:0], src[i][63:48]})。
+
+**RX 决策 (cut-through + 头吸收)**:
+- 匹配判定在 w4 拍 (dst_port 可见) 完成 → 吸收 w0..w4 (40B 头) 后从 w5 直出载荷,
+  不匹配帧整帧吞掉 (不占下游带宽, 只计数) — "非业务数据旁路快速处理"。
+- CRC 结果 (tcrs) 在 TLAST 拍才知道, cut-through 无法回撤 → 末拍 tuser[0]=crc_ok
+  标记, 下游 (echo) 自行丢弃; stat 计 crc 坏帧。UDP 校验和默认不验 (行情组播常置 0)。
+- P2 范围: 仅无 VLAN IPv4/UDP (行情标准); IHL≠5 / 非 UDP / VLAN → 旁路丢弃计数。
+
+**TX 决策 (帧级递交 + 整帧校验和, 流式发出)**:
+- 原因: UDP 校验和覆盖全载荷, 而字段位置在头 (w5) — 流式直通时头发出前载荷未到,
+  校验和不可知。行情源普遍置 0 合法, 但通用接口不应依赖。
+- app 接口 = 整帧递交 (载荷 AXIS + TLAST 定界), 组帧器: 收载荷 (过 checksum16 运行累加)
+  → TLAST 折叠锁存 csum → 发 5 字头 (IP csum 组合树同拍算完) → 流式读 FIFO 发载荷 →
+  TLAST 尾字带 2 字节前导偏移。延迟 = 帧长, 1G/100B ≈ 0.8µs, 订单场景可接受;
+  10G 时 80ns。载荷一字不复制 (FIFO 单口一遍写一遍读)。
+- IP 头固定: ver4/ihl5/dscp0/ttl64/proto17, id 递增, flags=0。UDP csum 可配置 0。
+
+**模块划分**: checksum16 (反码和, 补码累加+帧尾折叠) → udp_rx (parser+filter 合一,
+含 2 字节移位器) → udp_tx_frame (组帧器) → echo 集成 → 板测 (PC Python UDP 对端 +
+线速泛洪)。
