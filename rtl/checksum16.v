@@ -1,7 +1,8 @@
 `timescale 1ns/1ps
 // 16-bit 反码校验和运行累加器 (IP/UDP 通用): 32-bit 补码累加 + 帧尾折叠 + 取反。
 // 契约 (fin 必须晚于最后一个 den/aen 至少一拍):
-//   init  -> acc = init_val (伪头固定部分 src_ip+dst_ip+0x0011 的 32-bit 和)
+//   init  -> acc = init_val (伪头固定部分 src_ip+dst_ip+0x0011 的 32-bit 和);
+//            与 den 同拍共存时先装初值再累加本拍半字 (首拍即数据拍)
 //   den   -> acc += 本拍 4 半字 (左对齐, dkeep 高位有效; 奇字节尾半字低字节补 0)
 //   aen   -> acc += add_val (伪头长度字段 udp_len, TLAST 后一拍)
 //   fin   -> 折叠锁存; csum/csum_valid 在 fin 后一拍给出 ~fold16(acc)
@@ -43,7 +44,7 @@ module checksum16 (
             csum <= 16'h0;
             csum_valid <= 1'b0;
         end else begin
-            if (init)           acc <= init_val;
+            if (init)           acc <= init_val + (den ? wsum : 18'h0);
             else if (aen)       acc <= acc + add_val;
             else if (den)       acc <= acc + wsum;
             csum_valid <= fin;
