@@ -135,7 +135,8 @@ def generate(simdir):
     w('stim_dv.memh', dv, '%d')
     w('stim_er.memh', er, '%d')
     with open(os.path.join(simdir, 'cfg_switch.memh'), 'w') as fh:
-        fh.write('%X\n%X\n%X\n' % (cfg_switch_idx, 0xEF010203, 1))
+        # 板配置: cfg_dst_ip 保持 192.168.100.2, 仅打开组播放行
+        fh.write('%X\n%X\n%X\n' % (cfg_switch_idx, DST_IP_A, 1))
     with open(os.path.join(simdir, 'hardwin.memh'), 'w') as fh:
         fh.write('%X\n%X\n' % (hw0, hw1))
     return frames, hw0, hw1, cfg_switch_idx
@@ -213,8 +214,9 @@ def model(simdir, mode):
         return (d, keep, sop, last, crs, err)
 
     def cfg_at(k):
+        # 板配置: cfg_dst_ip 固定 (192.168.100.2), cfg_multi_en 后半程打开
         if k >= 26 + cfg_switch_idx:
-            return (0xEF010203, 1, CFG_PORTS, 0)
+            return (DST_IP_A, 1, CFG_PORTS, 0)
         return (DST_IP_A, 0, CFG_PORTS, 0)
 
     def tready_at(k, sc_eff):
@@ -392,9 +394,8 @@ def model(simdir, mode):
 
     def ip_match_cfg(w, w3r, cfg):
         dip, multi, ports, anyp = cfg
-        if multi:
-            return ((w3r >> 12) & 0xF) == 0xE
-        return ((w3r & 0xFFFF) << 16 | ((w[0] >> 48) & 0xFFFF)) == dip
+        return (((multi and ((w3r >> 12) & 0xF) == 0xE)) or
+                ((w3r & 0xFFFF) << 16 | ((w[0] >> 48) & 0xFFFF)) == dip)
 
     def port_match_cfg(w, cfg):
         dip, multi, ports, anyp = cfg

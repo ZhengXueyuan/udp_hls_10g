@@ -124,8 +124,9 @@ module udp_rx (
     reg  [19:0] ipc_s9;
     wire [19:0] ipc_sum10 = ipc_s9 + {4'b0, s_axis_tdata[63:48]};
     wire        ipcsum_ok = (fold16x(ipc_sum10) == 16'hFFFF);
-    wire        ip_match  = cfg_multi_en ? (w3_r[15:12] == 4'hE) :
-                            ({w3_r[15:0], s_axis_tdata[63:48]} == cfg_dst_ip);
+    // 组播过滤与单播精确匹配并存 (cfg_multi_en 只额外放行组播, 不关闭单播)
+    wire        ip_match  = ((cfg_multi_en && (w3_r[15:12] == 4'hE)) ||
+                             ({w3_r[15:0], s_axis_tdata[63:48]} == cfg_dst_ip));
     wire        port_match = cfg_port_any ||
                              (s_axis_tdata[31:16] == cfg_port0) ||
                              (s_axis_tdata[31:16] == cfg_port1) ||

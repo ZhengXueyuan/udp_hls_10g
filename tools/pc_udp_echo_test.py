@@ -54,7 +54,7 @@ def main():
     for seq in range(n):
         s.sendto(payload(seq), dst)
         sent += 1
-        # 边发边收 (echo 延迟 ~ 帧长×2)
+        # 边发边收: 收到本帧 echo 即继续 (echo 延迟 ~µs 级)
         while True:
             try:
                 data, addr = s.recvfrom(2048)
@@ -64,6 +64,8 @@ def main():
                 rseq = int.from_bytes(data[0:4], 'big')
                 if data == payload(rseq):
                     got[rseq] = True
+                    if rseq == seq:
+                        break
                 else:
                     bad.append((rseq, data[:16].hex()))
         time.sleep(interval)

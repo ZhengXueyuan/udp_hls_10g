@@ -31,11 +31,16 @@ module frame_fifo #(
     wire [AW:0] wptr_n  = wptr + (wr_ok ? 1'b1 : 1'b0);
     wire        bypass  = wr_ok && (rptr_n[AW-1:0] == wptr[AW-1:0]);
 
+    // mem 独立无复位块: 与指针/输出寄存器分开, 才能推断 BRAM
+    // (带异步复位的 always 里写 mem 会被综合成寄存器数组 -> 2048 深 LUTRAM -> 时序炸)
     always @(posedge clk) begin
+        if (wr_ok) mem[wptr[AW-1:0]] <= din;
+    end
+
+    always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             wptr <= 0; rptr <= 0; wsnap <= 0; dout_r <= 0;
         end else begin
-            if (wr_ok) mem[wptr[AW-1:0]] <= din;
             if (rollback) wptr <= wsnap;
             else wptr <= wptr_n;
             if (rd_ok) rptr <= rptr_n;

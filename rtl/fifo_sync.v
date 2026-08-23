@@ -24,14 +24,17 @@ module fifo_sync #(
     wire [AW:0] rptr_n = rptr + ((rd && !empty) ? 1'b1 : 1'b0);
     wire        bypass = (wr && !full) && (rptr_n[AW-1:0] == wptr[AW-1:0]);
 
+    // mem 独立无复位块: 与指针/输出寄存器分开, 深 FIFO 才能推断 BRAM
+    // (带异步复位的 always 里写 mem 会被综合成寄存器数组 -> LUTRAM -> 时序炸)
+    always @(posedge clk) begin
+        if (wr && !full) mem[wptr[AW-1:0]] <= din;
+    end
+
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             wptr <= 0; rptr <= 0; dout <= 0;
         end else begin
-            if (wr && !full) begin
-                mem[wptr[AW-1:0]] <= din;
-                wptr <= wptr + 1;
-            end
+            if (wr && !full) wptr <= wptr + 1;
             if (rd && !empty) rptr <= rptr + 1;
             dout <= bypass ? din : mem[rptr_n[AW-1:0]];
         end
