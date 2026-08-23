@@ -409,6 +409,7 @@ def model(simdir, mode):
         empty = wptr == rptr
         s_valid = not empty
         m_tready = tready_at(k, 0)
+        w = dout if s_valid else None
         if ev and m_tready:
             lines.append('%016X %02X %d %d %d' % (ed, ek, el, eu & 1, (eu >> 1) & 1))
         if st == 'HDR' and s_valid and (wcnt == 5) and matched:
@@ -416,7 +417,12 @@ def model(simdir, mode):
             # meta 组合: accept 取决于 s_ready (HDR 时恒 1)
             lines.append('META %012X %08X %04X %04X' %
                          ((mac_lo << 32) | mac_hi, src_ip_r, src_port_r, meta_len_r))
-        w = dout if s_valid else None
+        if ((st == 'HDR' and s_valid and wcnt == 5 and matched and
+             w is not None and w[3] and pop8(w[1]) - 2 == meta_len_r) or
+            (st == 'PAY' and (not ev or m_tready) and s_valid and
+             w is not None and w[3] and pop8(w[1]) != 0 and
+             pcount + pop8(w[1]) == meta_len_r)):
+            lines.append('FEND %d' % (1 if (not w[4]) or w[5] else 0))
         cfg = cfg_at(k)
         accept, meta = udp_cycle(w, m_tready, cfg)
         # ---- fifo 更新 (rd = accept, wr = mac push) ----

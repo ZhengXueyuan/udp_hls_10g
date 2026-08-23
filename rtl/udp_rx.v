@@ -31,6 +31,8 @@ module udp_rx (
     input  wire        m_axis_tready,
     output wire        m_axis_tlast,
     output wire [1:0]  m_axis_tuser,   // [0]=crc_ok [1]=err (TLAST 拍)
+    output wire        fend,           // 帧判定拍脉冲 (载荷 TLAST 拍 / 零长帧 w5 拍; 丢弃帧不脉冲)
+    output wire        ferr,           // fend 拍有效: 帧坏 (FCS 错或 rx_er)
     // 每帧元数据 (meta_valid 脉冲 = w5 接受拍, 即载荷首拍前)
     output wire        meta_valid,
     output wire [47:0] meta_src_mac,
@@ -143,6 +145,13 @@ module udp_rx (
     assign m_axis_tlast  = emit_l;
     assign m_axis_tuser  = emit_u;
     assign meta_valid    = (state == S_HDR) && accept && (wcnt == 6'd5) && matched;
+    assign fend          = ((state == S_HDR) && accept && (wcnt == 6'd5) && matched &&
+                             s_axis_tlast &&
+                             ({8'b0, pop8(s_axis_tkeep)} - 12'd2 == meta_len_r)) ||
+                           ((state == S_PAY) && (!emit_v || m_axis_tready) && accept &&
+                            s_axis_tlast && (pop8(s_axis_tkeep) != 4'd0) &&
+                            (pcount + {8'b0, pop8(s_axis_tkeep)} == meta_len_r));
+    assign ferr          = !s_axis_tcrs || s_axis_terr;
     assign meta_src_mac  = {mac_lo, mac_hi};
     assign meta_src_ip   = src_ip_r;
     assign meta_src_port = src_port_r;

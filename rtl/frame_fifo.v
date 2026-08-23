@@ -1,0 +1,51 @@
+`timescale 1ns/1ps
+// 带帧回卷的 FWFT 同步 FIFO (fifo_sync 同语义 + 写指针快照/回卷)。
+// snap (帧首拍): 快照本拍写后的 wptr; rollback (帧判定拍): wptr 回卷, 该帧已写字全部作废。
+// full 为保守判定 (忽略同拍 rd), 无组合环; 深度必须 >= 单帧最大字数 (1518B = 190 字)。
+module frame_fifo #(
+    parameter W  = 73,
+    parameter D  = 2048,
+    parameter AW = 11
+) (
+    input  wire        clk,
+    input  wire        rst_n,
+    input  wire        wr,
+    input  wire [W-1:0] din,
+    input  wire        snap,
+    input  wire        rollback,
+    input  wire        rd,
+    output wire [W-1:0] dout,
+    output wire        empty,
+    output wire        full
+);
+
+    reg [W-1:0] mem [0:D-1];
+    reg [AW:0]  wptr, rptr, wsnap;
+    reg [W-1:0] dout_r;
+
+    wire        full_n  = (wptr[AW-1:0] + 1'b1 == rptr[AW-1:0]) && (wptr[AW] != rptr[AW]);
+    wire        empty_n = (wptr == rptr);
+    wire        rd_ok   = rd && !empty_n;
+    wire        wr_ok   = wr && !full_n;
+    wire [AW:0] rptr_n  = rptr + (rd_ok ? 1'b1 : 1'b0);
+    wire [AW:0] wptr_n  = wptr + (wr_ok ? 1'b1 : 1'b0);
+    wire        bypass  = wr_ok && (rptr_n[AW-1:0] == wptr[AW-1:0]);
+
+    always @(posedge clk) begin
+        if (!rst_n) begin
+            wptr <= 0; rptr <= 0; wsnap <= 0; dout_r <= 0;
+        end else begin
+            if (wr_ok) mem[wptr[AW-1:0]] <= din;
+            if (rollback) wptr <= wsnap;
+            else wptr <= wptr_n;
+            if (rd_ok) rptr <= rptr_n;
+            dout_r <= bypass ? din : mem[rptr_n[AW-1:0]];
+            // 快照必须 = 本拍写入的槽 (wptr), 用 wptr_n 会把首字排除在回卷范围外
+            if (snap) wsnap <= wptr;
+        end
+    end
+
+    assign dout  = dout_r;
+    assign empty = empty_n;
+    assign full  = full_n;
+endmodule

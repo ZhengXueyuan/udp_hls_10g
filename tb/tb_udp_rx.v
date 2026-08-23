@@ -32,6 +32,7 @@ module tb_udp_rx;
     wire        m_tvalid, m_tlast;
     wire [1:0]  m_tuser;
     wire        meta_valid;
+    wire        fend, ferr;
     wire [47:0] meta_src_mac;
     wire [31:0] meta_src_ip;
     wire [15:0] meta_src_port, meta_len;
@@ -58,6 +59,7 @@ module tb_udp_rx;
         .s_axis_tcrs(s_tcrs), .s_axis_terr(s_terr),
         .m_axis_tdata(m_tdata), .m_axis_tkeep(m_tkeep), .m_axis_tvalid(m_tvalid),
         .m_axis_tready(tready), .m_axis_tlast(m_tlast), .m_axis_tuser(m_tuser),
+        .fend(fend), .ferr(ferr),
         .meta_valid(meta_valid), .meta_src_mac(meta_src_mac), .meta_src_ip(meta_src_ip),
         .meta_src_port(meta_src_port), .meta_len(meta_len),
         .cfg_dst_ip(cfg_dst_ip), .cfg_multi_en(cfg_multi_en),
@@ -134,6 +136,8 @@ module tb_udp_rx;
         if (rst_n && meta_valid)
             $fwrite(fd, "META %012h %08h %04h %04h\n",
                     meta_src_mac, meta_src_ip, meta_src_port, meta_len);
+        if (rst_n && fend)
+            $fwrite(fd, "FEND %d\n", ferr);
     end
 
     // ---- 调试: s_axis 接受拍与 udp_rx 内部状态 ----
