@@ -53,8 +53,9 @@ module udp_tx_frame (
     reg  [7:0]  tail_k;
 
     wire        accept = s_axis_tvalid && s_axis_tready;
-    wire [73:0] fdin   = {s_axis_tdata, s_axis_tkeep, s_axis_tlast};
-    wire [73:0] fdout;
+    // FIFO 字位段 (与读取位段一致): [72]=last [71:64]=keep [63:0]=data
+    wire [72:0] fdin   = {s_axis_tlast, s_axis_tkeep, s_axis_tdata};
+    wire [72:0] fdout;
     wire        fifo_full, fifo_empty;
     wire        wr = accept && (s_axis_tkeep != 8'h00);
     wire        pay_load = (state == S_PAY) && (m_axis_tready || !m_axis_tvalid);
@@ -99,7 +100,9 @@ module udp_tx_frame (
         end
     endfunction
 
-    wire [15:0] tl_c    = plen + {8'b0, pop8(s_axis_tkeep)} + 12'd28;
+    // 帧长 (tlast 拍): recv_first 时 plen 还是上一帧残留值, 必须显式归零
+    wire [11:0] plen_n  = (recv_first ? 12'd0 : plen) + {8'b0, pop8(s_axis_tkeep)};
+    wire [15:0] tl_c    = plen_n + 12'd28;
     wire [15:0] id_now  = recv_first ? id_r : id_cap;
     wire [31:0] csum_init_val = {4'b0, cfg_src_ip[31:16]} + {4'b0, cfg_src_ip[15:0]} +
                                 {4'b0, cfg_dst_ip[31:16]} + {4'b0, cfg_dst_ip[15:0]} +
@@ -117,7 +120,10 @@ module udp_tx_frame (
         .clk(clk), .rst_n(rst_n),
         .init(csum_init), .init_val(csum_init_val),
         .den(csum_den), .din(s_axis_tdata), .dkeep(s_axis_tkeep),
-        .aen(csum_aen), .add_val({2'b0, udp_len_r}),
+        // aen 一次补足: 伪头 udp_len + UDP 头 (udp_len+sport+dport; csum 字段本身为 0 不参与)
+        // RFC 768: udp_len 在伪头与 UDP 头中各计一次 -> 两倍
+        .aen(csum_aen), .add_val({2'b0, udp_len_r} + {2'b0, udp_len_r} +
+                                  {2'b0, cfg_src_port} + {2'b0, cfg_dst_port}),
         .fin(csum_fin),
         .csum(csum), .csum_valid(csum_valid)
     );
@@ -152,8 +158,8 @@ module udp_tx_frame (
                             plen <= plen + {8'b0, pop8(s_axis_tkeep)};
                         end
                         if (s_axis_tlast) begin
-                            plen_r <= plen + {8'b0, pop8(s_axis_tkeep)};
-                            udp_len_r <= plen + {8'b0, pop8(s_axis_tkeep)} + 12'd8;
+                            plen_r <= plen_n;
+                            udp_len_r <= plen_n + 12'd8;
                             total_len_r <= tl_c;
                             ip_csum_r <= ip_csum_calc(tl_c, id_now);
                             state <= S_WAIT; wait_cnt <= 2'd0;
@@ -174,11 +180,14 @@ module udp_tx_frame (
                         m_axis_tkeep <= 8'hFF;
                         m_axis_tlast <= 1'b0;
                         case (hcnt)
-                            3'd0: m_axis_tdata <= {cfg_dst_mac, cfg_src_mac[47:40]};
-                            3'd1: m_axis_tdata <= {cfg_src_mac[39:0], 16'h0800, 8'h45, 8'h00};
+                            // 字节布局铁律: w0 = dst[6]+src[0..1]; w1 = src[2..5]+ethertype+45+00;
+                            // w2 = total_len+id+0000+40+11; w3 = ip_csum+src_ip+dst[31:16];
+                            // w4 = dst[15:0]+sport+dport+udp_len — 每字拼接必须恰 64 位
+                            3'd0: m_axis_tdata <= {cfg_dst_mac, cfg_src_mac[47:32]};
+                            3'd1: m_axis_tdata <= {cfg_src_mac[31:0], 16'h0800, 8'h45, 8'h00};
                             3'd2: m_axis_tdata <= {total_len_r, id_cap, 16'h0000, 8'h40, 8'h11};
-                            3'd3: m_axis_tdata <= {ip_csum_r, cfg_src_ip, cfg_dst_ip[31:24]};
-                            default: m_axis_tdata <= {cfg_dst_ip[23:0], cfg_src_port,
+                            3'd3: m_axis_tdata <= {ip_csum_r, cfg_src_ip, cfg_dst_ip[31:16]};
+                            default: m_axis_tdata <= {cfg_dst_ip[15:0], cfg_src_port,
                                                       cfg_dst_port, udp_len_r};
                         endcase
                         if (hcnt == 3'd4) begin
@@ -194,14 +203,14 @@ module udp_tx_frame (
                         if (plen_r == 12'd0) begin
                         // 零长载荷: {csum, 0} 2 字节
                         m_axis_tvalid <= 1'b1;
-                        m_axis_tdata <= {udp_csum_r, 16'h0000};
+                        m_axis_tdata <= {udp_csum_r, 48'h0000};   // 拼接必须 64 位
                         m_axis_tkeep <= 8'hC0;
                         m_axis_tlast <= 1'b1;
                         state <= S_DONE;
                     end else if (fifo_empty) begin
                         // 欠载防御 (app 契约违规): 提前结束帧
                         m_axis_tvalid <= 1'b1;
-                        m_axis_tdata <= {hold16, 16'h0000};
+                        m_axis_tdata <= {hold16, 48'h0000};
                         m_axis_tkeep <= 8'hC0;
                         m_axis_tlast <= 1'b1;
                         state <= S_DONE;
@@ -210,8 +219,9 @@ module udp_tx_frame (
                         m_axis_tdata <= {hold16, fdout[63:16]};
                         hold16 <= fdout[15:0];
                         if (fdout[72]) begin
-                            // 末载荷字: n 有效字节
-                            if (pop8(fdout[71:64]) <= 4'd2) begin
+                            // 末载荷字: n 有效字节。输出字 = {hold16(2B), cur[63:16](6B)}
+                            // n<6: 本拍 2+n 字节收尾; n==6: 满字收尾; n>6: 满字+溢出尾字 (n-6 字节)
+                            if (pop8(fdout[71:64]) < 4'd6) begin
                                 m_axis_tkeep <= 8'hFF << (4'd8 -
                                                 (4'd2 + pop8(fdout[71:64])));
                                 m_axis_tlast <= 1'b1;
@@ -221,7 +231,6 @@ module udp_tx_frame (
                                 m_axis_tlast <= 1'b1;
                                 state <= S_DONE;
                             end else begin
-                                // 溢出尾字: 低 2 字节区剩余 n-6 字节
                                 m_axis_tkeep <= 8'hFF;
                                 m_axis_tlast <= 1'b0;
                                 tail_d <= ljust16x(fdout[15:0],

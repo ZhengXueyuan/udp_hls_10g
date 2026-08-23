@@ -55,9 +55,11 @@ module udp_rx (
     reg  [1:0]  state;
     reg  [5:0]  wcnt;
     reg         matched;
-    reg  [15:0] w1_lo, w2_r, w3_r;       // 头字段暂存
-    reg  [15:0] mac_lo;                  // src_mac[47:40]
-    reg  [39:0] mac_hi;                  // src_mac[39:0]
+    reg  [15:0] w1_lo, w3_r;             // 头字段暂存
+    reg  [63:0] w2_r;                    // 必须 64 位: IP 校验和树要读全部 4 半字
+                                         // (声明窄了会部分越界选择 -> X -> if(X) 静默绕过校验)
+    reg  [15:0] mac_lo;                  // src_mac[47:32] (线上字节 6..7)
+    reg  [31:0] mac_hi;                  // src_mac[31:0]  (线上字节 8..11)
     reg  [31:0] src_ip_r;
     reg  [15:0] src_port_r, meta_len_r;
     reg  [47:0] hold;
@@ -120,8 +122,8 @@ module udp_rx (
     reg  [19:0] ipc_s9;
     wire [19:0] ipc_sum10 = ipc_s9 + {4'b0, s_axis_tdata[63:48]};
     wire        ipcsum_ok = (fold16x(ipc_sum10) == 16'hFFFF);
-    wire        ip_match  = cfg_multi_en ? (s_axis_tdata[63:60] == 4'hE) :
-                            ({s_axis_tdata[63:48], w3_r[15:0]} == cfg_dst_ip);
+    wire        ip_match  = cfg_multi_en ? (w3_r[15:12] == 4'hE) :
+                            ({w3_r[15:0], s_axis_tdata[63:48]} == cfg_dst_ip);
     wire        port_match = cfg_port_any ||
                              (s_axis_tdata[31:16] == cfg_port0) ||
                              (s_axis_tdata[31:16] == cfg_port1) ||
@@ -129,7 +131,7 @@ module udp_rx (
                              (s_axis_tdata[31:16] == cfg_port3);
     wire        udp_len_ok = (s_axis_tdata[15:0] >= 16'd8);
 
-    wire        hdr_ok1  = (wcnt == 6'd1) && (s_axis_tdata[47:32] == 16'h0800) &&
+    wire        hdr_ok1  = (wcnt == 6'd1) && (s_axis_tdata[31:16] == 16'h0800) &&
                            (s_axis_tdata[15:8] == 8'h45);
     wire        hdr_ok2  = (wcnt == 6'd2) && (s_axis_tdata[7:0] == 8'h11);
 
@@ -162,21 +164,21 @@ module udp_rx (
                 S_HDR: begin
                     if (accept) begin
                         if (s_axis_tuser) begin
-                            wcnt <= 6'd0;        // SOP 防御: 上一帧被截断
-                            emit_v <= 1'b0;      // 半帧无 TLAST, 下游按契约丢弃
+                            emit_v <= 1'b0;      // 截断防御: 半帧无 TLAST, 下游按契约丢弃;
+                                                 // 本字即新帧 w0, case 按 wcnt=0 处理
                         end
-                        if (s_axis_tlast) begin
-                            // 头没走完帧就结束: 畸形
+                        if (s_axis_tlast && (wcnt != 6'd5)) begin
+                            // 头没走完帧就结束: 畸形 (w5 的 TLAST 是合法短帧, 走 case 特例)
                             state <= S_HDR; wcnt <= 6'd0; matched <= 1'b0;
                             stat_drop_nonmatch <= stat_drop_nonmatch + 1;
                         end else begin
-                            case (wcnt)
+                            case (s_axis_tuser ? 6'd0 : wcnt)
                                 6'd0: begin
                                     if (s_axis_tkeep != 8'hFF) begin
                                         state <= S_DROP; matched <= 1'b0;
                                         stat_drop_nonmatch <= stat_drop_nonmatch + 1;
                                     end else begin
-                                        mac_lo <= s_axis_tdata[15:8];   // src_mac[47:40]
+                                        mac_lo <= s_axis_tdata[15:0];   // src_mac[47:32]
                                         wcnt <= 6'd1;
                                     end
                                 end
@@ -185,7 +187,7 @@ module udp_rx (
                                         state <= S_DROP; matched <= 1'b0;
                                         stat_drop_nonmatch <= stat_drop_nonmatch + 1;
                                     end else begin
-                                        mac_hi <= s_axis_tdata[63:24];
+                                        mac_hi <= s_axis_tdata[63:32];
                                         w1_lo <= s_axis_tdata[15:0];
                                         wcnt <= 6'd2;
                                     end
@@ -265,9 +267,18 @@ module udp_rx (
                 S_PAY: begin
                     if ((!emit_v || m_axis_tready) && accept) begin
                         if (s_axis_tuser) begin
-                            // 截断防御: 丢弃当前帧残余, 从头解析
-                            state <= S_HDR; wcnt <= 6'd0; matched <= 1'b0;
+                            // 截断防御: 丢弃当前帧残余 (半帧无 TLAST), 本字即新帧 w0
                             emit_v <= 1'b0;
+                            if (s_axis_tlast) begin
+                                state <= S_HDR; wcnt <= 6'd0; matched <= 1'b0;
+                                stat_drop_nonmatch <= stat_drop_nonmatch + 1;
+                            end else if (s_axis_tkeep != 8'hFF) begin
+                                state <= S_DROP; matched <= 1'b0;
+                                stat_drop_nonmatch <= stat_drop_nonmatch + 1;
+                            end else begin
+                                mac_lo <= s_axis_tdata[15:8];
+                                state <= S_HDR; wcnt <= 6'd1; matched <= 1'b0;
+                            end
                         end else if (s_axis_tlast) begin
                             if (pop8(s_axis_tkeep) == 4'd0) begin
                                 // 空尾字: 畸形
