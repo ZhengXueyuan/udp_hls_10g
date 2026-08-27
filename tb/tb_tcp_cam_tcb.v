@@ -7,6 +7,11 @@ module tb_tcp_cam_tcb;
     reg [3:0]  cfg_addr;
     reg [31:0] cfg_sip, cfg_dip;
     reg [15:0] cfg_sport, cfg_dport;
+    reg [47:0] cfg_dmac;
+    reg [3:0]  rd_id;
+    wire [47:0] rd_dmac;
+    wire [31:0] rd_dip;
+    wire [15:0] rd_sport, rd_dport;
     reg [31:0] q_sip, q_dip;
     reg [15:0] q_sport, q_dport;
     wire [3:0] q_id;
@@ -32,6 +37,9 @@ module tb_tcp_cam_tcb;
         .cfg_wr(cfg_wr), .cfg_addr(cfg_addr),
         .cfg_sip(cfg_sip), .cfg_dip(cfg_dip),
         .cfg_sport(cfg_sport), .cfg_dport(cfg_dport),
+        .cfg_dmac(cfg_dmac),
+        .rd_id(rd_id), .rd_dmac(rd_dmac), .rd_dip(rd_dip),
+        .rd_sport(rd_sport), .rd_dport(rd_dport),
         .q_sip(q_sip), .q_dip(q_dip), .q_sport(q_sport), .q_dport(q_dport),
         .q_id(q_id), .q_hit(q_hit)
     );
@@ -63,7 +71,7 @@ module tb_tcp_cam_tcb;
     initial begin
         clk = 0; rst_n = 0; errs = 0; step = 0;
         cfg_wr = 0; cfg_addr = 0; cfg_sip = 0; cfg_dip = 0;
-        cfg_sport = 0; cfg_dport = 0;
+        cfg_sport = 0; cfg_dport = 0; cfg_dmac = 0; rd_id = 0;
         q_sip = 0; q_dip = 0; q_sport = 0; q_dport = 0;
         ra_id = 0; rb_id = 0;
         upd_wr = 0; upd_id = 0; upd_sel = 0; upd_val = 0;
@@ -74,14 +82,17 @@ module tb_tcp_cam_tcb;
         cfg_wr = 1; cfg_addr = 0;
         cfg_sip = 32'h0A000001; cfg_dip = 32'hC0A86402;
         cfg_sport = 16'h3039; cfg_dport = 16'h1F90;
+        cfg_dmac = 48'h112233445566;
         @(posedge clk); step = step + 1;
         cfg_addr = 1;
         cfg_sip = 32'h0A000002; cfg_dip = 32'hC0A86402;
         cfg_sport = 16'h4000; cfg_dport = 16'h1F91;
+        cfg_dmac = 48'hAABBCCDDEE01;
         @(posedge clk); step = step + 1;
         cfg_addr = 15;
         cfg_sip = 32'h0A00000F; cfg_dip = 32'hC0A86402;
         cfg_sport = 16'h5000; cfg_dport = 16'h1F92;
+        cfg_dmac = 48'h665544332211;
         @(posedge clk); step = step + 1;
         cfg_wr = 0;
         @(posedge clk); step = step + 1;
@@ -101,6 +112,20 @@ module tb_tcp_cam_tcb;
         q_sip = 32'hDEADBEEF;
         #1;
         chk("cam miss2", !q_hit);
+        @(posedge clk); step = step + 1;
+
+        // ---- CAM 读回口检查 ----
+        rd_id = 4'd0;
+        #1;
+        chk("rd id0 dmac",  rd_dmac  == 48'h112233445566);
+        chk("rd id0 dip",   rd_dip   == 32'hC0A86402);
+        chk("rd id0 sport", rd_sport == 16'h3039);
+        chk("rd id0 dport", rd_dport == 16'h1F90);
+        rd_id = 4'd15;
+        #1;
+        chk("rd id15 dmac",  rd_dmac  == 48'h665544332211);
+        chk("rd id15 sport", rd_sport == 16'h5000);
+        chk("rd id15 dport", rd_dport == 16'h1F92);
         @(posedge clk); step = step + 1;
 
         // ---- TCB 更新 + 双读 ----

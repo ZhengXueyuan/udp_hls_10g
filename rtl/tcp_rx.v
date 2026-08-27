@@ -65,6 +65,7 @@ module tcp_rx (
     input  wire [31:0] cfg_dip,
     input  wire [15:0] cfg_sport,
     input  wire [15:0] cfg_dport,
+    input  wire [47:0] cfg_dmac,
     // 统计
     output reg  [31:0] stat_pass,          // 接受且 FCS 好 (含纯 ACK)
     output reg  [31:0] stat_drop_nonmatch, // 头坏/非 TCP/CAM 未命中/状态/标志/带选项/窗口外/截断
@@ -219,10 +220,11 @@ module tcp_rx (
         .clk(clk), .rst_n(rst_n),
         .cfg_wr(cfg_wr), .cfg_addr(cfg_addr),
         .cfg_sip(cfg_sip), .cfg_dip(cfg_dip),
-        .cfg_sport(cfg_sport), .cfg_dport(cfg_dport),
+        .cfg_sport(cfg_sport), .cfg_dport(cfg_dport), .cfg_dmac(cfg_dmac),
         .q_sip(src_ip_r), .q_dip({w3_r[15:0], s_axis_tdata[63:48]}),
         .q_sport(s_axis_tdata[47:32]), .q_dport(s_axis_tdata[31:16]),
-        .q_id(cam_id), .q_hit(cam_hit)
+        .q_id(cam_id), .q_hit(cam_hit),
+        .rd_id(4'd0), .rd_dmac(), .rd_dip(), .rd_sport(), .rd_dport()
     );
 
     wire [15:0] wnd_f = fend_w6 ? s_axis_tdata[63:48] : wnd_l;

@@ -25,6 +25,7 @@ module tb_tcp_rx;
     reg [3:0]  cfg_addr;
     reg [31:0] cfg_sip, cfg_dip;
     reg [15:0] cfg_sport, cfg_dport;
+    reg [47:0] cfg_dmac;
     reg        cfg_upd_wr;
     reg [3:0]  cfg_upd_id;
     reg [2:0]  cfg_upd_sel;
@@ -94,6 +95,7 @@ module tb_tcp_rx;
         .cfg_wr(cfg_wr), .cfg_addr(cfg_addr),
         .cfg_sip(cfg_sip), .cfg_dip(cfg_dip),
         .cfg_sport(cfg_sport), .cfg_dport(cfg_dport),
+        .cfg_dmac(cfg_dmac),
         .stat_pass(stat_pass), .stat_drop_nonmatch(stat_nonmatch),
         .stat_drop_ipcsum(stat_ipcsum), .stat_drop_crc(stat_crc),
         .stat_drop_seq(stat_seq), .stat_ack(stat_ack), .stat_bytes(stat_bytes)
@@ -118,6 +120,7 @@ module tb_tcp_rx;
             tready <= 1; sc <= 0; done <= 0; cphase <= 0;
             cfg_wr <= 0; cfg_addr <= 0; cfg_sip <= 0; cfg_dip <= 0;
             cfg_sport <= 0; cfg_dport <= 0;
+            cfg_dmac <= 48'h112233445566;
             cfg_upd_wr <= 0; cfg_upd_id <= 0; cfg_upd_sel <= 0; cfg_upd_val <= 0;
         end else begin
             if (cphase < 40) begin
