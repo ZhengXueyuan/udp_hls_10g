@@ -2,8 +2,8 @@
 // 64bit 左对齐 AXI-Stream 字流 -> 1G GMII TX 字节流 (10G-ready MAC 边界, TX 侧)。
 //
 // 输出帧 = 前导 55x7+D5 | dst..payload (含 pad) | FCS 4B。FCS = (crc^0xFFFFFFFF) 小端
-// (线上 LSB-first 铁律); payload < 46 字节时补 0 到 46 (帧 >= 64B); IFG >= 12 字节;
-// 帧内源流断供 (FIFO 空) -> 立即中止 (runt 由接收方丢弃, stat_abort++)。
+// (线上 LSB-first 铁律); 内容 (dst_mac 起) < 60 字节时补 0 到 60 (帧 >= 64B 含 FCS);
+// IFG >= 12 字节; 帧内源流断供 (FIFO 空) -> 立即中止 (runt 由接收方丢弃, stat_abort++)。
 // 源约定: 每词 tkeep != 0 (tkeep 高位有效, 与 mac_rx_64 输出一致)。
 // gmii_txd/tx_en 为组合输出 (状态 mux), 保证 CRC 输入与本拍发送字节严格同拍。
 module mac_tx_64 (
@@ -23,7 +23,10 @@ module mac_tx_64 (
 
     localparam [2:0] S_IDLE = 3'd0, S_PRE = 3'd1, S_DATA = 3'd2,
                      S_PAD = 3'd3, S_FCS = 3'd4, S_IFG = 3'd5;
-    localparam [15:0] MIN_PLEN = 16'd46;
+    // plen 计全部内容字节 (含 14B 以太头); 802.3 最小帧 60B 内容 (64B 含 FCS)
+    // — 曾用 46 (payload 基准) 判 pad, content∈[46,60) 的帧 (如 TCP 纯 ACK 54B)
+    // 不补 pad 上线成 runt (#48 全链实测抓到)
+    localparam [15:0] MIN_CLEN = 16'd60;
 
     reg [2:0] state;
 
@@ -128,12 +131,12 @@ module mac_tx_64 (
                     if (cw_idx == {1'b0, cw_len} - 3'd1) begin     // 本字末字节
                         if (cw_last) begin
                             // 本拍 crc_nxt 已含末字节
-                            if (plen + 1 >= MIN_PLEN) begin
+                            if (plen + 1 >= MIN_CLEN) begin
                                 state <= S_FCS; fcs_cnt <= 0;
                                 fcs_shr <= crc_nxt ^ 32'hFFFFFFFF;
                             end else begin
                                 state <= S_PAD;
-                                pad_cnt <= MIN_PLEN - plen - 1;
+                                pad_cnt <= MIN_CLEN - plen - 1;
                             end
                         end else if (!fempty) begin
                             frd <= 1'b1;

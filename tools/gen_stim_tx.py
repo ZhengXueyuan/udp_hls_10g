@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 """mac_tx_64 xsim 刺激生成 + 周期精确期望模型。
 
-模式 main:  60B 帧 (无 pad) + 42B 帧 (pad 4) + 8B 帧 (pad 38), 背靠背。
+模式 main:  60B 帧 (无 pad) + 42B 帧 (pad 18) + 8B 帧 (pad 52), 背靠背。
+   (pad 基准 = 60B 内容含 14B 以太头; 曾按 46 判, content∈[46,60) 出 runt)
 模式 abort: 仅 1 词 + 长空窗 10000 拍 -> 欠载中止 (runt 无 FCS); 残余 2 词开新帧。
    (欠载点严格确定: FIFO 只装过 1 词, 无容量博弈)
 期望模型与 RTL 1:1 (16 词 FIFO / TB 握手 / TX 状态机 / 欠载中止)。
@@ -12,7 +13,7 @@ import os
 import sys
 
 PRE = bytes([0x55] * 7 + [0xD5])
-MIN_PLEN = 46
+MIN_CLEN = 60
 FIFO_D = 16
 
 
@@ -146,12 +147,12 @@ def model(script, maxc=30000):
             clen = bin(cw[1]).count('1')
             if idx == clen - 1:
                 if cw[2]:
-                    if plen >= MIN_PLEN:
+                    if plen >= MIN_CLEN:
                         state, fcs_cnt = 'FCS', 0
                         fcs_shr = crc_step(crc, txd) ^ 0xFFFFFFFF
                     else:
                         state = 'PAD'
-                        pad = MIN_PLEN - plen
+                        pad = MIN_CLEN - plen
                 elif fifo:
                     cw = fifo.pop(0)
                     idx = 0

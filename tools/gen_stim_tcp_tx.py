@@ -159,7 +159,8 @@ def parse_gmii(fn):
 
 
 def check_frame(fb, fr, idx, seq):
-    """验证一帧: 返回错误字符串或 None。帧 = 前导8 + 内容 + FCS4 (无 pad: 54+plen >= 54 > 46)。"""
+    """验证一帧: 返回错误字符串或 None。帧 = 前导8 + 内容 + FCS4;
+    内容 < 60B 时 mac_tx_64 补 0 pad 到 60 (54+plen<60 的帧: 纯 ACK 必补 6B)。"""
     errs = []
     is_data = fr[0] == 'data'
     cid = fr[1]
@@ -178,8 +179,8 @@ def check_frame(fb, fr, idx, seq):
     if struct.pack('<I', zlib.crc32(body) & 0xFFFFFFFF) != fcs:
         errs.append('fcs %s vs %s' % (fcs.hex(),
                                       struct.pack('<I', zlib.crc32(body) & 0xFFFFFFFF).hex()))
-    if len(body) != 54 + n:
-        errs.append('len %d != %d' % (len(body), 54 + n))
+    if len(body) != max(60, 54 + n):
+        errs.append('len %d != %d' % (len(body), max(60, 54 + n)))
     if len(body) < 54:
         return ';'.join(errs + ['short']) if errs else 'short'
     if body[:6] != c['dmac']:
@@ -230,6 +231,8 @@ def check_frame(fb, fr, idx, seq):
         errs.append('tcp_csum %04x != %04x' % (tc, ref))
     if body[54:54 + n] != pl:
         errs.append('payload')
+    if any(body[54 + n:]):
+        errs.append('pad nonzero')
     return ';'.join(errs) if errs else None
 
 

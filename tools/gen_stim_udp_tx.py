@@ -124,7 +124,7 @@ def check_frame(fb, pl, idx, csum_en):
         errs.append('fcs %s vs %s' % (fcs.hex(),
                                       struct.pack('<I', zlib.crc32(fb[8:-4]) & 0xFFFFFFFF).hex()))
     n = len(pl)
-    elen = max(46, 42 + n)
+    elen = max(60, 42 + n)   # pad 基准 = 60B 内容 (含 14B 以太头)
     if len(body) != elen:
         errs.append('len %d != %d' % (len(body), elen))
     if body[:6] != DST_MAC:

@@ -73,7 +73,7 @@ def check_frame(fb, n, idx):
     fcs = fb[-4:]
     if struct.pack('<I', zlib.crc32(fb[8:-4]) & 0xFFFFFFFF) != fcs:
         errs.append('fcs')
-    elen = max(46, 42 + n)
+    elen = max(60, 42 + n)   # pad 基准 = 60B 内容 (含 14B 以太头)
     if len(body) != elen:
         errs.append('len %d != %d' % (len(body), elen))
     if body[:6] != SRC_MAC:
