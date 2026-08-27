@@ -1,14 +1,18 @@
 `timescale 1ns/1ps
 // #48 TCP fast path 全链 TB: GMII -> mac_rx_64 -> tcp_rx -> (ack_req) -> tcp_tx_frame -> mac_tx_64 -> GMII。
 // tcp_rx 载荷 m_axis 悬空 (tready=1, 不环回); app 数据由 TB 脚本直接驱动 tcp_tx_frame (presenting)。
-// TCB 更新仲裁 (组合, 本 TB 顶层): tx > rx > 慢路径配置; rx.upd_gnt = sel_rx。
+// tcp_synp 接 tcp_rx SYN sideband: conn0 由三次握手建立 (CAM0/TCB0 不预写), SYN+ACK 经
+// ACK 请求二选一进 tcp_tx_frame (ack_syn=1)。CAM 配置口二选一: TB 配置阶段优先, 其次 synp。
+// TCB 更新仲裁 (组合, 本 TB 顶层): tx > rx > cfg 级 (TB 配置 | synp.upd); rx.upd_gnt = sel_rx。
 // CAM 外置: tcp_rx.cam_q_* -> tcp_cam.q_*; tcp_cam.rd_* -> tcp_tx_frame.cam_rd_*。
-// 配置阶段 (前 40 拍, cphase): CAM 2 条 (拍 2..3) + TCB 2 条 x 6 字段 (拍 6..17, cfg_tcb.memh)。
+// 配置阶段 (前 40 拍, cphase): CAM 条目 1 (拍 2) + TCB 条目 1 x 6 字段 (拍 6..11, cfg_tcb.memh)。
 // RX 激励: stim_data/dv/er.memh (时钟化非阻塞, 同 tb_tcp_rx); 字节 j 在拍 41+j 上线 (k 计数)。
 // TX app 脚本: txp_ty (0=锚点等待 k>=stim_n, 1=载荷词) + txp_data/keep/last/gap/id。
 // 捕获 (resp_tcp_chain.memh): 每拍 "%02h %d" (gmii_txd, tx_en) + 事件行
-//   FEND k ferr / ACK k id val / TUPD k sel id val (实际落 TCB 的写) / COLL k sel (tx 与 rx 同拍争用)。
-// 末尾 STATS7 (tcp_rx 7 统计) + STATS_TX (frames bytes ack ackdrop) + TCBF (conn0/1 全 6 字段)。
+//   FEND k ferr / ACK k id val (含 synp 的 SYN+ACK 请求) / SYNP k拍锁存的对端握手字段 /
+//   TUPD k sel id val (实际落 TCB 的写, 含 synp cfg 级) / COLL k sel (tx 与 rx 同拍争用)。
+// 末尾 STATS7 (tcp_rx 7 统计) + STATS_TX (frames bytes ack ackdrop) + CAMF (CAM 条目 0)
+// + TCBF (conn0/1 全 6 字段)。
 module tb_tcp_chain;
 
     reg        clk, rst_n;
@@ -95,14 +99,53 @@ module tb_tcp_chain;
     wire [7:0]  gmii_txd;
     wire        gmii_tx_en;
     wire [31:0] tx_stat_frames, tx_stat_bytes, tx_stat_ack, tx_stat_ack_drop;
+    // tcp_rx SYN sideband -> tcp_synp
+    wire        syn_v;
+    wire [47:0] syn_smac;
+    wire [31:0] syn_sip;
+    wire [15:0] syn_sport, syn_dport;
+    wire [31:0] syn_seq;
+    wire [15:0] syn_wnd;
+    // tcp_synp 输出
+    wire        synp_cfg_wr;
+    wire [3:0]  synp_cfg_addr;
+    wire [31:0] synp_cfg_sip, synp_cfg_dip;
+    wire [15:0] synp_cfg_sport, synp_cfg_dport;
+    wire [47:0] synp_cfg_dmac;
+    wire        synp_upd_wr;
+    wire [3:0]  synp_upd_id;
+    wire [2:0]  synp_upd_sel;
+    wire [31:0] synp_upd_val;
+    wire        sack_req;
+    wire [3:0]  sack_id;
+    wire [31:0] sack_ackval;
 
-    // ---- TCB 更新仲裁 (tx > rx > cfg) ----
+    // ---- CAM 配置口二选一: TB 配置阶段优先, 其次 synp (握手静默期无冲突) ----
+    wire        cam_cfg_wr    = cfg_wr | synp_cfg_wr;
+    wire [3:0]  cam_cfg_addr  = cfg_wr ? cfg_addr  : synp_cfg_addr;
+    wire [31:0] cam_cfg_sip   = cfg_wr ? cfg_sip   : synp_cfg_sip;
+    wire [31:0] cam_cfg_dip   = cfg_wr ? cfg_dip   : synp_cfg_dip;
+    wire [15:0] cam_cfg_sport = cfg_wr ? cfg_sport : synp_cfg_sport;
+    wire [15:0] cam_cfg_dport = cfg_wr ? cfg_dport : synp_cfg_dport;
+    wire [47:0] cam_cfg_dmac  = cfg_wr ? cfg_dmac  : synp_cfg_dmac;
+
+    // ---- TX 的 ACK 请求二选一: synp (SYN+ACK) 优先 ----
+    wire        tx_ack_req = sack_req | ack_req;
+    wire [3:0]  tx_ack_id  = sack_req ? sack_id     : ack_id;
+    wire [31:0] tx_ack_val = sack_req ? sack_ackval : ack_val;
+    wire        tx_ack_syn = sack_req;
+
+    // ---- TCB 更新仲裁 (tx > rx > cfg; cfg 级 = TB 配置 | synp) ----
+    wire        cfglvl_wr  = cfg_upd_wr | synp_upd_wr;
+    wire [2:0]  cfglvl_sel = cfg_upd_wr ? cfg_upd_sel : synp_upd_sel;
+    wire [3:0]  cfglvl_id  = cfg_upd_wr ? cfg_upd_id  : synp_upd_id;
+    wire [31:0] cfglvl_val = cfg_upd_wr ? cfg_upd_val : synp_upd_val;
     wire        sel_tx = tx_upd_wr;
     wire        sel_rx = !sel_tx && rx_upd_wr;
-    wire        tcb_wr  = sel_tx || sel_rx || cfg_upd_wr;
-    wire [2:0]  tcb_sel = sel_tx ? tx_upd_sel : (sel_rx ? rx_upd_sel : cfg_upd_sel);
-    wire [3:0]  tcb_id  = sel_tx ? tx_upd_id  : (sel_rx ? rx_upd_id  : cfg_upd_id);
-    wire [31:0] tcb_val = sel_tx ? tx_upd_val : (sel_rx ? rx_upd_val : cfg_upd_val);
+    wire        tcb_wr  = sel_tx || sel_rx || cfglvl_wr;
+    wire [2:0]  tcb_sel = sel_tx ? tx_upd_sel : (sel_rx ? rx_upd_sel : cfglvl_sel);
+    wire [3:0]  tcb_id  = sel_tx ? tx_upd_id  : (sel_rx ? rx_upd_id  : cfglvl_id);
+    wire [31:0] tcb_val = sel_tx ? tx_upd_val : (sel_rx ? rx_upd_val : cfglvl_val);
     assign rx_upd_gnt = sel_rx;
 
     integer     fd;
@@ -132,6 +175,9 @@ module tb_tcp_chain;
         .upd_wr(rx_upd_wr), .upd_id(rx_upd_id), .upd_sel(rx_upd_sel), .upd_val(rx_upd_val),
         .upd_gnt(rx_upd_gnt),
         .ack_req(ack_req), .ack_id(ack_id), .ack_val(ack_val),
+        .syn_v(syn_v), .syn_smac(syn_smac), .syn_sip(syn_sip),
+        .syn_sport(syn_sport), .syn_dport(syn_dport),
+        .syn_seq(syn_seq), .syn_wnd(syn_wnd),
         .cam_q_sip(cam_q_sip), .cam_q_dip(cam_q_dip),
         .cam_q_sport(cam_q_sport), .cam_q_dport(cam_q_dport),
         .cam_q_hit(cam_q_hit), .cam_q_id(cam_q_id),
@@ -142,9 +188,9 @@ module tb_tcp_chain;
 
     tcp_cam u_cam (
         .clk(clk), .rst_n(rst_n),
-        .cfg_wr(cfg_wr), .cfg_addr(cfg_addr),
-        .cfg_sip(cfg_sip), .cfg_dip(cfg_dip),
-        .cfg_sport(cfg_sport), .cfg_dport(cfg_dport), .cfg_dmac(cfg_dmac),
+        .cfg_wr(cam_cfg_wr), .cfg_addr(cam_cfg_addr),
+        .cfg_sip(cam_cfg_sip), .cfg_dip(cam_cfg_dip),
+        .cfg_sport(cam_cfg_sport), .cfg_dport(cam_cfg_dport), .cfg_dmac(cam_cfg_dmac),
         .q_sip(cam_q_sip), .q_dip(cam_q_dip),
         .q_sport(cam_q_sport), .q_dport(cam_q_dport),
         .q_id(cam_q_id), .q_hit(cam_q_hit),
@@ -163,12 +209,28 @@ module tb_tcp_chain;
         .upd_wr(tcb_wr), .upd_id(tcb_id), .upd_sel(tcb_sel), .upd_val(tcb_val)
     );
 
+    tcp_synp u_synp (
+        .clk(clk), .rst_n(rst_n),
+        .syn_v(syn_v), .syn_smac(syn_smac), .syn_sip(syn_sip),
+        .syn_sport(syn_sport), .syn_dport(syn_dport),
+        .syn_seq(syn_seq), .syn_wnd(syn_wnd),
+        .cfg_wr(synp_cfg_wr), .cfg_addr(synp_cfg_addr),
+        .cfg_sip(synp_cfg_sip), .cfg_dip(synp_cfg_dip),
+        .cfg_sport(synp_cfg_sport), .cfg_dport(synp_cfg_dport),
+        .cfg_dmac(synp_cfg_dmac),
+        .upd_wr(synp_upd_wr), .upd_id(synp_upd_id),
+        .upd_sel(synp_upd_sel), .upd_val(synp_upd_val),
+        .sack_req(sack_req), .sack_id(sack_id), .sack_ackval(sack_ackval),
+        .cfg_my_ip(32'hC0A86402), .cfg_listen(16'h1F90), .cfg_iss(32'd5999)
+    );
+
     tcp_tx_frame u_tx (
         .clk(clk), .rst_n(rst_n),
         .s_axis_tdata(tdata), .s_axis_tkeep(tkeep),
         .s_axis_tvalid(tvalid), .s_axis_tready(tready), .s_axis_tlast(tlast),
         .s_axis_tid(tid),
-        .ack_req(ack_req), .ack_id(ack_id), .ack_val(ack_val), .ack_syn(1'b0),
+        .ack_req(tx_ack_req), .ack_id(tx_ack_id), .ack_val(tx_ack_val),
+        .ack_syn(tx_ack_syn),
         .rb_id(rb_id), .rb_snd_nxt(rb_snd_nxt), .rb_rcv_nxt(rb_rcv_nxt),
         .rb_rcv_wnd(rb_rcv_wnd),
         .upd_wr(tx_upd_wr), .upd_id(tx_upd_id), .upd_sel(tx_upd_sel), .upd_val(tx_upd_val),
@@ -205,25 +267,20 @@ module tb_tcp_chain;
             k <= k + 1;
             if (cphase < 40) begin
                 rx_dv <= 0; rx_er <= 0; tvalid <= 0; presenting <= 0;
-                // CAM 2 条 (拍 2..3)
-                cfg_wr <= (cphase >= 2 && cphase <= 3);
-                cfg_addr <= cphase - 2;
+                // CAM 1 条 (拍 2, 条目 1; 条目 0 归 synp 握手建立)
+                cfg_wr <= (cphase == 6'd2);
+                cfg_addr <= 4'd1;
                 case (cphase)
                     6'd2: begin
-                        cfg_sip <= 32'h0A000001; cfg_dip <= 32'hC0A86402;
-                        cfg_sport <= 16'h3039; cfg_dport <= 16'h1F90;
-                        cfg_dmac <= 48'h112233445566;
-                    end
-                    6'd3: begin
                         cfg_sip <= 32'h0A000009; cfg_dip <= 32'hC0A86409;
                         cfg_sport <= 16'hD431; cfg_dport <= 16'h1F91;
                         cfg_dmac <= 48'hAABBCCDDEE01;
                     end
                     default: ;
                 endcase
-                // TCB 2 条 x 6 字段 (拍 6..17, 条目 e 字段 f: tcbc[e*6+f])
-                cfg_upd_wr <= (cphase >= 6 && cphase <= 17);
-                cfg_upd_id  <= (cphase - 6) / 6;
+                // TCB 条目 1 x 6 字段 (拍 6..11, cfg_tcb.memh; 条目 0 归 synp)
+                cfg_upd_wr <= (cphase >= 6 && cphase <= 11);
+                cfg_upd_id  <= 4'd1;
                 cfg_upd_sel <= (cphase - 6) % 6;
                 cfg_upd_val <= tcbc[cphase - 6];
                 cphase <= cphase + 1;
@@ -282,6 +339,9 @@ module tb_tcp_chain;
                 rx_stat_seq, rx_stat_ack, rx_stat_bytes);
         $fwrite(fd, "STATS_TX %0d %0d %0d %0d\n",
                 tx_stat_frames, tx_stat_bytes, tx_stat_ack, tx_stat_ack_drop);
+        $fwrite(fd, "CAMF %08h %08h %04h %04h %012h\n",
+                u_cam.sip_r[0], u_cam.dip_r[0], u_cam.sport_r[0],
+                u_cam.dport_r[0], u_cam.dmac_r[0]);
         $fwrite(fd, "TCBF %08h %08h %08h %04h %04h %0d %08h %08h %08h %04h %04h %0d\n",
                 u_tcb.rcv_nxt_r[0], u_tcb.snd_nxt_r[0], u_tcb.snd_una_r[0],
                 u_tcb.rcv_wnd_r[0], u_tcb.snd_wnd_r[0], u_tcb.state_r[0],
@@ -301,12 +361,17 @@ module tb_tcp_chain;
             $fwrite(fd, "%02h %d\n", gmii_txd, gmii_tx_en);
             if (fend)
                 $fwrite(fd, "FEND %0d %0d\n", k, ferr);
-            if (ack_req)
-                $fwrite(fd, "ACK %0d %0d %08h\n", k, ack_id, ack_val);
+            if (tx_ack_req)
+                $fwrite(fd, "ACK %0d %0d %08h\n", k, tx_ack_id, tx_ack_val);
+            if (syn_v)
+                $fwrite(fd, "SYNP %012h %08h %04h %04h %08h %04h\n",
+                        syn_smac, syn_sip, syn_sport, syn_dport, syn_seq, syn_wnd);
             if (tx_upd_wr)
                 $fwrite(fd, "TUPD %0d %0d %0d %08h\n", k, tx_upd_sel, tx_upd_id, tx_upd_val);
             else if (sel_rx)
                 $fwrite(fd, "TUPD %0d %0d %0d %08h\n", k, rx_upd_sel, rx_upd_id, rx_upd_val);
+            else if (synp_upd_wr)
+                $fwrite(fd, "TUPD %0d %0d %0d %08h\n", k, synp_upd_sel, synp_upd_id, synp_upd_val);
             if (tx_upd_wr && rx_upd_wr)
                 $fwrite(fd, "COLL %0d %0d\n", k, rx_upd_sel);
         end

@@ -1,17 +1,26 @@
 #!/usr/bin/env python
 """#48 TCP fast path 全链 (mac_rx_64->tcp_rx->tcb->tcp_tx_frame->mac_tx_64) 刺激 + 校验。
 
-拓扑: RX 字节流进 tcp_rx; ack_req 直连 tcp_tx_frame; CAM 外置共享; TCB 更新仲裁
-(tx>rx>cfg) 在 TB; app 数据由 TB 脚本 (presenting, 锚点绝对拍) 驱动 tcp_tx_frame。
+拓扑: RX 字节流进 tcp_rx; ack_req 与 tcp_synp 的 sack_req 二选一进 tcp_tx_frame
+(synp 优先, ack_syn=1); CAM 外置共享 (配置口: TB cphase 优先, 其次 synp); TCB 更新仲裁
+(tx>rx>cfg级=TB配置|synp) 在 TB; app 数据由 TB 脚本 (presenting, 锚点绝对拍) 驱动。
 周期约定 (模型拍 t = TB 日志 k): 复位后第 1 个 posedge 进入拍 0; RX 字节 j 于拍 41+j
 上线 (cphase 40 拍配置后逐拍驱动); 事件于拍 t 组合有效, posedge 末写入, 拍 t+1 可见。
 
-场景: RX 14 帧 (纯ACK/data42/data100/纯ACK带pad/data1000/重复/乱序/data64/conn1 data50/
-data200 + 4 个反应式 PC 纯ACK); TX app 4 帧 (c0/30, c0/80, c1/20, c0/300)。
-锚点自解: d80 的 S_DONE 对齐 data42 drain 第 2 拍 (snd_una 写, 仲裁争用),
-d300 的 S_DONE 对齐 data1000 drain 第 2 拍 — COLL 行实证。
+握手 (tcp_synp): 纯 SYN 帧尾 (S_DROP tlast 拍 t) -> syn_v 拍 t+1 (TB 日志 SYNP k=t+1);
+synp 在 k+3..k+8 写 TCB0 六字段 (TUPD 日志), CAM0 写于 k+2 拍末 (k+3 可见),
+sack_req 于 k+9 入 ACK 队 -> SYN+ACK (flags 0x12, seq=iss, ack=对端 iss+1,
+发完 snd_nxt+1)。对端 ACK (ack=iss+1) 后 snd_una=iss+1, conn0 进入数据流。
+
+场景: SYN -> [gap] 对端 ACK -> 原 conn0/conn1 流量 (snd_una 链从 6000 起) ->
+末尾 SYN 重传 (幂等, conn0 状态重置: rcv_nxt=1000, snd_nxt=6000, snd_una=5999)。
+注意: 移位后的 una 链 (6100/6150/6200/6300) 在前段超过 TX 实发进度 (snd_nxt 时值),
+DUT 按 ack_ok 合法拒绝推进 (ACK 未发数据); 模型用 snd_nxt 事件表真值复现 —
+una 实际只在 hs_ack->6000 / data64->6300 / pcack300->6410 三级推进。
+锚点自解: d80/d300 的 S_DONE 对齐 data42/data1000 drain 第 1 拍 (rcv_nxt 写,
+仲裁争用 — snd_una 写已不存在, 不可作锚) — COLL 行实证。
 校验: parse_gmii 逐帧语义 (头/双 csum/载荷/FCS/flags/window/seq/ack/id) + 帧序 +
-FEND/ACK/TUPD/COLL 事件序列逐拍比对 + STATS7/STATS_TX/TCBF。总结 'CHAIN OK'。
+FEND/ACK/SYNP/TUPD/COLL 事件序列逐拍比对 + STATS7/STATS_TX/CAMF/TCBF。总结 'CHAIN OK'。
 """
 import os
 import struct
@@ -31,13 +40,22 @@ CONN = {
 }
 DUT_MAC = bytes([0x00, 0x0A, 0x35, 0x01, 0xFE, 0xC1])
 DUT_IP = 0xC0A86402
-TCB_INIT = [dict(rcv_nxt=1000, snd_nxt=6000, snd_una=5000,
-                 rcv_wnd=0x2000, snd_wnd=0x2000, state=1),
-            dict(rcv_nxt=77, snd_nxt=900, snd_una=900,
-                 rcv_wnd=0x1800, snd_wnd=0x2000, state=1)]
+# conn0 不预写 (握手建立); conn1 照旧预写
+TCB_ZERO = dict(rcv_nxt=0, snd_nxt=0, snd_una=0, rcv_wnd=0, snd_wnd=0, state=0)
+TCB1_INIT = dict(rcv_nxt=77, snd_nxt=900, snd_una=900,
+                 rcv_wnd=0x1800, snd_wnd=0x2000, state=1)
+SYNP_ISS = 5999          # synp cfg_iss
+SYN_SEQ = 999            # 对端 iss
+SYN_WND = 0x2000
+HS_GAP = 300             # SYN 与对端 ACK 间额外空字节 (等 SYN+ACK 发完)
+RESYN_GAP = 200          # 末尾 SYN 重传前额外空字节 (流量沉淀)
 FIELDS = ('rcv_nxt', 'snd_nxt', 'snd_una', 'rcv_wnd', 'snd_wnd', 'state')
 SEL2FIELD = {0: 'rcv_nxt', 1: 'snd_nxt', 2: 'snd_una',
              3: 'rcv_wnd', 4: 'snd_wnd', 5: 'state'}
+
+
+def fresh_tcb():
+    return [dict(TCB_ZERO), dict(TCB1_INIT)] + [dict(TCB_ZERO) for _ in range(14)]
 
 
 def payload(n):
@@ -61,7 +79,11 @@ def ip_hdr(src_ip, dst_ip, total_len):
 
 def mk_tcp_frame(cid, seq, ack, flags, n, wnd, pad):
     c = CONN[cid]
-    eth = c['dmac'] + c['pcmac'] + b'\x08\x00'
+    if flags & 0x02:
+        # SYN: 对端真实源 MAC (synp 据此配 CAM0 dmac), 目的 = DUT MAC
+        eth = DUT_MAC + c['dmac'] + b'\x08\x00'
+    else:
+        eth = c['dmac'] + c['pcmac'] + b'\x08\x00'
     tcp = struct.pack('!HHLLBBHHH', c['sport'], c['dport'], seq & 0xFFFFFFFF,
                       ack & 0xFFFFFFFF, 0x50, flags, wnd & 0xFFFF, 0, 0)
     seg = tcp + payload(n)
@@ -81,32 +103,41 @@ def mk_tcp_frame(cid, seq, ack, flags, n, wnd, pad):
 
 
 def build_rx_frames():
-    """kind: data / ack / drop_ack。seq/ack 由连接状态链式推出 (RX 流顺序决定)。"""
+    """kind: syn / data / ack / drop_ack。conn0 snd_una 链从握手后 6000 起;
+    snd_nxt 链: SYN+ACK 发完 6000, app 数据帧接续。seq/ack 由连接状态链式推出。"""
     F = []
 
-    def add(name, cid, kind, plen, seq, ack, wnd, pad=False):
+    def add(name, cid, kind, plen, seq, ack, wnd, pad=False, flags=0x10, gap=0):
         F.append(dict(name=name, cid=cid, kind=kind, plen=plen, seq=seq,
-                      ack=ack, wnd=wnd, pad=pad))
+                      ack=ack, wnd=wnd, pad=pad, flags=flags, gap=gap))
 
-    add('ack_pure', 0, 'ack', 0, 1000, 5100, 0x4000)          # snd_una 5000->5100
-    add('data42', 0, 'data', 42, 1000, 5150, 0x4000)          # rcv 1042; una->5150
-    add('data100', 0, 'data', 100, 1042, 5150, 0x4000)        # rcv 1142
-    add('ack_pad', 0, 'ack', 0, 1142, 5200, 0x3000, pad=True)  # una->5200 wnd 3000
-    add('data1000', 0, 'data', 1000, 1142, 5300, 0x4000)      # rcv 2142; una->5300
-    add('dup', 0, 'drop_ack', 20, 2142 - 500, 5300, 0x4000)   # 丢数据回 ACK 2142
-    add('ooo', 0, 'drop_ack', 30, 2142 + 100, 5300, 0x4000)   # 乱序回 ACK 2142
-    add('data64', 0, 'data', 64, 2142, 5300, 0x4000)          # rcv 2206
+    # ---- 三次握手: SYN (纯 SYN, 60B 补 pad) -> DUT SYN+ACK -> 对端 ACK ----
+    add('syn', 0, 'syn', 0, SYN_SEQ, 0, SYN_WND, pad=True, flags=0x02)
+    add('hs_ack', 0, 'ack', 0, 1000, 6000, SYN_WND, gap=HS_GAP)  # una 5999->6000
+    # ---- 原 conn0/conn1 流量 (snd_una 链 5000 起 -> 6000 起, 顺移 +1000) ----
+    add('ack_pure', 0, 'ack', 0, 1000, 6100, 0x4000)          # snd_una 6000->6100
+    add('data42', 0, 'data', 42, 1000, 6150, 0x4000)          # rcv 1042; una->6150
+    add('data100', 0, 'data', 100, 1042, 6150, 0x4000)        # rcv 1142
+    add('ack_pad', 0, 'ack', 0, 1142, 6200, 0x3000, pad=True)  # una->6200 wnd 3000
+    add('data1000', 0, 'data', 1000, 1142, 6300, 0x4000)      # rcv 2142; una->6300
+    add('dup', 0, 'drop_ack', 20, 2142 - 500, 6300, 0x4000)   # 丢数据回 ACK 2142
+    add('ooo', 0, 'drop_ack', 30, 2142 + 100, 6300, 0x4000)   # 乱序回 ACK 2142
+    add('data64', 0, 'data', 64, 2142, 6300, 0x4000)          # rcv 2206
     add('c1data50', 1, 'data', 50, 77, 900, 0x1A00)           # c1 rcv 127
-    add('data200', 0, 'data', 200, 2206, 5300, 0x4000)        # rcv 2406
+    add('data200', 0, 'data', 200, 2206, 6300, 0x4000)        # rcv 2406
     # 反应式 PC 纯 ACK (DUT 数据段确认, 值 = 段 seq+len; 序 = TX 完成序)
     add('pcack30', 0, 'ack', 0, 2406, 6030, 0x4000)
     add('pcack80', 0, 'ack', 0, 2406, 6110, 0x4000)
     add('pcack20', 1, 'ack', 0, 127, 920, 0x2200)
     add('pcack300', 0, 'ack', 0, 2406, 6410, 0x4000)
+    # ---- 末尾: SYN 重传 (幂等; 重置 conn0 回握手后初态) ----
+    add('syn_re', 0, 'syn', 0, SYN_SEQ, 0, SYN_WND, pad=True, flags=0x02,
+        gap=RESYN_GAP)
     off = 0
     for f in F:
-        fb, fcs = mk_tcp_frame(f['cid'], f['seq'], f['ack'], 0x10, f['plen'],
-                               f['wnd'], f['pad'])
+        off += f['gap']
+        fb, fcs = mk_tcp_frame(f['cid'], f['seq'], f['ack'], f['flags'],
+                               f['plen'], f['wnd'], f['pad'])
         f['fb'] = fb
         f['fcs'] = fcs
         f['first'] = off + 8        # 内容首字节在字节流中的索引
@@ -116,7 +147,7 @@ def build_rx_frames():
 
 
 APP_FRAMES = [('d30', 0, 30), ('d80', 0, 80), ('d20', 1, 20), ('d300', 0, 300)]
-ANCHOR0 = dict(d30=80, d80=187, d20=300, d300=1253)   # 初值 (已求解收敛)
+ANCHOR0 = dict(d30=500, d80=649, d20=762, d300=1715)   # 初值 (已求解收敛)
 
 
 def pop8(k):
@@ -130,10 +161,12 @@ def fold16(v):
 
 # ---------------- RX 侧周期精确模型 (mac_rx_64 + fifo8 + tcp_rx 时序壳) ----------------
 
-def rx_model(frames, snd_nxt_override=None):
-    """snd_nxt_override: RX 侧 w5 判读的 ack_ok 需要 ra_snd_nxt; pcack 的 ack 号基于
-    TX 已推进的 snd_nxt。全部 w5 读拍都晚于对应真实 tx upd 拍 (场景大间隔保证),
-    且其它帧的 ack_ok  verdict 在初值/终值下一致 (逐帧核对) — 故直接用终值等价。"""
+def rx_model(frames, snd_nxt_init=None, snd_nxt_events=()):
+    """snd_nxt 时变处理: w5 判读的 ack_ok 需 ra_snd_nxt 真实时值。握手后 una 链
+    (+1000) 前段会超过 TX 实发进度 (DUT 合法拒推进 una: ACK 了未发数据) — 终值
+    等价假设不再成立, 按事件表应用: snd_nxt_events = [(beat, cid, val)]
+    (synp sel1 写 iss + tx sel1 写)。bootstrap 用 snd_nxt_init 静态终值。
+    字拍/fend/ack 流与 snd_nxt 无关 (acc 不看 ack_ok), 仅 drains 受影响。"""
     nstim = max(f['first'] + f['B'] + 4 + 12 for f in frames)
     tmax = nstim + 200
     # 帧字节 -> (byte, dv) 按索引
@@ -154,16 +187,37 @@ def rx_model(frames, snd_nxt_override=None):
     wptr = rptr = 0
     mem = [None] * 8
     dout = None
-    # cam / tcb
-    cam = [(CONN[0]['sip'], CONN[0]['dip'], CONN[0]['sport'], CONN[0]['dport']),
+    # cam / tcb (conn0 不预写 — 由 synp 握手建立; conn1 cphase 预写)
+    cam = [None,
            (CONN[1]['sip'], CONN[1]['dip'], CONN[1]['sport'], CONN[1]['dport'])] + \
           [None] * 14
-    tcb = [dict(t) for t in TCB_INIT] + [dict(rcv_nxt=0, snd_nxt=0, snd_una=0,
-                                              rcv_wnd=0, snd_wnd=0, state=0)
-                                         for _ in range(14)]
-    if snd_nxt_override:
-        for cid, v in snd_nxt_override.items():
+    tcb = fresh_tcb()
+    if snd_nxt_init:
+        for cid, v in snd_nxt_init.items():
             tcb[cid]['snd_nxt'] = v
+    snx_at = {}
+    for b, cid, v in snd_nxt_events:
+        snx_at.setdefault(b, []).append((cid, v))
+    # synp 离线模型: syn_v 拍 kv -> CAM0 写 kv+3 可见; TCB0 六字段 TUPD kv+3..kv+8;
+    # sack 入队 kv+9 (syn=1)。应用拍 = TB 日志拍 (同 drain 约定)。
+    camw_at = {}
+    tcbw_at = {}
+    synp_tcbw = []
+    sacks = []
+    syns = []
+
+    def gen_syn(kv, fi):
+        """kv = syn_v 日志拍; fi = frames 索引。"""
+        f = frames[fi]
+        c = CONN[f['cid']]
+        syns.append((kv, fi))
+        camw_at[kv + 3] = (c['sip'], c['dip'], c['sport'], c['dport'])
+        vals = [(f['seq'] + 1) & 0xFFFFFFFF, SYNP_ISS, SYNP_ISS,
+                0x2000, f['wnd'] & 0xFFFF, 1]
+        for fi2, v in enumerate(vals):
+            tcbw_at.setdefault(kv + 3 + fi2, []).append((fi2, v))
+            synp_tcbw.append((kv + 3 + fi2, fi2, 0, v))
+        sacks.append((kv + 9, 0, (f['seq'] + 1) & 0xFFFFFFFF, 1))
 
     def cam_lookup(sip, dip, sport, dport):
         for i in range(16):
@@ -175,6 +229,8 @@ def rx_model(frames, snd_nxt_override=None):
     st, wcnt = 'HDR', 0
     w1_lo = w2r = w3r = ipc_s9 = 0
     src_ip_r = src_port_r = seq_hi_r = 0
+    syn_l = False
+    drop_syn = False
     cam_hit_l = False
     conn_id_l = 0
     acc_l = ackresp_l = ack_adv_l = False
@@ -193,6 +249,16 @@ def rx_model(frames, snd_nxt_override=None):
     for t in range(tmax):
         j = t - 41
         by, dvv = (sdata[j], sdv[j]) if 0 <= j < nstim else (0, 0)
+        # ---- synp 写生效 (CAM0 / TCB0; snd_nxt 由事件表单独应用) ----
+        if t in camw_at:
+            cam[0] = camw_at[t]
+        if t in tcbw_at:
+            for sel, v in tcbw_at[t]:
+                if sel != 1:
+                    tcb[0][SEL2FIELD[sel]] = v & 0xFFFF if sel in (3, 4) else v
+        if t in snx_at:
+            for cid, v in snx_at[t]:
+                tcb[cid]['snd_nxt'] = v
         full = ((wptr & 7) == (rptr & 7)) and (wptr >> 3) != (rptr >> 3)
         empty = wptr == rptr
         w = dout if not empty else None
@@ -294,6 +360,7 @@ def rx_model(frames, snd_nxt_override=None):
                         ack32_l, seq32_l = ack32, seq32
                         plen_l = plen_w
                         rcv_nxt_l = tb['rcv_nxt']
+                        syn_l = (flags == 0x02)   # 纯 SYN
                         wcnt = 6
                 else:      # wc == 6
                     pop8w = pop8(w[1])
@@ -313,6 +380,9 @@ def rx_model(frames, snd_nxt_override=None):
                         elif ackresp_l:
                             stats['seq'] += 1
                         else:
+                            # 纯 SYN 短帧 (w6-tlast): 帧尾即报握手
+                            if syn_l and w[4] and not w[5]:
+                                gen_syn(t + 1, fcur)
                             stats['nonmatch'] += 1
                     elif acc_l:
                         if plen_l == 0:
@@ -323,10 +393,10 @@ def rx_model(frames, snd_nxt_override=None):
                         wnd_l = (w[0] >> 48) & 0xFFFF
                         wcnt = 7
                     elif ackresp_l:
-                        st, drop_ack = 'DROP', True
+                        st, drop_ack, drop_syn = 'DROP', True, False
                         stats['seq'] += 1
                     else:
-                        st, drop_ack = 'DROP', False
+                        st, drop_ack, drop_syn = 'DROP', False, syn_l
                         stats['nonmatch'] += 1
             elif st == 'PAY':
                 if w[2]:
@@ -385,11 +455,15 @@ def rx_model(frames, snd_nxt_override=None):
             else:      # DROP
                 if w[3]:
                     st, wcnt = 'HDR', 0
+                    if drop_syn and w[4] and not w[5]:
+                        # SYN 帧 S_DROP 帧尾报握手 (syn_v 拍 = t+1)
+                        gen_syn(t + 1, fcur)
                     if drop_ack and w[4]:
                         # S_DROP 帧尾 ACK (dup/ooo): val = rcv_nxt_l (本拍组合有效)
-                        acks.append((t, conn_id_l, rcv_nxt_l))
+                        acks.append((t, conn_id_l, rcv_nxt_l, 0))
                         stats['ack'] += 1
                     drop_ack = False
+                    drop_syn = False
         # ---- 组合 fend/ack/drain (事件拍 = t) ----
         if fend:
             fends.append((t, ferr_b))
@@ -403,7 +477,7 @@ def rx_model(frames, snd_nxt_override=None):
             pend_wnd_val = ((w[0] >> 48) & 0xFFFF) if fend_w6 else wnd_l
             drn = 1
             if plen_l != 0 and w[4]:
-                acks.append((t, conn_id_l, (rcv_nxt_l + plen_l) & 0xFFFFFFFF))
+                acks.append((t, conn_id_l, (rcv_nxt_l + plen_l) & 0xFFFFFFFF, 0))
                 stats['ack'] += 1
         if drn and not fend:
             if drn == 1:
@@ -506,37 +580,45 @@ def rx_model(frames, snd_nxt_override=None):
             rptr += 1
         dout = din if bypass else (mem[rptr & 7] if not (wptr == rptr) else None)
     return dict(fends=fends, acks=acks, drains=drains, stats=stats,
-                tcb=tcb, w5cyc=w5cyc, nstim=nstim)
+                tcb=tcb, w5cyc=w5cyc, nstim=nstim,
+                syns=syns, sacks=sacks, synp_tcbw=synp_tcbw)
 
 
 # ---------------- TX 侧周期精确模型 (app 驱动 + tcp_tx_frame + mac_tx_64 时序) ----------------
 
 def compute_schedule(drains, txk):
-    """drains: [(fend, di, sel, id, val)] (di = drn 序号 0/1/2, gnt=1 时写于 fend+1+di)。
-    txk: tx upd 拍集合。返回 (rxw, rxreq): rxw = [(grant_k, sel, id, val)];
-    rxreq = rx upd_wr 高电平拍集合 (含保持拍) — COLL 检测用。
-    语义: 字段按 drn 序; 每字段最早 max(cursor, fend+1+di); 撞 txk 顺延; cursor=grant+1。"""
+    """drains: [(fend, di, sel, id, val)] (di = drn 级号 0/1/2)。RTL drn FSM 每级至少
+    占一拍: 级 di 首拍 = fend+1+di + 前级滞留; pend 且未 gnt (撞 txk) 才滞留顺延;
+    pend=0 的级不占写但仍耗一拍过级。返回 (rxw, rxreq): rxw = [(grant_k, sel, id, val)];
+    rxreq = rx upd_wr 高电平拍集合 (含保持拍) — COLL 检测用。"""
     rxw = []
     rxreq = set()
     byf = {}
     for fend, di, sel, i, v in drains:
-        byf.setdefault(fend, []).append((di, sel, i, v))
+        byf.setdefault(fend, {})[di] = (sel, i, v)
     for fend in sorted(byf):
         cursor = fend + 1
-        for di, sel, i, v in sorted(byf[fend]):
-            g = max(cursor, fend + 1 + di)
-            while g in txk:
-                g += 1
-            for c in range(max(cursor, fend + 1 + di), g + 1):
-                rxreq.add(c)
-            rxw.append((g, sel, i, v))
-            cursor = g + 1
+        fields = byf[fend]
+        for di in (0, 1, 2):
+            base = max(cursor, fend + 1 + di)
+            if di in fields:
+                sel, i, v = fields[di]
+                g = base
+                while g in txk:
+                    g += 1
+                for c in range(base, g + 1):
+                    rxreq.add(c)
+                rxw.append((g, sel, i, v))
+                cursor = g + 1
+            else:
+                cursor = base + 1     # pend=0: 过级仍耗一拍
     return rxw, rxreq
 
 
-def tx_model(acks, rxw, rxreq, anchors):
-    """acks: [(k,id,val)] ack_req 脉冲 (拍 k 组合有效, 当拍末入队, 拍 k+1 可见);
-    rxw/rxreq: compute_schedule 结果; anchors: {name: k} (TB 驱动器等到 k>=anchor)。"""
+def tx_model(acks, rxw, rxreq, anchors, cfgw_at=None):
+    """acks: [(k,id,val,syn)] ack_req/sack_req 脉冲 (拍 k 组合有效, 当拍末入队, 拍 k+1 可见);
+    rxw/rxreq: compute_schedule 结果; anchors: {name: k} (TB 驱动器等到 k>=anchor);
+    cfgw_at: {k: [(sel,id,val)]} synp 的 TCB0 cfg 级写 (应用拍 = 日志拍)。"""
     tmax = 9000
     items = []
     for name, cid, plen in APP_FRAMES:
@@ -545,15 +627,13 @@ def tx_model(acks, rxw, rxreq, anchors):
         for j, nb in enumerate(ws):
             items.append(('W', nb, 1 if j == len(ws) - 1 else 0, cid))
     ack_at = {}
-    for k, i, v in acks:
-        ack_at.setdefault(k, []).append((i, v))
+    for k, i, v, s in acks:
+        ack_at.setdefault(k, []).append((i, v, s))
     rxw_at = {}
     for k, sel, i, v in rxw:
         rxw_at.setdefault(k, []).append((sel, i, v))
 
-    tcb = [dict(t) for t in TCB_INIT] + [dict(rcv_nxt=0, snd_nxt=0, snd_una=0,
-                                              rcv_wnd=0, snd_wnd=0, state=0)
-                                         for _ in range(14)]
+    tcb = fresh_tcb()
     st = 'IDLE'
     plen = 0
     plen_r = 0
@@ -561,6 +641,7 @@ def tx_model(acks, rxw, rxreq, anchors):
     hcnt = 0
     cur_id = 0
     is_data = False
+    is_syn_r = False
     seq_r = ack_r = 0
     id_r = 0
     tail_nb = 0
@@ -612,6 +693,8 @@ def tx_model(acks, rxw, rxreq, anchors):
         ev_push_mq = None
         ev_pop_aq = False
         ev_tcbw = list(rxw_at.get(t, []))
+        if cfgw_at:
+            ev_tcbw += list(cfgw_at.get(t, []))
         upd_event = None
 
         # ---- mac_tx_64 引擎 (frd 注册语义: 决策拍加载 cw, 下拍指针前进) ----
@@ -676,6 +759,7 @@ def tx_model(acks, rxw, rxreq, anchors):
                 tb = tcb[start_id]
                 cur_id = start_id
                 is_data = start_data
+                is_syn_r = bool(start_ack and aq[aq_r][2])
                 seq_r = tb['snd_nxt']
                 ack_r = tb['rcv_nxt'] if start_data else aq[aq_r][1]
                 id_cap = id_r
@@ -692,7 +776,8 @@ def tx_model(acks, rxw, rxreq, anchors):
                     ev_pop_aq = True
                     plen_r = 0
                     st, wait_cnt = 'WAIT', 0
-                frames.append(dict(kind='data' if start_data else 'ack',
+                frames.append(dict(kind='data' if start_data else
+                                   ('synack' if is_syn_r else 'ack'),
                                    cid=cur_id, seq=seq_r, ack=ack_r,
                                    plen=None, idx=id_cap,
                                    name=APP_FRAMES[appidx][0] if start_data else ''))
@@ -754,6 +839,9 @@ def tx_model(acks, rxw, rxreq, anchors):
                         sdone[frames[-1]['name']] = t
                 else:
                     stats[2] += 1
+                    if is_syn_r and bus_v and mac_ready:
+                        # SYN+ACK 发完 snd_nxt+1 (与数据段同: 末字消费拍)
+                        upd_event = (t, 1, cur_id, (seq_r + 1) & 0xFFFFFFFF)
                 frames[-1]['plen'] = plen_r
                 bus_v = False
                 st = 'IDLE'
@@ -783,11 +871,11 @@ def tx_model(acks, rxw, rxreq, anchors):
             pq_w += 1
         if ev_pop_pq:
             pq_r += 1
-        for i, v in ev_push_aq:
+        for i, v, s in ev_push_aq:
             if aq_w - aq_r >= 8:
                 stats[3] += 1
             else:
-                aq.append((i, v))
+                aq.append((i, v, s))
                 aq_w += 1
         if ev_pop_aq:
             aq_r += 1
@@ -807,8 +895,11 @@ def tx_model(acks, rxw, rxreq, anchors):
 def solve_and_build():
     frames = build_rx_frames()
     snd_final = {0: 6000 + 30 + 80 + 300, 1: 900 + 20}
-    rx = rx_model(frames, snd_nxt_override=snd_final)
-    fend_frames = [f for f in frames if f['kind'] != 'drop_ack']
+    rx = rx_model(frames, snd_nxt_init=snd_final)     # bootstrap (字拍/fend/ack 无关 snd_nxt)
+    cfgw_at = {}
+    for k, sel, i, v in rx['synp_tcbw']:
+        cfgw_at.setdefault(k, []).append((sel, i, v))
+    fend_frames = [f for f in frames if f['kind'] not in ('drop_ack', 'syn')]
     fend_of = {}
     for f, (k, fe) in zip(fend_frames, rx['fends']):
         assert fe == 0, f['name']
@@ -818,12 +909,22 @@ def solve_and_build():
     txk = set()
     tx = None
     for _ in range(12):
+        all_acks = sorted(rx['acks'] + rx['sacks'], key=lambda a: a[0])
         rxw, rxreq = compute_schedule(rx['drains'], txk)
-        tx = tx_model(rx['acks'], rxw, rxreq, anchors)
-        d80 = fend_of['data42'] + 2 - tx['sdone']['d80']
-        d300 = fend_of['data1000'] + 2 - tx['sdone']['d300']
+        tx = tx_model(all_acks, rxw, rxreq, anchors, cfgw_at)
+        # 碰撞锚点: S_DONE 对齐 fend+1 (rcv_nxt drain 拍 — 数据帧恒有; 握手场景下
+        # 前段 una drain 被 DUT 合法拒绝 (ack 超前 snd_nxt), 不再可作锚)
+        d80 = fend_of['data42'] + 1 - tx['sdone']['d80']
+        d300 = fend_of['data1000'] + 1 - tx['sdone']['d300']
         newtxk = set(u[0] for u in tx['tupds'])
-        if d80 == 0 and d300 == 0 and newtxk == txk:
+        # 真值 snd_nxt 事件重算 RX drains (synp sel1 + tx sel1)
+        snd_events = sorted([(k, i, v) for k, sel, i, v in rx['synp_tcbw'] if sel == 1] +
+                            [(k, i, v) for k, sel, i, v in tx['tupds'] if sel == 1])
+        rx2 = rx_model(frames, snd_nxt_events=snd_events)
+        converged = (d80 == 0 and d300 == 0 and newtxk == txk and
+                     rx2['drains'] == rx['drains'])
+        rx = rx2
+        if converged:
             break
         anchors['d80'] += d80
         anchors['d300'] += d300
@@ -831,8 +932,9 @@ def solve_and_build():
     else:
         raise RuntimeError('anchor solve did not converge')
     # 终次重算 (shifts 用收敛后的 txk)
+    all_acks = sorted(rx['acks'] + rx['sacks'], key=lambda a: a[0])
     rxw, rxreq = compute_schedule(rx['drains'], set(u[0] for u in tx['tupds']))
-    tx = tx_model(rx['acks'], rxw, rxreq, anchors)
+    tx = tx_model(all_acks, rxw, rxreq, anchors, cfgw_at)
     return frames, rx, tx, anchors, fend_of
 
 
@@ -857,11 +959,9 @@ def gen_memh(simdir, frames, tx, anchors):
     w('stim_dv.memh', dv, '%d')
     w('stim_er.memh', [0] * nstim, '%d')
     with open(os.path.join(simdir, 'cfg_tcb.memh'), 'w') as fh:
-        for e in range(16):
-            t = TCB_INIT[e] if e < 2 else dict(rcv_nxt=0, snd_nxt=0, snd_una=0,
-                                               rcv_wnd=0, snd_wnd=0, state=0)
-            for fld in FIELDS:
-                fh.write('%X\n' % t[fld])
+        # 仅 conn1 (条目 0 归 synp 握手建立)
+        for fld in FIELDS:
+            fh.write('%X\n' % TCB1_INIT[fld])
     # app 脚本: 每帧 = 锚点项 (ty0, n=anchor) + 载荷词 (ty1)
     ty, d, k, l, n, ci = [], [], [], [], [], []
     for name, cid, plen in APP_FRAMES:
@@ -888,7 +988,8 @@ def expected_frame_bytes(fr):
     cid = fr['cid']
     c = CONN[cid]
     pl = payload(fr['plen']) if fr['kind'] == 'data' else b''
-    flags = 0x18 if fr['kind'] == 'data' else 0x10
+    flags = (0x18 if fr['kind'] == 'data' else
+             (0x12 if fr['kind'] == 'synack' else 0x10))
     eth = c['dmac'] + DUT_MAC + b'\x08\x00'
     tcp = struct.pack('!HHLLBBHHH', c['dport'], c['sport'], fr['seq'] & 0xFFFFFFFF,
                       fr['ack'] & 0xFFFFFFFF, 0x50, flags, c['rcv_wnd'], 0, 0)
@@ -909,12 +1010,14 @@ def expected_frame_bytes(fr):
 
 
 def parse_resp(fn):
-    """返回 (gmii_bytes_per_frame, events)。行: '%02h %d' 字节 / FEND / ACK / TUPD / COLL /
-    STATS7 / STATS_TX / TCBF。"""
+    """返回 (gmii_bytes_per_frame, events)。行: '%02h %d' 字节 / FEND / ACK / SYNP / TUPD /
+    COLL / STATS7 / STATS_TX / CAMF / TCBF。"""
     frames = []
     cur = []
     active = False
-    ev = dict(fend=[], ack=[], tupd=[], coll=[], stats7=None, stx=None, tcbf=None)
+    bytecnt = 0          # 已见字节行数; 事件行 k = bytecnt - 2 (当拍字节行先写)
+    ev = dict(fend=[], ack=[], synp=[], tupd=[], coll=[], stats7=None, stx=None,
+              camf=None, tcbf=None)
     with open(fn) as fh:
         for line in fh:
             p = line.split()
@@ -924,6 +1027,10 @@ def parse_resp(fn):
                 ev['fend'].append((int(p[1]), int(p[2])))
             elif p[0] == 'ACK':
                 ev['ack'].append((int(p[1]), int(p[2]), int(p[3], 16)))
+            elif p[0] == 'SYNP':
+                ev['synp'].append((bytecnt - 2, int(p[1], 16), int(p[2], 16),
+                                   int(p[3], 16), int(p[4], 16), int(p[5], 16),
+                                   int(p[6], 16)))
             elif p[0] == 'TUPD':
                 ev['tupd'].append((int(p[1]), int(p[2]), int(p[3]), int(p[4], 16)))
             elif p[0] == 'COLL':
@@ -932,6 +1039,8 @@ def parse_resp(fn):
                 ev['stats7'] = [int(x) for x in p[1:]]
             elif p[0] == 'STATS_TX':
                 ev['stx'] = [int(x) for x in p[1:]]
+            elif p[0] == 'CAMF':
+                ev['camf'] = p[1:]
             elif p[0] == 'TCBF':
                 ev['tcbf'] = p[1:]
             elif len(p) == 2:
@@ -939,6 +1048,7 @@ def parse_resp(fn):
                     b = int(p[0], 16)
                 except ValueError:
                     continue
+                bytecnt += 1
                 if p[1] == '1':
                     cur.append(b)
                     active = True
@@ -994,10 +1104,21 @@ def check(simdir):
     # ---- 事件序列 ----
     if ev['fend'] != rx['fends']:
         errs.append('FEND seq\n  exp %s\n  got %s' % (rx['fends'], ev['fend']))
-    if ev['ack'] != [(k, i, v) for k, i, v in rx['acks']]:
-        errs.append('ACK seq\n  exp %s\n  got %s' % (rx['acks'], ev['ack']))
+    exp_ack = sorted([(k, i, v) for k, i, v, s in rx['acks'] + rx['sacks']])
+    if ev['ack'] != exp_ack:
+        errs.append('ACK seq\n  exp %s\n  got %s' % (exp_ack, ev['ack']))
+    # SYNP 事件 (k 由字节行计数推得)
+    exp_synp = []
+    for k, fi in rx['syns']:
+        f = frames[fi]
+        c = CONN[f['cid']]
+        exp_synp.append((k, int.from_bytes(c['dmac'], 'big'), c['sip'],
+                         c['sport'], c['dport'], f['seq'], f['wnd']))
+    if ev['synp'] != exp_synp:
+        errs.append('SYNP seq\n  exp %s\n  got %s' % (exp_synp, ev['synp']))
     exp_tupd = sorted([(k, sel, i, v) for k, sel, i, v in tx['rxw']] +
-                      [(k, sel, i, v) for k, sel, i, v in tx['tupds']])
+                      [(k, sel, i, v) for k, sel, i, v in tx['tupds']] +
+                      [(k, sel, i, v) for k, sel, i, v in rx['synp_tcbw']])
     if ev['tupd'] != exp_tupd:
         errs.append('TUPD seq\n  exp %s\n  got %s' % (exp_tupd, ev['tupd']))
     if ev['coll'] != tx['colls']:
@@ -1012,6 +1133,12 @@ def check(simdir):
         errs.append('STATS7 exp %s got %s' % (exp7, ev['stats7']))
     if ev['stx'] != tx['stats']:
         errs.append('STATS_TX exp %s got %s' % (tx['stats'], ev['stx']))
+    # CAMF = CAM 条目 0 = 握手建立的四元组 + 对端 MAC
+    c0 = CONN[0]
+    cexp = ['%08X' % c0['sip'], '%08X' % c0['dip'], '%04X' % c0['sport'],
+            '%04X' % c0['dport'], '%012X' % int.from_bytes(c0['dmac'], 'big')]
+    if [t.lower() for t in (ev['camf'] or [])] != [t.lower() for t in cexp]:
+        errs.append('CAMF exp %s got %s' % (cexp, ev['camf']))
     texp = []
     for e in (0, 1):
         for fld in FIELDS:
@@ -1021,6 +1148,8 @@ def check(simdir):
     if [t.lower() for t in (ev['tcbf'] or [])] != [t.lower() for t in texp]:
         errs.append('TCBF exp %s got %s' % (texp, ev['tcbf']))
     print('anchors %s sdone %s colls %s' % (anchors, tx['sdone'], tx['colls']))
+    print('SYNP exp %s got %s' % (exp_synp, ev['synp']))
+    print('CAMF exp %s got %s' % (cexp, ev['camf']))
     print('STATS7 exp %s got %s' % (exp7, ev['stats7']))
     print('STATS_TX exp %s got %s' % (tx['stats'], ev['stx']))
     print('TCBF exp %s got %s' % (texp, ev['tcbf']))
@@ -1040,7 +1169,7 @@ def main(simdir):
     for name, t in tx['starts']:
         for g in grant_k:
             assert abs(g - t) > 3, (name, t, g)
-        for k, _, _ in rx['acks']:
+        for k, _, _, _ in rx['acks']:
             assert abs(k - t) > 2, (name, t, k)
     for a, b in zip(rx['fends'], rx['fends'][1:]):
         assert b[0] - a[0] >= 10, (a, b)
@@ -1048,6 +1177,7 @@ def main(simdir):
     gen_memh(simdir, frames, tx, anchors)
     print('anchors %s' % anchors)
     print('fends %s' % fend_of)
+    print('syns %s sacks %s' % (rx['syns'], rx['sacks']))
     print('sdone %s colls %s' % (tx['sdone'], tx['colls']))
     print('expected TX frames:')
     for fr in tx['frames']:
