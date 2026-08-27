@@ -19,8 +19,8 @@
 - `tdata[63:56]` = 帧首字节 (dst_mac[0]), 字内字节从高到低连续
 - SOP 字总是满对齐 (`tkeep[7]=1`); TLAST 字 `tkeep` 高位有效
 - FCS 在 MAC 层校验并剥离; `tcrs` (TLAST 有效) = FCS 正确; `terr` = 帧内 rx_er
-- CRC-32: 反射多项式 0xEDB88320 / 初值 0xFFFFFFFF / 残留 == 0xC704DD7B 为正确;
-  线上 FCS 字节序 **LSB-first** (继承 udp_hls_eco 铁律)
+- CRC-32: 反射多项式 0xEDB88320 / 初值 0xFFFFFFFF / 残留 == **0xDEBB20E3** 为正确
+  (0xC704DD7B 是大端/非反射魔数, 勿用); 线上 FCS 字节序 **LSB-first** (zlib.crc32 值小端)
 
 ## 目录
 
