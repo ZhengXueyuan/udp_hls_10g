@@ -56,9 +56,9 @@ def csum16(hw):
     return (~s) & 0xFFFF
 
 
-def ip_hdr(src_ip, dst_ip, proto, total_len, bad_csum=False):
+def ip_hdr(src_ip, dst_ip, proto, total_len, bad_csum=False, frag=0):
     h = bytearray(struct.pack('!BBHHHBBH', 0x45, 0,
-                              total_len & 0xFFFF, 0x1234, 0, 64, proto, 0))
+                              total_len & 0xFFFF, 0x1234, frag & 0xFFFF, 64, proto, 0))
     h += struct.pack('!4s4s', struct.pack('!I', src_ip), struct.pack('!I', dst_ip))
     c = csum16(struct.unpack('!10H', bytes(h[:20])))
     h[10:12] = struct.pack('!H', c ^ (1 if bad_csum else 0))
@@ -70,7 +70,7 @@ def payload(n):
 
 
 def mk_tcp_frame(sport, dport, seq, ack, flags, n, wnd=0x4000, doff=5,
-                 bad_ipcsum=False, bad_fcs=False, pad=False):
+                 bad_ipcsum=False, bad_fcs=False, pad=False, frag=0):
     eth = DST_MAC + SRC_MAC + b'\x08\x00'
     tcp = struct.pack('!HHLLBBHHH', sport, dport, seq & 0xFFFFFFFF,
                       ack & 0xFFFFFFFF, (doff << 4) & 0xF0, flags,
@@ -86,7 +86,7 @@ def mk_tcp_frame(sport, dport, seq, ack, flags, n, wnd=0x4000, doff=5,
         buf += b'\x00'
     cs = csum16(struct.unpack('!%dH' % (len(buf) // 2), buf))
     seg = seg[:16] + struct.pack('!H', cs) + seg[18:]
-    ip = ip_hdr(SRC_IP, DST_IP, 6, 20 + len(seg), bad_ipcsum)
+    ip = ip_hdr(SRC_IP, DST_IP, 6, 20 + len(seg), bad_ipcsum, frag)
     fb = eth + ip + seg
     if pad and len(fb) < 60:
         fb += b'\x00' * (60 - len(fb))
@@ -141,6 +141,7 @@ def build_frames():
     add('fin', 0, 'drop_silent', 0, flags=0x11)
     add('rst', 0, 'drop_silent', 0, flags=0x14)
     add('doff6', 0, 'drop_silent', 20, doff=6)
+    add('frag', 0, 'drop_silent', 20, frag=0x2000)   # MF=1 分片段: 丢给 P4
     # cammiss: 源端口未配置 (手工构造, seq 不推进)
     fb, fcs = mk_tcp_frame(0x3038, DPORT0, seq0, 5000, 0x10, 20)
     F.append(('cammiss', fb, fcs))
@@ -269,8 +270,6 @@ def model(simdir, mode):
     pend_rcv = pend_una = pend_wnd = False
     pend_id = pend_rcv_val = pend_una_val = pend_wnd_val = 0
     drn = 0
-    upd_wr = 0
-    upd_id = upd_sel = upd_val = 0
     stats = dict(pss=0, nonmatch=0, ipcsum=0, crc=0, seq=0, ack=0, bytes=0)
 
     lines = []
@@ -295,7 +294,7 @@ def model(simdir, mode):
         nonlocal acc_l, ackresp_l, ack_adv_l, ack32_l, seq32_l, rcv_nxt_l, plen_l, wnd_l
         nonlocal drop_ack, hold16, pcount, ev, ed, ek, el, eu, tail_stage, td, tk, tu
         nonlocal pend_rcv, pend_una, pend_wnd, pend_id
-        nonlocal pend_rcv_val, pend_una_val, pend_wnd_val, drn, upd_wr, upd_id, upd_sel, upd_val
+        nonlocal pend_rcv_val, pend_una_val, pend_wnd_val, drn
         s_valid = w is not None
         if st == 'PAY':
             s_ready = m_tready or not ev
@@ -396,7 +395,8 @@ def model(simdir, mode):
                             ack_adv = ack_ok and ack32 != t['snd_una']
                             plen_w = (((w2r >> 48) & 0xFFFF) - 40) & 0xFFFF
                             base_ok = (cam_hit_l and state_ok and flags_ok and
-                                       doff_ok and len_ok)
+                                       doff_ok and len_ok and
+                                       ((w2r >> 16) & 0x3FFF) == 0)
                             acc = base_ok and win_ok and seq_eq
                             ackresp = (base_ok and not seq_eq and
                                        (win_ok or seq_lt) and plen_w != 0)
@@ -540,8 +540,8 @@ def model(simdir, mode):
             (st == 'HDR' and accept and wcnt == 6 and w[3] and ackresp_l and w[4]) or \
             (st == 'DROP' and accept and w[3] and drop_ack and w[4])
 
-        # ---- fend pend / drain ----
-        upd_wr_n, upd_id_n, upd_sel_n, upd_val_n = 0, upd_id, upd_sel, upd_val
+        # ---- fend pend / drain (RTL 改组合 upd + gnt: drn 拍当拍写 TCB;
+        #      本 TB gnt = !cfg_upd_wr, 激励期间恒 1) ----
         drn_n = drn
         pend_rcv_n, pend_una_n, pend_wnd_n = pend_rcv, pend_una, pend_wnd
         pend_id_n = pend_id
@@ -559,15 +559,15 @@ def model(simdir, mode):
         else:
             if drn == 1:
                 if pend_rcv:
-                    upd_wr_n, upd_id_n, upd_sel_n, upd_val_n = 1, pend_id, 0, pend_rcv_val
+                    tcb[pend_id]['rcv_nxt'] = pend_rcv_val & 0xFFFFFFFF
                 drn_n = 2
             elif drn == 2:
                 if pend_una:
-                    upd_wr_n, upd_id_n, upd_sel_n, upd_val_n = 1, pend_id, 2, pend_una_val
+                    tcb[pend_id]['snd_una'] = pend_una_val & 0xFFFFFFFF
                 drn_n = 3
             elif drn == 3:
                 if pend_wnd:
-                    upd_wr_n, upd_id_n, upd_sel_n, upd_val_n = 1, pend_id, 4, pend_wnd_val
+                    tcb[pend_id]['snd_wnd'] = pend_wnd_val & 0xFFFF
                 drn_n = 0
         if ack_req:
             stats['ack'] += 1
@@ -588,7 +588,6 @@ def model(simdir, mode):
         pend_id = pend_id_n
         pend_rcv_val, pend_una_val, pend_wnd_val = pend_rcv_val_n, pend_una_val_n, pend_wnd_val_n
         drn = drn_n
-        upd_wr, upd_id, upd_sel, upd_val = upd_wr_n, upd_id_n, upd_sel_n, upd_val_n
         return accept
 
     for k in range(0, kstat + 1):
@@ -629,9 +628,6 @@ def model(simdir, mode):
             if ack_req:
                 av = (rcv_nxt_l + plen_l) if (fend_w6 or fend_pay) else rcv_nxt_l
                 lines.append('ACK %d %08X' % (conn_id_l, av))
-        # ---- tcb 写 (posedge 采样 upd_*) ----
-        if upd_wr:
-            tcb[upd_id][FIELDS[upd_sel]] = upd_val & 0xFFFFFFFF
         # ---- tcp_rx 每周期 ----
         accept = tcp_cycle(w, m_tready)
         rd_ok = accept and s_valid

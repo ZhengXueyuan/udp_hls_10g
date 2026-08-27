@@ -18,6 +18,9 @@
 // dst_ip + 0x0006。伪头协议字节 0x06。纯 ACK 段 flags=0x10, 数据段 0x18 (PSH+ACK)。
 // 数据段 seq = TCB snd_nxt (首拍锁存), 发完 snd_nxt += plen; ack = rcv_nxt。
 // 对端信息 (dmac/dip/端口) 由 CAM 读回口按 conn_id 组合取得, 首拍锁存。
+// app 契约: 载荷 ≤1500B (plen 12 位, 超 4095 回绕不检查); S_IDLE 因 ACK 优先或
+// FIFO 满挡数据期间, app 须保持 tdata/tkeep/tlast/tid 稳定 (presenting 契约)。
+// csum_valid 由 fin 时序保证 (aen→fin→取数固定间隔), 不另检查。
 module tcp_tx_frame (
     input  wire        clk,
     input  wire        rst_n,

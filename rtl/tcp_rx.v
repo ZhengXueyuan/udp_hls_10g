@@ -49,23 +49,25 @@ module tcp_rx (
     input  wire [31:0] ra_snd_una,
     input  wire [15:0] ra_rcv_wnd,
     input  wire [3:0]  ra_state,
-    // TCB 更新 (fend 后 drain: 拍1 rcv_nxt, 拍2 snd_una, 拍3 snd_wnd; 与慢路径更新口顶层仲裁)
-    output reg         upd_wr,
-    output reg  [3:0]  upd_id,
-    output reg  [2:0]  upd_sel,
-    output reg  [31:0] upd_val,
+    // TCB 更新 (fend 后 drain: 拍1 rcv_nxt, 拍2 snd_una, 拍3 snd_wnd;
+    // 组合电平输出, upd_gnt 未给则保持该字段 — 顶层仲裁必须无损 (tx 优先时 rx 靠 gnt 顺延)
+    output wire        upd_wr,
+    output wire [3:0]  upd_id,
+    output wire [2:0]  upd_sel,
+    output wire [31:0] upd_val,
+    input  wire        upd_gnt,
     // ACK 请求 (TX 侧消费: 发无载荷 ACK 段, ack 号 = ack_val)
     output wire        ack_req,
     output wire [3:0]  ack_id,
     output wire [31:0] ack_val,
-    // CAM 配置 (内部 tcp_cam 实例, 慢路径写)
-    input  wire        cfg_wr,
-    input  wire [3:0]  cfg_addr,
-    input  wire [31:0] cfg_sip,
-    input  wire [31:0] cfg_dip,
-    input  wire [15:0] cfg_sport,
-    input  wire [15:0] cfg_dport,
-    input  wire [47:0] cfg_dmac,
+    // CAM 查询 (外部 tcp_cam 实例, 与 TX 读回共享同一份连接表;
+    // q_* 组合输出在 w4 拍有效, q_hit/q_id 同拍返回)
+    output wire [31:0] cam_q_sip,
+    output wire [31:0] cam_q_dip,
+    output wire [15:0] cam_q_sport,
+    output wire [15:0] cam_q_dport,
+    input  wire        cam_q_hit,
+    input  wire [3:0]  cam_q_id,
     // 统计
     output reg  [31:0] stat_pass,          // 接受且 FCS 好 (含纯 ACK)
     output reg  [31:0] stat_drop_nonmatch, // 头坏/非 TCP/CAM 未命中/状态/标志/带选项/窗口外/截断
@@ -173,7 +175,9 @@ module tcp_rx (
     wire        ack_ok   = ((ack32 - ra_snd_una) <= (ra_snd_nxt - ra_snd_una));
     wire        ack_adv  = ack_ok && (ack32 != ra_snd_una);
     wire [15:0] plen_w   = w2_r[63:48] - 16'd40;
-    wire        base_ok  = cam_hit_l && state_ok && flags_ok && doff_ok && len_ok;
+    wire        frag_ok  = (w2_r[29:16] == 14'h0);   // MF=0 且片偏移=0 (分片段丢给 P4)
+    wire        base_ok  = cam_hit_l && state_ok && flags_ok && doff_ok && len_ok &&
+                           frag_ok;
     wire        acc      = base_ok && win_ok && seq_eq;
     // 窗口内乱序 (seq > rcv_nxt) 与重复 (seq < rcv_nxt): 丢数据仍回 ACK (快速重传/dup-ACK 依赖)
     wire        ackresp  = base_ok && !seq_eq && (win_ok || seq_lt) && (plen_w != 16'd0);
@@ -205,29 +209,32 @@ module tcp_rx (
     assign meta_conn_id  = conn_id_l;
     assign meta_seq      = seq32_l;
 
+    // w6 拍可能发短帧末字, 须等上一帧尾字排空 (硬背压跨帧角例)
     assign s_axis_tready = (state == S_PAY) ? (m_axis_tready || !emit_v) :
-                           (state == S_TAIL) ? 1'b0 : 1'b1;
+                           (state == S_TAIL) ? 1'b0 :
+                           ((state == S_HDR) && (wcnt == 3'd6)) ?
+                               (m_axis_tready || !emit_v) : 1'b1;
     assign m_axis_tdata  = emit_d;
     assign m_axis_tkeep  = emit_k;
     assign m_axis_tvalid = emit_v;
     assign m_axis_tlast  = emit_l;
     assign m_axis_tuser  = emit_u;
 
-    // 内部 CAM: 4 元组组合查询 (w4 拍字段)
-    wire [3:0] cam_id;
-    wire       cam_hit;
-    tcp_cam u_cam (
-        .clk(clk), .rst_n(rst_n),
-        .cfg_wr(cfg_wr), .cfg_addr(cfg_addr),
-        .cfg_sip(cfg_sip), .cfg_dip(cfg_dip),
-        .cfg_sport(cfg_sport), .cfg_dport(cfg_dport), .cfg_dmac(cfg_dmac),
-        .q_sip(src_ip_r), .q_dip({w3_r[15:0], s_axis_tdata[63:48]}),
-        .q_sport(s_axis_tdata[47:32]), .q_dport(s_axis_tdata[31:16]),
-        .q_id(cam_id), .q_hit(cam_hit),
-        .rd_id(4'd0), .rd_dmac(), .rd_dip(), .rd_sport(), .rd_dport()
-    );
+    // CAM 查询 (外部实例): 4 元组组合输出, w4 拍锁存结果
+    assign cam_q_sip   = src_ip_r;
+    assign cam_q_dip   = {w3_r[15:0], s_axis_tdata[63:48]};
+    assign cam_q_sport = s_axis_tdata[47:32];
+    assign cam_q_dport = s_axis_tdata[31:16];
 
     wire [15:0] wnd_f = fend_w6 ? s_axis_tdata[63:48] : wnd_l;
+
+    // TCB 更新口 (组合: drn 状态电平保持, gnt 拍被写进 TCB 并顺延下一字段)
+    assign upd_wr  = ((drn == 2'd1) && pend_rcv) || ((drn == 2'd2) && pend_una) ||
+                     ((drn == 2'd3) && pend_wnd);
+    assign upd_id  = pend_id;
+    assign upd_sel = (drn == 2'd1) ? 3'd0 : (drn == 2'd2) ? 3'd2 : 3'd4;
+    assign upd_val = (drn == 2'd1) ? pend_rcv_val :
+                     (drn == 2'd2) ? pend_una_val : {16'b0, pend_wnd_val};
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -243,13 +250,11 @@ module tcp_rx (
             pend_rcv <= 0; pend_una <= 0; pend_wnd <= 0;
             pend_id <= 0; pend_rcv_val <= 0; pend_una_val <= 0; pend_wnd_val <= 0;
             drn <= 0;
-            upd_wr <= 0; upd_id <= 0; upd_sel <= 0; upd_val <= 0;
             stat_pass <= 0; stat_drop_nonmatch <= 0; stat_drop_ipcsum <= 0;
             stat_drop_crc <= 0; stat_drop_seq <= 0; stat_ack <= 0; stat_bytes <= 0;
         end else begin
             if (m_axis_tready && emit_v) emit_v <= 1'b0;   // 输出被消费
-            // ---- fend 拍锁存 TCB 更新 (drain 下拍开始, 一字段一拍) ----
-            upd_wr <= 1'b0;
+            // ---- fend 拍锁存 TCB 更新 (drain 下拍开始, 一字段一拍, gnt 未给则保持) ----
             if (fend) begin
                 pend_rcv <= acc_l && (plen_l != 16'd0) && s_axis_tcrs;
                 pend_una <= ack_adv_l && s_axis_tcrs;
@@ -260,29 +265,11 @@ module tcp_rx (
                 pend_wnd_val <= wnd_f;
                 drn <= 2'd1;
             end else begin
-                // ---- drain FSM ----
+                // ---- drain FSM (upd_* 组合输出, gnt 拍才前进) ----
                 case (drn)
-                    2'd1: begin
-                        if (pend_rcv) begin
-                            upd_wr <= 1'b1; upd_id <= pend_id;
-                            upd_sel <= 3'd0; upd_val <= pend_rcv_val;
-                        end
-                        drn <= 2'd2;
-                    end
-                    2'd2: begin
-                        if (pend_una) begin
-                            upd_wr <= 1'b1; upd_id <= pend_id;
-                            upd_sel <= 3'd2; upd_val <= pend_una_val;
-                        end
-                        drn <= 2'd3;
-                    end
-                    2'd3: begin
-                        if (pend_wnd) begin
-                            upd_wr <= 1'b1; upd_id <= pend_id;
-                            upd_sel <= 3'd4; upd_val <= {16'b0, pend_wnd_val};
-                        end
-                        drn <= 2'd0;
-                    end
+                    2'd1: if (!pend_rcv || upd_gnt) drn <= 2'd2;
+                    2'd2: if (!pend_una || upd_gnt) drn <= 2'd3;
+                    2'd3: if (!pend_wnd || upd_gnt) drn <= 2'd0;
                     default: ;
                 endcase
             end
@@ -291,7 +278,9 @@ module tcp_rx (
                 S_HDR: begin
                     if (accept) begin
                         if (s_axis_tuser) begin
-                            emit_v <= 1'b0;   // 截断防御: 本字即新帧 w0
+                            // 截断防御: 本字即新帧 w0。仅清半帧残留 (emit_l=0);
+                            // 完整帧尾 (emit_l=1) 未消费时必须保留, w6 门控等其排空
+                            if (!emit_l) emit_v <= 1'b0;
                         end
                         if (s_axis_tlast && (wcnt != 3'd6)) begin
                             // 头没走完帧就结束 (TCP 最小帧 54B, w6 之前 TLAST 必畸形)
@@ -342,8 +331,8 @@ module tcp_rx (
                                         state <= S_DROP; drop_ack <= 1'b0;
                                         stat_drop_ipcsum <= stat_drop_ipcsum + 1;
                                     end else begin
-                                        cam_hit_l <= cam_hit;
-                                        conn_id_l <= cam_id;
+                                        cam_hit_l <= cam_q_hit;
+                                        conn_id_l <= cam_q_id;
                                         src_port_r <= s_axis_tdata[47:32];
                                         seq_hi_r <= s_axis_tdata[15:0];
                                         wcnt <= 3'd5;
@@ -369,10 +358,13 @@ module tcp_rx (
                                         state <= S_HDR; wcnt <= 3'd0;
                                         if (w6_tlast_ok) begin
                                             // 纯 ACK (plen=0) 或短载荷 (plen=1..2, 无填充)
-                                            if (s_axis_tcrs) stat_pass <= stat_pass + 1;
-                                            else stat_drop_crc <= stat_drop_crc + 1;
-                                            if (plen_l != 16'd0) begin
+                                            if (s_axis_tcrs) begin
+                                                stat_pass <= stat_pass + 1;
                                                 stat_bytes <= stat_bytes + plen_l;
+                                            end else begin
+                                                stat_drop_crc <= stat_drop_crc + 1;
+                                            end
+                                            if (plen_l != 16'd0) begin
                                                 emit_v <= 1'b1;
                                                 emit_d <= ljust2(s_axis_tdata[15:0], plen_l[2:0]);
                                                 emit_k <= 8'hFF << (4'd8 - plen_l[3:0]);
@@ -410,7 +402,7 @@ module tcp_rx (
                     if ((!emit_v || m_axis_tready) && accept) begin
                         if (s_axis_tuser) begin
                             // 截断防御: 丢弃当前帧残余, 本字即新帧 w0
-                            emit_v <= 1'b0;
+                            if (!emit_l) emit_v <= 1'b0;
                             if (s_axis_tlast) begin
                                 state <= S_HDR; wcnt <= 3'd0;
                                 stat_drop_nonmatch <= stat_drop_nonmatch + 1;
@@ -459,6 +451,10 @@ module tcp_rx (
                             if (s_axis_tkeep != 8'hFF) begin
                                 state <= S_DROP; drop_ack <= 1'b0;
                                 stat_drop_nonmatch <= stat_drop_nonmatch + 1;
+                            end else if (pcount + 16'd8 > plen_l) begin
+                                // 帧身超过 IP total_len 声明的载荷: 畸形, 吞掉防 pcount 回绕
+                                state <= S_DROP; drop_ack <= 1'b0;
+                                stat_drop_nonmatch <= stat_drop_nonmatch + 1;
                             end else begin
                                 emit_v <= 1'b1;
                                 emit_d <= {hold16, s_axis_tdata[63:16]};
@@ -492,7 +488,7 @@ module tcp_rx (
                 S_TAIL: begin
                     if (tail_stage) begin
                         if (m_axis_tready) begin
-                            state <= S_HDR;     // 溢出尾字已消费
+                            state <= S_HDR; wcnt <= 3'd0;   // 溢出尾字已消费
                             emit_v <= 1'b0;
                         end
                     end else if (m_axis_tready) begin

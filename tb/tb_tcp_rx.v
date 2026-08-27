@@ -59,6 +59,10 @@ module tb_tcp_rx;
     wire [2:0]  u_rx_upd_sel;
     wire [31:0] u_rx_upd_val;
     wire        s_ready;
+    wire [31:0] cam_q_sip, cam_q_dip;
+    wire [15:0] cam_q_sport, cam_q_dport;
+    wire        cam_q_hit;
+    wire [3:0]  cam_q_id;
     // TCB 更新 mux: 慢路径配置优先
     wire [2:0]  tcb_sel = cfg_upd_wr ? cfg_upd_sel : u_rx_upd_sel;
     wire [3:0]  tcb_id  = cfg_upd_wr ? cfg_upd_id  : u_rx_upd_id;
@@ -91,14 +95,25 @@ module tb_tcp_rx;
         .ra_rcv_nxt(ra_rcv_nxt), .ra_snd_nxt(ra_snd_nxt), .ra_snd_una(ra_snd_una),
         .ra_rcv_wnd(ra_rcv_wnd), .ra_state(ra_state),
         .upd_wr(u_rx_upd_wr), .upd_id(u_rx_upd_id), .upd_sel(u_rx_upd_sel), .upd_val(u_rx_upd_val),
+        .upd_gnt(!cfg_upd_wr),
         .ack_req(ack_req), .ack_id(ack_id), .ack_val(ack_val),
-        .cfg_wr(cfg_wr), .cfg_addr(cfg_addr),
-        .cfg_sip(cfg_sip), .cfg_dip(cfg_dip),
-        .cfg_sport(cfg_sport), .cfg_dport(cfg_dport),
-        .cfg_dmac(cfg_dmac),
+        .cam_q_sip(cam_q_sip), .cam_q_dip(cam_q_dip),
+        .cam_q_sport(cam_q_sport), .cam_q_dport(cam_q_dport),
+        .cam_q_hit(cam_q_hit), .cam_q_id(cam_q_id),
         .stat_pass(stat_pass), .stat_drop_nonmatch(stat_nonmatch),
         .stat_drop_ipcsum(stat_ipcsum), .stat_drop_crc(stat_crc),
         .stat_drop_seq(stat_seq), .stat_ack(stat_ack), .stat_bytes(stat_bytes)
+    );
+
+    tcp_cam u_cam (
+        .clk(clk), .rst_n(rst_n),
+        .cfg_wr(cfg_wr), .cfg_addr(cfg_addr),
+        .cfg_sip(cfg_sip), .cfg_dip(cfg_dip),
+        .cfg_sport(cfg_sport), .cfg_dport(cfg_dport), .cfg_dmac(cfg_dmac),
+        .q_sip(cam_q_sip), .q_dip(cam_q_dip),
+        .q_sport(cam_q_sport), .q_dport(cam_q_dport),
+        .q_id(cam_q_id), .q_hit(cam_q_hit),
+        .rd_id(4'd0), .rd_dmac(), .rd_dip(), .rd_sport(), .rd_dport()
     );
 
     tcb u_tcb (

@@ -139,7 +139,9 @@ module udp_rx (
     wire        hdr_ok2  = (wcnt == 6'd2) && (s_axis_tdata[7:0] == 8'h11);
 
     assign s_axis_tready = (state == S_PAY) ? (m_axis_tready || !emit_v) :
-                           (state == S_TAIL) ? 1'b0 : 1'b1;
+                           (state == S_TAIL) ? 1'b0 :
+                           ((state == S_HDR) && (wcnt == 6'd5)) ?
+                               (m_axis_tready || !emit_v) : 1'b1;
     assign m_axis_tdata  = emit_d;
     assign m_axis_tkeep  = emit_k;
     assign m_axis_tvalid = emit_v;
@@ -174,8 +176,9 @@ module udp_rx (
                 S_HDR: begin
                     if (accept) begin
                         if (s_axis_tuser) begin
-                            emit_v <= 1'b0;      // 截断防御: 半帧无 TLAST, 下游按契约丢弃;
-                                                 // 本字即新帧 w0, case 按 wcnt=0 处理
+                            // 仅清半帧残留 (emit_l=0); 完整帧尾未消费时保留,
+                            // w5 门控 (s_axis_tready) 等其排空
+                            if (!emit_l) emit_v <= 1'b0;
                         end
                         if (s_axis_tlast && (wcnt != 6'd5)) begin
                             // 头没走完帧就结束: 畸形 (w5 的 TLAST 是合法短帧, 走 case 特例)
@@ -278,7 +281,7 @@ module udp_rx (
                     if ((!emit_v || m_axis_tready) && accept) begin
                         if (s_axis_tuser) begin
                             // 截断防御: 丢弃当前帧残余 (半帧无 TLAST), 本字即新帧 w0
-                            emit_v <= 1'b0;
+                            if (!emit_l) emit_v <= 1'b0;
                             if (s_axis_tlast) begin
                                 state <= S_HDR; wcnt <= 6'd0; matched <= 1'b0;
                                 stat_drop_nonmatch <= stat_drop_nonmatch + 1;
@@ -330,6 +333,10 @@ module udp_rx (
                                 // 帧内非整字: 畸形
                                 state <= S_DROP; matched <= 1'b0;
                                 stat_drop_nonmatch <= stat_drop_nonmatch + 1;
+                            end else if (pcount + 12'd8 > meta_len_r) begin
+                                // 帧身超过 udp_len 声明的载荷: 畸形, 吞掉防 pcount 回绕
+                                state <= S_DROP; matched <= 1'b0;
+                                stat_drop_nonmatch <= stat_drop_nonmatch + 1;
                             end else begin
                                 emit_v <= 1'b1;
                                 emit_d <= {hold, s_axis_tdata[63:48]};
@@ -344,7 +351,7 @@ module udp_rx (
                 S_TAIL: begin
                     if (tail_stage) begin
                         if (m_axis_tready) begin
-                            state <= S_HDR;     // 溢出尾字已消费
+                            state <= S_HDR; wcnt <= 6'd0;   // 溢出尾字已消费
                             emit_v <= 1'b0;
                         end
                     end else if (m_axis_tready) begin
