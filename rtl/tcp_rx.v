@@ -60,6 +60,14 @@ module tcp_rx (
     output wire        ack_req,
     output wire [3:0]  ack_id,
     output wire [31:0] ack_val,
+    // SYN sideband (P4-lite 握手用): 纯 SYN 段帧尾脉冲 (FCS 好才发), 字段全锁存
+    output reg         syn_v,
+    output wire [47:0] syn_smac,
+    output wire [31:0] syn_sip,
+    output wire [15:0] syn_sport,
+    output wire [15:0] syn_dport,
+    output wire [31:0] syn_seq,
+    output wire [15:0] syn_wnd,
     // CAM 查询 (外部 tcp_cam 实例, 与 TX 读回共享同一份连接表;
     // q_* 组合输出在 w4 拍有效, q_hit/q_id 同拍返回)
     output wire [31:0] cam_q_sip,
@@ -86,8 +94,12 @@ module tcp_rx (
     reg  [15:0] w1_lo, w3_r;             // w3_r[15:0] = dst_ip[31:16]
     reg  [63:0] w2_r;                    // 必须 64 位 (IP 校验和树读全部 4 半字)
     reg  [19:0] ipc_s9;
+    reg  [15:0] mac_lo;                  // src_mac[47:32] (SYN 应答要用对端 MAC)
+    reg  [31:0] mac_hi;                  // src_mac[31:0]
     reg  [31:0] src_ip_r;
-    reg  [15:0] src_port_r, seq_hi_r;
+    reg  [15:0] src_port_r, seq_hi_r, dport_r;
+    reg         syn_l, drop_syn_r;
+    reg  [15:0] syn_wnd_r;
     reg         cam_hit_l;
     reg  [3:0]  conn_id_l;
     // w5 拍判读锁存 (w5->w6 沿)
@@ -226,6 +238,13 @@ module tcp_rx (
     assign cam_q_sport = s_axis_tdata[47:32];
     assign cam_q_dport = s_axis_tdata[31:16];
 
+    assign syn_smac  = {mac_lo, mac_hi};
+    assign syn_sip   = src_ip_r;
+    assign syn_sport = src_port_r;
+    assign syn_dport = dport_r;
+    assign syn_seq   = seq32_l;
+    assign syn_wnd   = syn_wnd_r;
+
     wire [15:0] wnd_f = fend_w6 ? s_axis_tdata[63:48] : wnd_l;
 
     // TCB 更新口 (组合: drn 状态电平保持, gnt 拍被写进 TCB 并顺延下一字段)
@@ -240,7 +259,9 @@ module tcp_rx (
         if (!rst_n) begin
             state <= S_HDR; wcnt <= 0;
             w1_lo <= 0; w2_r <= 0; w3_r <= 0; ipc_s9 <= 0;
-            src_ip_r <= 0; src_port_r <= 0; seq_hi_r <= 0;
+            src_ip_r <= 0; src_port_r <= 0; seq_hi_r <= 0; dport_r <= 0;
+            mac_lo <= 0; mac_hi <= 0;
+            syn_l <= 0; drop_syn_r <= 0; syn_wnd_r <= 0; syn_v <= 0;
             cam_hit_l <= 0; conn_id_l <= 0;
             acc_l <= 0; ackresp_l <= 0; ack_adv_l <= 0;
             ack32_l <= 0; seq32_l <= 0; rcv_nxt_l <= 0; plen_l <= 0; wnd_l <= 0;
@@ -254,6 +275,7 @@ module tcp_rx (
             stat_drop_crc <= 0; stat_drop_seq <= 0; stat_ack <= 0; stat_bytes <= 0;
         end else begin
             if (m_axis_tready && emit_v) emit_v <= 1'b0;   // 输出被消费
+            syn_v <= 1'b0;                                 // 脉冲型: 每拍默认清零
             // ---- fend 拍锁存 TCB 更新 (drain 下拍开始, 一字段一拍, gnt 未给则保持) ----
             if (fend) begin
                 pend_rcv <= acc_l && (plen_l != 16'd0) && s_axis_tcrs;
@@ -290,15 +312,20 @@ module tcp_rx (
                             case (s_axis_tuser ? 3'd0 : wcnt)
                                 3'd0: begin
                                     if (s_axis_tkeep != 8'hFF) begin
-                                        state <= S_DROP; drop_ack <= 1'b0;
+                                        state <= S_DROP; drop_ack <= 1'b0; drop_syn_r <= 1'b0;
                                         stat_drop_nonmatch <= stat_drop_nonmatch + 1;
-                                    end else wcnt <= 3'd1;
+                                    end else begin
+                                        mac_lo <= s_axis_tdata[15:0];   // src_mac[47:32]
+                                        drop_syn_r <= 1'b0;
+                                        wcnt <= 3'd1;
+                                    end
                                 end
                                 3'd1: begin
                                     if (s_axis_tkeep != 8'hFF || !hdr_ok1) begin
-                                        state <= S_DROP; drop_ack <= 1'b0;
+                                        state <= S_DROP; drop_ack <= 1'b0; drop_syn_r <= 1'b0;
                                         stat_drop_nonmatch <= stat_drop_nonmatch + 1;
                                     end else begin
+                                        mac_hi <= s_axis_tdata[63:32];
                                         w1_lo <= s_axis_tdata[15:0];
                                         wcnt <= 3'd2;
                                     end
@@ -334,6 +361,7 @@ module tcp_rx (
                                         cam_hit_l <= cam_q_hit;
                                         conn_id_l <= cam_q_id;
                                         src_port_r <= s_axis_tdata[47:32];
+                                        dport_r <= s_axis_tdata[31:16];
                                         seq_hi_r <= s_axis_tdata[15:0];
                                         wcnt <= 3'd5;
                                     end
@@ -350,10 +378,12 @@ module tcp_rx (
                                         seq32_l <= seq32;
                                         plen_l <= plen_w;
                                         rcv_nxt_l <= ra_rcv_nxt;
+                                        syn_l <= (flags == 8'h02);   // 纯 SYN (无 ACK/RST/FIN)
                                         wcnt <= 3'd6;
                                     end
                                 end
                                 default: begin   // wcnt==6: 判定 + 载荷入口
+                                    syn_wnd_r <= s_axis_tdata[63:48];
                                     if (s_axis_tlast) begin
                                         state <= S_HDR; wcnt <= 3'd0;
                                         if (w6_tlast_ok) begin
@@ -374,6 +404,9 @@ module tcp_rx (
                                         end else if (ackresp_l) begin
                                             stat_drop_seq <= stat_drop_seq + 1;
                                         end else begin
+                                            // 纯 SYN 短帧 (w6-tlast): 帧尾即报握手
+                                            if (syn_l && s_axis_tcrs && !s_axis_terr)
+                                                syn_v <= 1'b1;
                                             stat_drop_nonmatch <= stat_drop_nonmatch + 1;
                                         end
                                     end else if (acc_l) begin
@@ -387,10 +420,11 @@ module tcp_rx (
                                         wnd_l <= s_axis_tdata[63:48];
                                         wcnt <= 3'd7;
                                     end else if (ackresp_l) begin
-                                        state <= S_DROP; drop_ack <= 1'b1;
+                                        state <= S_DROP; drop_ack <= 1'b1; drop_syn_r <= 1'b0;
                                         stat_drop_seq <= stat_drop_seq + 1;
                                     end else begin
                                         state <= S_DROP; drop_ack <= 1'b0;
+                                        drop_syn_r <= syn_l;   // SYN 帧在 S_DROP 帧尾报握手
                                         stat_drop_nonmatch <= stat_drop_nonmatch + 1;
                                     end
                                 end
@@ -407,9 +441,11 @@ module tcp_rx (
                                 state <= S_HDR; wcnt <= 3'd0;
                                 stat_drop_nonmatch <= stat_drop_nonmatch + 1;
                             end else if (s_axis_tkeep != 8'hFF) begin
-                                state <= S_DROP; drop_ack <= 1'b0;
+                                state <= S_DROP; drop_ack <= 1'b0; drop_syn_r <= 1'b0;
                                 stat_drop_nonmatch <= stat_drop_nonmatch + 1;
                             end else begin
+                                mac_lo <= s_axis_tdata[15:0];   // 本字即新帧 w0
+                                drop_syn_r <= 1'b0;
                                 state <= S_HDR; wcnt <= 3'd1;
                             end
                         end else if (s_axis_tlast) begin
@@ -473,9 +509,11 @@ module tcp_rx (
                                 state <= S_HDR; wcnt <= 3'd0;
                                 stat_drop_nonmatch <= stat_drop_nonmatch + 1;
                             end else if (s_axis_tkeep != 8'hFF) begin
-                                state <= S_DROP; drop_ack <= 1'b0;
+                                state <= S_DROP; drop_ack <= 1'b0; drop_syn_r <= 1'b0;
                                 stat_drop_nonmatch <= stat_drop_nonmatch + 1;
                             end else begin
+                                mac_lo <= s_axis_tdata[15:0];   // 本字即新帧 w0
+                                drop_syn_r <= 1'b0;
                                 state <= S_HDR; wcnt <= 3'd1;
                             end
                         end else if (s_axis_tlast) begin
@@ -497,10 +535,12 @@ module tcp_rx (
                         tail_stage <= 1'b1;
                     end
                 end
-                default: begin   // S_DROP: 吞到帧尾 (drop_ack 帧尾回 ACK)
+                default: begin   // S_DROP: 吞到帧尾 (drop_ack 帧尾回 ACK; drop_syn 帧尾报握手)
                     if (accept && s_axis_tlast) begin
                         state <= S_HDR; wcnt <= 3'd0;
+                        if (drop_syn_r && s_axis_tcrs && !s_axis_terr) syn_v <= 1'b1;
                         drop_ack <= 1'b0;
+                        drop_syn_r <= 1'b0;
                     end
                 end
             endcase

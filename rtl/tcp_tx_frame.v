@@ -31,10 +31,11 @@ module tcp_tx_frame (
     output wire        s_axis_tready,
     input  wire        s_axis_tlast,
     input  wire [3:0]  s_axis_tid,
-    // ACK 请求 (tcp_rx 脉冲; 入 8 深队列, 满则丢并计数)
+    // ACK 请求 (tcp_rx 脉冲 / tcp_synp SYN+ACK 请求; 入 8 深队列, 满则丢并计数)
     input  wire        ack_req,
     input  wire [3:0]  ack_id,
     input  wire [31:0] ack_val,
+    input  wire        ack_syn,        // 1 = SYN+ACK 段 (flags=0x12, 发完 snd_nxt+1)
     // TCB 读口 B (顶层实例化 tcb 并连线)
     output wire [3:0]  rb_id,
     input  wire [31:0] rb_snd_nxt,
@@ -83,7 +84,7 @@ module tcp_tx_frame (
     reg  [7:0]  tail_k;
     // 帧首拍锁存
     reg  [3:0]  cur_id;
-    reg         is_data_r;
+    reg         is_data_r, is_syn_r;
     reg  [31:0] seq_r, ack_r;
     reg  [15:0] wnd_r;
     reg  [15:0] doff_flags_r;
@@ -91,20 +92,21 @@ module tcp_tx_frame (
     reg  [31:0] dip_r;
     reg  [15:0] sport_r, dport_r;
 
-    // ---- ACK 请求队列 ----
+    // ---- ACK 请求队列 ([36:33]=id [32]=syn [31:0]=ack_val) ----
     wire        ackq_full, ackq_empty;
-    wire [35:0] ackq_dout;
+    wire [36:0] ackq_dout;
     wire        pay_full, pay_empty;
     wire        ack_pend = !ackq_empty;
-    wire [3:0]  start_id = ack_pend ? ackq_dout[35:32] : s_axis_tid;
+    wire [3:0]  start_id = ack_pend ? ackq_dout[36:33] : s_axis_tid;
 
     assign rb_id     = (state == S_IDLE) ? start_id : cur_id;
     assign cam_rd_id = (state == S_IDLE) ? start_id : cur_id;
 
-    assign upd_wr  = (state == S_DONE) && is_data_r && m_axis_tvalid && m_axis_tready;
+    assign upd_wr  = (state == S_DONE) && (is_data_r || is_syn_r) &&
+                     m_axis_tvalid && m_axis_tready;
     assign upd_id  = cur_id;
     assign upd_sel = 3'd1;
-    assign upd_val = seq_r + {20'b0, plen_r};
+    assign upd_val = seq_r + (is_data_r ? {20'b0, plen_r} : 32'd1);
 
     wire        start_ack  = (state == S_IDLE) && ack_pend;
     wire        start_data = (state == S_IDLE) && !ack_pend &&
@@ -203,9 +205,9 @@ module tcp_tx_frame (
         .empty(pay_empty), .full(pay_full)
     );
 
-    fifo_sync #(.W(36), .D(8), .AW(3)) u_ackq (
+    fifo_sync #(.W(37), .D(8), .AW(3)) u_ackq (
         .clk(clk), .rst_n(rst_n),
-        .wr(ack_req && !ackq_full), .din({ack_id, ack_val}),
+        .wr(ack_req && !ackq_full), .din({ack_id, ack_syn, ack_val}),
         .rd(start_ack), .dout(ackq_dout),
         .empty(ackq_empty), .full(ackq_full)
     );
@@ -217,7 +219,7 @@ module tcp_tx_frame (
             tcp_len_r <= 0; total_len_r <= 0; ip_csum_r <= 0; tcp_csum_r <= 0;
             id_r <= 0; id_cap <= 0;
             wait_cnt <= 0; hcnt <= 0; hold48 <= 0; tail_d <= 0; tail_k <= 0;
-            cur_id <= 0; is_data_r <= 0;
+            cur_id <= 0; is_data_r <= 0; is_syn_r <= 0;
             seq_r <= 0; ack_r <= 0; wnd_r <= 0; doff_flags_r <= 0;
             dmac_r <= 0; dip_r <= 0; sport_r <= 0; dport_r <= 0;
             m_axis_tdata <= 0; m_axis_tkeep <= 0; m_axis_tvalid <= 0; m_axis_tlast <= 0;
@@ -231,10 +233,12 @@ module tcp_tx_frame (
                         // 帧首拍: 锁存连接上下文 (rb/cam_rd 组合输出对 start_id 有效)
                         cur_id <= start_id;
                         is_data_r <= start_data;
+                        is_syn_r <= start_ack && ackq_dout[32];
                         seq_r <= rb_snd_nxt;
                         ack_r <= start_data ? rb_rcv_nxt : ackq_dout[31:0];
                         wnd_r <= rb_rcv_wnd;
-                        doff_flags_r <= {8'h50, start_data ? 8'h18 : 8'h10};
+                        doff_flags_r <= {8'h50, start_data ? 8'h18 :
+                                         (ackq_dout[32] ? 8'h12 : 8'h10)};
                         dmac_r <= cam_rd_dmac;
                         dip_r <= cam_rd_dip;
                         sport_r <= cam_rd_dport;   // 本地端口
@@ -292,8 +296,7 @@ module tcp_tx_frame (
                             3'd2: m_axis_tdata <= {total_len_r, id_cap, 16'h0000, 8'h40, 8'h06};
                             3'd3: m_axis_tdata <= {ip_csum_r, cfg_src_ip, dip_r[31:16]};
                             3'd4: m_axis_tdata <= {dip_r[15:0], sport_r, dport_r, seq_r[31:16]};
-                            default: m_axis_tdata <= {seq_r[15:0], ack_r, 8'h50,
-                                                      is_data_r ? 8'h18 : 8'h10};
+                            default: m_axis_tdata <= {seq_r[15:0], ack_r, doff_flags_r};
                         endcase
                         if (hcnt == 3'd5) begin
                             state <= S_PAY;

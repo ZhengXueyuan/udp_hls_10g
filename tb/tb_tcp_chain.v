@@ -168,7 +168,7 @@ module tb_tcp_chain;
         .s_axis_tdata(tdata), .s_axis_tkeep(tkeep),
         .s_axis_tvalid(tvalid), .s_axis_tready(tready), .s_axis_tlast(tlast),
         .s_axis_tid(tid),
-        .ack_req(ack_req), .ack_id(ack_id), .ack_val(ack_val),
+        .ack_req(ack_req), .ack_id(ack_id), .ack_val(ack_val), .ack_syn(1'b0),
         .rb_id(rb_id), .rb_snd_nxt(rb_snd_nxt), .rb_rcv_nxt(rb_rcv_nxt),
         .rb_rcv_wnd(rb_rcv_wnd),
         .upd_wr(tx_upd_wr), .upd_id(tx_upd_id), .upd_sel(tx_upd_sel), .upd_val(tx_upd_val),
