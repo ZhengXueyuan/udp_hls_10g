@@ -161,12 +161,13 @@ def fold16(v):
 
 # ---------------- RX 侧周期精确模型 (mac_rx_64 + fifo8 + tcp_rx 时序壳) ----------------
 
-def rx_model(frames, snd_nxt_init=None, snd_nxt_events=()):
+def rx_model(frames, snd_nxt_init=None, snd_nxt_events=(), good=None):
     """snd_nxt 时变处理: w5 判读的 ack_ok 需 ra_snd_nxt 真实时值。握手后 una 链
     (+1000) 前段会超过 TX 实发进度 (DUT 合法拒推进 una: ACK 了未发数据) — 终值
     等价假设不再成立, 按事件表应用: snd_nxt_events = [(beat, cid, val)]
     (synp sel1 写 iss + tx sel1 写)。bootstrap 用 snd_nxt_init 静态终值。
-    字拍/fend/ack 流与 snd_nxt 无关 (acc 不看 ack_ok), 仅 drains 受影响。"""
+    字拍/fend/ack 流与 snd_nxt 无关 (acc 不看 ack_ok), 仅 drains 受影响。
+    good: 每帧 FCS 好坏列表 (None = 全好; echo 场景的坏 CRC 帧用)。"""
     nstim = max(f['first'] + f['B'] + 4 + 12 for f in frames)
     tmax = nstim + 200
     # 帧字节 -> (byte, dv) 按索引
@@ -178,7 +179,9 @@ def rx_model(frames, snd_nxt_init=None, snd_nxt_events=()):
         for j, b in enumerate(stream):
             sdata[base + j] = b
             sdv[base + j] = 1
-    crs_list = [True] * len(frames) + [False]
+    if good is None:
+        good = [True] * len(frames)
+    crs_list = [g for g in good] + [False]
 
     # mac_rx_64 状态
     mst, pre_cnt, bcnt, fbytes = 'IDLE', 0, 0, 0
