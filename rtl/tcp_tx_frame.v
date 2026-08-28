@@ -50,7 +50,7 @@ module tcp_tx_frame (
     // CAM 读回 (顶层连 tcp_cam 读回口; 慢路径保证条目有效)
     output wire [3:0]  cam_rd_id,
     input  wire [47:0] cam_rd_dmac,
-    input  wire [31:0] cam_rd_dip,
+    input  wire [31:0] cam_rd_sip,     // 对端 IP = 发送帧 dst IP (dip 字段是本地 IP!)
     input  wire [15:0] cam_rd_sport,   // 对端端口 = 发送 dst_port
     input  wire [15:0] cam_rd_dport,   // 本地端口 = 发送 src_port
     // 配置
@@ -169,9 +169,9 @@ module tcp_tx_frame (
 
     // 帧长 (tlast 拍): start_data 时 plen 还是上一帧残留值, 必须显式归零
     wire [11:0] plen_n = (start_data ? 12'd0 : plen) + {8'b0, pop8(s_axis_tkeep)};
-    // 校验和伪头初值: dip 用组合读回 (dip_r 本拍才锁存)
+    // 校验和伪头初值: dst IP 用组合读回 (dip_r 本拍才锁存)
     wire [31:0] csum_init_val = {4'b0, cfg_src_ip[31:16]} + {4'b0, cfg_src_ip[15:0]} +
-                                {4'b0, cam_rd_dip[31:16]} + {4'b0, cam_rd_dip[15:0]} +
+                                {4'b0, cam_rd_sip[31:16]} + {4'b0, cam_rd_sip[15:0]} +
                                 32'h0006;
     wire        csum_init = start_ack || start_data;
     wire        csum_den  = (start_data || (state == S_RECV)) && accept &&
@@ -240,7 +240,7 @@ module tcp_tx_frame (
                         doff_flags_r <= {8'h50, start_data ? 8'h18 :
                                          (ackq_dout[32] ? 8'h12 : 8'h10)};
                         dmac_r <= cam_rd_dmac;
-                        dip_r <= cam_rd_dip;
+                        dip_r <= cam_rd_sip;       // 对端 IP
                         sport_r <= cam_rd_dport;   // 本地端口
                         dport_r <= cam_rd_sport;   // 对端端口
                         id_cap <= id_r;

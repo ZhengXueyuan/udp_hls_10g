@@ -987,7 +987,9 @@ def gen_memh(simdir, frames, tx, anchors):
 
 
 def expected_frame_bytes(fr):
-    """模型帧 -> 线上内容字节 (不含前导/FCS)。"""
+    """模型帧 -> 线上内容字节 (不含前导/FCS)。TX 帧 dst IP = 对端 IP = CAM 的 sip
+    字段 (dip 字段是本地 IP, 只用于 RX 匹配) — 曾错用 dip, 板测 SYN+ACK 目的 IP
+    写成本机被 Windows 丢弃。"""
     cid = fr['cid']
     c = CONN[cid]
     pl = payload(fr['plen']) if fr['kind'] == 'data' else b''
@@ -998,7 +1000,7 @@ def expected_frame_bytes(fr):
                       fr['ack'] & 0xFFFFFFFF, 0x50, flags, c['rcv_wnd'], 0, 0)
     seg = tcp + pl
     ph = struct.pack('!4s4sBBH', struct.pack('!I', DUT_IP),
-                     struct.pack('!I', c['dip']), 0, 6, len(seg))
+                     struct.pack('!I', c['sip']), 0, 6, len(seg))
     buf = ph + seg
     if len(buf) % 2:
         buf += b'\x00'
@@ -1007,7 +1009,7 @@ def expected_frame_bytes(fr):
     total = 20 + len(seg)
     h = bytearray(struct.pack('!BBHHHBBH', 0x45, 0, total, fr['idx'] & 0xFFFF,
                               0, 64, 6, 0))
-    h += struct.pack('!4s4s', struct.pack('!I', DUT_IP), struct.pack('!I', c['dip']))
+    h += struct.pack('!4s4s', struct.pack('!I', DUT_IP), struct.pack('!I', c['sip']))
     h[10:12] = struct.pack('!H', csum16(struct.unpack('!10H', bytes(h[:20]))))
     return eth + bytes(h) + seg
 

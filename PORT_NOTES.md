@@ -314,3 +314,31 @@ drain) 均无损: rx 被压字段顺延 1 拍, 值无丢; TCBF 终态精确。
 下一步 #49: 板上 TCP 对端 (wrapper_tcp + PC TCP client)。需要新增 tcp_echo
 适配模块 (RX 载荷 -> TX app, 帧边界握手: meta_valid 锁 conn, 等 tx S_IDLE),
 并先在全链 xsim 里过一遍再上板。
+
+## 2026-08-28 P3 完成 ✅ 板上 TCP echo PASS (Windows 真栈对接)
+
+**结果**: 三次握手 13.2ms; 14 块 (1..1460B) 逐字节回显全对, 平均 RTT 0.05ms。
+Windows 真实 SYN 带 12B 选项 (doff=8, mss1460/ws8/sackOK) — tcp_rx 的
+doff!=5 丢弃路径不影响 SYN sideband (syn_l 在 w5 无条件锁存, S_DROP 帧尾
+照样 syn_v); 我方 SYN+ACK 无选项, PC 接受。
+
+**板上两轮抓到 3 个问题 (xsim 全没抓到的原因各异)**:
+1. **SYN+ACK dst IP = 本机 IP**: CAM 4 元组是 RX 视角 (sip=对端, dip=本机),
+   TX 组帧错用 rd_dip 当目的 IP — **模型与 RTL 同错互相印证** (chain/echo
+   xsim 全绿但语义错)。修: CAM 读回口加 rd_sip, TX 用它作 dst IP。
+   教训: 语义级正确性要**独立于 RTL 的参考** (例如让模型按协议规范写期望值,
+   而不是镜像 RTL 的行为), 至少关键字段要有常识校验 (dst IP 不可能等于本机)。
+2. **批量替换空格变体**: TB 的 `.port(wire),` 紧凑格式被替换命中, wrapper 的
+   `.port   (wire),` 对齐格式漏掉 → wrapper 的 CAM 实例没接 rd_sip → 悬空=0
+   → dst IP=0.0.0.0。教训: 端口接线批量改必须 grep 验证每个实例的每个端口。
+3. **pktmon etl 追加合并**: 多次 stop 合并进同一 PktMon.etl, 旧帧在前 —
+   重新抓包前必须删除 etl, 否则误读旧数据 (两次"行为没变"的假象)。
+   pktmon etl2txt 参数是 `--verbose --hex` (没有 -v); 路径用正斜杠。
+   pktmon 的 etl 落在调用时 cwd (git-bash 的 cwd), 不是固定目录。
+
+**P3 全部里程碑**: cam/tcb -> tcp_rx -> tcp_tx_frame -> 全链 -> SYN 握手 ->
+echo 全链 -> 板上 PASS。6 个回归 (cam_tcb/tcp_rx/tcp_tx/chain/echo + P2 三套)
+全绿。板级: WNS +0.482, LUT 8.3K, BRAM 0 (frame_fifo 分布式 RAM, 10G 前要解决)。
+
+**下一步 P4**: 慢路径 HLS 移植 (ARP/ICMP/DHCP/重传/RTO/FIN, 正式握手替代
+tcp_synp)。P5: app 接口。P6: 10G (晶振 + PG157 + BRAM 化)。

@@ -23,9 +23,11 @@ module tcp_cam #(
     input  wire [15:0] q_dport,
     output reg  [3:0]  q_id,
     output reg         q_hit,
-    // 读回 (组合, TX 用): sport = 对端端口 (发送时作 dst_port), dport = 本地端口
+    // 读回 (组合, TX 用): sip = 对端 IP (发送帧的 dst IP!), dip = 本地 IP,
+    // sport = 对端端口 (发送时作 dst_port), dport = 本地端口
     input  wire [3:0]  rd_id,
     output wire [47:0] rd_dmac,
+    output wire [31:0] rd_sip,
     output wire [31:0] rd_dip,
     output wire [15:0] rd_sport,
     output wire [15:0] rd_dport
@@ -67,6 +69,7 @@ module tcp_cam #(
     end
 
     assign rd_dmac  = dmac_r[rd_id];
+    assign rd_sip   = sip_r[rd_id];
     assign rd_dip   = dip_r[rd_id];
     assign rd_sport = sport_r[rd_id];
     assign rd_dport = dport_r[rd_id];

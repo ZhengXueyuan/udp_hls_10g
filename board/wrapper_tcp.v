@@ -234,7 +234,7 @@ module wrapper_tcp (
     // ---- CAM 读回 (tcp_cam → tcp_tx_frame) ----
     wire [3:0]  cam_rd_id;
     wire [47:0] cam_rd_dmac;
-    wire [31:0] cam_rd_dip;
+    wire [31:0] cam_rd_sip, cam_rd_dip;
     wire [15:0] cam_rd_sport, cam_rd_dport;
 
     mac_rx_64 u_mac_rx (
@@ -361,6 +361,7 @@ module wrapper_tcp (
         .q_hit          (cam_q_hit),
         .rd_id          (cam_rd_id),
         .rd_dmac        (cam_rd_dmac),
+        .rd_sip         (cam_rd_sip),
         .rd_dip         (cam_rd_dip),
         .rd_sport       (cam_rd_sport),
         .rd_dport       (cam_rd_dport)
@@ -458,7 +459,7 @@ module wrapper_tcp (
         .upd_val        (tx_upd_val),
         .cam_rd_id      (cam_rd_id),
         .cam_rd_dmac    (cam_rd_dmac),
-        .cam_rd_dip     (cam_rd_dip),
+        .cam_rd_sip     (cam_rd_sip),
         .cam_rd_sport   (cam_rd_sport),
         .cam_rd_dport   (cam_rd_dport),
         .cfg_src_mac    (48'h000A3501FEC1),  // 00:0A:35:01:FE:C1
