@@ -527,3 +527,7 @@ tb_slow_tx/tb_tx_arb。排错链挖出 **3 个真 RTL bug** (板测 PASS 都没�
 一律 Write 工具 + unix2dos。
 
 下一步: 重建 bitstream 重上板回归 (RTL 变了) → P4b 正式握手。
+
+**修复后板级复测 ✅ (同日)**: 重建 WNS +0.217, 烧录重跑 pc_p4_test.py =
+P4a BOARD PASS (ARP 免静态 + ping 4/4 + TCP 14 块回归 + UDP echo)。
+**P4a 全部完成。**
