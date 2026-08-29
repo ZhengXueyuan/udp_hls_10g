@@ -18,9 +18,11 @@ SRC_IP = 0xC0A86402
 # CAM dport = 本地端口 (线上 src_port)。
 CONN = {
     0: dict(dmac=bytes([0x11, 0x22, 0x33, 0x44, 0x55, 0x66]), dip=0xC0A86402,
+            sip=0x0A000001,
             peer_port=0x3039, local_port=0x1F90,
             rcv_nxt=1000, snd_nxt0=6000, rcv_wnd=0x2000),
     1: dict(dmac=bytes([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x01]), dip=0xC0A86409,
+            sip=0x0A000009,
             peer_port=0xD431, local_port=0x1F91,
             rcv_nxt=77, snd_nxt0=900, rcv_wnd=0x1800),
 }
@@ -61,7 +63,7 @@ def tcp_csum_ref(cid, seq, ackf, flags, pl):
     c = CONN[cid]
     tcp_len = 20 + len(pl)
     pseudo = [(SRC_IP >> 16) & 0xFFFF, SRC_IP & 0xFFFF,
-              (c['dip'] >> 16) & 0xFFFF, c['dip'] & 0xFFFF,
+              (c['sip'] >> 16) & 0xFFFF, c['sip'] & 0xFFFF,
               0x0006, tcp_len]
     hdr = [c['local_port'], c['peer_port'],
            (seq >> 16) & 0xFFFF, seq & 0xFFFF,
@@ -207,8 +209,8 @@ def check_frame(fb, fr, idx, seq):
         errs.append('ip_csum fold %04x' % s)
     if struct.unpack('!I', body[26:30])[0] != SRC_IP:
         errs.append('src_ip %08x' % struct.unpack('!I', body[26:30])[0])
-    if struct.unpack('!I', body[30:34])[0] != c['dip']:
-        errs.append('dip %08x' % struct.unpack('!I', body[30:34])[0])
+    if struct.unpack('!I', body[30:34])[0] != c['sip']:
+        errs.append('dst ip (exp=sip) %08x' % struct.unpack('!I', body[30:34])[0])
     if struct.unpack('!H', body[34:36])[0] != c['local_port']:
         errs.append('sport %04x' % struct.unpack('!H', body[34:36])[0])
     if struct.unpack('!H', body[36:38])[0] != c['peer_port']:

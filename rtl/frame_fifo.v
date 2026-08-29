@@ -23,7 +23,10 @@ module frame_fifo #(
     reg [AW:0]  wptr, rptr, wsnap;
     reg [W-1:0] dout_r;
 
-    wire        full_n  = (wptr[AW-1:0] + 1'b1 == rptr[AW-1:0]) && (wptr[AW] != rptr[AW]);
+    // full = 真满 (绕回位不同 + 低位相同), 与 fifo_sync 同式。
+    // 曾用 "+1 保守式": wptr 低位==511 时等效 rptr 低位==512 (不可能) → rptr 低
+    // 位==0 的窗口内 full 永不触发, 写入绕回踩槽 (P4a slowrx 单元 TB 实锤)。
+    wire        full_n  = (wptr[AW-1:0] == rptr[AW-1:0]) && (wptr[AW] != rptr[AW]);
     wire        empty_n = (wptr == rptr);
     wire        rd_ok   = rd && !empty_n;
     wire        wr_ok   = wr && !full_n;

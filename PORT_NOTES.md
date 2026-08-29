@@ -494,3 +494,36 @@ shell 重定向同名文件冲突** (xelab.log/xsim.log 是工具默认名, 重�
 
 **P4a 遗留**: 单元 TB (test agent 进行中); GitHub push 网络中断待重试
 (本地 commit 070f194)。
+
+## 2026-08-30 P4a 单元回归轮 — 审查/测试 agent 价值实锤 (3 真 bug 全修)
+
+test agent 交付 tb_rx_classify + tb_slow_rx 后撞 403 配额; 主会话接手补完
+tb_slow_tx/tb_tx_arb。排错链挖出 **3 个真 RTL bug** (板测 PASS 都没暴露,
+全是单元压力路径):
+
+1. **frame_fifo full 公式缺陷 (存量地雷, P2 起就在)**: 旧式
+   `(wptr 低位+1 == rptr 低位) && 绕回位异` 在 rptr 低位==0 时等效要求
+   rptr==512 (不可能) → **该窗口内 full 永不触发**, 写满后继续写绕回踩槽
+   (数据面静默损坏)。P2/P3 板测全绿是因 fifo 从未逼近满。修: 与 fifo_sync
+   同式真满判定。所有 Python 模型同步 (模型同步铁律)。
+2. **播放器幻影开播 (slow_rx_adp + slow_tx_adp 同病)**: committed 计数器
+   在播完拍 (done_pulse/play_done) 递减, 而 P_IDLE/O_IDLE 的"有帧可播"
+   判断同拍读到未减旧值 → 最后一帧播完的下拍**幻影开播**, 抢读下一帧的
+   未提交词 (绕过 commit/rollback 纪律 — 坏帧会泄漏给 HLS)。板测过是因
+   慢帧稀疏, 幻影开播时 fifo 恒空 (P_LOAD 等不到词就挂着, 下一真帧来了
+   被截流式播放, 内容碰巧一样)。修: committed 语义改"提交未开播", 开播拍
+   即减。**状态机设计教训: "队列计数 + 开播条件"必须同源同拍, 不能一个
+   看滞后值**。
+3. **gen 模型 wsnap 用后增量 wptr (模型 bug, RTL 正确)**: 回卷边界差一槽,
+   丢帧首词复活混入下一帧 — 模型与 RTL 背离, 自查 xref 抓到。
+   (P2 教训 "快照=本拍写槽" 的模型侧翻版。)
+
+**修复后回归**: P0×2 + P2×3 + P3×4 (cam_tcb/tcp_rx 三模式/tcp_tx/chain/echo)
++ P4a×5 (rxclass/slowrx/slowtx/txarb/p4chain 真 HLS) 全绿。
+**顺手补的基建债**: ① run_tb_tcp_rx/tcp_tx.bat 原来**没有 checker 调用**
+(xsim 跑完即算过) — tcp_tx 的 checker 期望还是 rd_sip 修复前的旧语义
+(dst=本机 IP), 一直假绿! 已修 checker (dst=sip) 并给两 bat 补 checker 调用。
+② 教训追加: printf 写 bat 会被 bash+printf 双重转义 (\U \t \r 全中) — bat
+一律 Write 工具 + unix2dos。
+
+下一步: 重建 bitstream 重上板回归 (RTL 变了) → P4b 正式握手。

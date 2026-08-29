@@ -78,6 +78,9 @@ module slow_rx_adp (
     assign hls_rx_tvalid = !o_empty;
 
     // ---------------- 字节播放器 ----------------
+    // committed 语义: 提交未开播的帧数; P_IDLE 开播拍即 -1 (不等播完) —
+    // 若等播完 (done_pulse 拍) 再减, P_IDLE 会在最后一帧播完的下拍读到
+    // 未减的旧值 → 幻影开播 → 抢读下一帧的未提交词 (unit TB 实锤)。
     localparam P_IDLE = 2'd0, P_PRE = 2'd1, P_LOAD = 2'd2, P_EMIT = 2'd3;
     reg [1:0]  pstate;
     reg [2:0]  pre_cnt;
@@ -85,7 +88,8 @@ module slow_rx_adp (
     reg        wlast;
     reg [3:0]  nb;            // 本字有效字节数 (1..8)
     reg [3:0]  idx;
-    reg        done_pulse;
+
+    wire start_play = (pstate == P_IDLE) && (committed != 8'd0);
 
     function [3:0] keep2n(input [7:0] k);
         casez (k)
@@ -124,9 +128,8 @@ module slow_rx_adp (
             pstate <= P_IDLE; pre_cnt <= 3'd0;
             wreg <= 64'd0; wlast <= 1'b0; nb <= 4'd8; idx <= 4'd0;
             ff_rd <= 1'b0; o_wr <= 1'b0; o_din <= 9'd0;
-            done_pulse <= 1'b0;
         end else begin
-            ff_rd <= 1'b0; o_wr <= 1'b0; done_pulse <= 1'b0;
+            ff_rd <= 1'b0; o_wr <= 1'b0;
 
             // 输入侧 in_frame / resync_drop / abort / commit / rollback
             if (ff_snap) in_frame <= 1'b1;
@@ -173,19 +176,16 @@ module slow_rx_adp (
                     o_wr  <= 1'b1;
                     o_din <= {last_byte_of_frame, cur_byte};
                     if (idx == nb - 4'd1) begin
-                        if (wlast) begin
-                            pstate     <= P_IDLE;
-                            done_pulse <= 1'b1;
-                        end else begin
-                            pstate <= P_LOAD;
-                        end
+                        if (wlast) pstate <= P_IDLE;
+                        else       pstate <= P_LOAD;
                     end
                     idx <= idx + 4'd1;
                 end
                 default: pstate <= P_IDLE;
             endcase
-            if (do_commit && !done_pulse)      committed <= committed + 8'd1;
-            else if (!do_commit && done_pulse) committed <= committed - 8'd1;
+            // committed: +1 commit / -1 开播, 同拍互抵
+            if (do_commit && !start_play)      committed <= committed + 8'd1;
+            else if (!do_commit && start_play) committed <= committed - 8'd1;
         end
     end
 endmodule

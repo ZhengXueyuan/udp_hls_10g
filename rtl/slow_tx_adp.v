@@ -53,9 +53,10 @@ module slow_tx_adp (
     reg        commit_pulse;
 
     // 输出播放器状态
+    // committed 语义: 提交未开播的帧数; O_IDLE 开播拍即 -1 (不等播完) —
+    // 与 slow_rx_adp 同病同药: 播完再减会让 O_IDLE 读到旧值幻影开播。
     localparam O_IDLE = 1'b0, O_SEND = 1'b1;
     reg        ostate;
-    reg        play_done;
 
     // 字 frame_fifo = {tlast, tkeep, tdata} 73 位; rd 组合 (FWFT 同拍消费)
     reg         wf_wr, wf_snap, wf_rlbk;
@@ -70,6 +71,8 @@ module slow_tx_adp (
         .snap(wf_snap), .rollback(wf_rlbk),
         .rd(wf_rd), .dout(wf_dout), .empty(wf_empty), .full(wf_full)
     );
+
+    wire start_play = (ostate == O_IDLE) && (committed != 8'd0) && !wf_empty;
 
     wire [7:0] in_b    = i_dout[7:0];
     wire       in_last = i_dout[8];
@@ -165,9 +168,9 @@ module slow_tx_adp (
                 default: tstate <= T_IDLE;
             endcase
 
-            // committed: commit(+1) 与播放完一帧(-1) 同拍互抵
-            if (commit_pulse && !play_done)      committed <= committed + 8'd1;
-            else if (!commit_pulse && play_done) committed <= committed - 8'd1;
+            // committed: +1 commit / -1 开播, 同拍互抵
+            if (commit_pulse && !start_play)      committed <= committed + 8'd1;
+            else if (!commit_pulse && start_play) committed <= committed - 8'd1;
         end
     end
 
@@ -180,16 +183,12 @@ module slow_tx_adp (
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            ostate <= O_IDLE; play_done <= 1'b0;
+            ostate <= O_IDLE;
         end else begin
-            play_done <= 1'b0;
             case (ostate)
-                O_IDLE: if (committed != 8'd0 && !wf_empty) ostate <= O_SEND;
+                O_IDLE: if (start_play) ostate <= O_SEND;
                 O_SEND: if (m_axis_tvalid && m_axis_tready) begin
-                    if (wf_dout[72]) begin      // tlast 字被消费
-                        ostate    <= O_IDLE;
-                        play_done <= 1'b1;
-                    end
+                    if (wf_dout[72]) ostate <= O_IDLE;   // tlast 字被消费
                 end
             endcase
         end
