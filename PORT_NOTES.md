@@ -479,3 +479,18 @@ CAM miss (conn0 未配置时的正常计数), 期望误写 0。
 (rtl + HLS -f) → xelab → xsim → check); **xelab/xsim 的 -log 文件名会与
 shell 重定向同名文件冲突** (xelab.log/xsim.log 是工具默认名, 重定向占用
 导致 17-183) — 重定向用 xelab_run.log/xsim_run.log。
+
+### P4a 完成 ✅ 板上 PASS (一次通过: ARP 免静态 + ping + TCP 回归 + UDP)
+
+**构建**: WNS **+0.918** (全约束达成), LUT 26.3K (12.9% — HLS 优化后仅 ~18K,
+远低于 41.8K 估计), FF 17.6K, BRAM 26.5。烧录 DONE=HIGH。
+**板测 (tools/pc_p4_test.py, 先删静态 ARP: netsh delete neighbors)**:
+1. **ARP+ICMP**: ping 192.168.100.2 = 4/4 0ms; ARP 表出现 **动态** 绑定
+   192.168.100.2 → 00-0a-35-01-fe-c0 — HLS ARP 应答器生效, 免静态 ARP。
+2. **TCP 回归**: 握手 10.3ms, 14 块 1..1460B 逐字节回显全对, 平均 RTT
+   0.04ms — classify 插入后 fast path 无损。
+3. **UDP echo** (HLS 慢路径白送): 64B 回显 RTT 0.16ms。
+**P4a BOARD PASS** — 全链 xsim (真 HLS) 把板级风险全部前置消除, 板上一次通过。
+
+**P4a 遗留**: 单元 TB (test agent 进行中); GitHub push 网络中断待重试
+(本地 commit 070f194)。
