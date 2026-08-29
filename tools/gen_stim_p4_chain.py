@@ -1,0 +1,421 @@
+#!/usr/bin/env python
+"""P4a 全链 (mac_rx_64->rx_classify->{fast TCP 链, slow HLS 链}->tx_arb->mac_tx_64)
+刺激 + 语义校验。慢路径带**真 HLS udp_echo** (158 个综合 verilog 进 xsim)。
+
+拓扑: classify 按 ethertype/proto 分流; ARP/ICMP/UDP -> slow_rx_adp -> HLS
+-> slow_tx_adp; TCP -> P3 链 (tcp_synp 握手 conn0; conn1 TB 预配)。
+TX 汇合 tx_arb (fast 优先) — 快慢两流在 GMII 捕获里自由交错。
+
+校验全语义级 (HLS 应答拍级不可预期; classify 周期精确由单元 TB 覆盖):
+- 慢流顺序 = RX 顺序 (HLS 串行处理): arp_reply / icmp_reply / udp_echo / arp_reply
+  逐帧谓词 (关键字段 + IP/ICMP 校验和 + 载荷逐字节 + FCS)
+- 快流 = tb_tcp_echo 的逐字节匹配 (kind/cid/seq/ack/plen + expected_frame_bytes,
+  ip id = 快流内序号 — 慢帧不过 tcp_tx_frame 不占 id)
+- 事件计数 (FEND/SYNP/ACK) + STATS7/TX/ECO/CAMF/TCBF 精确 + 慢路径统计
+帧间距: 慢帧后 20000B (HLS 应答余量), TCP 段 1500B (tx 排空)。
+"""
+import os
+import struct
+import sys
+import zlib
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gen_stim_tcp_chain as C
+
+# P4 统一 MAC = C0 (HLS 编译期值); fast path cfg_src_mac 同步 C0。
+C.DUT_MAC = bytes([0x00, 0x0A, 0x35, 0x01, 0xFE, 0xC0])
+DUT_MAC = C.DUT_MAC
+DUT_IP = C.DUT_IP
+PC_MAC = bytes([0x11, 0x22, 0x33, 0x44, 0x55, 0x66])   # = CONN[0].dmac
+PC_IP = 0xC0A86401                                    # 192.168.100.1
+payload = C.payload
+csum16 = C.csum16
+PRE = C.PRE
+
+GAP_SLOW = 20000       # 慢帧后的 HLS 应答余量
+GAP_TCP = 1500         # TCP 段间 (tx 排空)
+
+
+def ip_hdr_p(src_ip, dst_ip, proto, total_len):
+    h = bytearray(struct.pack('!BBHHHBBH', 0x45, 0, total_len & 0xFFFF,
+                              0x4321, 0, 64, proto, 0))
+    h += struct.pack('!4s4s', struct.pack('!I', src_ip), struct.pack('!I', dst_ip))
+    h[10:12] = struct.pack('!H', csum16(struct.unpack('!10H', bytes(h[:20]))))
+    return bytes(h)
+
+
+def finish(fb):
+    if len(fb) < 60:
+        fb += b'\x00' * (60 - len(fb))
+    return fb, struct.pack('<I', zlib.crc32(fb) & 0xFFFFFFFF)
+
+
+def mk_arp_req():
+    body = struct.pack('!HHBBH', 1, 0x0800, 6, 4, 1)
+    body += PC_MAC + struct.pack('!I', PC_IP)
+    body += b'\x00' * 6 + struct.pack('!I', DUT_IP)
+    return finish(b'\xFF' * 6 + PC_MAC + b'\x08\x06' + body)
+
+
+def mk_icmp_req(ident=0x1234, seq=1, n=32):
+    pl = payload(n)
+    ic = struct.pack('!BBHHH', 8, 0, 0, ident, seq) + pl
+    pad = b'\x00' if len(ic) % 2 else b''
+    cs = csum16(struct.unpack('!%dH' % (len(ic + pad) // 2), ic + pad))
+    ic = ic[:2] + struct.pack('!H', cs) + ic[4:]
+    fb = DUT_MAC + PC_MAC + b'\x08\x00' + ip_hdr_p(PC_IP, DUT_IP, 1, 20 + len(ic)) + ic
+    fb, fcs = finish(fb)
+    return fb, fcs, pl
+
+
+def mk_udp(sport=0x9C42, dport=0x1F90, n=24):
+    pl = payload(n)
+    uh = struct.pack('!HHHH', sport, dport, 8 + n, 0)
+    fb = DUT_MAC + PC_MAC + b'\x08\x00' + ip_hdr_p(PC_IP, DUT_IP, 17, 20 + 8 + n) + uh + pl
+    fb, fcs = finish(fb)
+    return fb, fcs, pl
+
+
+def build_rx_frames():
+    F = []
+
+    def add(name, fb, fcs, gap):
+        F.append(dict(name=name, fb=fb, fcs=fcs, gap=gap))
+
+    fb, fcs = mk_arp_req()
+    add('arp1', fb, fcs, GAP_SLOW)
+    fb, fcs, _pl = mk_icmp_req()
+    add('icmp1', fb, fcs, GAP_SLOW)
+    fb, fcs, _pl = mk_udp()
+    add('udp1', fb, fcs, GAP_SLOW)
+    fb, fcs = C.mk_tcp_frame(0, 999, 0, 0x02, 0, 0x2000, True)
+    add('syn', fb, fcs, 300)
+    fb, fcs = C.mk_tcp_frame(0, 1000, 6000, 0x10, 0, 0x4000, True)
+    add('hs_ack', fb, fcs, GAP_TCP)
+    fb, fcs = C.mk_tcp_frame(0, 1000, 6000, 0x18, 7, 0x4000, True)
+    add('data7a', fb, fcs, GAP_TCP)
+    fb, fcs = C.mk_tcp_frame(0, 1007, 6000, 0x18, 9, 0x4000, True)
+    add('data7b', fb, fcs, GAP_TCP)
+    fb, fcs = mk_arp_req()
+    add('arp2', fb, fcs, GAP_SLOW)
+    fb, fcs = C.mk_tcp_frame(1, 77, 900, 0x18, 20, 0x1A00, True)
+    add('c1data', fb, fcs, GAP_TCP)
+    off = 0
+    for f in F:
+        off += f['gap']
+        f['first'] = off + 8
+        f['B'] = len(f['fb'])
+        off += 8 + f['B'] + 4 + 12
+    return F
+
+
+def gen_memh(simdir, frames):
+    os.makedirs(simdir, exist_ok=True)
+    nstim = max(f['first'] + f['B'] + 4 + 12 for f in frames)
+    data = [0] * nstim
+    dv = [0] * nstim
+    for f in frames:
+        stream = PRE + f['fb'] + f['fcs']
+        base = f['first'] - 8
+        for j, b in enumerate(stream):
+            data[base + j] = b
+            dv[base + j] = 1
+
+    def w(fn, vals, fmt):
+        with open(os.path.join(simdir, fn), 'w') as fh:
+            fh.write('\n'.join(fmt % v for v in vals) + '\n')
+    w('stim_data.memh', data, '%02X')
+    w('stim_dv.memh', dv, '%d')
+    w('stim_er.memh', [0] * nstim, '%d')
+    with open(os.path.join(simdir, 'cfg_tcb.memh'), 'w') as fh:
+        for fld in C.FIELDS:
+            fh.write('%X\n' % C.TCB1_INIT[fld])
+
+
+# ================= 校验 =================
+
+def parse_gmii(fn):
+    byte_lines = []
+    ev = dict(fend=[], ack=[], synp=[], stats7=None, stx=None, seco=None,
+              camf=None, tcbf=None, srx=None, stx2=None)
+    with open(fn) as fh:
+        for line in fh:
+            p = line.split()
+            if not p:
+                continue
+            if p[0] == 'FEND':
+                ev['fend'].append((int(p[1]), int(p[2])))
+            elif p[0] == 'ACK':
+                ev['ack'].append((int(p[1]), int(p[2]), int(p[3], 16)))
+            elif p[0] == 'SYNP':
+                ev['synp'].append(tuple(int(x, 16) for x in p[1:7]))
+            elif p[0] == 'STATS7':
+                ev['stats7'] = tuple(int(x) for x in p[1:])
+            elif p[0] == 'STATS_TX':
+                ev['stx'] = tuple(int(x) for x in p[1:])
+            elif p[0] == 'STATS_ECO':
+                ev['seco'] = tuple(int(x) for x in p[1:])
+            elif p[0] == 'CAMF':
+                ev['camf'] = tuple(int(x, 16) for x in p[1:])
+            elif p[0] == 'TCBF':
+                ev['tcbf'] = tuple(int(x, 16) for x in p[1:])
+            elif p[0] == 'SLOWRX':
+                ev['srx'] = tuple(int(x) for x in p[1:])
+            elif p[0] == 'SLOWTX':
+                ev['stx2'] = tuple(int(x) for x in p[1:])
+            else:
+                byte_lines.append((int(p[0], 16), int(p[1])))
+    frames = []
+    cur = []
+    active = False
+    for b, en in byte_lines:
+        if en:
+            cur.append(b) if active else None
+            if not active:
+                cur = [b]
+                active = True
+        else:
+            if active:
+                frames.append(bytes(cur))
+                active = False
+    return frames, ev
+
+
+def ip_ok(body):
+    """IP 头校验和有效 + 返回 proto。"""
+    if len(body) < 34 or body[14] >> 4 != 4:
+        return 0
+    hw = struct.unpack('!10H', body[14:34])
+    s = sum(hw)
+    s = (s & 0xFFFF) + (s >> 16)
+    s = (s & 0xFFFF) + (s >> 16)
+    if s != 0xFFFF:
+        return -1
+    return body[23]
+
+
+def check_arp_reply(body, errs, tag):
+    if len(body) < 42:
+        errs.append('%s: arp reply too short' % tag)
+        return
+    if body[12:14] != b'\x08\x06':
+        errs.append('%s: not arp' % tag)
+        return
+    op, = struct.unpack('!H', body[20:22])
+    sha = body[22:28]
+    spa, = struct.unpack('!I', body[28:32])
+    tha = body[32:38]
+    tpa, = struct.unpack('!I', body[38:42])
+    if body[:6] != PC_MAC or body[6:12] != DUT_MAC:
+        errs.append('%s: eth addr dst=%s src=%s' % (tag, body[:6].hex(), body[6:12].hex()))
+    if op != 2 or sha != DUT_MAC or spa != DUT_IP or tha != PC_MAC or tpa != PC_IP:
+        errs.append('%s: arp fields op=%d sha=%s spa=%08x tha=%s tpa=%08x'
+                    % (tag, op, sha.hex(), spa, tha.hex(), tpa))
+
+
+def check_icmp_reply(body, errs, tag, n=32):
+    proto = ip_ok(body)
+    if proto != 1:
+        errs.append('%s: icmp ip proto/csum %s' % (tag, proto))
+        return
+    ihl = (body[14] & 0xF) * 4
+    ic = body[14 + ihl:]
+    if ic[0] != 0:
+        errs.append('%s: icmp type %d != 0' % (tag, ic[0]))
+    if struct.unpack('!HH', ic[4:8]) != (0x1234, 1):
+        errs.append('%s: icmp id/seq %s' % (tag, ic[4:8].hex()))
+    pad = b'\x00' if (len(ic) - 8) % 2 else b''
+    # ICMP csum 覆盖 type..payload 末 (无 pad; HLS 按 ip total_len 界)
+    total = struct.unpack('!H', body[16:18])[0]
+    icl = body[14 + ihl:14 + total]
+    pad = b'\x00' if len(icl) % 2 else b''
+    s = sum(struct.unpack('!%dH' % (len(icl + pad) // 2), icl + pad))
+    s = (s & 0xFFFF) + (s >> 16)
+    s = (s & 0xFFFF) + (s >> 16)
+    if s != 0xFFFF:
+        errs.append('%s: icmp csum bad' % tag)
+    if icl[8:8 + n] != payload(n):
+        errs.append('%s: icmp payload mismatch' % tag)
+
+
+def check_udp_echo(body, errs, tag, n=24):
+    proto = ip_ok(body)
+    if proto != 17:
+        errs.append('%s: udp ip proto/csum %s' % (tag, proto))
+        return
+    ihl = (body[14] & 0xF) * 4
+    uh = body[14 + ihl:]
+    sport, dport, ulen = struct.unpack('!HHH', uh[:6])
+    if (sport, dport) != (0x1F90, 0x9C42):
+        errs.append('%s: udp ports %04x/%04x' % (tag, sport, dport))
+    if uh[8:8 + n] != payload(n):
+        errs.append('%s: udp payload mismatch' % tag)
+
+
+def tcp_fields(body):
+    sport, = struct.unpack('!H', body[34:36])
+    flags = body[47]
+    kind = 'data' if flags == 0x18 else ('synack' if flags == 0x12 else 'ack')
+    cid = 0 if sport == 0x1F90 else 1
+    seq, = struct.unpack('!I', body[38:42])
+    ack, = struct.unpack('!I', body[42:46])
+    plen = struct.unpack('!H', body[16:18])[0] - 40
+    return kind, cid, seq, ack, plen
+
+
+def check(simdir):
+    frames = build_rx_frames()
+    got, ev = parse_gmii(os.path.join(simdir, 'resp_p4_chain.memh'))
+    errs = []
+
+    # ---- 期望快流 (TCP): synack + 每数据段 (ack, echo) ----
+    exp_fast = [dict(kind='synack', cid=0, seq=C.SYNP_ISS, ack=1000, plen=0, rx_i=-1)]
+    rcv = {0: 1000, 1: 77}
+    snd = {0: 6000, 1: 900}
+    for i, f in enumerate(frames):
+        if f['name'].startswith('data') or f['name'] == 'c1data':
+            cid = 0 if f['name'].startswith('data') else 1
+            plen = 7 if f['name'] == 'data7a' else (9 if f['name'] == 'data7b' else 20)
+            na = rcv[cid] + plen
+            exp_fast.append(dict(kind='ack', cid=cid, seq=snd[cid], ack=na,
+                                 plen=0, rx_i=i))
+            exp_fast.append(dict(kind='data', cid=cid, seq=snd[cid], ack=na,
+                                 plen=plen, rx_i=i))
+            rcv[cid] = na
+            snd[cid] += plen
+    # ---- 期望慢流 (HLS, 顺序 = RX 顺序) ----
+    exp_slow = ['arp', 'icmp', 'udp', 'arp']
+
+    # ---- 帧分类 ----
+    slow_got = []
+    fast_got = []
+    for fb in got:
+        body = fb[8:-4]
+        if len(body) < 14:
+            errs.append('runt frame len=%d' % len(body))
+            continue
+        if body[6:12] != DUT_MAC:
+            errs.append('frame src mac %s != DUT C0' % body[6:12].hex())
+        et = struct.unpack('!H', body[12:14])[0]
+        if et == 0x0806:
+            slow_got.append(('arp', fb))
+        elif et == 0x0800:
+            proto = body[23]
+            if proto == 6:
+                fast_got.append(fb)
+            elif proto == 1:
+                slow_got.append(('icmp', fb))
+            elif proto == 17:
+                slow_got.append(('udp', fb))
+            else:
+                errs.append('unknown ip proto %d' % proto)
+        else:
+            errs.append('unknown ethertype %04x' % et)
+        # FCS 全帧校验
+        if struct.pack('<I', zlib.crc32(body) & 0xFFFFFFFF) != fb[-4:]:
+            errs.append('frame fcs bad')
+
+    # ---- 慢流匹配 (严格顺序) ----
+    if [k for k, _ in slow_got] != exp_slow:
+        errs.append('slow stream %s != %s' % ([k for k, _ in slow_got], exp_slow))
+    for i, (k, fb) in enumerate(slow_got):
+        body = fb[8:-4]
+        if k == 'arp':
+            check_arp_reply(body, errs, 'slow%d' % i)
+        elif k == 'icmp':
+            check_icmp_reply(body, errs, 'slow%d' % i)
+        elif k == 'udp':
+            check_udp_echo(body, errs, 'slow%d' % i)
+
+    # ---- 快流匹配 (逐字节, ip id = 快流序号) ----
+    if len(fast_got) != len(exp_fast):
+        errs.append('fast count %d != %d' % (len(fast_got), len(exp_fast)))
+    else:
+        used = [False] * len(exp_fast)
+        last_ack_i = -1
+        last_echo_i = -1
+        used_by = []
+        for i, fb in enumerate(fast_got):
+            kind, cid, seq, ack, plen = tcp_fields(fb[8:-4])
+            cand = [j for j, e in enumerate(exp_fast) if not used[j] and
+                    e['kind'] == kind and e['cid'] == cid and e['plen'] == plen and
+                    e['ack'] == ack and e['seq'] == seq and
+                    (kind == 'data' and e['rx_i'] > last_echo_i or
+                     kind == 'ack' and e['rx_i'] >= last_ack_i or
+                     kind == 'synack')]
+            if not cand:
+                errs.append('fast %d no match: %s c%d seq=%d ack=%d plen=%d'
+                            % (i, kind, cid, seq, ack, plen))
+                used_by.append(None)
+                continue
+            j = cand[0]
+            used[j] = True
+            used_by.append(j)
+            e = exp_fast[j]
+            if kind == 'ack':
+                last_ack_i = e['rx_i']
+            if kind == 'data':
+                last_echo_i = e['rx_i']
+                aj = next(k for k in range(j + 1) if exp_fast[k]['kind'] == 'ack'
+                          and exp_fast[k]['rx_i'] == e['rx_i'])
+                if not used[aj]:
+                    errs.append('fast %d: echo before its ACK' % i)
+        for i, (j, fb) in enumerate(zip(used_by, fast_got)):
+            if j is None:
+                continue
+            e2 = dict(exp_fast[j], idx=i)
+            eb = C.expected_frame_bytes(e2)
+            body = fb[8:-4]
+            if len(body) < len(eb) or body[:len(eb)] != eb:
+                errs.append('fast %d (%s c%d) bytes mismatch' %
+                            (i, exp_fast[j]['kind'], exp_fast[j]['cid']))
+
+    # ---- 事件 / 统计 / 终态 ----
+    if len(ev['fend']) != 4:
+        errs.append('FEND count %d != 4' % len(ev['fend']))
+    if len(ev['ack']) != 4:          # 3 数据 ACK + 1 SYN+ACK
+        errs.append('ACK events %d != 4' % len(ev['ack']))
+    esyn = (int.from_bytes(C.CONN[0]['dmac'], 'big'), C.CONN[0]['sip'],
+            C.CONN[0]['sport'], C.CONN[0]['dport'], 999, 0x2000)
+    if ev['synp'] != [esyn]:
+        errs.append('SYNP exp %s got %s' % (esyn, ev['synp']))
+    exp_bytes = 7 + 9 + 20     # stat_bytes 计载荷字节 (plen_l = ip_len-40)
+    # nonmatch=1: SYN 到达时 conn0 未配置 (CAM miss), 属正常 (syn sideband 另行处理)
+    if ev['stats7'] != (4, 1, 0, 0, 0, 3, exp_bytes):
+        errs.append('STATS7 got %s exp (4,0,0,0,0,3,%d)' % (ev['stats7'], exp_bytes))
+    if ev['stx'] != (7, 36, 4, 0):
+        errs.append('STATS_TX got %s' % (ev['stx'],))
+    if ev['seco'] != (3, 0):
+        errs.append('STATS_ECO got %s' % (ev['seco'],))
+    if ev['camf'] != (C.CONN[0]['sip'], C.CONN[0]['dip'], C.CONN[0]['sport'],
+                      C.CONN[0]['dport'], int.from_bytes(C.CONN[0]['dmac'], 'big')):
+        errs.append('CAMF got %s' % (ev['camf'],))
+    texp = (1016, 6016, 6000, 0x2000, 0x4000, 1,
+            97, 920, 900, 0x1800, 0x1A00, 1)
+    if ev['tcbf'] != texp:
+        errs.append('TCBF exp %s got %s' % (texp, ev['tcbf']))
+    if ev['srx'] != (4, 0):
+        errs.append('SLOWRX got %s exp (4,0)' % (ev['srx'],))
+    if ev['stx2'] != (4, 0):
+        errs.append('SLOWTX got %s exp (4,0)' % (ev['stx2'],))
+
+    print('frames RX=%d TX=%d (fast=%d slow=%d)'
+          % (len(frames), len(got), len(fast_got), len(slow_got)))
+    if errs:
+        for e in errs[:12]:
+            print('MISMATCH:', e)
+        print('P4 CHAIN FAIL (%d errs)' % len(errs))
+        return False
+    print('P4 CHAIN OK')
+    return True
+
+
+if __name__ == '__main__':
+    simdir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'sim', 'p4sim')
+    frames = build_rx_frames()
+    print('%d RX frames' % len(frames))
+    if len(sys.argv) > 2 and sys.argv[2] == 'check':
+        sys.exit(0 if check(simdir) else 1)
+    gen_memh(simdir, frames)
+    print('memh written')
