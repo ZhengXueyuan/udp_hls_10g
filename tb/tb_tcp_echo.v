@@ -82,7 +82,7 @@ module tb_tcp_echo;
     wire [31:0] tx_upd_val;
     wire [3:0]  cam_rd_id;
     wire [47:0] cam_rd_dmac;
-    wire [31:0] cam_rd_dip;
+    wire [31:0] cam_rd_sip, cam_rd_dip;
     wire [15:0] cam_rd_sport, cam_rd_dport;
     wire [63:0] x_tdata;
     wire [7:0]  x_tkeep;
@@ -196,7 +196,7 @@ module tb_tcp_echo;
         .q_sip(cam_q_sip), .q_dip(cam_q_dip),
         .q_sport(cam_q_sport), .q_dport(cam_q_dport),
         .q_id(cam_q_id), .q_hit(cam_q_hit),
-        .rd_id(cam_rd_id), .rd_dmac(cam_rd_dmac), .rd_dip(cam_rd_dip),
+        .rd_id(cam_rd_id), .rd_dmac(cam_rd_dmac), .rd_sip(cam_rd_sip), .rd_dip(cam_rd_dip),
         .rd_sport(cam_rd_sport), .rd_dport(cam_rd_dport)
     );
 
@@ -236,7 +236,7 @@ module tb_tcp_echo;
         .rb_id(rb_id), .rb_snd_nxt(rb_snd_nxt), .rb_rcv_nxt(rb_rcv_nxt),
         .rb_rcv_wnd(rb_rcv_wnd),
         .upd_wr(tx_upd_wr), .upd_id(tx_upd_id), .upd_sel(tx_upd_sel), .upd_val(tx_upd_val),
-        .cam_rd_id(cam_rd_id), .cam_rd_dmac(cam_rd_dmac), .cam_rd_dip(cam_rd_dip),
+        .cam_rd_id(cam_rd_id), .cam_rd_dmac(cam_rd_dmac), .cam_rd_sip(cam_rd_sip),
         .cam_rd_sport(cam_rd_sport), .cam_rd_dport(cam_rd_dport),
         .cfg_src_mac(48'h000A3501FEC1), .cfg_src_ip(32'hC0A86402),
         .m_axis_tdata(x_tdata), .m_axis_tkeep(x_tkeep),
