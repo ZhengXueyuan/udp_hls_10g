@@ -84,7 +84,7 @@ def mk_udp(sport=0x9C42, dport=0x1F90, n=24):
     return fb, fcs, pl
 
 
-def build_rx_frames():
+def build_rx_frames(burst=0):
     F = []
 
     def add(name, fb, fcs, gap):
@@ -108,6 +108,13 @@ def build_rx_frames():
     add('data7a', fb, fcs, GAP_TCP)
     fb, fcs = C.mk_tcp_frame(0, 1007, HS_ACKVAL, 0x18, 9, 0x4000, True)
     add('data7b', fb, fcs, GAP_TCP)
+    # P4b-5 排障: burst 模式 — 连续大段 (1460B, 线速帧距 12B), 复现板级
+    # 吞吐测试的 echo 停滞。seq 从 1016 起每段 +1460。
+    seq = 1016
+    for b in range(burst):
+        fb, fcs = C.mk_tcp_frame(0, seq, HS_ACKVAL, 0x18, 1460, 0x4000, True)
+        add('burst%d' % b, fb, fcs, 12)
+        seq += 1460
     fb, fcs = mk_arp_req()
     add('arp2', fb, fcs, GAP_SLOW)
     fb, fcs = C.mk_tcp_frame(1, 77, 900, 0x18, 20, 0x1A00, True)
@@ -472,11 +479,43 @@ def check(simdir):
     return True
 
 
+def check_burst(simdir, nburst):
+    """P4b-5 排障: burst 模式轻量诊断 — 数 echo 帧 + 末态统计 (不做全语义)。"""
+    got, ev = parse_gmii(os.path.join(simdir, 'resp_p4_chain.memh'))
+    data_echoes = 0
+    for fb in got:
+        body = fb[8:-4]
+        if len(body) >= 48 and body[12:14] == b'\x08\x00' and body[23] == 6:
+            flags = body[47]
+            if flags == 0x18:
+                data_echoes += 1
+    print('burst sent=%d  data echoes=%d  (含 2 个预置 + 1 个 conn1)'
+          % (nburst, data_echoes))
+    print('STATS7  %s' % (ev['stats7'],))
+    print('STATS_TX %s' % (ev['stx'],))
+    print('STATS_ECO %s' % (ev['seco'],))
+    print('TCBF %s' % (ev['tcbf'],))
+    return True
+
+
 if __name__ == '__main__':
     simdir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'sim', 'p4sim')
-    frames = build_rx_frames()
+    nburst = 0
+    mode = 'gen'
+    if len(sys.argv) > 2:
+        if sys.argv[2] == 'check':
+            mode = 'check'
+        elif sys.argv[2] == 'burst':
+            nburst = int(sys.argv[3]) if len(sys.argv) > 3 else 100
+            mode = 'gen'
+        elif sys.argv[2] == 'burstcheck':
+            nburst = int(sys.argv[3]) if len(sys.argv) > 3 else 100
+            mode = 'burstcheck'
+    frames = build_rx_frames(burst=nburst)
     print('%d RX frames' % len(frames))
-    if len(sys.argv) > 2 and sys.argv[2] == 'check':
+    if mode == 'check':
         sys.exit(0 if check(simdir) else 1)
+    if mode == 'burstcheck':
+        sys.exit(0 if check_burst(simdir, nburst) else 1)
     gen_memh(simdir, frames)
     print('memh written')

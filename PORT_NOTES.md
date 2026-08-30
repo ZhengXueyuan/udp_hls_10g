@@ -727,3 +727,84 @@ S_TCB_LAST 拍) / udp_echo.cpp (TCP 控制帧 busy 延迟) / gen_stim
 - snd_wnd 用 SYN 原始 wnd 未乘 peer_wscale — fast 侧不按 snd_wnd 门控
   发送, 影响小。
 
+## 2026-08-30 P4b-5 前发现: T_ESTABLISHED 的 FIN 分支是死代码 (已修)
+
+乐观建连下第 3 个 ACK 走 fast path, HLS 永远停在 T_SYN_RCVD —
+T_ESTABLISHED 的 FIN 分支 (FIN+ACK + CFG_DEL) 永不触发; 对端 FIN 到
+T_SYN_RCVD 被静默忽略 → 无 FIN+ACK、fast 条目不清, PC 只能靠 RST 兜底
+(close() 拖几秒), 重连前 fast 侧残留 ESTABLISHED。
+修: T_SYN_RCVD 补 FIN 分支 — FIN+ACK (seq 是旧值, 对端因 out-of-window
+多半丢弃, 无害) + **CFG_DEL 拆 fast 条目 (关键)** + T_LAST_ACK。
+全链 tb 无 FIN 帧所以没抓到 — 教训: **单元/全链 tb 的刺激要覆盖握手后
+关闭路径** (P4b-5 板测的连接循环天然覆盖, 先板测再回归也行)。
+
+## 2026-08-30 P4b-5 板测: 连接循环第 4 轮超时 — 槽位耗尽 (已修)
+
+**现象**: echo 测试连开连关, 1-3 轮全 PASS, 第 4 轮 connect 超时;
+同时 ping 2/2 + UDP echo 100/100 正常 (慢路径活着, 仅 TCP 槽位问题)。
+
+**根因链**: PC 每次 connect 用新临时端口 → 新 4 元组 → tcp_find 不匹配
+旧槽 → 占新槽。FIN 后槽位进 T_LAST_ACK, 最后 ACK 走 fast path HLS 永远
+收不到 → 槽位要等 4 个 RTO (10M pass ≈ 1.6s/档, 共 ~13s) 限次重传才
+释放 → 三轮测试占死 MAX_TCP_CONN=3 全部槽, 第 4 轮无槽可用 SYN 被丢。
+
+**修**: FIN 分支处理完 (FIN+ACK + CFG_DEL) 后**立即 T_FREE +
+retrans_pending=false** — 最后 ACK 反正收不到, 等 T_LAST_ACK 无意义;
+FIN+ACK 重传也无意义 (seq 是旧值, 对端 out-of-window 丢弃, PC close
+靠 RST 兜底)。槽位即刻回收, 连接循环任意轮次可用。
+
+## 2026-08-30 P4b-5 板测: 吞吐测试 2.6s 必死 — SYN+ACK 定时重传杀活连接 (已修)
+
+**症状**: rate test 每次恰在 ~2.6s 挂 ConnectionResetError (WinError
+10054); pktmon 抓包显示 PC 自己发的 RST。
+
+**排障链**:
+1. burst 复现 sim: 200×1460B 线速突发全回显零丢失, echo 帧距 1550
+   拍 = 线速 (1526 拍/帧) — **fast 路径无结构问题**。
+2. 抓包 (pktmon comp 102): PC 发送线程被 pktmon 自身 CPU 过载卡了
+   310ms — 回显停顿是跟随 PC 输入, 非 FPGA 问题 (首次误判!); FPGA
+   rcv_nxt 与 PC 发送完全吻合 = RX 零丢包; 1335 段全回显, 其余是 PC
+   自己的重传 (按设计不回显)。
+3. **不带 pktmon 仍 2.6s 必死** — 排除抓包因素后定位: RTO =
+   10M pass ≈ 2.6s (@~32 拍/pass), SYN+ACK 定时重传正好打在**已建立**
+   连接上 — Windows 收意外 SYN 直接 RST 杀连接。之前抓包没看到
+   [S.] 重传帧是 pktmon 过载漏帧。
+4. 教训: 抓包工具本身可能改变被测系统行为 (CPU 占用) — 先对照
+   "无抓包复现"再下结论。
+
+**修** (layer_tcp.cpp):
+- T_SYN_RCVD 超时**不重传** — 直接释放半开槽位 (连接已建立时对端
+  不会重发 SYN, 槽位释放不影响 fast 数据面; fast 条目保留)。
+- SYN+ACK 丢失恢复改由**对端 SYN 重传驱动**: T_SYN_RCVD 的 re-SYN
+  分支原样重发 (seq 不变, tcp_send 对 SYN 会 +1 故先退一拍)。
+- T_LAST_ACK 保留限次重传 (FIN+ACK 路径)。
+
+## 2026-08-30 P4b-5 板测 (续): 吞吐仍死 — 两个 fast 路径缺陷 (P4b-6 修)
+
+修复 SYN+ACK 重传后, rate test 失败点从 2.65s 移到 ~19s, 但仍
+ConnectionResetError。三次抓包 (pktmon) 逐层排除:
+
+1. **PC NIC 零丢弃零错误** (Get-NetAdapterStatistics) — 线是干净的,
+   丢的是 PC 栈层; pktmon 抓包自身会占 CPU 卡 PC 发送线程 310ms
+   (首次误判"FPGA 回显停顿", 实为跟随 PC 输入)。
+2. **burst sim (200×1460B 线速) 全绿**: echo 帧距 1550 拍 = 线速,
+   fast 路径 RX/TX 结构无瓶颈。
+3. **真缺陷 A — echo seq 空洞**: 抓包显示 echo #420→#421 之间 seq 跳
+   1812 字节 (=1460+352), 空洞处恰是 PC 发送停顿 (~250ms) 后的
+   恢复点。PC 栈等缺失字节 → ACK 冻结 → PC 发送窗口关死 → FPGA
+   rcv_nxt 停 → 互相等待死锁 → PC 重传风暴 → ~19s RST。
+   机制候选: tcp_tx_frame 的 pay_empty 提前收帧 (S_PAY 欠载防御) 或
+   mac_tx_64 断供 runt — 帧没上线但 snd_nxt 照走 (upd 在 S_DONE 发)。
+   需在 tb 里复现"帧间停顿后恢复"场景定位 (burst tb 加 PC 发送停顿)。
+4. **真缺陷 B — 无 snd_wnd 门控**: fast 路径不查对端接收窗口就狂发
+   (审查观察项 #6 当时判"影响小" — 板测推翻)。PC 接收侧一旦变慢
+   (窗口关), FPGA 超窗狂发 → PC 栈丢弃超窗段 → 同上死锁。修:
+   tcp_tx_frame 加窗口门控 (rb_snd_una + rb_snd_wnd, start_data 前查
+   snd_nxt-snd_una < snd_wnd) + HLS cfg 记录传缩放后窗口 (peer_wscale,
+   钳 16 位)。tb 的 burst 刺激需加反应式 ACK (PC 模型) 否则窗口
+   门控会在 tb 里把 echo 卡死 (tb 无 ACK 回注)。
+
+**P4b-6 清单**: 缺陷 A 定位+修 / 缺陷 B 窗口门控+tb PC 模型 / 重综合
++ 回归 + 板测复测。板测教训: 抓包先查 NIC 计数器, 再对照无抓包复现;
+   sim 与板的差距往往在"对端行为"而非 FPGA 结构。
+

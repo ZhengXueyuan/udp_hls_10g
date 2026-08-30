@@ -27,9 +27,9 @@ import_files -norecurse ${root_dir}/rtl/crc32_8b.v \
                          ${root_dir}/rtl/tcp_rx.v \
                          ${root_dir}/rtl/tcp_tx_frame.v \
                          ${root_dir}/rtl/tcp_echo.v \
-                         ${root_dir}/rtl/tcp_synp.v \
                          ${root_dir}/rtl/rx_classify.v \
                          ${root_dir}/rtl/slow_rx_adp.v \
+                         ${root_dir}/rtl/slow_cfg_adp.v \
                          ${root_dir}/rtl/slow_tx_adp.v \
                          ${root_dir}/rtl/tx_arb.v
 import_files -norecurse ${script_dir}/wrapper_p4.v ${script_dir}/util_gmii_to_rgmii.v

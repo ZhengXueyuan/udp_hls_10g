@@ -345,10 +345,19 @@ static void tcp_rx_process(bool rst, ip_rx_t &ip_rx, uint32_t *buf, mac_tx_req_t
                     c.cwnd=TCP_MSS; // collapse cwnd on timeout
                     c.flight_size=0;
                     c.dup_ack_cnt=0;
-                    // P4b: 限次重传 — 握手/拆除 ACK 全进 fast path, HLS 永远
-                    // 收不到; 超 TCP_MAX_RETRY 后放弃释放槽位 (否则无限重传
-                    // SYN+ACK 垃圾帧会触发对端 RST 杀连接)
-                    if(c.state==T_SYN_RCVD||c.state==T_LAST_ACK){
+                    // P4b-5 板测实锤: SYN+ACK 定时重传 (~2.6s) 会打在已建立
+                    // 连接上 — 对端 (Windows) 收意外 SYN 直接 RST 杀连接
+                    // (吞吐测试每次恰在 2.6s 死, ConnectionResetError)。
+                    // 修复: T_SYN_RCVD 超时**不重传** — 释放半开槽位即可
+                    // (SYN+ACK 丢失由对端 SYN 重传驱动, T_SYN_RCVD 的 re-SYN
+                    // 分支原样重发; 连接已建立时对端不会重发 SYN, 槽位释放
+                    // 不影响 fast 数据面)。T_LAST_ACK 保留限次重传 (FIN+ACK)。
+                    if(c.state==T_SYN_RCVD){
+                        c.state=T_FREE;
+                        c.retrans_pending=false;
+                        continue;
+                    }
+                    if(c.state==T_LAST_ACK){
                         c.retry_cnt++;
                         if(c.retry_cnt>TCP_MAX_RETRY){
                             c.state=T_FREE;
@@ -437,7 +446,31 @@ static void tcp_rx_process(bool rst, ip_rx_t &ip_rx, uint32_t *buf, mac_tx_req_t
                 // 立即把连接配置推给 fast path (CAM/TCB), 数据面直接可用
                 cfg_write(cfg_stream,CFG_CMD_ADD,cid,c.peer_ip,c.peer_port,
                           rx_smac,wnd,c.peer_seq,c.seq);}break;
-        case T_SYN_RCVD:if((flags&TCP_ACK)&&ack==c.seq){c.retrans_pending=false;c.state=T_ESTABLISHED;c.rto_timer=0;c.retry_cnt=0;}break;
+        case T_SYN_RCVD:if((flags&TCP_ACK)&&ack==c.seq){c.retrans_pending=false;c.state=T_ESTABLISHED;c.rto_timer=0;c.retry_cnt=0;}
+            // P4b-5: 对端 SYN 重传 = SYN+ACK 丢失 — 原样重发 (seq 不变;
+            // tcp_send 对 SYN 会再 +1, 先退一拍)。定时重传已废除 (会 RST
+            // 活连接, 见 RTO 扫描处), 丢失恢复全靠此分支。
+            else if((flags&TCP_SYN)&&!(flags&TCP_ACK)){
+                c.seq--;
+                tcp_send(buf,tx_req,cid,TCP_SYN|TCP_ACK,NULL,0);}
+            // P4b: 乐观建连 — 第 3 个 ACK 走 fast path, HLS 永远停在 T_SYN_RCVD
+            // (除非恰有慢路径 ACK); T_ESTABLISHED 的 FIN 分支因此是死代码。
+            // 对端 FIN 必须在此应答: 发 FIN+ACK (seq 是旧值, 对端多半因
+            // out-of-window 丢弃 — 无害) + CFG_DEL 拆 fast 条目 (关键)。
+            // PC 侧 close 最终靠 RST 兜底完成, 但 fast 侧条目必须及时清。
+            else if(flags&TCP_FIN){
+                c.peer_seq=seq+1;
+                tcp_send(buf,tx_req,cid,TCP_FIN|TCP_ACK,NULL,0);
+                cfg_write(cfg_stream,CFG_CMD_DEL,cid,0,0,0,0,0,0);
+                // 直接释放槽位: 最后 ACK 走 fast path, HLS 永远收不到 —
+                // 进 T_LAST_ACK 要等 4 个 RTO (~13s) 限次重传才释放,
+                // PC 连接循环 (每次新临时端口 = 新 4 元组 = 新槽) 会把
+                // MAX_TCP_CONN=3 个槽全部占死, 第 4 次 connect 超时
+                // (板测实锤)。FIN+ACK 的 seq 是旧值 (fast 数据面已推进
+                // snd_nxt), 对端 out-of-window 丢弃 — 重传无意义,
+                // PC close 靠 RST 兜底完成。
+                c.state=T_FREE;c.retrans_pending=false;}
+            break;
         case T_ESTABLISHED:
             c.peer_seq=seq+plen;if(flags&TCP_FIN)c.peer_seq++;
             if(plen>0){
