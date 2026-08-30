@@ -808,3 +808,57 @@ ConnectionResetError。三次抓包 (pktmon) 逐层排除:
 + 回归 + 板测复测。板测教训: 抓包先查 NIC 计数器, 再对照无抓包复现;
    sim 与板的差距往往在"对端行为"而非 FPGA 结构。
 
+
+## 2026-08-30 施工截面 (compact 前快照) — P4b-6 开工状态
+
+### 已提交 (943b2d9, ls-remote 验证)
+P4b 正式握手全链 + P4b-5 板测三项修复 (FIN 即释放槽位 / RST 命中任一槽
+补 DEL / SYN+ACK 定时重传废除改 SYN 驱动)。回归 17/17 绿 (测试 agent
+验证)。板上: 连接循环 6/6 PASS, UDP echo 100/100, ping 2/2。
+
+### 板上当前 bitstream
+= 943b2d9 的 HLS (SYN 驱动重发 + FIN 即释放 + RST 扫描) + slow_cfg_adp
+(rst_n 跟 hls_rst_n)。烧录 OK (DONE=HIGH)。吞吐仍死 (~19s RST)。
+
+### P4b-6 待办 (按序)
+
+**1. 缺陷 A — echo seq 空洞 1812B 定位**
+- 现象: echo #420→#421 seq 跳 1812 (=1460+352), 在 PC 发送停顿 ~250ms
+  后的恢复点; PC 栈等缺失字节 → ACK 冻结 → 双向死锁 → ~19s RST。
+- 候选机制: tcp_tx_frame S_PAY 的 pay_empty 提前收帧 (欠载防御, 帧短
+  但 snd_nxt 按 plen_r 全量走) 或 mac_tx_64 断供 runt (abort)。
+- 方法: burst tb 的刺激加"停顿-恢复"段 (数据中间插 ~300k 拍空隙),
+  看 sim 是否复现 echo 空洞; 加探针 (tcp_tx_frame 的 state/plen_r、
+  mac_tx_64 stat_abort、u_echo fifo 水位)。run_tb_p4_burst.bat 已建。
+- 注意: burst tb 无 ACK 回注, snd_una 永不前进 — 修缺陷 B 的窗口
+  门控前, tb 必须加反应式 ACK (否则门控会卡死 echo, 期望值全错)。
+
+**2. 缺陷 B — snd_wnd 门控**
+- tcp_tx_frame: 加 rb_snd_una/rb_snd_wnd 输入口; start_data 与
+  S_IDLE 的 s_axis_tready 门控加 `(rb_snd_nxt - rb_snd_una) < rb_snd_wnd`。
+- HLS cfg 记录 w5 的 peer_wnd 改传缩放窗口: T_LISTEN 的 cfg_write 调用
+  处用 `c.peer_window` (wnd<<peer_wscale, 已算好) 钳 16 位
+  `(pw>0xFFFF)?0xFFFF:pw`。
+- wrapper_p4.v + tb_p4_chain.v 接线 rb_snd_una/rb_snd_wnd (tcb 已有输出)。
+- tb burst 反应式 PC 模型: 捕获 TX 帧尾 → 解析 echo seq+len →
+  注入纯 ACK (seq = u_tcb.rcv_nxt_r[0], ack = echo end, sport 0x3039
+  dport 0x1F90 flags 0x10 wnd 0x4000) 到 RX 流 (驱动 FSM 暂停静态流
+  播注入帧); 常规 5 帧链 tb 不受影响 (echo 总量 36B < wnd 0x2000)。
+
+**3. 验证链**: 重综合 (run_hls.bat) → 常规链 tb + burst tb (含停顿段
++ PC 模型) → build_p4.bat → run_program_p4.bat → 板测 (rate test
+16MB + 连接循环 + UDP/ping)。
+
+### 关键工具/文件 (已建)
+- sim/p4sim/run_tb_p4_burst.bat (burst 200 生成+仿真+burstcheck)
+- sim/p4sim_hlsprobe/run_hls_udp_probe.bat (HLS 孤立探针, 证 HLS 干净)
+- tools/gen_stim_p4_chain.py: burst/burstcheck 模式; gap 语义=帧前间距!
+- pktmon 配方: start --capture --comp 102 --file-name X.etl; etl2txt
+  --verbose --hex; UTF-16 读; 抓包自身会占 CPU 干扰被测系统, 结论前
+  必对照无抓包复现 + Get-NetAdapterStatistics (NIC 计数零丢弃是硬证据)。
+
+### 板测环境
+- PC NIC 192.168.100.1 (1G 全双工), FPGA 192.168.100.2:8080,
+  MAC 00:0A:35:01:FE:C0; 静态 ARP 已配 (P4a 遗留, UDP 测试脚本输出
+  提到 FE-C1 是过期文案, 实际 C0)。
+- anaconda python: /c/Users/zhxue/anaconda3/python.exe
