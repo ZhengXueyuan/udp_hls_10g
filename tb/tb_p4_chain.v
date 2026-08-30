@@ -13,11 +13,11 @@ module tb_p4_chain;
     reg        clk, rst_n;
     reg [7:0]  rx_d;
     reg        rx_dv, rx_er;
-    reg [7:0]  stim_d [0:1048575];
-    reg [7:0]  stim_v [0:1048575];
-    reg [7:0]  stim_e [0:1048575];
+    reg [7:0]  stim_d [0:4194303];
+    reg [7:0]  stim_v [0:4194303];
+    reg [7:0]  stim_e [0:4194303];
     integer    nstim;
-    reg [19:0] i;
+    reg [22:0] i;
     reg [31:0] k;
     reg        done;
     // 配置阶段
@@ -191,8 +191,8 @@ module tb_p4_chain;
     // echo_seen / inj_done 分属捕获/驱动两个 always (单驱动铁律); 差值 = 待注入
     reg [15:0] echo_seen, inj_done;
     wire       inj_pend = pcack_en && (echo_seen != inj_done);
-    reg [15:0] inj_wnd;   // 注入 ACK 的通告窗口 (默认 0x4000; +PCWND1K 压 0x0400
-                          //  — SYN 带 WS=2, 缩放后有效窗口 0x1000, 强迫门控交战)
+    reg [15:0] inj_wnd;   // 注入 ACK 的通告窗口 (默认 0x4000; +PCWND1K 压 0x0010
+                          //  — SYN 带 WS=8, 缩放后有效窗口 4096, 强迫门控交战)
     reg [3:0]  gap_cnt;   // 已连续播放的间隙字节数 (采样 rcv_nxt 须等上一帧
                           //  fend 的 drain 落地 = fend+3 拍, 否则注入帧带旧 seq
                           //  被 tcp_rx 拒收 — TB 模型噪声, 但污染统计)
@@ -544,13 +544,13 @@ module tb_p4_chain;
     initial begin
         clk = 0; rst_n = 0;
         pcack_en = $test$plusargs("PCACK");
-        inj_wnd = $test$plusargs("PCWND1K") ? 16'h0400 : 16'h4000;
+        inj_wnd = $test$plusargs("PCWND1K") ? 16'h0010 : 16'h4000;
         $readmemh("stim_data.memh", stim_d);
         $readmemh("stim_dv.memh",   stim_v);
         $readmemh("stim_er.memh",   stim_e);
         $readmemh("cfg_tcb.memh",   tcbc);
         nstim = 0;
-        while (nstim < 1048576 && stim_d[nstim] !== 8'hxx) nstim = nstim + 1;
+        while (nstim < 4194304 && stim_d[nstim] !== 8'hxx) nstim = nstim + 1;
         fd = $fopen("resp_p4_chain.memh", "w");
         #200; rst_n = 1;
         wait (done == 1);
@@ -592,6 +592,22 @@ module tb_p4_chain;
             if (syn_v)
                 $fwrite(fd, "SYNP %012h %08h %04h %04h %08h %04h\n",
                         syn_smac, syn_sip, syn_sport, syn_dport, syn_seq, syn_wnd);
+        end
+    end
+
+    // ---- P4b-6 缺陷 A 定位: tcp_tx_frame 帧完成 vs mac 上线帧数对账 ----
+    reg [31:0] tcf_prev = 0, macf_prev = 0;
+    always @(posedge clk) begin
+        if (rst_n && $test$plusargs("PROBE")) begin
+            if (tx_stat_frames != tcf_prev) begin
+                $display("TCF k=%0d n=%0d bytes=%0d", k, tx_stat_frames,
+                         tx_stat_bytes);
+                tcf_prev <= tx_stat_frames;
+            end
+            if (mac_stat_frames != macf_prev) begin
+                $display("MACF k=%0d n=%0d", k, mac_stat_frames);
+                macf_prev <= mac_stat_frames;
+            end
         end
     end
 
@@ -714,6 +730,19 @@ module tb_p4_chain;
                          u_slow_rx.u_ff.full, u_slow_rx.ff_snap,
                          u_slow_rx.frame_end, u_slow_rx.trunc_evt,
                          u_slow_rx.in_frame, u_slow_rx.resync_drop);
+        end
+    end
+
+    // ---- P4b-6 排障: HLS 内部 mac_rx 状态机窥探 (SYN 处理卡死定位) ----
+    reg [2:0] mrx_prev = 3'b111;
+    always @(posedge clk) begin
+        if (rst_n && $test$plusargs("PROBE")) begin
+            if (u_hls.grp_mac_rx_process_fu_1620.state_1 != mrx_prev) begin
+                $display("MACRXST k=%0d st=%0d -> %0d (rdy=%b)",
+                         k, mrx_prev, u_hls.grp_mac_rx_process_fu_1620.state_1,
+                         hls_rx_tready);
+                mrx_prev <= u_hls.grp_mac_rx_process_fu_1620.state_1;
+            end
         end
     end
 

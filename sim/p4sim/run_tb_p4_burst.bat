@@ -4,8 +4,8 @@ REM   usage (Git Bash): cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p4sim\run_tb_p4_bur
 REM   %1 = burst segment count (default 200)
 REM   %2/%3 = pause_at/pause_len (cycles, optional; that segment becomes 352B,
 REM           next segment gets the long pre-gap) -- PC send pause-resume
-REM   %4 = burst advertised window in hex (default 4000); =400 also sets
-REM        +PCWND1K (raw 0400 << wscale2 = effective 0x1000, gate stress)
+REM   %4 = burst advertised window in hex (default 4000); =10 also sets
+REM        +PCWND1K (raw 0010 << wscale8 = effective 4096, gate stress)
 REM   P4b-6: always runs with +PCACK (window gating needs ACK injection to
 REM          advance snd_una, otherwise the gate deadlocks the echo)
 cd /d %~dp0
@@ -19,7 +19,7 @@ if not "%2"=="" set PAUSE=%2 %3
 set WND=
 if not "%4"=="" set WND=%4
 set XPA=-testplusarg PCACK
-if "%4"=="400" set XPA=-testplusarg PCACK -testplusarg PCWND1K
+if "%4"=="10" set XPA=-testplusarg PCACK -testplusarg PCWND1K
 
 copy /y %HLS%\*.dat . >nul
 (if exist %HLS%\ (dir /b /s %HLS%\*.v) else (echo HLS dir missing & exit /b 1)) > hls_files.f

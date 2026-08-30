@@ -38,7 +38,7 @@ bool arp_lookup(arp_entry_t *table, ap_uint<32> ip, mac_addr_t &mac);
 // ACK (纯 ACK 进 fast path), 无限重传会向对端发垃圾 SYN+ACK 触发 RST 杀连接
 #define TCP_MAX_RETRY    3
 #define TCP_HEADER_BYTES 20
-#define TCP_MAX_HDR      28   // 20 base + 8 options (MSS+WS+NOP)
+#define TCP_MAX_HDR      24   // 20 base + 4 options (MSS only; WS 已移除)
 #define TCP_BUF_BASE     (TX_SCRATCH_BASE + 16)
 #define TCP_ALPHA_SHIFT  3   // srtt weight = 1/8
 #define TCP_BETA_SHIFT   2   // rttvar weight = 1/4
@@ -145,16 +145,18 @@ static uint16_t tcp_csum(uint32_t sip, uint32_t dip, const uint8_t *d, uint16_t 
     return(uint16_t)(~s);
 }
 static void tcp_build_hdr(uint8_t*b,uint16_t sp,uint16_t dp,uint32_t seq,uint32_t ack,uint8_t f,uint16_t w,bool syn){
-    bool has_opts=syn;uint8_t doff=has_opts?7:5; // 20+8=28 bytes when SYN
+    bool has_opts=syn;uint8_t doff=has_opts?6:5; // 20+4=24 bytes when SYN (MSS only)
     b[0]=(sp>>8)&0xFF;b[1]=sp&0xFF;b[2]=(dp>>8)&0xFF;b[3]=dp&0xFF;
     b[4]=(seq>>24)&0xFF;b[5]=(seq>>16)&0xFF;b[6]=(seq>>8)&0xFF;b[7]=seq&0xFF;
     b[8]=(ack>>24)&0xFF;b[9]=(ack>>16)&0xFF;b[10]=(ack>>8)&0xFF;b[11]=ack&0xFF;
     b[12]=(doff<<4);b[13]=f;b[14]=(w>>8)&0xFF;b[15]=w&0xFF;
     b[16]=0;b[17]=0;b[18]=0;b[19]=0;
     if(has_opts){
-        b[20]=2;b[21]=4;b[22]=(TCP_MSS>>8)&0xFF;b[23]=TCP_MSS&0xFF; // MSS=536
-        b[24]=3;b[25]=3;b[26]=7; // Window Scale = 7 (window × 128)
-        b[27]=1; // NOP padding to 4-byte boundary
+        // P4b-6 板测实锤: 不再通告 WS — 若通告 our_wscale=7, rcv_wnd 0x3000 被
+        // 对端放大 128 倍 (1.5MB), 远超 echo 管道容量 (~17KB); 门控一关闭 PC
+        // 继续狂发把管道塞满 → RX 拥塞连 ACK 都进不来 → 永久死锁 (需重烧板)。
+        // 不缩放时 PC 在飞 ≤ 0x3000 < 管道容量, ACK 恒可穿过, 门控自然恢复。
+        b[20]=2;b[21]=4;b[22]=(TCP_MSS>>8)&0xFF;b[23]=TCP_MSS&0xFF; // MSS=1460
     }
 }
 
@@ -405,11 +407,13 @@ static void tcp_rx_process(bool rst, ip_rx_t &ip_rx, uint32_t *buf, mac_tx_req_t
         tcp_conn_t &c=tcp_conn[cid];c.state=T_LISTEN;c.cwnd=TCP_MSS;c.ssthresh=65535;
         c.srtt=0;c.rttvar=0;c.rto=TCP_RTO_MIN;c.dup_ack_cnt=0;c.seq=0x12345678|(cid<<20);c.peer_seq=0;c.last_ack_recv=0;c.flight_size=0;
         c.retry_cnt=0;   // P4b
-        c.peer_mss=TCP_MSS;c.peer_wscale=0;c.our_wscale=7;
+        c.peer_mss=TCP_MSS;c.peer_wscale=0;c.our_wscale=0;
         // Parse MSS/WS options from SYN (bytes 20+ of TCP header).
         // FIX 2026-08-18: read the option bytes from the RX buffer, not from
         // th[] (only 20 bytes were loaded -> out-of-bounds reads gave garbage
-        // MSS/window-scale). Clamp the window scale to 0..7 (RFC 7323).
+        // MSS/window-scale). Clamp to 0..14 (RFC 7323 max; cfg w0[19:16]
+        // 4 bits 装得下)。P4b-6 板测实锤: 旧钳 7 把 Windows 的 ws=8 变 0 →
+        // fast 门控用原始窗口 4096 → 7 帧后永久死锁 (~19s RST)。
         if(doff>5){uint8_t opt_end=(doff-5)*4;for(int o=0;o+1<opt_end;){
             int obw=(tb*4+20+o)>>2;uint8_t obi=(tb*4+20+o)&3;
             uint8_t k=(frame_buf[obw]>>((3-obi)*8))&0xFF;if(k==0)break;if(k==1){o++;continue;}
@@ -419,7 +423,7 @@ static void tcp_rx_process(bool rst, ip_rx_t &ip_rx, uint32_t *buf, mac_tx_req_t
             if(k==2&&ln>=4){int mw=(tb*4+20+o+2)>>2;uint8_t mi=(tb*4+20+o+2)&3;
                 c.peer_mss=(((uint16_t)((frame_buf[mw]>>((3-mi)*8))&0xFF)<<8)|((frame_buf[(tb*4+20+o+3)>>2]>>((3-((tb*4+20+o+3)&3))*8))&0xFF));}
             else if(k==3&&ln>=3){int ww=(tb*4+20+o+2)>>2;uint8_t wi=(tb*4+20+o+2)&3;
-                uint8_t ws=(frame_buf[ww]>>((3-wi)*8))&0xFF;c.peer_wscale=(ws<=7)?ws:0;}
+                uint8_t ws=(frame_buf[ww]>>((3-wi)*8))&0xFF;c.peer_wscale=(ws<=14)?ws:0;}
             o+=ln;
         }}
         // Adjust cwnd to peer's MSS if smaller
@@ -446,11 +450,18 @@ static void tcp_rx_process(bool rst, ip_rx_t &ip_rx, uint32_t *buf, mac_tx_req_t
     // Process ACK for congestion control
     if(flags&TCP_ACK){tcp_reno_on_ack(c,ack,false);/*ack!=c.last_ack_recv*/}
     switch(c.state){
-        case T_LISTEN:if(flags&TCP_SYN){c.peer_seq=seq+1;c.peer_ip=ip_rx.src_ip;c.peer_port=sp;c.state=T_SYN_RCVD;c.retry_cnt=0;tcp_send(buf,tx_req,cid,TCP_SYN|TCP_ACK,NULL,0);
-                // P4b: 乐观建连 — tcp_send 后 c.seq = ISS+1 (SYN 占一个序号);
-                // 立即把连接配置推给 fast path (CAM/TCB), 数据面直接可用
+        case T_LISTEN:if(flags&TCP_SYN){c.peer_seq=seq+1;c.peer_ip=ip_rx.src_ip;c.peer_port=sp;c.state=T_SYN_RCVD;c.retry_cnt=0;
+                // P4b: 乐观建连 — 把连接配置推给 fast path (CAM/TCB),
+                // 数据面直接可用。snd_nxt = ISS+1 (SYN 占一个序号,
+                // tcp_send 稍后推进 c.seq, 故此处显式 +1)。
+                // P4b-6 死锁修复: cfg 必须先于 tcp_send — 延迟处理路径
+                // (mac 忙时) 的 cfg_stream 接受谓词 = tx_req.request==0;
+                // 若 SYN+ACK 先置 request=1, 谓词死亡, cfg 写入永不被
+                // 接受 → 顶层 FSM 卡死在子调用 (xsim 实锤: 收 SYN 后
+                // 无 SYN+ACK 无 cfg, 板级 connect 超时)。
                 cfg_write(cfg_stream,CFG_CMD_ADD,cid,c.peer_ip,c.peer_port,
-                          rx_smac,wnd,c.peer_wscale,c.peer_seq,c.seq);}break;
+                          rx_smac,wnd,c.peer_wscale,c.peer_seq,c.seq+1);
+                tcp_send(buf,tx_req,cid,TCP_SYN|TCP_ACK,NULL,0);}break;
         case T_SYN_RCVD:if((flags&TCP_ACK)&&ack==c.seq){c.retrans_pending=false;c.state=T_ESTABLISHED;c.rto_timer=0;c.retry_cnt=0;}
             // P4b-5: 对端 SYN 重传 = SYN+ACK 丢失 — 原样重发 (seq 不变;
             // tcp_send 对 SYN 会再 +1, 先退一拍)。定时重传已废除 (会 RST
@@ -465,8 +476,9 @@ static void tcp_rx_process(bool rst, ip_rx_t &ip_rx, uint32_t *buf, mac_tx_req_t
             // PC 侧 close 最终靠 RST 兜底完成, 但 fast 侧条目必须及时清。
             else if(flags&TCP_FIN){
                 c.peer_seq=seq+1;
-                tcp_send(buf,tx_req,cid,TCP_FIN|TCP_ACK,NULL,0);
+                // cfg 先于 tcp_send (延迟路径死锁, 见 T_LISTEN 注)
                 cfg_write(cfg_stream,CFG_CMD_DEL,cid,0,0,0,0,0,0,0);
+                tcp_send(buf,tx_req,cid,TCP_FIN|TCP_ACK,NULL,0);
                 // 直接释放槽位: 最后 ACK 走 fast path, HLS 永远收不到 —
                 // 进 T_LAST_ACK 要等 4 个 RTO (~13s) 限次重传才释放,
                 // PC 连接循环 (每次新临时端口 = 新 4 元组 = 新槽) 会把
@@ -484,9 +496,11 @@ static void tcp_rx_process(bool rst, ip_rx_t &ip_rx, uint32_t *buf, mac_tx_req_t
                 // TX region while it is being read by an in-flight frame).
                 tcp_queue(buf,tx_req,cid,payload,plen,mac_busy);
             }else if(flags&TCP_ACK)c.retrans_pending=false;
-            if(flags&TCP_FIN){tcp_send(buf,tx_req,cid,TCP_FIN|TCP_ACK,NULL,0);c.state=T_LAST_ACK;
-                // P4b: fast 侧拆除 (CFG_DEL); HLS 槽位等最后 ACK 释放
-                cfg_write(cfg_stream,CFG_CMD_DEL,cid,0,0,0,0,0,0,0);}break;
+            if(flags&TCP_FIN){c.state=T_LAST_ACK;
+                // P4b: fast 侧拆除 (CFG_DEL); HLS 槽位等最后 ACK 释放。
+                // cfg 先于 tcp_send (延迟路径死锁, 见 T_LISTEN 注)
+                cfg_write(cfg_stream,CFG_CMD_DEL,cid,0,0,0,0,0,0,0);
+                tcp_send(buf,tx_req,cid,TCP_FIN|TCP_ACK,NULL,0);}break;
         case T_LAST_ACK:if(flags&TCP_ACK){c.retrans_pending=false;c.state=T_FREE;}break;
     }
 }

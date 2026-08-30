@@ -84,10 +84,11 @@ def mk_udp(sport=0x9C42, dport=0x1F90, n=24):
     return fb, fcs, pl
 
 
-# P4b-6 审查 M1: SYN 固定带 WS=2 选项 (doff=6) — 否则 peer_wscale 恒 0,
-# wscale 缩放链 (HLS 解析 -> cfg w0[19:16] -> slow_cfg_adp 第 7 字段 ->
-# tcp_rx drain 移位钳位) 全程零覆盖。
-SYN_WSCALE = 2
+# SYN 固定带 WS=8 (Windows 实测值, doff=8) — P4b-6 板测根因: 旧 HLS 钳
+# ws<=7 把 Windows 的 8 变 0 → fast 门控用原始窗口 → 死锁。此值让 wscale
+# 缩放链 (HLS 解析 -> cfg w0[19:16] -> slow_cfg_adp 第 7 字段 -> tcp_rx
+# drain 移位钳位) 在 Windows 量纲下真实交战。
+SYN_WSCALE = 8
 
 
 def mk_syn_ws(wnd=0x2000, wscale=SYN_WSCALE):
@@ -109,7 +110,8 @@ def mk_syn_ws(wnd=0x2000, wscale=SYN_WSCALE):
     return finish(fb)
 
 
-def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000):
+def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000,
+                    tail608=False, dupstorm=False):
     F = []
 
     def add(name, fb, fcs, gap):
@@ -138,11 +140,28 @@ def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000):
     # P4b-6: pause_at >= 0 时, 第 pause_at 段改 352B 载荷 (停顿前末段尾包),
     # 其后一段 gap 拉 pause_len — 模拟板测抓到的 PC 发送停顿-恢复。
     seq = 1016
+    seq_hist = []
     for b in range(burst):
-        plen = 352 if b == pause_at else 1460
+        if b == pause_at:
+            plen = 352
+        elif tail608 and (b % 9) == 8:
+            plen = 608      # PC 12KB 窗口尾包 (8x1460+608) — 板测段模式
+        else:
+            plen = 1460
         fb, fcs = C.mk_tcp_frame(0, seq, HS_ACKVAL, 0x18, plen, burst_wnd, True)
         add('burst%d' % b, fb, fcs, 12)
+        seq_hist.append(seq)
         seq += plen
+        # dupstorm: 窗口边界后重放最后 2 段 (旧 seq = 重传) — 板测实锤的
+        # 重传风暴 (ackresp 纯 ACK 路径与 echo 交错是空洞嫌疑场景)
+        if dupstorm and (b % 9) == 8 and b >= 2:
+            for d in (b - 2, b - 1):
+                fb, fcs = C.mk_tcp_frame(0, seq_hist[d], HS_ACKVAL, 0x18,
+                                         1460, burst_wnd, True)
+                add('dup%d_%d' % (b, d), fb, fcs, 12)
+            # RTT 间隙 (12KB 窗口周期: PC 等 ACK ~0.1ms = 12500 拍)
+            if len(F) >= 1:
+                F[-1]['gap'] = 12500
     if 0 <= pause_at < burst - 1:
         F[pause_at + 1 + 7]['gap'] = pause_len   # +7: 前 7 帧 (arp..data7b)
     fb, fcs = mk_arp_req()
@@ -320,8 +339,8 @@ def check_synack(body, errs, tag):
         errs.append('%s: synack seq %08x != HLS_ISS %08x' % (tag, seq, HLS_ISS))
     if ack != 1000:
         errs.append('%s: synack ack %d != 1000' % (tag, ack))
-    if body[46] >> 4 != 7:
-        errs.append('%s: synack doff %d != 7 (无选项!)' % (tag, body[46] >> 4))
+    if body[46] >> 4 != 6:
+        errs.append('%s: synack doff %d != 6 (P4b-6: 仅 MSS, 无 WS)' % (tag, body[46] >> 4))
     if body[47] != 0x12:
         errs.append('%s: synack flags %02x != 0x12' % (tag, body[47]))
     # MSS 选项 (doff=7: 选项 8B 在 byte 54..61 = body[54:62]... body 含以太头:
@@ -566,11 +585,92 @@ def check_burst(simdir, nburst):
     return ok
 
 
+
+
+# ================= P4b-6 抓包重放 (replay 模式) =================
+def build_replay_frames(cap_path, w0=0.440, w1=0.752, n_warmup=10):
+    """标准前置 + 预热 N 段 + pcapng [w0,w1] 窗口的 PC 帧重放 (seq/ack 重定基)。"""
+    import json as _json
+    F = []
+
+    def add(name, fb, fcs, gap):
+        F.append(dict(name=name, fb=fb, fcs=fcs, gap=gap))
+
+    fb, fcs = mk_arp_req()
+    add('arp1', fb, fcs, GAP_SLOW)
+    fb, fcs, _ = mk_icmp_req()
+    add('icmp1', fb, fcs, GAP_SLOW)
+    fb, fcs, _ = mk_udp()
+    add('udp1', fb, fcs, GAP_SLOW)
+    fb, fcs = mk_syn_ws()
+    add('syn', fb, fcs, 300)
+    fb, fcs = C.mk_tcp_frame(0, 1000, HS_ACKVAL, 0x10, 0, 0x4000, True)
+    add('hs_ack', fb, fcs, GAP_SLOW)
+    fb, fcs = C.mk_tcp_frame(0, 1000, HS_ACKVAL, 0x18, 7, 0x4000, True)
+    add('data7a', fb, fcs, GAP_TCP)
+    fb, fcs = C.mk_tcp_frame(0, 1007, HS_ACKVAL, 0x18, 9, 0x4000, True)
+    add('data7b', fb, fcs, GAP_TCP)
+    seq = 1016
+    for b in range(n_warmup):
+        fb, fcs = C.mk_tcp_frame(0, seq, HS_ACKVAL, 0x18, 1460, 0x4000, True)
+        add('warm%d' % b, fb, fcs, 12)
+        seq += 1460
+    raw = _json.load(open(cap_path))
+    rp = []
+    for t, h in raw:
+        p = bytes.fromhex(h)
+        if len(p) < 48 or p[23] != 6:
+            continue
+        if not (w0 <= t <= w1):
+            continue
+        sp, dp = struct.unpack('!HH', p[34:38])
+        if sp == 8080:
+            continue
+        seq_p, ack_p = struct.unpack('!II', p[38:46])
+        plen = struct.unpack('!H', p[16:18])[0] - 40
+        rp.append((t, p, seq_p, ack_p, plen))
+    if not rp:
+        print('REPLAY: no frames in window')
+        return None
+    seq_off = seq - rp[0][2]
+    ack_off = (HS_ACKVAL + 16 + n_warmup * 1460) - rp[0][3]
+    prev_t = rp[0][0]
+    for i, (t, p, seq_p, ack_p, plen) in enumerate(rp):
+        gap = max(12, min(int((t - prev_t) * 125e6), 50000))
+        prev_t = t
+        nseq = (seq_p + seq_off) & 0xFFFFFFFF
+        nack = (ack_p + ack_off) & 0xFFFFFFFF
+        fb = bytearray(p)
+        fb[34:36] = struct.pack('!H', 0x3039)
+        fb[38:42] = struct.pack('!I', nseq)
+        fb[42:46] = struct.pack('!I', nack)
+        fb[24:26] = struct.pack('!H', 0)
+        hw = struct.unpack('!10H', bytes(fb[14:34]))
+        cs = sum(hw)
+        cs = (cs & 0xFFFF) + (cs >> 16)
+        cs = (cs & 0xFFFF) + (cs >> 16)
+        fb[24:26] = struct.pack('!H', (~cs) & 0xFFFF)
+        fb = bytes(fb)
+        add('rp%d' % i, fb, struct.pack('<I', zlib.crc32(fb) & 0xFFFFFFFF),
+            gap if i else 12)
+    print('REPLAY: %d frames rebased (seq_off=%d ack_off=%d)'
+          % (len(rp), seq_off, ack_off))
+    off = 0
+    for f in F:
+        off += f['gap']
+        f['first'] = off + 8
+        f['B'] = len(f['fb'])
+        off += 8 + f['B'] + 4 + 12
+    return F
+
+
 if __name__ == '__main__':
     simdir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'sim', 'p4sim')
     nburst = 0
     pause_at, pause_len = -1, 0
     burst_wnd = 0x4000
+    tail608 = False
+    dupstorm = False
     mode = 'gen'
     if len(sys.argv) > 2:
         if sys.argv[2] == 'check':
@@ -581,12 +681,25 @@ if __name__ == '__main__':
                 pause_at, pause_len = int(sys.argv[4]), int(sys.argv[5])
             if len(sys.argv) > 6:
                 burst_wnd = int(sys.argv[6], 16)
+            if len(sys.argv) > 7:
+                tail608 = (sys.argv[7] == '608')
+            if len(sys.argv) > 8:
+                dupstorm = (sys.argv[8] == 'dup')
             mode = 'gen'
         elif sys.argv[2] == 'burstcheck':
             nburst = int(sys.argv[3]) if len(sys.argv) > 3 else 100
             mode = 'burstcheck'
+        elif sys.argv[2] == 'replay':
+            cap = sys.argv[3] if len(sys.argv) > 3 else 'rate4.pcapng.json'
+            w0 = float(sys.argv[4]) if len(sys.argv) > 4 else 0.440
+            w1 = float(sys.argv[5]) if len(sys.argv) > 5 else 0.752
+            frames = build_replay_frames(cap, w0=w0, w1=w1)
+            gen_memh(simdir, frames)
+            print('replay memh written')
+            sys.exit(0)
     frames = build_rx_frames(burst=nburst, pause_at=pause_at, pause_len=pause_len,
-                             burst_wnd=burst_wnd)
+                             burst_wnd=burst_wnd, tail608=tail608,
+                             dupstorm=dupstorm)
     print('%d RX frames' % len(frames))
     if mode == 'check':
         sys.exit(0 if check(simdir) else 1)
@@ -594,3 +707,4 @@ if __name__ == '__main__':
         sys.exit(0 if check_burst(simdir, nburst) else 1)
     gen_memh(simdir, frames)
     print('memh written')
+

@@ -932,3 +932,87 @@ P4b 正式握手全链 + P4b-5 板测三项修复 (FIN 即释放槽位 / RST 命
 build_p4.bat → run_program_p4.bat → rate test 16MB (重点: 原 ~19s RST
 点) + 连接循环 6 轮 + UDP 100 + ping。若 rate test 再挂: 查 STATS 哨兵
 (需要 ILA 或 LED 暴露 stat_eend/mac abort — 暂未接线, 复测失败再加)。
+
+## 2026-08-30 P4b-6 板测: 速率测试仍死 — pktmon pcapng 抓包实锤根因 (wscale 钳位)
+
+### 症状 (修复前, 每次可复现)
+- rate test: **恰 t=18.95s RST, sent=1.00MB, echo=0.01MB** (确定性)。
+- 失败后板子**永久僵死** (UDP/ping/TCP connect 全超时) — 只能重烧恢复。
+- NIC 零错误零丢弃 (线干净); 链路 1G。
+
+### 抓包还原 (pktmon --comp 102 → pktmon pcapng → python 解析)
+1. Windows SYN: **WS=8** (12B 选项), wnd raw 65535。
+2. 3rd ACK wnd raw=**255** (→65280 有效); 后续数据帧 wnd raw=**4096**
+   (→1MB 有效, Windows 自动调窗)。数据段 flags=0x10 (无 PSH!), L=1460。
+3. FPGA 只回了 7 个 echo 后 TX 静默; RX 收到第 17 段后 rcv_nxt 冻结
+   (第 18 段起全被上游拥塞丢弃); PC 重传第 18 段 (0.070/0.130/0.252/
+   0.492s) 全部无应答 → 300ms×2^n 退避 6 次 ≈18.9s → RST。
+4. 0.62s 起 PC 发 ARP 请求无应答 (慢路径 RX 也死了) — RX 拥塞在
+   rx_classify 共享入口, 两条路一起饿死。
+
+### 根因链 (两层)
+1. **触发**: HLS SYN 解析 `peer_wscale=(ws<=7)?ws:0` — **Windows 的 ws=8
+   被钳成 0** → fast 路径 drain 从不缩放 → snd_wnd = Windows 的**原始**
+   窗口 4096 (wscale=8 时真窗 = raw×256)。门控按 4096 字节执行:
+   7 个 echo 后 in_flight=4380 ≥ 4096 → 门控永久关闭。
+2. **放大成死锁**: echo 停了 → tcp_echo 管道 (~17KB = 11 帧) 被 10 帧
+   未回显数据塞满 → tcp_rx 停收 → rx_classify 共享输入拥塞 → **PC 的
+   ACK 和重传全部进不来** (ACK 是重开门控的唯一钥匙) → snd_una 冻结
+   → 死锁; 连 SYN/ARP 也进不来 → 板子僵死只能重烧。
+
+### 修 (layer_tcp.cpp)
+- **wscale 钳位 7→14** (RFC 7323 上限; cfg w0[19:16] 4 位装得下)。
+  修后 snd_wnd = 4096<<8 = 1M → 钳 0xFFFF = 64KB 门控, 正常锯齿。
+- **SYN+ACK 不再通告 WS** (our_wscale 7→0, 选项只剩 MSS+2NOP, doff
+  7→6): 我方 rcv_wnd 0x3000 (12KB) 不被对端缩放成 1.5MB — PC 在飞
+  ≤12KB < echo 管道容量 17KB → **门控即使真关闭, PC 的纯 ACK 也能
+  穿过管道重开门控, 结构性防死锁**。
+- 12KB/0.05ms RTT ≈ 240MB/s > 1G 线速, 吞吐不受影响。
+
+### TB 镜像 Windows (防再犯)
+- SYN_WSCALE 2→**8** (旧钳位下此值会让 sim 复现死锁 — 板测教训入 sim);
+- check_synack doff 期望 7→6; 门控交战变体 raw wnd 0x0400→**0x10**
+  (×256 = 4096 有效)。
+
+### 方法论沉淀
+- pktmon 抓包 recipe 升级: **`pktmon start --capture --comp 102` →
+  `pktmon stop` → `pktmon pcapng X.etl -o X.pcapng`** (etl2txt 只出流
+  摘要无包字节; pcapng 直转最稳) → python 手写 pcapng 解析 (~50 行)。
+- 抓包必须在**干净板子**上做 (RST 失败后板子僵死, 抓到的只有超时);
+  先跑轻载测试确认恢复再抓。
+- 板测复测铁律: 失败后先重烧, 否则后续所有测试都是僵尸板噪声。
+
+## 2026-08-30 P4b-6 板测 (续): 修后 sim 复现新死锁 — HLS 延迟处理路径 cfg 谓词死锁
+
+### 症状
+wscale 钳位 + SYN+ACK 去 WS 修复后, 链 tb 全挂: **HLS 收 SYN 后不发
+SYN+ACK、不出 cfg 记录, 且之后所有慢路径帧 (arp2) 不再应答** — HLS
+主循环卡死 (top FSM 停在 state41, mac_rx 状态机冻结在 IDLE)。
+
+### 定位链 (TB 窥探 HLS 生成 RTL 内部寄存器)
+1. TB 加探针 `u_hls.grp_mac_rx_process_fu_1620.state_1` (mac_rx 状态机):
+   arp/icmp/udp 正常 0→1→2→4→0; **SYN 帧完整收完 (st→0 后再无变化)**,
+   regslice 吞了 2 个前导字节后停 — 子函数没被调用。
+2. top FSM 卡在 **ap_CS_fsm_state41** — 查生成 RTL:
+   `ap_block_state41_on_subcall_done = (tcp_rx_process_ap_done==0 &
+   predicate)` — **卡在延迟 tcp_rx_process 子调用上**。
+3. `ap_predicate_op325_call_state41 = (tx_req_request==0 & !mac_tx_busy)`
+   — 延迟调用 + **cfg_stream 接受**都以 `tx_req.request==0` 为谓词;
+   而 tcp_rx_process 内 `tcp_send(SYN+ACK)` 先置 request=1 → **谓词
+   死亡 → cfg 写入永不被接受 → 子调用永不返回 → 顶层永久卡死**。
+4. 触发条件: SYN 的 do_process 落在 UDP echo 的 MAC 忙窗口内 → 走
+   延迟路径 (直调路径的 cfg 接受在 state19, 无谓词, 所以旧时序下
+   从未炸)。新 HLS 综合时序变化 + 新 SYN 帧长变化让 SYN 恰好落入
+   忙窗口 — **潜伏死锁首次被踩中** (板级 connect 超时同根因)。
+
+### 修 (layer_tcp.cpp)
+- **cfg 先于 tcp_send** (三处: T_LISTEN ADD / T_SYN_RCVD FIN / 
+  T_ESTABLISHED FIN): cfg 在 request 置位前流完, 谓词存活;
+  T_LISTEN 的 w7 显式 `c.seq+1` (SYN+ACK 稍后才推进)。
+- TCP_MAX_HDR 28→24 (doff=6 只剩 MSS 选项; 原 28 会让 total/csum
+  覆盖 4 字节幽灵数据 — 与 doff=6 失配, 顺手修)。
+- tcp_build_hdr 删掉 NOP 写入 (4B MSS 恰满 24B 头)。
+
+### 验证
+链 tb (WS=2/WS=8) + burst 三变体全绿; 门控交战变体 raw=0x10 →
+snd_wnd=4096 生效。板级重建中。
