@@ -281,6 +281,7 @@ module wrapper_p4 (
         .s_axis_tuser   (f_tuser),
         .s_axis_tcrs    (f_tcrs),
         .s_axis_terr    (f_terr),
+        .cfg_suppress_data_ack(1'b1),   // echo 应用: 纯 ACK 冗余 (吞吐实测实锤)
         .m_axis_tdata   (pay_tdata),
         .m_axis_tkeep   (pay_tkeep),
         .m_axis_tvalid  (pay_tvalid),

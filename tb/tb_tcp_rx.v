@@ -86,6 +86,7 @@ module tb_tcp_rx;
         .s_axis_tdata(s_tdata), .s_axis_tkeep(s_tkeep), .s_axis_tvalid(s_tvalid),
         .s_axis_tready(s_ready), .s_axis_tlast(s_tlast), .s_axis_tuser(s_tuser),
         .s_axis_tcrs(s_tcrs), .s_axis_terr(s_terr),
+        .cfg_suppress_data_ack(1'b0),   // 单元 TB 覆盖未抑制路径
         .m_axis_tdata(m_tdata), .m_axis_tkeep(m_tkeep), .m_axis_tvalid(m_tvalid),
         .m_axis_tready(tready), .m_axis_tlast(m_tlast), .m_axis_tuser(m_tuser),
         .fend(fend), .ferr(ferr),
