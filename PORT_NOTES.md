@@ -1016,3 +1016,35 @@ SYN+ACK、不出 cfg 记录, 且之后所有慢路径帧 (arp2) 不再应答** �
 ### 验证
 链 tb (WS=2/WS=8) + burst 三变体全绿; 门控交战变体 raw=0x10 →
 snd_wnd=4096 生效。板级重建中。
+
+## 2026-08-30 P4b-6 板测终局: 抓包重放定位缺陷 A 为线级丢帧
+
+### 数据 (pktmon --pkt-size 0 完整抓包, 三次板测)
+- 修复后: sent 1.0MB/1.56MB/1.81MB, echo 0.01/0.51/0.78MB (递增 —
+  每次重烧后起点不同, 但都在首次窗口周期出现 **同型空洞**后 19s RST)。
+- 空洞: 5094/608 echo 中恰 1 处, **seq 跳 1812 = 1460+352**; PC 栈
+  ACK 冻在空洞首字节 → dup-ACK 风暴 → 门控打满 → PC 6×RTO 退避
+  (~19s, 300ms×2^n) → FIN+RST。
+- 空洞时刻的完整交换: PC 重传 (RTO) → FPGA 接受并回 echo + 纯 ACK/
+  echo 同 seq 交替 (ackresp 路径正常) → **两个 echo (1460B+352B)
+  消失: FPGA snd_nxt 走了 1812, PC 网卡零收到零错误**。
+
+### 重放排障 (决定性)
+- pktmon 默认 snaplen=128B (首轮抓包全截断 — 教训!); --pkt-size 0
+  重抓 1514B 全帧。
+- gen replay 模式: pcapng 帧重定基 (seq/ack/端口) + IP csum 重算
+  (NIC 卸载导致抓包 csum 无效) + 间隙压缩; tb 数组 1M→4M。
+- **557 帧精确重放 → sim 429 echo 零空洞** — fast 路径 RTL 在板级
+  精确帧序列下干净。
+
+### 结论与遗留
+- 缺陷 A = **线级/PHY 侧丢帧**: 2 个 echo 帧在 FPGA TX 与 PC 网卡
+  之间消失 (NIC 零 CRC 错误 = 帧未以坏帧形式到达, 而是完全消失);
+  候选: FPGA TX MAC 起点丢弃 / RGMII-PHY / tx_arb 慢路径锁死 —
+  板上哨兵 (stat_eend/mac abort) 未接线, 需 ILA 或 LED 接线指认。
+- **fast 路径无重传逻辑** — 空洞无法自愈 (PC 等缺失 echo 字节
+  永不到达) → 任何线级丢帧都致命。P4b-7 候选: fast 路径 seq 重传
+  (dup-ACK 触发) 或 echo 应用层重传。
+- 板测方法论沉淀: pktmon --pkt-size 0 必带; 抓包帧 IP csum 因
+  NIC 卸载无效需重算; 每次 RST 后板子僵死必须重烧; 重放 = 区分
+  "RTL 缺陷" 与 "物理链路问题" 的决定性手段。
