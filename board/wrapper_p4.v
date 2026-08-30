@@ -217,6 +217,7 @@ module wrapper_p4 (
     wire [31:0] ra_rcv_nxt, ra_snd_nxt, ra_snd_una;
     wire [15:0] ra_rcv_wnd;
     wire [3:0]  ra_state;
+    wire [3:0]  ra_wscale;
     wire [3:0]  rb_id;
     wire [31:0] rb_rcv_nxt, rb_snd_nxt, rb_snd_una;
     wire [15:0] rb_rcv_wnd, rb_snd_wnd;
@@ -307,6 +308,7 @@ module wrapper_p4 (
         .ra_snd_una     (ra_snd_una),
         .ra_rcv_wnd     (ra_rcv_wnd),
         .ra_state       (ra_state),
+        .ra_wscale      (ra_wscale),
         .upd_wr         (rx_upd_wr),
         .upd_id         (rx_upd_id),
         .upd_sel        (rx_upd_sel),
@@ -395,6 +397,7 @@ module wrapper_p4 (
         .ra_rcv_wnd     (ra_rcv_wnd),
         .ra_snd_wnd     (),
         .ra_state       (ra_state),
+        .ra_wscale      (ra_wscale),
         .rb_id          (rb_id),
         .rb_rcv_nxt     (rb_rcv_nxt),
         .rb_snd_nxt     (rb_snd_nxt),
@@ -468,6 +471,8 @@ module wrapper_p4 (
         .rb_snd_nxt     (rb_snd_nxt),
         .rb_rcv_nxt     (rb_rcv_nxt),
         .rb_rcv_wnd     (rb_rcv_wnd),
+        .rb_snd_una     (rb_snd_una),
+        .rb_snd_wnd     (rb_snd_wnd),
         .upd_wr         (tx_upd_wr),
         .upd_id         (tx_upd_id),
         .upd_sel        (tx_upd_sel),
@@ -487,7 +492,8 @@ module wrapper_p4 (
         .stat_frames    (tx_stat_frames),
         .stat_bytes     (tx_stat_bytes),
         .stat_ack       (),
-        .stat_ack_drop  ()
+        .stat_ack_drop  (),
+        .stat_eend      ()
     );
 
     // --- slow 路由: slow_rx_adp → udp_echo (HLS) → slow_tx_adp ---

@@ -84,7 +84,32 @@ def mk_udp(sport=0x9C42, dport=0x1F90, n=24):
     return fb, fcs, pl
 
 
-def build_rx_frames(burst=0):
+# P4b-6 审查 M1: SYN 固定带 WS=2 选项 (doff=6) — 否则 peer_wscale 恒 0,
+# wscale 缩放链 (HLS 解析 -> cfg w0[19:16] -> slow_cfg_adp 第 7 字段 ->
+# tcp_rx drain 移位钳位) 全程零覆盖。
+SYN_WSCALE = 2
+
+
+def mk_syn_ws(wnd=0x2000, wscale=SYN_WSCALE):
+    """SYN (doff=6): 选项 [kind=3 len=3 val=wscale, NOP]。"""
+    c = C.CONN[0]
+    eth = DUT_MAC + c['dmac'] + b'\x08\x00'   # SYN: dst=DUT, src=PC
+    tcp = struct.pack('!HHLLBBHHH', c['sport'], c['dport'], 999, 0,
+                      0x60, 0x02, wnd, 0, 0) + bytes([3, 3, wscale, 1])
+    ph = struct.pack('!4s4sBBH', struct.pack('!I', c['sip']),
+                     struct.pack('!I', c['dip']), 0, 6, len(tcp))
+    buf = ph + tcp
+    if len(buf) % 2:
+        buf += b'\x00'
+    cs = csum16(struct.unpack('!%dH' % (len(buf) // 2), buf))
+    tcp = tcp[:16] + struct.pack('!H', cs) + tcp[18:]
+    fb = eth + C.ip_hdr(c['sip'], c['dip'], 20 + len(tcp)) + tcp
+    if len(fb) < 60:
+        fb += b'\x00' * (60 - len(fb))
+    return finish(fb)
+
+
+def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000):
     F = []
 
     def add(name, fb, fcs, gap):
@@ -96,7 +121,7 @@ def build_rx_frames(burst=0):
     add('icmp1', fb, fcs, GAP_SLOW)
     fb, fcs, _pl = mk_udp()
     add('udp1', fb, fcs, GAP_SLOW)
-    fb, fcs = C.mk_tcp_frame(0, 999, 0, 0x02, 0, 0x2000, True)
+    fb, fcs = mk_syn_ws()            # SYN 带 WS=2 (wscale 链覆盖)
     add('syn', fb, fcs, 300)
     # P4b: hs_ack 前留 GAP_SLOW (gap 是帧前间距! 改 syn 的 gap 只会推迟 syn
     # 自己) — 真实 TCP 里 PC 要等收到 SYN+ACK 才发数据; HLS 处理 SYN + cfg
@@ -110,11 +135,16 @@ def build_rx_frames(burst=0):
     add('data7b', fb, fcs, GAP_TCP)
     # P4b-5 排障: burst 模式 — 连续大段 (1460B, 线速帧距 12B), 复现板级
     # 吞吐测试的 echo 停滞。seq 从 1016 起每段 +1460。
+    # P4b-6: pause_at >= 0 时, 第 pause_at 段改 352B 载荷 (停顿前末段尾包),
+    # 其后一段 gap 拉 pause_len — 模拟板测抓到的 PC 发送停顿-恢复。
     seq = 1016
     for b in range(burst):
-        fb, fcs = C.mk_tcp_frame(0, seq, HS_ACKVAL, 0x18, 1460, 0x4000, True)
+        plen = 352 if b == pause_at else 1460
+        fb, fcs = C.mk_tcp_frame(0, seq, HS_ACKVAL, 0x18, plen, burst_wnd, True)
         add('burst%d' % b, fb, fcs, 12)
-        seq += 1460
+        seq += plen
+    if 0 <= pause_at < burst - 1:
+        F[pause_at + 1 + 7]['gap'] = pause_len   # +7: 前 7 帧 (arp..data7b)
     fb, fcs = mk_arp_req()
     add('arp2', fb, fcs, GAP_SLOW)
     fb, fcs = C.mk_tcp_frame(1, 77, 900, 0x18, 20, 0x1A00, True)
@@ -156,7 +186,7 @@ def gen_memh(simdir, frames):
 def parse_gmii(fn):
     byte_lines = []
     ev = dict(fend=[], ack=[], synp=[], stats7=None, stx=None, seco=None,
-              camf=None, tcbf=None, srx=None, stx2=None)
+              camf=None, tcbf=None, srx=None, stx2=None, smac=None)
     with open(fn) as fh:
         for line in fh:
             p = line.split()
@@ -182,6 +212,8 @@ def parse_gmii(fn):
                 ev['srx'] = tuple(int(x) for x in p[1:])
             elif p[0] == 'SLOWTX':
                 ev['stx2'] = tuple(int(x) for x in p[1:])
+            elif p[0] == 'STATS_MAC':
+                ev['smac'] = tuple(int(x) for x in p[1:])
             else:
                 byte_lines.append((int(p[0], 16), int(p[1])))
     frames = []
@@ -458,8 +490,9 @@ def check(simdir):
     if ev['camf'] != (PC_IP, DUT_IP, C.CONN[0]['sport'],
                       C.CONN[0]['dport'], int.from_bytes(PC_MAC, 'big')):
         errs.append('CAMF got %s' % (ev['camf'],))
-    # TCBF: conn0 = HLS 握手配置 + 数据推进; ISS 链 = 0x12345678
-    texp = (1016, 0x12345679 + 16, HS_ACKVAL, 0x3000, 0x4000, 1,
+    # TCBF: conn0 = HLS 握手配置 + 数据推进; ISS 链 = 0x12345678;
+    # snd_wnd: SYN WS=2 后 drain 缩放 0x4000<<2=0x10000 → 钳 0xFFFF
+    texp = (1016, 0x12345679 + 16, HS_ACKVAL, 0x3000, 0xFFFF, 1,
             97, 920, 900, 0x1800, 0x1A00, 1)
     if ev['tcbf'] != texp:
         errs.append('TCBF exp %s got %s' % (texp, ev['tcbf']))
@@ -467,6 +500,9 @@ def check(simdir):
         errs.append('SLOWRX got %s exp (5,0)' % (ev['srx'],))
     if ev['stx2'] != (5, 0):
         errs.append('SLOWTX got %s exp (5,0)' % (ev['stx2'],))
+    # 缺陷 A 哨兵: mac abort / tx 欠载提前收帧 恒 0
+    if ev['smac'] is None or ev['smac'][1] != 0 or ev['smac'][2] != 0:
+        errs.append('STATS_MAC (frames,abort,eend) got %s' % (ev['smac'],))
 
     print('frames RX=%d TX=%d (fast=%d slow=%d)'
           % (len(frames), len(got), len(fast_got), len(slow_got)))
@@ -480,38 +516,77 @@ def check(simdir):
 
 
 def check_burst(simdir, nburst):
-    """P4b-5 排障: burst 模式轻量诊断 — 数 echo 帧 + 末态统计 (不做全语义)。"""
+    """burst 诊断: conn0 echo seq 连续性 (空洞 = 缺陷 A) + 计数/统计终态。
+
+    返回 False 当: echo 数不符 / seq 空洞 / mac abort / 欠载提前收帧。
+    PCACK 模式下注入的纯 ACK 不上 TX, 不影响本检查。"""
     got, ev = parse_gmii(os.path.join(simdir, 'resp_p4_chain.memh'))
-    data_echoes = 0
+    echoes = []     # conn0 数据 echo: (seq, plen)
+    other_fast = 0
     for fb in got:
         body = fb[8:-4]
         if len(body) >= 48 and body[12:14] == b'\x08\x00' and body[23] == 6:
             flags = body[47]
+            sport, dport = struct.unpack('!HH', body[34:38])
             if flags == 0x18:
-                data_echoes += 1
-    print('burst sent=%d  data echoes=%d  (含 2 个预置 + 1 个 conn1)'
-          % (nburst, data_echoes))
+                seq, = struct.unpack('!I', body[38:42])
+                plen = struct.unpack('!H', body[16:18])[0] - 40
+                if sport == 0x1F90 and dport == 0x3039:
+                    echoes.append((seq, plen))
+                else:
+                    other_fast += 1   # conn1 echo
+    exp_echo = nburst + 2             # 200 段 burst + data7a/data7b
+    ok = True
+    if len(echoes) != exp_echo:
+        print('MISMATCH: conn0 echo %d != %d' % (len(echoes), exp_echo))
+        ok = False
+    # seq 连续性: 每个 echo 的 seq 必须 == 前一个的 seq+plen (无空洞无重叠)
+    holes = 0
+    for i in range(1, len(echoes)):
+        want = echoes[i - 1][0] + echoes[i - 1][1]
+        if echoes[i][0] != want:
+            holes += 1
+            print('MISMATCH: echo #%d seq=%d, 空洞/重叠 %d 字节 (期望 %d)'
+                  % (i, echoes[i][0], echoes[i][0] - want, want))
+            ok = False
+    if holes == 0 and len(echoes) == exp_echo:
+        print('echo seq 链连续: %d 帧, %d 字节, 无空洞'
+              % (len(echoes), sum(p for _, p in echoes)))
+    print('burst sent=%d  conn0 echoes=%d  conn1 echoes=%d'
+          % (nburst, len(echoes), other_fast))
     print('STATS7  %s' % (ev['stats7'],))
     print('STATS_TX %s' % (ev['stx'],))
     print('STATS_ECO %s' % (ev['seco'],))
+    print('STATS_MAC (mac_frames,abort,eend) %s' % (ev['smac'],))
     print('TCBF %s' % (ev['tcbf'],))
-    return True
+    if ev['smac'] is None or ev['smac'][1] != 0 or ev['smac'][2] != 0:
+        print('MISMATCH: mac abort / tx eend 非零 (缺陷 A 哨兵)')
+        ok = False
+    print('BURST %s' % ('OK' if ok else 'FAIL'))
+    return ok
 
 
 if __name__ == '__main__':
     simdir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'sim', 'p4sim')
     nburst = 0
+    pause_at, pause_len = -1, 0
+    burst_wnd = 0x4000
     mode = 'gen'
     if len(sys.argv) > 2:
         if sys.argv[2] == 'check':
             mode = 'check'
         elif sys.argv[2] == 'burst':
             nburst = int(sys.argv[3]) if len(sys.argv) > 3 else 100
+            if len(sys.argv) > 5:
+                pause_at, pause_len = int(sys.argv[4]), int(sys.argv[5])
+            if len(sys.argv) > 6:
+                burst_wnd = int(sys.argv[6], 16)
             mode = 'gen'
         elif sys.argv[2] == 'burstcheck':
             nburst = int(sys.argv[3]) if len(sys.argv) > 3 else 100
             mode = 'burstcheck'
-    frames = build_rx_frames(burst=nburst)
+    frames = build_rx_frames(burst=nburst, pause_at=pause_at, pause_len=pause_len,
+                             burst_wnd=burst_wnd)
     print('%d RX frames' % len(frames))
     if mode == 'check':
         sys.exit(0 if check(simdir) else 1)

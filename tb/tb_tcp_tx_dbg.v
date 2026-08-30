@@ -13,13 +13,14 @@ module tb_tcp_tx_dbg;
         .s_axis_tready(tready), .s_axis_tlast(tlast), .s_axis_tid(tid),
         .ack_req(1'b0), .ack_id(4'd0), .ack_val(32'd0),
         .rb_id(), .rb_snd_nxt(32'd6000), .rb_rcv_nxt(32'd1000), .rb_rcv_wnd(16'h2000),
+        .rb_snd_una(32'd6000), .rb_snd_wnd(16'hFFFF),
         .upd_wr(), .upd_id(), .upd_sel(), .upd_val(),
         .cam_rd_id(), .cam_rd_dmac(48'h112233445566), .cam_rd_dip(32'hC0A86402),
         .cam_rd_sport(16'h3039), .cam_rd_dport(16'h1F90),
         .cfg_src_mac(48'h000A3501FEC1), .cfg_src_ip(32'hC0A86402),
         .m_axis_tdata(m_tdata), .m_axis_tkeep(m_tkeep),
         .m_axis_tvalid(m_tvalid), .m_axis_tready(m_tready), .m_axis_tlast(m_tlast),
-        .stat_frames(), .stat_bytes(), .stat_ack(), .stat_ack_drop()
+        .stat_frames(), .stat_bytes(), .stat_ack(), .stat_ack_drop(), .stat_eend()
     );
 
     always #4 clk = ~clk;

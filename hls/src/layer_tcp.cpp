@@ -103,10 +103,11 @@ static int8_t tcp_find(uint16_t port, uint32_t ip) {
 //=============================================================================
 // P4b: 配置记录写 (cfg_stream, 8x32bit) — 握手/拆除结果推送给 fast path
 // CAM/TCB (唯一状态源在 fast 数据面)。记录布局 (slow_cfg_adp 解析):
-//   w0 = (cmd<<8)|slot      (cmd: 0=CFG_ADD, 1=CFG_DEL)
+//   w0 = (wscale<<16)|(cmd<<8)|slot   (cmd: 0=CFG_ADD, 1=CFG_DEL)
+//        wscale = 对端 window scale (SYN 选项解析) — fast 侧 snd_wnd drain 缩放用
 //   w1 = peer_ip            w2 = local_ip (192.168.100.2)
 //   w3 = (peer_port<<16)|local_port
-//   w4 = peer_mac[47:16]    w5 = (peer_mac[15:0]<<16)|peer_wnd
+//   w4 = peer_mac[47:16]    w5 = (peer_mac[15:0]<<16)|peer_wnd (已按 wscale 缩放)
 //   w6 = rcv_nxt (=peer ISS+1)
 //   w7 = snd_nxt (=我方 SYN+ACK 发送后的 c.seq = ISS+1)
 // DEL 只需 w0 (其余写 0, 定长 8 词保解析器简单)。
@@ -115,16 +116,20 @@ static int8_t tcp_find(uint16_t port, uint32_t ip) {
 #define CFG_CMD_DEL 1
 static void cfg_write(hls::stream<ap_uint<32> > &cfg_stream, uint8_t cmd,
                       int8_t cid, uint32_t peer_ip, uint16_t peer_port,
-                      uint64_t peer_mac, uint16_t peer_wnd,
+                      uint64_t peer_mac, uint16_t peer_wnd, uint8_t wscale,
                       uint32_t rcv_nxt, uint32_t snd_nxt){
     ap_uint<32> w[8];
-    w[0]=((ap_uint<32>)cmd<<8)|(ap_uint<32>)(uint8_t)cid;
+    w[0]=((ap_uint<32>)wscale<<16)|((ap_uint<32>)cmd<<8)|(ap_uint<32>)(uint8_t)cid;
     if(cmd==CFG_CMD_ADD){
+        // P4b-6: peer_wnd 先按 wscale 缩放再钳 16 位 — fast 侧门控直接可比;
+        // drain 路径 (tcp_rx) 另按 wscale 缩放每帧通告, 两处量纲一致。
+        uint32_t pw=(uint32_t)peer_wnd<<wscale;
+        uint16_t wnd16=(pw>0xFFFF)?0xFFFF:(uint16_t)pw;
         w[1]=peer_ip;
         w[2]=(BOARD_IP_BYTE0<<24)|(BOARD_IP_BYTE1<<16)|(BOARD_IP_BYTE2<<8)|BOARD_IP_BYTE3;
         w[3]=((ap_uint<32>)peer_port<<16)|(ap_uint<32>)TCP_PORT_ECHO;
         w[4]=(ap_uint<32>)(peer_mac>>16);
-        w[5]=((ap_uint<32>)(peer_mac&0xFFFF)<<16)|(ap_uint<32>)peer_wnd;
+        w[5]=((ap_uint<32>)(peer_mac&0xFFFF)<<16)|(ap_uint<32>)wnd16;
         w[6]=rcv_nxt;
         w[7]=snd_nxt;
     }else{
@@ -429,7 +434,7 @@ static void tcp_rx_process(bool rst, ip_rx_t &ip_rx, uint32_t *buf, mac_tx_req_t
             if(tcp_conn[i].peer_port==sp&&tcp_conn[i].peer_ip==ip_rx.src_ip){
                 tcp_conn[i].state=T_FREE;
                 tcp_conn[i].retrans_pending=false;
-                cfg_write(cfg_stream,CFG_CMD_DEL,i,0,0,0,0,0,0);
+                cfg_write(cfg_stream,CFG_CMD_DEL,i,0,0,0,0,0,0,0);
                 return;
             }
         }
@@ -445,7 +450,7 @@ static void tcp_rx_process(bool rst, ip_rx_t &ip_rx, uint32_t *buf, mac_tx_req_t
                 // P4b: 乐观建连 — tcp_send 后 c.seq = ISS+1 (SYN 占一个序号);
                 // 立即把连接配置推给 fast path (CAM/TCB), 数据面直接可用
                 cfg_write(cfg_stream,CFG_CMD_ADD,cid,c.peer_ip,c.peer_port,
-                          rx_smac,wnd,c.peer_seq,c.seq);}break;
+                          rx_smac,wnd,c.peer_wscale,c.peer_seq,c.seq);}break;
         case T_SYN_RCVD:if((flags&TCP_ACK)&&ack==c.seq){c.retrans_pending=false;c.state=T_ESTABLISHED;c.rto_timer=0;c.retry_cnt=0;}
             // P4b-5: 对端 SYN 重传 = SYN+ACK 丢失 — 原样重发 (seq 不变;
             // tcp_send 对 SYN 会再 +1, 先退一拍)。定时重传已废除 (会 RST
@@ -461,7 +466,7 @@ static void tcp_rx_process(bool rst, ip_rx_t &ip_rx, uint32_t *buf, mac_tx_req_t
             else if(flags&TCP_FIN){
                 c.peer_seq=seq+1;
                 tcp_send(buf,tx_req,cid,TCP_FIN|TCP_ACK,NULL,0);
-                cfg_write(cfg_stream,CFG_CMD_DEL,cid,0,0,0,0,0,0);
+                cfg_write(cfg_stream,CFG_CMD_DEL,cid,0,0,0,0,0,0,0);
                 // 直接释放槽位: 最后 ACK 走 fast path, HLS 永远收不到 —
                 // 进 T_LAST_ACK 要等 4 个 RTO (~13s) 限次重传才释放,
                 // PC 连接循环 (每次新临时端口 = 新 4 元组 = 新槽) 会把
@@ -481,7 +486,7 @@ static void tcp_rx_process(bool rst, ip_rx_t &ip_rx, uint32_t *buf, mac_tx_req_t
             }else if(flags&TCP_ACK)c.retrans_pending=false;
             if(flags&TCP_FIN){tcp_send(buf,tx_req,cid,TCP_FIN|TCP_ACK,NULL,0);c.state=T_LAST_ACK;
                 // P4b: fast 侧拆除 (CFG_DEL); HLS 槽位等最后 ACK 释放
-                cfg_write(cfg_stream,CFG_CMD_DEL,cid,0,0,0,0,0,0);}break;
+                cfg_write(cfg_stream,CFG_CMD_DEL,cid,0,0,0,0,0,0,0);}break;
         case T_LAST_ACK:if(flags&TCP_ACK){c.retrans_pending=false;c.state=T_FREE;}break;
     }
 }

@@ -54,6 +54,7 @@ module tcp_rx (
     input  wire [31:0] ra_snd_una,
     input  wire [15:0] ra_rcv_wnd,
     input  wire [3:0]  ra_state,
+    input  wire [3:0]  ra_wscale,   // 对端 window scale (snd_wnd drain 缩放用)
     // TCB 更新 (fend 后 drain: 拍1 rcv_nxt, 拍2 snd_una, 拍3 snd_wnd;
     // 组合电平输出, upd_gnt 未给则保持该字段 — 顶层仲裁必须无损 (tx 优先时 rx 靠 gnt 顺延)
     output wire        upd_wr,
@@ -253,6 +254,11 @@ module tcp_rx (
     assign syn_wnd   = syn_wnd_r;
 
     wire [15:0] wnd_f = fend_w6 ? s_axis_tdata[63:48] : wnd_l;
+    // snd_wnd drain 按握手 wscale 缩放 (P4b-6 窗口门控的真实量纲; 钳 16 位 —
+    // echo 在飞上限 = 我方通告 rcv_wnd 0x3000 << 64K, 钳位不影响门控语义)。
+    // 32 位扩展再钳: wscale>7 (HLS 侧钳 ws<=7 是软契约, 此处自防守)
+    wire [31:0] wnd_scaled = {16'b0, wnd_f} << ra_wscale;
+    wire [15:0] wnd_ws    = |wnd_scaled[31:16] ? 16'hFFFF : wnd_scaled[15:0];
 
     // TCB 更新口 (组合: drn 状态电平保持, gnt 拍被写进 TCB 并顺延下一字段)
     assign upd_wr  = ((drn == 2'd1) && pend_rcv) || ((drn == 2'd2) && pend_una) ||
@@ -291,7 +297,7 @@ module tcp_rx (
                 pend_id <= conn_id_l;
                 pend_rcv_val <= rcv_nxt_l + {16'b0, plen_l};
                 pend_una_val <= ack32_l;
-                pend_wnd_val <= wnd_f;
+                pend_wnd_val <= wnd_ws;
                 drn <= 2'd1;
             end else begin
                 // ---- drain FSM (upd_* 组合输出, gnt 拍才前进) ----

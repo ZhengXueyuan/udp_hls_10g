@@ -74,7 +74,7 @@ module tb_tcp_tx;
         .s_axis_tid(tid),
         .ack_req(ack_req), .ack_id(ack_id), .ack_val(ack_val), .ack_syn(1'b0),
         .rb_id(rb_id), .rb_snd_nxt(rb_snd_nxt), .rb_rcv_nxt(rb_rcv_nxt),
-        .rb_rcv_wnd(rb_rcv_wnd),
+        .rb_rcv_wnd(rb_rcv_wnd), .rb_snd_una(rb_snd_una), .rb_snd_wnd(rb_snd_wnd),
         .upd_wr(dut_upd_wr), .upd_id(dut_upd_id), .upd_sel(dut_upd_sel), .upd_val(dut_upd_val),
         .cam_rd_id(cam_rd_id), .cam_rd_dmac(cam_rd_dmac), .cam_rd_sip(cam_rd_sip),
         .cam_rd_sport(cam_rd_sport), .cam_rd_dport(cam_rd_dport),
@@ -82,13 +82,13 @@ module tb_tcp_tx;
         .m_axis_tdata(m_tdata), .m_axis_tkeep(m_tkeep),
         .m_axis_tvalid(m_tvalid), .m_axis_tready(m_tready), .m_axis_tlast(m_tlast),
         .stat_frames(stat_frames), .stat_bytes(stat_bytes),
-        .stat_ack(stat_ack), .stat_ack_drop(stat_ack_drop)
+        .stat_ack(stat_ack), .stat_ack_drop(stat_ack_drop), .stat_eend()
     );
 
     tcb u_tcb (
         .clk(clk), .rst_n(rst_n),
         .ra_id(4'd0), .ra_rcv_nxt(), .ra_snd_nxt(), .ra_snd_una(),
-        .ra_rcv_wnd(), .ra_snd_wnd(), .ra_state(),
+        .ra_rcv_wnd(), .ra_snd_wnd(), .ra_state(), .ra_wscale(),
         .rb_id(rb_id), .rb_rcv_nxt(rb_rcv_nxt), .rb_snd_nxt(rb_snd_nxt),
         .rb_snd_una(rb_snd_una), .rb_rcv_wnd(rb_rcv_wnd), .rb_snd_wnd(rb_snd_wnd),
         .rb_state(rb_state),

@@ -58,6 +58,7 @@ module tb_p4_chain;
     wire [31:0] ra_rcv_nxt, ra_snd_nxt, ra_snd_una;
     wire [15:0] ra_rcv_wnd;
     wire [3:0]  ra_state;
+    wire [3:0]  ra_wscale;
     wire        rx_upd_wr;
     wire [3:0]  rx_upd_id;
     wire [2:0]  rx_upd_sel;
@@ -106,6 +107,8 @@ module tb_p4_chain;
     wire [7:0]  gmii_txd;
     wire        gmii_tx_en;
     wire [31:0] tx_stat_frames, tx_stat_bytes, tx_stat_ack, tx_stat_ack_drop;
+    wire [31:0] tx_stat_eend;
+    wire [31:0] mac_stat_frames, mac_stat_abort;
     // tcp_rx SYN sideband (P4b: SYN 已分流慢路径, sideband 空挂)
     wire        syn_v;
     wire [47:0] syn_smac;
@@ -167,6 +170,95 @@ module tb_p4_chain;
 
     integer     fd;
 
+    // ================= P4b-6 PC 反应式 ACK 模型 (+PCACK) =================
+    // 窗口门控下 snd_una 必须随 echo 推进, 否则 in_flight 打满 snd_wnd 锁死。
+    // 捕获 conn0 echo 数据帧 (GMII TX: 0800/proto6/sport 1F90/dport 3039/
+    // flags 18), 帧尾记 echo_end_seq = seq + (ip_tlen-40); RX 流帧间隙注入
+    // 纯 ACK (60B: seq=rcv_nxt_r[0], ack=echo_end_seq, wnd 0x4000)。
+    // 注入帧 IP 头除 csum 外恒定, TCP csum fast 路径不查 (填 0)。
+    reg        pcack_en;
+    reg        inj_play;          // 正在播放注入帧
+    reg [6:0]  inj_idx;
+    reg [31:0] inj_ack_val;
+    reg [7:0]  inj_buf [0:71];    // 8 前导 + 60 帧 + 4 FCS
+    reg [31:0] seq_b, ack_b, inj_crc;
+    reg [15:0] ipcs_c;
+    integer    bi;
+    // TX echo 帧头捕获 (前 48 字节)
+    reg        tx_en_d, tx_inf;
+    reg [5:0]  txbc;
+    reg [7:0]  cap [0:47];
+    // echo_seen / inj_done 分属捕获/驱动两个 always (单驱动铁律); 差值 = 待注入
+    reg [15:0] echo_seen, inj_done;
+    wire       inj_pend = pcack_en && (echo_seen != inj_done);
+    reg [15:0] inj_wnd;   // 注入 ACK 的通告窗口 (默认 0x4000; +PCWND1K 压 0x0400
+                          //  — SYN 带 WS=2, 缩放后有效窗口 0x1000, 强迫门控交战)
+    reg [3:0]  gap_cnt;   // 已连续播放的间隙字节数 (采样 rcv_nxt 须等上一帧
+                          //  fend 的 drain 落地 = fend+3 拍, 否则注入帧带旧 seq
+                          //  被 tcp_rx 拒收 — TB 模型噪声, 但污染统计)
+
+    function [7:0] inj_byte;
+        input [6:0] idx;
+        input [31:0] sq;
+        input [31:0] ak;
+        input [15:0] ics;
+        begin
+            case (idx)
+                7'd0:  inj_byte = 8'h00;  7'd1:  inj_byte = 8'h0A;
+                7'd2:  inj_byte = 8'h35;  7'd3:  inj_byte = 8'h01;
+                7'd4:  inj_byte = 8'hFE;  7'd5:  inj_byte = 8'hC0;
+                7'd6:  inj_byte = 8'h11;  7'd7:  inj_byte = 8'h22;
+                7'd8:  inj_byte = 8'h33;  7'd9:  inj_byte = 8'h44;
+                7'd10: inj_byte = 8'h55;  7'd11: inj_byte = 8'h66;
+                7'd12: inj_byte = 8'h08;  7'd13: inj_byte = 8'h00;
+                7'd14: inj_byte = 8'h45;  7'd15: inj_byte = 8'h00;
+                7'd16: inj_byte = 8'h00;  7'd17: inj_byte = 8'h28;
+                7'd18: inj_byte = 8'h77;  7'd19: inj_byte = 8'h77;
+                7'd20: inj_byte = 8'h00;  7'd21: inj_byte = 8'h00;
+                7'd22: inj_byte = 8'h40;  7'd23: inj_byte = 8'h06;
+                7'd24: inj_byte = ics[15:8]; 7'd25: inj_byte = ics[7:0];
+                7'd26: inj_byte = 8'hC0;  7'd27: inj_byte = 8'hA8;
+                7'd28: inj_byte = 8'h64;  7'd29: inj_byte = 8'h01;
+                7'd30: inj_byte = 8'hC0;  7'd31: inj_byte = 8'hA8;
+                7'd32: inj_byte = 8'h64;  7'd33: inj_byte = 8'h02;
+                7'd34: inj_byte = 8'h30;  7'd35: inj_byte = 8'h39;
+                7'd36: inj_byte = 8'h1F;  7'd37: inj_byte = 8'h90;
+                7'd38: inj_byte = sq[31:24]; 7'd39: inj_byte = sq[23:16];
+                7'd40: inj_byte = sq[15:8];  7'd41: inj_byte = sq[7:0];
+                7'd42: inj_byte = ak[31:24]; 7'd43: inj_byte = ak[23:16];
+                7'd44: inj_byte = ak[15:8];  7'd45: inj_byte = ak[7:0];
+                7'd46: inj_byte = 8'h50;  7'd47: inj_byte = 8'h10;
+                7'd48: inj_byte = inj_wnd[15:8]; 7'd49: inj_byte = inj_wnd[7:0];
+                default: inj_byte = 8'h00;   // 50..53 tcp csum/urg=0, 54..59 pad
+            endcase
+        end
+    endfunction
+
+    function [15:0] ip_csum_inj;   // 注入帧 IP 头恒定 → csum 恒定
+        input dummy;             // verilog 函数至少一个输入
+        reg [31:0] s;
+        begin
+            s = 32'h4500 + 32'h0028 + 32'h7777 + 32'h0000 + 32'h4006 +
+                32'hC0A8 + 32'h6401 + 32'hC0A8 + 32'h6402;
+            s = (s & 32'hFFFF) + (s >> 16);
+            s = (s & 32'hFFFF) + (s >> 16);
+            ip_csum_inj = ~s[15:0];
+        end
+    endfunction
+
+    function [31:0] crc32b;
+        input [31:0] crc;
+        input [7:0]  d;
+        integer j;
+        reg [31:0] cc;
+        begin
+            cc = crc ^ {24'b0, d};
+            for (j = 0; j < 8; j = j + 1)
+                cc = cc[0] ? ((cc >> 1) ^ 32'hEDB88320) : (cc >> 1);
+            crc32b = cc;
+        end
+    endfunction
+
     mac_rx_64 u_mac (
         .clk(clk), .rst_n(rst_n),
         .gmii_rxd(rx_d), .gmii_rx_dv(rx_dv), .gmii_rx_er(rx_er),
@@ -203,7 +295,7 @@ module tb_p4_chain;
         .meta_len(meta_len), .meta_conn_id(meta_conn_id), .meta_seq(),
         .ra_id(ra_id),
         .ra_rcv_nxt(ra_rcv_nxt), .ra_snd_nxt(ra_snd_nxt), .ra_snd_una(ra_snd_una),
-        .ra_rcv_wnd(ra_rcv_wnd), .ra_state(ra_state),
+        .ra_rcv_wnd(ra_rcv_wnd), .ra_state(ra_state), .ra_wscale(ra_wscale),
         .upd_wr(rx_upd_wr), .upd_id(rx_upd_id), .upd_sel(rx_upd_sel), .upd_val(rx_upd_val),
         .upd_gnt(rx_upd_gnt),
         .ack_req(ack_req), .ack_id(ack_id), .ack_val(ack_val),
@@ -245,7 +337,7 @@ module tb_p4_chain;
         .clk(clk), .rst_n(rst_n),
         .ra_id(ra_id), .ra_rcv_nxt(ra_rcv_nxt), .ra_snd_nxt(ra_snd_nxt),
         .ra_snd_una(ra_snd_una), .ra_rcv_wnd(ra_rcv_wnd), .ra_snd_wnd(),
-        .ra_state(ra_state),
+        .ra_state(ra_state), .ra_wscale(ra_wscale),
         .rb_id(rb_id), .rb_rcv_nxt(rb_rcv_nxt), .rb_snd_nxt(rb_snd_nxt),
         .rb_snd_una(rb_snd_una), .rb_rcv_wnd(rb_rcv_wnd), .rb_snd_wnd(rb_snd_wnd),
         .rb_state(rb_state),
@@ -274,7 +366,7 @@ module tb_p4_chain;
         .ack_req(tx_ack_req), .ack_id(tx_ack_id), .ack_val(tx_ack_val),
         .ack_syn(tx_ack_syn),
         .rb_id(rb_id), .rb_snd_nxt(rb_snd_nxt), .rb_rcv_nxt(rb_rcv_nxt),
-        .rb_rcv_wnd(rb_rcv_wnd),
+        .rb_rcv_wnd(rb_rcv_wnd), .rb_snd_una(rb_snd_una), .rb_snd_wnd(rb_snd_wnd),
         .upd_wr(tx_upd_wr), .upd_id(tx_upd_id), .upd_sel(tx_upd_sel), .upd_val(tx_upd_val),
         .cam_rd_id(cam_rd_id), .cam_rd_dmac(cam_rd_dmac), .cam_rd_sip(cam_rd_sip),
         .cam_rd_sport(cam_rd_sport), .cam_rd_dport(cam_rd_dport),
@@ -282,7 +374,8 @@ module tb_p4_chain;
         .m_axis_tdata(x_tdata), .m_axis_tkeep(x_tkeep),
         .m_axis_tvalid(x_tvalid), .m_axis_tready(x_tready), .m_axis_tlast(x_tlast),
         .stat_frames(tx_stat_frames), .stat_bytes(tx_stat_bytes),
-        .stat_ack(tx_stat_ack), .stat_ack_drop(tx_stat_ack_drop)
+        .stat_ack(tx_stat_ack), .stat_ack_drop(tx_stat_ack_drop),
+        .stat_eend(tx_stat_eend)
     );
 
     // ---- 慢路径: slow_rx_adp -> udp_echo (HLS) -> slow_tx_adp ----
@@ -333,7 +426,7 @@ module tb_p4_chain;
         .s_axis_tdata(a_tdata), .s_axis_tkeep(a_tkeep),
         .s_axis_tvalid(a_tvalid), .s_axis_tready(a_tready), .s_axis_tlast(a_tlast),
         .gmii_txd(gmii_txd), .gmii_tx_en(gmii_tx_en), .gmii_tx_er(),
-        .stat_frames(), .stat_abort()
+        .stat_frames(mac_stat_frames), .stat_abort(mac_stat_abort)
     );
 
     always #4 clk = ~clk;     // 125 MHz
@@ -343,6 +436,7 @@ module tb_p4_chain;
         if (!rst_n) begin
             i <= 0; k <= 32'hFFFFFFFF; rx_d <= 8'h07; rx_dv <= 0; rx_er <= 0; done <= 0;
             cphase <= 0;
+            inj_play <= 0; inj_idx <= 0; inj_done <= 0; gap_cnt <= 0;
             cfg_wr <= 0; cfg_addr <= 0; cfg_sip <= 0; cfg_dip <= 0;
             cfg_sport <= 0; cfg_dport <= 0; cfg_dmac <= 0;
             cfg_upd_wr <= 0; cfg_upd_id <= 0; cfg_upd_sel <= 0; cfg_upd_val <= 0;
@@ -367,21 +461,90 @@ module tb_p4_chain;
                 cphase <= cphase + 1;
             end else begin
                 cfg_wr <= 0; cfg_upd_wr <= 0;
-                if (i < nstim) begin
-                    rx_d  <= stim_d[i];
-                    rx_dv <= stim_v[i][0];
-                    rx_er <= stim_e[i][0];
-                    i <= i + 1;
+                if (inj_play) begin
+                    // 注入帧播放 (静态流暂停, i 冻结 — rcv_nxt 播放期不变)。
+                    // 前 12 拍播 IFG (dv=0)! 直接进前导会让 mac_rx_64 收不到
+                    // 帧间间隙 → 注入帧与静态前帧融合成一帧 (PCACK 首版实锤)。
+                    if (inj_idx < 7'd12) begin
+                        rx_d  <= 8'h07;
+                        rx_dv <= 1'b0;
+                    end else begin
+                        rx_d  <= inj_buf[inj_idx - 7'd12];
+                        rx_dv <= 1'b1;
+                    end
+                    rx_er <= 1'b0;
+                    if (inj_idx == 7'd83) inj_play <= 1'b0;   // 12 IFG + 72 帧
+                    inj_idx <= inj_idx + 7'd1;
+                end else if (i < nstim) begin
+                    if (pcack_en && inj_pend && !stim_v[i][0] &&
+                        gap_cnt >= 4'd11) begin
+                        // 帧间隙: 构建纯 ACK (此刻静态流在间隙, rcv_nxt 冻结)。
+                        // 本拍仍播该间隙字节, 下拍起 12 拍 IFG 再进前导。
+                        seq_b  = u_tcb.rcv_nxt_r[0];
+                        ack_b  = inj_ack_val;
+                        ipcs_c = ip_csum_inj(1'b0);
+                        inj_crc = 32'hFFFFFFFF;
+                        for (bi = 0; bi < 8; bi = bi + 1)
+                            inj_buf[bi] <= (bi == 7) ? 8'hD5 : 8'h55;
+                        for (bi = 0; bi < 60; bi = bi + 1) begin
+                            inj_buf[8 + bi] <= inj_byte(bi, seq_b, ack_b, ipcs_c);
+                            inj_crc = crc32b(inj_crc, inj_byte(bi, seq_b, ack_b, ipcs_c));
+                        end
+                        inj_crc = ~inj_crc;
+                        inj_buf[68] <= inj_crc[7:0];      // FCS 线上 LSB-first
+                        inj_buf[69] <= inj_crc[15:8];
+                        inj_buf[70] <= inj_crc[23:16];
+                        inj_buf[71] <= inj_crc[31:24];
+                        inj_done <= echo_seen;   // 累计 ACK 一次覆盖全部待注入
+                        inj_play <= 1'b1;
+                        inj_idx  <= 7'd0;
+                        rx_d  <= stim_d[i];      // 本拍照旧播间隙字节并消耗之
+                        rx_dv <= stim_v[i][0];
+                        rx_er <= stim_e[i][0];
+                        i <= i + 1;
+                    end else begin
+                        rx_d  <= stim_d[i];
+                        rx_dv <= stim_v[i][0];
+                        rx_er <= stim_e[i][0];
+                        i <= i + 1;
+                        if (stim_v[i][0]) gap_cnt <= 4'd0;
+                        else if (gap_cnt != 4'hF) gap_cnt <= gap_cnt + 4'd1;
+                    end
+                end else if (pcack_en && inj_pend && gap_cnt >= 4'd11) begin
+                    // 静态流已尽, 尾帧 echo 的 ACK 仍需注入 (否则门控卡住尾批)
+                    seq_b  = u_tcb.rcv_nxt_r[0];
+                    ack_b  = inj_ack_val;
+                    ipcs_c = ip_csum_inj(1'b0);
+                    inj_crc = 32'hFFFFFFFF;
+                    for (bi = 0; bi < 8; bi = bi + 1)
+                        inj_buf[bi] <= (bi == 7) ? 8'hD5 : 8'h55;
+                    for (bi = 0; bi < 60; bi = bi + 1) begin
+                        inj_buf[8 + bi] <= inj_byte(bi, seq_b, ack_b, ipcs_c);
+                        inj_crc = crc32b(inj_crc, inj_byte(bi, seq_b, ack_b, ipcs_c));
+                    end
+                    inj_crc = ~inj_crc;
+                    inj_buf[68] <= inj_crc[7:0];
+                    inj_buf[69] <= inj_crc[15:8];
+                    inj_buf[70] <= inj_crc[23:16];
+                    inj_buf[71] <= inj_crc[31:24];
+                    inj_done <= echo_seen;
+                    inj_play <= 1'b1;
+                    inj_idx  <= 7'd0;
+                    rx_dv <= 1'b0;   // 本拍即入 IFG
+                    rx_er <= 1'b0;
                 end else begin
                     rx_dv <= 0; rx_er <= 0;
+                    if (gap_cnt != 4'hF) gap_cnt <= gap_cnt + 4'd1;
                 end
-                if (i >= nstim) done <= 1;
+                if (i >= nstim && !inj_pend && !inj_play) done <= 1;
             end
         end
     end
 
     initial begin
         clk = 0; rst_n = 0;
+        pcack_en = $test$plusargs("PCACK");
+        inj_wnd = $test$plusargs("PCWND1K") ? 16'h0400 : 16'h4000;
         $readmemh("stim_data.memh", stim_d);
         $readmemh("stim_dv.memh",   stim_v);
         $readmemh("stim_er.memh",   stim_e);
@@ -408,6 +571,8 @@ module tb_p4_chain;
                 u_tcb.rcv_wnd_r[1], u_tcb.snd_wnd_r[1], u_tcb.state_r[1]);
         $fwrite(fd, "SLOWRX %0d %0d\n", srx_commit, srx_drop);
         $fwrite(fd, "SLOWTX %0d %0d\n", stx_frames, stx_purge);
+        $fwrite(fd, "STATS_MAC %0d %0d %0d\n", mac_stat_frames, mac_stat_abort,
+                tx_stat_eend);
         $fclose(fd);
         $display("DONE rx(pass=%0d nm=%0d ack=%0d) tx(fr=%0d ack=%0d) eco(echo=%0d) slow(cmt=%0d drp=%0d tx=%0d pg=%0d)",
                  rx_stat_pass, rx_stat_nonmatch, rx_stat_ack,
@@ -427,6 +592,59 @@ module tb_p4_chain;
             if (syn_v)
                 $fwrite(fd, "SYNP %012h %08h %04h %04h %08h %04h\n",
                         syn_smac, syn_sip, syn_sport, syn_dport, syn_seq, syn_wnd);
+        end
+    end
+
+    // ---- P4b-6 缺陷 A 哨兵 (无条件, 变化即报): TX 欠载提前收帧 / MAC 断供 abort
+    //      — 两者结构分析不可达, 亮灯即缺陷 A 实锤 ----
+    reg [31:0] ab_prev = 0, ee_prev = 0, nm_prev = 0;
+    always @(posedge clk) begin
+        if (rst_n) begin
+            if (mac_stat_abort != ab_prev)
+                $display("MACABORT k=%0d n=%0d", k, mac_stat_abort);
+            if (tx_stat_eend != ee_prev)
+                $display("TXEEND k=%0d n=%0d plen_r=%0d", k, tx_stat_eend,
+                         u_tx.plen_r);
+            if ($test$plusargs("PROBE") && rx_stat_nonmatch != nm_prev)
+                $display("NM k=%0d n=%0d rxst=%0d wcnt=%0d", k,
+                         rx_stat_nonmatch, u_rx.state, u_rx.wcnt);
+            if ($test$plusargs("PROBE") && tcb_wr && tcb_sel == 3'd0)
+                $display("RCVW k=%0d id=%0d val=%0d", k, tcb_id, tcb_val);
+            if ($test$plusargs("PROBE") && tcb_wr && tcb_sel == 3'd2)
+                $display("UNAW k=%0d id=%0d val=%08h", k, tcb_id, tcb_val);
+            ab_prev <= mac_stat_abort;
+            ee_prev <= tx_stat_eend;
+            nm_prev <= rx_stat_nonmatch;
+        end
+    end
+
+
+    // ---- TX echo 帧捕获: 帧尾锁存 echo_end_seq, echo_seen++ ----
+    always @(posedge clk) begin
+        if (!rst_n) begin
+            tx_en_d <= 0; tx_inf <= 0; txbc <= 0;
+            echo_seen <= 0; inj_ack_val <= 0;
+        end else begin
+            tx_en_d <= gmii_tx_en;
+            if (gmii_tx_en) begin
+                if (!tx_en_d) begin tx_inf <= 0; txbc <= 0; end
+                else if (!tx_inf) begin
+                    if (gmii_txd == 8'hD5) begin tx_inf <= 1; txbc <= 0; end
+                end else if (txbc < 6'd48) begin
+                    cap[txbc] <= gmii_txd;
+                    txbc <= txbc + 6'd1;
+                end
+            end else if (tx_en_d) begin
+                // 帧尾: conn0 echo 数据帧 → 其累计 ACK 待注入
+                if (cap[12] == 8'h08 && cap[13] == 8'h00 && cap[23] == 8'h06 &&
+                    cap[34] == 8'h1F && cap[35] == 8'h90 && cap[36] == 8'h30 &&
+                    cap[37] == 8'h39 && cap[47] == 8'h18 &&
+                    {cap[16], cap[17]} > 16'd40) begin
+                    echo_seen   <= echo_seen + 16'd1;
+                    inj_ack_val <= {cap[38], cap[39], cap[40], cap[41]} +
+                                   {16'b0, cap[16], cap[17]} - 32'd40;
+                end
+            end
         end
     end
 
@@ -457,17 +675,23 @@ module tb_p4_chain;
             if (hls_tx_tvalid && hls_tx_tready)
                 $display("HLSTX k=%0d d=%02h l=%b", k, hls_tx_tdata[7:0],
                          hls_tx_tdata[8]);
-            // 排障: fast 路径每帧 w6 判定 (纯 ACK 为何被拒)
-            if (u_rx.state == 3'd0 && u_rx.accept && u_rx.wcnt == 3'd6 &&
-                !f_tlast)
-                $display("RXW6 k=%0d cam=%b st=%0d seq=%08h rnxt=%08h ack=%08h suna=%08h snxt=%08h acc=%b",
+            // 排障: fast 路径每帧 w5 判定拍 (acc 在 w5→w6 沿锁存, 探 w6 是错的)
+            if (u_rx.state == 3'd0 && u_rx.accept && u_rx.wcnt == 3'd5)
+                $display("RXW5 k=%0d cam=%b st=%0d seq=%08h rnxt=%08h ack=%08h suna=%08h snxt=%08h base=%b win=%b seqeq=%b flags_ok=%b doff_ok=%b len_ok=%b frag=%b tlast=%b",
                          k, u_rx.cam_hit_l, u_rx.ra_state, u_rx.seq32,
                          u_rx.ra_rcv_nxt, u_rx.ack32, u_rx.ra_snd_una,
-                         u_rx.ra_snd_nxt, u_rx.acc);
-            if (u_rx.state == 3'd0 && u_rx.accept && u_rx.wcnt == 3'd6 &&
-                f_tlast)
-                $display("RXW6T k=%0d acc=%b ackresp=%b tlast=%b", k, u_rx.acc,
-                         u_rx.ackresp, f_tlast);
+                         u_rx.ra_snd_nxt, u_rx.base_ok, u_rx.win_ok,
+                         u_rx.seq_eq, u_rx.flags_ok, u_rx.doff_ok,
+                         u_rx.len_ok, u_rx.frag_ok, f_tlast);
+            if (u_rx.state == 3'd1 && u_rx.accept && f_tlast)
+                $display("RXPAY k=%0d pcount=%0d pay_r=%0d pop8=%0d fend_pay=%b emit_v=%b m_rdy=%b plen_l=%0d",
+                         k, u_rx.pcount, u_rx.pay_r, u_rx.pop8w,
+                         u_rx.fend_pay, u_rx.emit_v, m_tready, u_rx.plen_l);
+            // 缺陷 A 排障: burst0 帧尾区段逐拍 (fast 路由接受/保持)
+            if (k >= 85560 && k <= 85600 && (f_tvalid || u_rx.state != 3'd0))
+                $display("RXW k=%0d v=%b rdy=%b d=%016h kp=%02h l=%b u=%b rxst=%0d pc=%0d cls=%0d",
+                         k, f_tvalid, f_tready, f_tdata, f_tkeep, f_tlast, f_tuser,
+                         u_rx.state, u_rx.pcount, u_classify.state);
         end
     end
 

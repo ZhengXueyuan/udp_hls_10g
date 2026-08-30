@@ -65,6 +65,7 @@ module tb_tcp_chain;
     wire [31:0] ra_rcv_nxt, ra_snd_nxt, ra_snd_una;
     wire [15:0] ra_rcv_wnd;
     wire [3:0]  ra_state;
+    wire [3:0]  ra_wscale;
     wire        rx_upd_wr;
     wire [3:0]  rx_upd_id;
     wire [2:0]  rx_upd_sel;
@@ -172,7 +173,7 @@ module tb_tcp_chain;
         .meta_len(), .meta_conn_id(), .meta_seq(),
         .ra_id(ra_id),
         .ra_rcv_nxt(ra_rcv_nxt), .ra_snd_nxt(ra_snd_nxt), .ra_snd_una(ra_snd_una),
-        .ra_rcv_wnd(ra_rcv_wnd), .ra_state(ra_state),
+        .ra_rcv_wnd(ra_rcv_wnd), .ra_state(ra_state), .ra_wscale(ra_wscale),
         .upd_wr(rx_upd_wr), .upd_id(rx_upd_id), .upd_sel(rx_upd_sel), .upd_val(rx_upd_val),
         .upd_gnt(rx_upd_gnt),
         .ack_req(ack_req), .ack_id(ack_id), .ack_val(ack_val),
@@ -203,7 +204,7 @@ module tb_tcp_chain;
         .clk(clk), .rst_n(rst_n),
         .ra_id(ra_id), .ra_rcv_nxt(ra_rcv_nxt), .ra_snd_nxt(ra_snd_nxt),
         .ra_snd_una(ra_snd_una), .ra_rcv_wnd(ra_rcv_wnd), .ra_snd_wnd(),
-        .ra_state(ra_state),
+        .ra_state(ra_state), .ra_wscale(ra_wscale),
         .rb_id(rb_id), .rb_rcv_nxt(rb_rcv_nxt), .rb_snd_nxt(rb_snd_nxt),
         .rb_snd_una(rb_snd_una), .rb_rcv_wnd(rb_rcv_wnd), .rb_snd_wnd(rb_snd_wnd),
         .rb_state(rb_state),
@@ -233,7 +234,7 @@ module tb_tcp_chain;
         .ack_req(tx_ack_req), .ack_id(tx_ack_id), .ack_val(tx_ack_val),
         .ack_syn(tx_ack_syn),
         .rb_id(rb_id), .rb_snd_nxt(rb_snd_nxt), .rb_rcv_nxt(rb_rcv_nxt),
-        .rb_rcv_wnd(rb_rcv_wnd),
+        .rb_rcv_wnd(rb_rcv_wnd), .rb_snd_una(rb_snd_una), .rb_snd_wnd(rb_snd_wnd),
         .upd_wr(tx_upd_wr), .upd_id(tx_upd_id), .upd_sel(tx_upd_sel), .upd_val(tx_upd_val),
         .cam_rd_id(cam_rd_id), .cam_rd_dmac(cam_rd_dmac), .cam_rd_sip(cam_rd_sip),
         .cam_rd_sport(cam_rd_sport), .cam_rd_dport(cam_rd_dport),
@@ -241,7 +242,7 @@ module tb_tcp_chain;
         .m_axis_tdata(x_tdata), .m_axis_tkeep(x_tkeep),
         .m_axis_tvalid(x_tvalid), .m_axis_tready(x_tready), .m_axis_tlast(x_tlast),
         .stat_frames(tx_stat_frames), .stat_bytes(tx_stat_bytes),
-        .stat_ack(tx_stat_ack), .stat_ack_drop(tx_stat_ack_drop)
+        .stat_ack(tx_stat_ack), .stat_ack_drop(tx_stat_ack_drop), .stat_eend()
     );
 
     mac_tx_64 u_mactx (

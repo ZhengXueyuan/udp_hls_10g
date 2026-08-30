@@ -2,16 +2,17 @@
 // slow_cfg_adp: HLS cfg_stream (32b AXIS) -> CAM 配置写 + TCB 更新写。
 //
 // 记录 = 定长 8 词 (见 hls/src/layer_tcp.cpp cfg_write):
-//   w0 = (cmd<<8)|slot      cmd: 0=ADD (建连), 1=DEL (拆除)
+//   w0 = (wscale<<16)|(cmd<<8)|slot   cmd: 0=ADD (建连), 1=DEL (拆除)
+//        wscale = 对端 window scale (握手 SYN 选项解析值, fast 侧 snd_wnd 缩放用)
 //   w1 = peer_ip            w2 = local_ip
 //   w3 = (peer_port<<16)|local_port
-//   w4 = peer_mac[47:16]    w5 = (peer_mac[15:0]<<16)|peer_wnd
+//   w4 = peer_mac[47:16]    w5 = (peer_mac[15:0]<<16)|peer_wnd (已按 wscale 缩放)
 //   w6 = rcv_nxt (= 对端 ISS+1)
 //   w7 = snd_nxt (= 我方 ISS+1, SYN+ACK 已占一个序号)
 //
-// ADD: CAM 写一条 (sip/dip/sport/dport/dmac) + TCB 六字段
+// ADD: CAM 写一条 (sip/dip/sport/dport/dmac) + TCB 七字段
 //      (rcv_nxt / snd_nxt / snd_una=snd_nxt / rcv_wnd=0x3000 / snd_wnd=peer_wnd
-//       / state=1 ESTABLISHED)。
+//       / state=1 ESTABLISHED / wscale)。
 // DEL: CAM 该槽清零 (sip=0 永不匹配) + TCB state=0。
 // TCB 写经 cfg 仲裁级 (tx>rx>cfg): upd_wr 电平保持到 cfg_gnt 才前进 —
 // 无 gnt 反馈的盲写在有其它连接流量时会丢字段 (连接建立错号), 必须等授权。
@@ -70,8 +71,9 @@ module slow_cfg_adp (
             3'd1:    tcb_val_c = w7;                    // snd_nxt
             3'd2:    tcb_val_c = w7;                    // snd_una
             3'd3:    tcb_val_c = 32'h00003000;          // rcv_wnd 通告 12K
-            3'd4:    tcb_val_c = {16'b0, w5[15:0]};     // snd_wnd = 对端窗口
-            default: tcb_val_c = 32'd1;                 // state = ESTABLISHED
+            3'd4:    tcb_val_c = {16'b0, w5[15:0]};     // snd_wnd = 对端窗口(已缩放)
+            3'd5:    tcb_val_c = 32'd1;                 // state = ESTABLISHED
+            default: tcb_val_c = {28'b0, w0[19:16]};    // 3'd6: wscale
         endcase
     end
 
@@ -147,9 +149,9 @@ module slow_cfg_adp (
                         upd_sel <= tcb_idx;
                         upd_val <= tcb_val_c;
                         if (cfg_gnt) begin
-                            if (tcb_idx == 3'd5) begin
+                            if (tcb_idx == 3'd6) begin
                                 // upd_sel/upd_val 寄存器比 tcb_idx 晚一拍:
-                                // 本拍 gnt 写的是字段 4, state 字段 (sel=5)
+                                // 本拍 gnt 写的是字段 5, wscale 字段 (sel=6)
                                 // 要到下一拍才在输出上 — upd_wr 再保持一拍。
                                 state <= S_TCB_LAST;
                             end else begin
@@ -159,7 +161,7 @@ module slow_cfg_adp (
                     end
                 end
                 S_TCB_LAST: begin
-                    // 本拍 upd_sel=5 / upd_val=1 已可见, gnt 拍落地 state=1
+                    // 本拍 upd_sel=6 / upd_val=wscale 已可见, gnt 拍落地 wscale
                     cam_cfg_wr <= 1'b0;
                     upd_wr  <= 1'b1;
                     if (cfg_gnt) begin

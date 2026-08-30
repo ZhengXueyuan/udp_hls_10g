@@ -41,6 +41,12 @@ module tcp_tx_frame (
     input  wire [31:0] rb_snd_nxt,
     input  wire [31:0] rb_rcv_nxt,
     input  wire [15:0] rb_rcv_wnd,
+    // P4b-6 窗口门控: 在飞字节 = snd_nxt - snd_una, >= 对端通告窗口 (drain 时已
+    // 按 wscale 缩放) 则不开新数据帧 (纯 ACK 不挡 — 保活/窗口探测语义不受影响;
+    // 无门控时板测实锤: PC 窗口关死后 FPGA 狂发被栈层静默丢弃, echo seq 出现
+    // 永久空洞, 对端等缺失字节 -> 双向死锁 -> RST)
+    input  wire [31:0] rb_snd_una,
+    input  wire [15:0] rb_snd_wnd,
     // TCB 更新 (数据段末字消费拍组合脉冲: sel=1 snd_nxt <= seq+plen;
     // 与状态回 S_IDLE 同拍写入 — 下一帧最早下拍启动, 读到的是更新后的值)
     output wire        upd_wr,
@@ -66,7 +72,8 @@ module tcp_tx_frame (
     output reg  [31:0] stat_frames,
     output reg  [31:0] stat_bytes,
     output reg  [31:0] stat_ack,        // 发出的纯 ACK 段数
-    output reg  [31:0] stat_ack_drop    // ACK 队列满丢弃
+    output reg  [31:0] stat_ack_drop,   // ACK 队列满丢弃
+    output reg  [31:0] stat_eend        // S_PAY 欠载提前收帧 (结构不可达; 亮灯即缺陷 A)
 );
 
     localparam [2:0] S_IDLE = 3'd0, S_RECV = 3'd1, S_WAIT = 3'd2, S_HDR = 3'd3,
@@ -109,11 +116,16 @@ module tcp_tx_frame (
     assign upd_val = seq_r + (is_data_r ? {20'b0, plen_r} : 32'd1);
 
     wire        start_ack  = (state == S_IDLE) && ack_pend;
+    // 窗口门控: 仅在飞 < snd_wnd 才开数据帧 (rb_* 组合按 start_id 寻址, 本拍即
+    // 本连接的值)。snd_wnd=0 (未配置槽/对端关窗) 天然禁发。
+    wire [31:0] in_flight = rb_snd_nxt - rb_snd_una;
+    wire        wnd_open  = (in_flight < {16'b0, rb_snd_wnd});
     wire        start_data = (state == S_IDLE) && !ack_pend &&
-                             s_axis_tvalid && !pay_full;
+                             s_axis_tvalid && !pay_full && wnd_open;
 
     assign s_axis_tready = ((state == S_RECV) ||
-                            ((state == S_IDLE) && !ack_pend)) && !pay_full;
+                            ((state == S_IDLE) && !ack_pend && wnd_open)) &&
+                           !pay_full;
     wire        accept = s_axis_tvalid && s_axis_tready;
 
     // ---- 载荷 FIFO + 校验和 ----
@@ -224,6 +236,7 @@ module tcp_tx_frame (
             dmac_r <= 0; dip_r <= 0; sport_r <= 0; dport_r <= 0;
             m_axis_tdata <= 0; m_axis_tkeep <= 0; m_axis_tvalid <= 0; m_axis_tlast <= 0;
             stat_frames <= 0; stat_bytes <= 0; stat_ack <= 0; stat_ack_drop <= 0;
+            stat_eend <= 0;
         end else begin
             if (m_axis_tready && m_axis_tvalid) m_axis_tvalid <= 1'b0;
             if (ack_req && ackq_full) stat_ack_drop <= stat_ack_drop + 1;
@@ -317,7 +330,8 @@ module tcp_tx_frame (
                             state <= S_DONE;
                         end else if (pay_empty) begin
                             // 欠载防御 (app 契约违规): 提前结束帧
-                            m_axis_tvalid <= 1'b1;
+                            stat_eend <= stat_eend + 1;   // 结构不可达 (整帧先入 FIFO
+                            m_axis_tvalid <= 1'b1;        //  才开 S_WAIT) — 计数哨兵
                             m_axis_tdata <= {hold48, 16'h0000};
                             m_axis_tkeep <= 8'hFC;
                             m_axis_tlast <= 1'b1;

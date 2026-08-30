@@ -862,3 +862,73 @@ P4b 正式握手全链 + P4b-5 板测三项修复 (FIN 即释放槽位 / RST 命
   MAC 00:0A:35:01:FE:C0; 静态 ARP 已配 (P4a 遗留, UDP 测试脚本输出
   提到 FE-C1 是过期文案, 实际 C0)。
 - anaconda python: /c/Users/zhxue/anaconda3/python.exe
+
+## 2026-08-30 P4b-6: snd_wnd 窗口门控全链 + PCACK TB 模型 (已 sim 全绿)
+
+### 缺陷 A 结论性排查 (echo seq 空洞 1812B)
+- **结构分析 + sim 双重否定**: tcp_tx_frame 整帧先入 256 深 pay FIFO 才开
+  S_WAIT → S_PAY 欠载 (pay_empty 提前收帧) 结构不可达; mac_tx_64 断供
+  abort 必留 runt → 板上 NIC 零错误计数排除。两路各加哨兵计数器
+  (stat_eend / mac abort 进 STATS_MAC, tb 无条件监听, 变化即 $display)。
+- **burst tb 停顿-恢复复现尝试**: burst 200 中段 (第 100 段改 352B 尾包 +
+  后段前插 300k 拍停顿) → BURST OK, 202 echo seq 链连续无空洞。
+  **FPGA 侧结构性丢帧排除; 板上空洞的最可能解释收敛为缺陷 B 本身**
+  (PC 窗口关 → 超窗段被 Windows 栈层静默丢弃, NIC 计数不动, pktmon
+  在自身 CPU 过载下漏帧 → 抓到的"空洞"实际是栈层丢弃)。
+- 若板测复测仍有空洞, 哨兵会区分: stat_eend/abort 亮 = FPGA; 否则对端。
+
+### 缺陷 B 修法 (窗口门控全链)
+- **wscale 必须进 fast 路径** (否则对端 wscale=8 时 raw wnd 比真窗小 256x,
+  门控把吞吐掐死): TCB 加第 7 字段 wscale (sel=6, 复位 0 = 不缩放,
+  旧配置链语义不变); HLS cfg 记录 w0[19:16] 携带; slow_cfg_adp 写 7 字段
+  (S_TCB_LAST 移到 idx=6 后); tcp_rx drain snd_wnd 时 `wnd<<wscale` 钳
+  0xFFFF (echo 在飞 ≤ 我方通告 rcv_wnd 0x3000 << 64K, 钳位不影响语义)。
+- tcp_tx_frame: 新口 rb_snd_una/rb_snd_wnd; `wnd_open = (snd_nxt-snd_una)
+  < snd_wnd` (32 位减法回绕安全) 门控 start_data 与 S_IDLE tready;
+  纯 ACK 不挡 (窗口探测/保活语义)。snd_wnd=0 (未配置槽) 天然禁发。
+- HLS cfg_write: ADD 传 `min(peer_wnd<<peer_wscale, 0xFFFF)` 与 wscale;
+  DEL 传 0。门控期间 tcp_echo 2048 深 frame_fifo 积压, 再满则背压至
+  mac_rx 丢整帧 → 对端 TCP 重传恢复 (自然拥塞语义)。
+
+### TB: PCACK 反应式 PC 模型 (tb_p4_chain.v, +PCACK)
+- 捕获 conn0 echo 帧尾 (sport 1F90/dport 3039/flags 18/tlen>40) →
+  RX 流帧间隙注入纯 ACK (60B, seq=rcv_nxt_r[0], ack=echo_end_seq,
+  FCS 由 tb crc32b 函数现算, IP csum 恒定)。
+- **坑 1 (实锤)**: 注入帧必须前缀 12 拍 IFG (dv=0) — 直接进前导会让
+  mac_rx_64 收不到帧间间隙, 注入帧与静态前帧**融合成一帧** (帧身混入
+  55 55 前导字节, pcount 超长 → S_DROP)。
+- **坑 2**: 采样 rcv_nxt 须等前一帧 fend 的 TCB drain 落地 (实测最长
+  fend+9 拍, tx/rx 仲裁排队) — gap_cnt≥11 个间隙字节才触发构建。
+- echo_seen/inj_done 双计数器分属两个 always (单驱动铁律), 差值=待注入;
+  inj_done<=echo_seen 一次覆盖 (累计 ACK 语义)。
+- 静态 burst 段 wnd 参数化 (gen burst 第 4 参, hex); +PCWND1K 把注入
+  ACK 的 wnd 压 0x1000 — 门控交战测试 (TCBF snd_wnd=4096 确认钳制,
+  202 echo 仍全回无空洞)。
+
+### 验证状态 (sim)
+- run_tb_p4_chain (常规 9 帧全语义): P4 CHAIN OK
+- burst 200 / burst 200+300k 停顿 / burst 200 wnd=1000: 三模式 BURST OK
+  (202 echo 连续无空洞, abort=eend=0, STATS7 零丢)
+- 回归 20/20 绿 (测试 agent); 审查 agent 结论: 放行 + 2 major 建议
+
+### 审查处置 (2026-08-30)
+- **M1 wscale≠0 零覆盖 → 已修**: p4 链 SYN 固定带 WS=2 选项 (gen
+  mk_syn_ws, doff=6 [03 03 02 01])。HLS 解析 peer_wscale=2 → cfg 下发 →
+  drain 缩放真实交战: 常规链 TCBF snd_wnd 期望改 0xFFFF (0x4000<<2 钳位),
+  burst 门控交战变体改 raw wnd=0x400 (缩放后 0x1000, TCBF=4096 确认)。
+  全链 (chain + burst×3) 复跑全绿。
+- **M2 移位截断 → 已修**: tcp_rx 缩放改 32 位扩展再钳 (原 24 位在
+  wscale≥9 会回绕成 0 → 锁死; 原被 HLS ws<=7 软钳挡住, 现 RTL 自防守)。
+- m3 (tcb sel=7 落入 wscale) → 已修: sel=6 显式, default 空操作拒写。
+- m4 (state 先于 wscale 落地, 瞬态按 wscale=0 缩放 → 窗口偏小) → 接受:
+  保守方向, 下一帧 drain 自愈, 不改写字段序。
+- m5 (门控使背压成常态: 对端关窗 → tcp_echo 积压 → mac_rx 丢整帧 →
+  对端重传簇) → 记录为**预期行为**, 板测抓包看到重传簇不是丢帧 bug。
+- n1 (注入帧 dst MAC C0 vs gen_stim_tcp_chain 的 C1) → 误报: P4 统一
+  MAC 就是 C0 (gen_stim_p4_chain 覆盖了库默认); n2 (inj 构建代码重复)
+  → TB 代码从简, 不抽。
+
+### 板测复测清单 (P4b-6b)
+build_p4.bat → run_program_p4.bat → rate test 16MB (重点: 原 ~19s RST
+点) + 连接循环 6 轮 + UDP 100 + ping。若 rate test 再挂: 查 STATS 哨兵
+(需要 ILA 或 LED 暴露 stat_eend/mac abort — 暂未接线, 复测失败再加)。

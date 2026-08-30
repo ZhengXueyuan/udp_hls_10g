@@ -49,6 +49,7 @@ module tb_tcp_rx;
     wire [31:0] ra_rcv_nxt, ra_snd_nxt, ra_snd_una;
     wire [15:0] ra_rcv_wnd;
     wire [3:0]  ra_state;
+    wire [3:0]  ra_wscale;
     wire        ack_req;
     wire [3:0]  ack_id;
     wire [31:0] ack_val;
@@ -94,7 +95,7 @@ module tb_tcp_rx;
         .meta_len(meta_len), .meta_conn_id(meta_conn_id), .meta_seq(meta_seq),
         .ra_id(ra_id),
         .ra_rcv_nxt(ra_rcv_nxt), .ra_snd_nxt(ra_snd_nxt), .ra_snd_una(ra_snd_una),
-        .ra_rcv_wnd(ra_rcv_wnd), .ra_state(ra_state),
+        .ra_rcv_wnd(ra_rcv_wnd), .ra_state(ra_state), .ra_wscale(ra_wscale),
         .upd_wr(u_rx_upd_wr), .upd_id(u_rx_upd_id), .upd_sel(u_rx_upd_sel), .upd_val(u_rx_upd_val),
         .upd_gnt(!cfg_upd_wr),
         .ack_req(ack_req), .ack_id(ack_id), .ack_val(ack_val),
@@ -121,7 +122,7 @@ module tb_tcp_rx;
         .clk(clk), .rst_n(rst_n),
         .ra_id(ra_id), .ra_rcv_nxt(ra_rcv_nxt), .ra_snd_nxt(ra_snd_nxt),
         .ra_snd_una(ra_snd_una), .ra_rcv_wnd(ra_rcv_wnd), .ra_snd_wnd(),
-        .ra_state(ra_state),
+        .ra_state(ra_state), .ra_wscale(ra_wscale),
         .rb_id(4'd0), .rb_rcv_nxt(), .rb_snd_nxt(), .rb_snd_una(),
         .rb_rcv_wnd(), .rb_snd_wnd(), .rb_state(),
         .upd_wr(tcb_wr), .upd_id(tcb_id), .upd_sel(tcb_sel), .upd_val(tcb_val)

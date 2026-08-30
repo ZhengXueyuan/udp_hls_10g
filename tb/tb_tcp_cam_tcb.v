@@ -48,7 +48,7 @@ module tb_tcp_cam_tcb;
         .clk(clk), .rst_n(rst_n),
         .ra_id(ra_id), .ra_rcv_nxt(ra_rcv_nxt), .ra_snd_nxt(ra_snd_nxt),
         .ra_snd_una(ra_snd_una), .ra_rcv_wnd(ra_rcv_wnd), .ra_snd_wnd(ra_snd_wnd),
-        .ra_state(ra_state),
+        .ra_state(ra_state), .ra_wscale(),
         .rb_id(rb_id), .rb_rcv_nxt(rb_rcv_nxt), .rb_snd_nxt(rb_snd_nxt),
         .rb_snd_una(rb_snd_una), .rb_rcv_wnd(rb_rcv_wnd), .rb_snd_wnd(rb_snd_wnd),
         .rb_state(rb_state),
