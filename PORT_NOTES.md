@@ -617,3 +617,113 @@ FPGA 本身近线速 (890Mbps 瞬时, xsim 段→echo ~9µs)。P4b 的 MSS 选�
 正式握手 (SYN/FIN/RST 分流慢路径 + HLS 握手结果写 CAM/TCB + 移除 tcp_synp);
 注意: ① HLS SYN+ACK 带 MSS=1460 (吞吐直接受益) ② HLS 看门狗已备
 (slow_rx_adp) ③ FIN/RST 进慢路径后 tcp_rx 的 fast 数据面不再见它们。
+
+## 2026-08-30 P4b 开工 — 设计决策先行 (正式握手替代 tcp_synp)
+
+**目标**: TCP 三次握手/FIN/RST 由慢路径 HLS 正式处理 (带 MSS 选项),
+连接建立结果经配置通道写入 fast path CAM/TCB; 移除 tcp_synp。
+
+**架构决策 (设计张力已解)**:
+
+1. **分流**: rx_classify skid 加深到 6 字, w5 拍窥 TCP flags (w5[7:0] =
+   byte 47): proto==6 && (SYN|FIN|RST) → slow; 纯 ACK/数据 → fast。
+   握手第 3 个 ACK (纯 ACK) 天然进 fast path — 那时 CAM/TCB 已由 HLS
+   配好 (乐观 ESTABLISHED, tcp_synp 已板验此语义可行)。
+2. **HLS 乐观建连**: SYN 接受拍 (layer_tcp.cpp:370) 即经 cfg 通道写
+   CAM/TCB (state=ESTABLISHED) — 不等第 3 个 ACK (它进 fast path,
+   HLS 永远看不到)。HLS 自己 T_SYN_RCVD 只用于 SYN+ACK 重传。
+3. **SYN+ACK 重传必须限次** (HLS 现状: 无上限, 80ms→640ms 永不放弃):
+   工作连接的 ACK 全进 fast path, HLS 永远收不到 → 会无限重传 SYN+ACK
+   垃圾帧, 对端 (Windows) 收重复 SYN+ACK 会回 RST 杀连接! 改
+   layer_tcp.cpp: 重传 ≤3 次后放弃 (T_SYN_RCVD → 释放槽位; fast 侧
+   CAM/TCB 条目保留 — 若连接活着照常工作, 若死了等下次 SYN 覆盖)。
+4. **配置通道 = HLS 新增 cfg_stream 输出** (HLS 手术: 顶层加端口,
+   layer_tcp 在 SYN 接受/FIN 处写配置记录); 记录格式自定 (定长 16B×N
+   或 32b 字流); 新 slow_cfg_adp (fast 侧) 解析记录 → CAM cfg_wr +
+   TCB upd (cfg 仲裁级, tx>rx>cfg 已有)。
+5. **tcp_rx 的 syn sideband 变死代码** (SYN 不再进 fast) — 保留不拆
+   (回归兼容), wrapper 不再接 synp。
+6. **FIN**: 对端 FIN → 慢路径 → HLS 建 FIN+ACK 应答 + 写 CFG_DEL
+   (fast CAM 清连接 / TCB state→CLOSED — tcp_rx 后续段 CAM miss 丢弃)。
+   RST 类似 (HLS 无 RST 显式处理 — P4b 补最小: 收到 RST → CFG_DEL)。
+
+**分解**:
+- P4b-1: classify w5 flags 分流 (skid 6 字) + 单元 TB
+- P4b-2: HLS 手术 (cfg_stream + SYN/FIN tap + 限次重传) + 重综合
+- P4b-3: slow_cfg_adp + wrapper_p4 集成 (移除 tcp_synp)
+- P4b-4: xsim 全链 (握手+数据+FIN, 真 HLS)
+- P4b-5: 板测 (连接/echo/关闭循环 + 吞吐 MSS=1460 复测)
+- 每步必开审查+测试 agent。
+
+## 2026-08-30 P4b-4 排障 — 三个根因 (全链 xsim)
+
+**症状**: udp echo 载荷 24B 中 bytes 17-19 = `03 07 01` (期望 `7a 81 88`),
+FCS 与污染内容自洽 (checker 不报 fcs bad); CAMF 错位一词; TCB state=0。
+
+**根因 1 — slow_cfg_adp 记录错位一词**: 编译清单 (run_tb_p4_chain.bat)
+漏了 slow_cfg_adp.v → xelab 链接的是旧 .sdb (xsim.dir 残留) → 所有源文件
+修复全部无效! 症状: w regs 整体错位 (w1=0, w3 持 w2 值...)。修: bat 补
+slow_cfg_adp.v (同时移除 tcp_synp.v)。教训: **bat 改文件清单后必查
+xvlog 是否真的编译了目标文件; xsim.dir 里的旧 .sdb 会让 xelab 静默用旧码**。
+
+**根因 2 — slow_cfg_adp 的 TCB 第 6 字段 (state=1) 永远写不进**:
+upd_sel/upd_val 是寄存器, 比 tcb_idx 晚一拍可见。gnt 拍写入的是前一
+idx 的字段 (字段 0-4 恰好各写一次, 值对), tcb_idx==5 的 gnt 拍 FSM
+直接退出 (upd_wr<=0) → state=1 从未落地。修: tcb_idx==5 && gnt 时进
+S_TCB_LAST 状态, upd_wr 再保持一拍 (upd_sel=5/upd_val=1 可见) 再退。
+(写口语义: upd_wr 电平 + 仲裁 cfglvl_wr = upd_wr && gnt, 每拍一字段。)
+
+**根因 3 — HLS tcp_send 直写共享 TX 区砸在飞帧 (udp echo 污染)**:
+eco 工程给 TCP 数据路径修过 (tcp_queue 私有 BRAM, busy-gate), 但
+**控制帧 (SYN+ACK/FIN+ACK) 路径漏修** — tcp_send 无条件写
+buffer[TX_UDP_BASE], 与 udp echo 同区。mac_tx 逐字节流式读该区
+(每字节一拍, 每词读 4 次) — 帧完成拍 tcp_send 一拍写入就把在飞帧
+砸了。实测时间线 (HLSTX 探针): echo 载荷 byte 16 @k=63810 干净,
+byte 17 @k=63990 已污染; cfg 记录首词 @k=63970 — 正好是 SYN 处理拍。
+污染值 `03 07 01` = SYN+ACK 选项区 seg[25..27] (WS=03 03 07 尾 + NOP 01)
+— 逐字吻合 (word 523 = `03 03 07 01`, byte 16 已读走所以幸存)。
+P4a 时代 SYN 走 RTL tcp_synp, HLS 永远不见 SYN, 此坑从未暴露。
+修: udp_echo.cpp 顶层 — TCP 帧完成拍若 mac_tx_busy, 存元数据
+(ip_rx + src_mac) 延迟到 MAC 空闲拍再处理; 新帧完成即作废旧挂起帧
+(frame_buf 被覆盖, 对端重传兜底)。隔离实验 (tb_hls_udp_probe 直喂
+ARP+UDP) 先证 HLS 本身干净, 才定位到链上 — 排障顺序值得记下:
+**HLS 孤立探针 → 链上字节探针 (SRXW/HLSRX/HLSTX) → 时间线对位**。
+
+**根因 4 — 刺激时序**: syn 后间距只有 300B, hs_ack/data7a 在 fast
+路径 CAM/TCB 配好前就到达被丢 (HLS 处理 SYN + cfg 落地 ~4k 拍)。
+真实 TCP 里 PC 等 SYN+ACK 才发数据。修: **hs_ack 的 gap → GAP_SLOW**
+(注意 gen_stim 的 gap 语义 = **帧前**间距! 第一次改到 syn 的 gap 上
+只是把 syn 自己推迟, hs_ack 依然紧跟其后 — 坑上加坑)。
+
+**P4b-4 修正清单**: slow_cfg_adp.v (f_rd 组合去双驱动 + state 字段
+S_TCB_LAST 拍) / udp_echo.cpp (TCP 控制帧 busy 延迟) / gen_stim
+(hs_ack gap 20000) / run_tb_p4_chain.bat (补 slow_cfg_adp.v 编译)。
+结果: P4 CHAIN OK (9 RX / 8 TX: fast 3 echo + slow 5)。
+
+## 2026-08-30 P4b-4 审查 agent findings 处置 (回归 17/17 绿后)
+
+**修了**:
+1. **看门狗复位打断 cfg 记录 → slow_cfg_adp 永久错位**: HLS 被 hls_rst_n
+   复位时若 8 词记录写一半, 解析永久偏移 (8-N) 词, 垃圾记录误开/误删连接。
+   修: wrapper_p4.v + tb — slow_cfg_adp 的 rst_n 改接 `reset_n & hls_rst_n`,
+   与 HLS 同拍复位清 FIFO/state/wcnt。
+2. **RST 对已释放槽不补 DEL**: 重传超限释放的槽 (peer_ip/port 保留) 收到
+   对端 RST 时, 旧代码在 state==T_FREE 守卫处直接 return → fast 残留条目
+   永远清不掉。修: RST 处理前移, 4 元组命中任一槽 (含 T_FREE) 均清拆 +
+   CFG_DEL; **未命中则静默** (乱选空闲槽发 DEL 会误杀同槽活连接)。
+
+**不修 (设计意图, 审查误判)**:
+- 审查建议"重传超限释放槽位时补 CFG_DEL" — 不可取: 超限释放的典型场景
+  是握手 ACK 走 fast path (HLS 永远看不到), fast 条目正是**活连接** —
+  补 DEL 会杀掉正常工作的数据面连接。半开场景靠新 SYN 复用同槽 (ADD
+  覆盖) 自愈。超限释放不清 fast 是 P4b 设计决策 (PORT_NOTES 开工节)。
+
+**观察项接受** (不阻塞 P4b-5):
+- 看门狗复位不清 fast 侧 CAM/TCB — fast 数据面独立于慢路径, 清条目会
+  断活连接; 慢路径复位后连接状态由后续 SYN/FIN/RST 重建。
+- cfg FIFO 16 深 + gnt 长抢占的理论饥饿 (观察项, 正常流量不会)。
+- FIN 即发 CFG_DEL: 对端 FIN 后的重传段 fast 侧 CAM miss 被丢, 依赖
+  对端重传超时 — 协议边缘可接受。
+- snd_wnd 用 SYN 原始 wnd 未乘 peer_wscale — fast 侧不按 snd_wnd 门控
+  发送, 影响小。
+

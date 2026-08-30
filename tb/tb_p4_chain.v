@@ -106,53 +106,56 @@ module tb_p4_chain;
     wire [7:0]  gmii_txd;
     wire        gmii_tx_en;
     wire [31:0] tx_stat_frames, tx_stat_bytes, tx_stat_ack, tx_stat_ack_drop;
-    // tcp_rx SYN sideband -> tcp_synp
+    // tcp_rx SYN sideband (P4b: SYN 已分流慢路径, sideband 空挂)
     wire        syn_v;
     wire [47:0] syn_smac;
     wire [31:0] syn_sip;
     wire [15:0] syn_sport, syn_dport;
     wire [31:0] syn_seq;
     wire [15:0] syn_wnd;
-    // tcp_synp 输出
-    wire        synp_cfg_wr;
-    wire [3:0]  synp_cfg_addr;
-    wire [31:0] synp_cfg_sip, synp_cfg_dip;
-    wire [15:0] synp_cfg_sport, synp_cfg_dport;
-    wire [47:0] synp_cfg_dmac;
-    wire        synp_upd_wr;
-    wire [3:0]  synp_upd_id;
-    wire [2:0]  synp_upd_sel;
-    wire [31:0] synp_upd_val;
-    wire        sack_req;
-    wire [3:0]  sack_id;
-    wire [31:0] sack_ackval;
+    // slow_cfg_adp 输出 (P4b: HLS cfg_stream -> CAM/TCB)
+    wire        scfg_cam_wr;
+    wire [3:0]  scfg_cam_addr;
+    wire [31:0] scfg_cam_sip, scfg_cam_dip;
+    wire [15:0] scfg_cam_sport, scfg_cam_dport;
+    wire [47:0] scfg_cam_dmac;
+    wire        scfg_upd_wr;
+    wire [3:0]  scfg_upd_id;
+    wire [2:0]  scfg_upd_sel;
+    wire [31:0] scfg_upd_val;
+    wire        scfg_gnt;
+    wire [31:0] scfg_add, scfg_del;
     // 慢路径
     wire [15:0] hls_rx_tdata;
     wire        hls_rx_tvalid, hls_rx_tready;
     wire [15:0] hls_tx_tdata;
     wire        hls_tx_tvalid, hls_tx_tready;
+    wire [31:0] hls_cfg_tdata;
+    wire        hls_cfg_tvalid, hls_cfg_tready;
+    wire        hls_rst_n;
     wire [31:0] srx_commit, srx_drop, stx_frames, stx_purge;
 
-    // ---- CAM 配置口二选一: TB 配置阶段优先, 其次 synp ----
-    wire        cam_cfg_wr    = cfg_wr | synp_cfg_wr;
-    wire [3:0]  cam_cfg_addr  = cfg_wr ? cfg_addr  : synp_cfg_addr;
-    wire [31:0] cam_cfg_sip   = cfg_wr ? cfg_sip   : synp_cfg_sip;
-    wire [31:0] cam_cfg_dip   = cfg_wr ? cfg_dip   : synp_cfg_dip;
-    wire [15:0] cam_cfg_sport = cfg_wr ? cfg_sport : synp_cfg_sport;
-    wire [15:0] cam_cfg_dport = cfg_wr ? cfg_dport : synp_cfg_dport;
-    wire [47:0] cam_cfg_dmac  = cfg_wr ? cfg_dmac  : synp_cfg_dmac;
+    // ---- CAM 配置口二选一: TB 配置阶段优先, 其次 slow_cfg ----
+    wire        cam_cfg_wr    = cfg_wr | scfg_cam_wr;
+    wire [3:0]  cam_cfg_addr  = cfg_wr ? cfg_addr  : scfg_cam_addr;
+    wire [31:0] cam_cfg_sip   = cfg_wr ? cfg_sip   : scfg_cam_sip;
+    wire [31:0] cam_cfg_dip   = cfg_wr ? cfg_dip   : scfg_cam_dip;
+    wire [15:0] cam_cfg_sport = cfg_wr ? cfg_sport : scfg_cam_sport;
+    wire [15:0] cam_cfg_dport = cfg_wr ? cfg_dport : scfg_cam_dport;
+    wire [47:0] cam_cfg_dmac  = cfg_wr ? cfg_dmac  : scfg_cam_dmac;
 
-    // ---- TX 的 ACK 请求二选一: synp (SYN+ACK) 优先 ----
-    wire        tx_ack_req = sack_req | ack_req;
-    wire [3:0]  tx_ack_id  = sack_req ? sack_id     : ack_id;
-    wire [31:0] tx_ack_val = sack_req ? sack_ackval : ack_val;
-    wire        tx_ack_syn = sack_req;
+    // ---- TX 的 ACK 请求: 仅 tcp_rx (synp 已拆; SYN+ACK 由 HLS 慢路径直发) ----
+    wire        tx_ack_req = ack_req;
+    wire [3:0]  tx_ack_id  = ack_id;
+    wire [31:0] tx_ack_val = ack_val;
+    wire        tx_ack_syn = 1'b0;
 
-    // ---- TCB 更新仲裁 (tx > rx > cfg; cfg 级 = TB 配置 | synp) ----
-    wire        cfglvl_wr  = cfg_upd_wr | synp_upd_wr;
-    wire [2:0]  cfglvl_sel = cfg_upd_wr ? cfg_upd_sel : synp_upd_sel;
-    wire [3:0]  cfglvl_id  = cfg_upd_wr ? cfg_upd_id  : synp_upd_id;
-    wire [31:0] cfglvl_val = cfg_upd_wr ? cfg_upd_val : synp_upd_val;
+    // ---- TCB 更新仲裁 (tx > rx > cfg; cfg 级 = TB 配置 | slow_cfg(带 gnt)) ----
+    wire        scfg_gnt_i  = !tx_upd_wr && !rx_upd_wr && !cfg_upd_wr && scfg_upd_wr;
+    wire        cfglvl_wr   = cfg_upd_wr | (scfg_upd_wr && scfg_gnt_i);
+    wire [2:0]  cfglvl_sel  = cfg_upd_wr ? cfg_upd_sel : scfg_upd_sel;
+    wire [3:0]  cfglvl_id   = cfg_upd_wr ? cfg_upd_id  : scfg_upd_id;
+    wire [31:0] cfglvl_val  = cfg_upd_wr ? cfg_upd_val : scfg_upd_val;
     wire        sel_tx = tx_upd_wr;
     wire        sel_rx = !sel_tx && rx_upd_wr;
     wire        tcb_wr  = sel_tx || sel_rx || cfglvl_wr;
@@ -160,6 +163,7 @@ module tb_p4_chain;
     wire [3:0]  tcb_id  = sel_tx ? tx_upd_id  : (sel_rx ? rx_upd_id  : cfglvl_id);
     wire [31:0] tcb_val = sel_tx ? tx_upd_val : (sel_rx ? rx_upd_val : cfglvl_val);
     assign rx_upd_gnt = sel_rx;
+    assign scfg_gnt   = scfg_gnt_i;
 
     integer     fd;
 
@@ -248,19 +252,18 @@ module tb_p4_chain;
         .upd_wr(tcb_wr), .upd_id(tcb_id), .upd_sel(tcb_sel), .upd_val(tcb_val)
     );
 
-    tcp_synp u_synp (
-        .clk(clk), .rst_n(rst_n),
-        .syn_v(syn_v), .syn_smac(syn_smac), .syn_sip(syn_sip),
-        .syn_sport(syn_sport), .syn_dport(syn_dport),
-        .syn_seq(syn_seq), .syn_wnd(syn_wnd),
-        .cfg_wr(synp_cfg_wr), .cfg_addr(synp_cfg_addr),
-        .cfg_sip(synp_cfg_sip), .cfg_dip(synp_cfg_dip),
-        .cfg_sport(synp_cfg_sport), .cfg_dport(synp_cfg_dport),
-        .cfg_dmac(synp_cfg_dmac),
-        .upd_wr(synp_upd_wr), .upd_id(synp_upd_id),
-        .upd_sel(synp_upd_sel), .upd_val(synp_upd_val),
-        .sack_req(sack_req), .sack_id(sack_id), .sack_ackval(sack_ackval),
-        .cfg_my_ip(32'hC0A86402), .cfg_listen(16'h1F90), .cfg_iss(32'd5999)
+    slow_cfg_adp u_slow_cfg (
+        .clk(clk), .rst_n(rst_n & hls_rst_n),
+        .s_axis_tdata(hls_cfg_tdata), .s_axis_tvalid(hls_cfg_tvalid),
+        .s_axis_tready(hls_cfg_tready),
+        .cam_cfg_wr(scfg_cam_wr), .cam_cfg_addr(scfg_cam_addr),
+        .cam_cfg_sip(scfg_cam_sip), .cam_cfg_dip(scfg_cam_dip),
+        .cam_cfg_sport(scfg_cam_sport), .cam_cfg_dport(scfg_cam_dport),
+        .cam_cfg_dmac(scfg_cam_dmac),
+        .upd_wr(scfg_upd_wr), .upd_id(scfg_upd_id),
+        .upd_sel(scfg_upd_sel), .upd_val(scfg_upd_val),
+        .cfg_gnt(scfg_gnt),
+        .stat_add(scfg_add), .stat_del(scfg_del)
     );
 
     tcp_tx_frame u_tx (
@@ -290,16 +293,19 @@ module tb_p4_chain;
         .s_axis_tcrs(w_tcrs), .s_axis_terr(w_terr),
         .hls_rx_tdata(hls_rx_tdata), .hls_rx_tvalid(hls_rx_tvalid),
         .hls_rx_tready(hls_rx_tready),
+        .hls_rst_n(hls_rst_n),
         .stat_commit(srx_commit), .stat_drop(srx_drop)
     );
 
     udp_echo u_hls (
-        .ap_clk(clk), .ap_rst_n(rst_n), .reset_n(rst_n),
+        .ap_clk(clk), .ap_rst_n(rst_n & hls_rst_n), .reset_n(rst_n & hls_rst_n),
         .rx_stream_TDATA(hls_rx_tdata), .rx_stream_TVALID(hls_rx_tvalid),
         .rx_stream_TREADY(hls_rx_tready),
         .tx_stream_TDATA(hls_tx_tdata), .tx_stream_TVALID(hls_tx_tvalid),
         .tx_stream_TREADY(hls_tx_tready),
         .msg_stream_TDATA(), .msg_stream_TVALID(), .msg_stream_TREADY(1'b1),
+        .cfg_stream_TDATA(hls_cfg_tdata), .cfg_stream_TVALID(hls_cfg_tvalid),
+        .cfg_stream_TREADY(hls_cfg_tready),
         .led_d0(), .led_d1(), .led_d2(), .led_d3()
     );
 
@@ -424,6 +430,47 @@ module tb_p4_chain;
         end
     end
 
+    // ---- slow_cfg 排障: 记录 cfg_stream 每词 + S_CAM 拍的 w 寄存器 ----
+    always @(posedge clk) begin
+        if (rst_n && $test$plusargs("PROBE")) begin
+            if (hls_cfg_tvalid && hls_cfg_tready)
+                $display("CFGWORD k=%0d d=%08h wcnt=%0d st=%0d femp=%b fdout=%08h rp=%0d wp=%0d",
+                         k, hls_cfg_tdata, u_slow_cfg.wcnt, u_slow_cfg.state,
+                         u_slow_cfg.f_empty, u_slow_cfg.f_dout,
+                         u_slow_cfg.u_fifo.rptr, u_slow_cfg.u_fifo.wptr);
+            if (u_slow_cfg.state == 3'd0 && !u_slow_cfg.f_empty)
+                $display("CFGLAT k=%0d wcnt=%0d fdout=%08h rp=%0d wp=%0d",
+                         k, u_slow_cfg.wcnt, u_slow_cfg.f_dout,
+                         u_slow_cfg.u_fifo.rptr, u_slow_cfg.u_fifo.wptr);
+            if (u_slow_cfg.state == 2'd1)   // S_CAM
+                $display("CFGATCAM k=%0d w0=%08h w1=%08h w2=%08h w3=%08h w4=%08h w5=%08h w6=%08h w7=%08h",
+                         k, u_slow_cfg.w0, u_slow_cfg.w1, u_slow_cfg.w2,
+                         u_slow_cfg.w3, u_slow_cfg.w4, u_slow_cfg.w5,
+                         u_slow_cfg.w6, u_slow_cfg.w7);
+            // 排障: slow_rx_adp 输入字流 (rx_classify slow 输出) + HLS rx 字节流
+            if (w_tvalid && w_tready)
+                $display("SRXW k=%0d d=%016h kp=%02h l=%b u=%b", k, w_tdata,
+                         w_tkeep, w_tlast, w_tuser);
+            if (hls_rx_tvalid && hls_rx_tready)
+                $display("HLSRX k=%0d d=%02h l=%b", k, hls_rx_tdata[7:0],
+                         hls_rx_tdata[8]);
+            if (hls_tx_tvalid && hls_tx_tready)
+                $display("HLSTX k=%0d d=%02h l=%b", k, hls_tx_tdata[7:0],
+                         hls_tx_tdata[8]);
+            // 排障: fast 路径每帧 w6 判定 (纯 ACK 为何被拒)
+            if (u_rx.state == 3'd0 && u_rx.accept && u_rx.wcnt == 3'd6 &&
+                !f_tlast)
+                $display("RXW6 k=%0d cam=%b st=%0d seq=%08h rnxt=%08h ack=%08h suna=%08h snxt=%08h acc=%b",
+                         k, u_rx.cam_hit_l, u_rx.ra_state, u_rx.seq32,
+                         u_rx.ra_rcv_nxt, u_rx.ack32, u_rx.ra_snd_una,
+                         u_rx.ra_snd_nxt, u_rx.acc);
+            if (u_rx.state == 3'd0 && u_rx.accept && u_rx.wcnt == 3'd6 &&
+                f_tlast)
+                $display("RXW6T k=%0d acc=%b ackresp=%b tlast=%b", k, u_rx.acc,
+                         u_rx.ackresp, f_tlast);
+        end
+    end
+
     // ---- abort 转变沿侦测 (排障) ----
     reg ab_d = 0;
     always @(posedge clk) begin
@@ -459,12 +506,14 @@ module tb_p4_chain;
                         u_slow_rx.abort, u_slow_rx.resync_drop, u_slow_rx.in_frame,
                         u_slow_rx.u_ff.full, u_slow_rx.committed);
             if (k % 32'd5000 == 0)
-                $display("PROBE k=%0d | cls state=%0d | srx pstate=%0d cmt=%0d ab=%b rsd=%b ifm=%b ffw=%0d ffr=%0d occw=%0d | hls rxrdy=%b txv=%b txrdy=%b | stx tstate=%0d cmt=%0d",
+                $display("PROBE k=%0d | cls state=%0d | srx pstate=%0d cmt=%0d ab=%b rsd=%b ifm=%b ffw=%0d ffr=%0d occw=%0d | hls rxrdy=%b txv=%b txrdy=%b cs=%h hrn=%b txreq=%b | stx tstate=%0d cmt=%0d",
                          k, u_classify.state, u_slow_rx.pstate, u_slow_rx.committed,
                          u_slow_rx.abort, u_slow_rx.resync_drop, u_slow_rx.in_frame,
                          u_slow_rx.u_ff.wptr, u_slow_rx.u_ff.rptr,
                          (u_slow_rx.u_ofifo.wptr - u_slow_rx.u_ofifo.rptr),
                          hls_rx_tready, hls_tx_tvalid, hls_tx_tready,
+                         u_hls.ap_CS_fsm,
+                         hls_rst_n, u_hls.tx_req_request,
                          u_slow_tx.tstate, u_slow_tx.committed);
         end
     end

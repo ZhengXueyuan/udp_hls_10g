@@ -1,0 +1,267 @@
+//=============================================================================
+// udp_echo.cpp — Top-level HLS module (Phase 3 — AXI-Stream + VLAN)
+//=============================================================================
+// AXI-Stream interfaces:
+//   RX: hls::stream<gmii_byte_t>  (data + last flag)
+//   TX: hls::stream<gmii_byte_t>  (data + last flag)
+//
+// Internal layers communicate via struct references (unchanged from Phase 2).
+// VLAN tag detection (802.1Q/802.1ad) in layer_mac.cpp.
+//=============================================================================
+
+#include "eth_types.h"
+#include "eth_utils.h"
+#include "layer_mac.cpp"
+#include "layer_arp.cpp"
+#include "layer_ip.cpp"
+#include "layer_icmp.cpp"
+#include "layer_igmp.cpp"
+#include "layer_dhcp.cpp"
+#include "layer_udp.cpp"
+#include "layer_tcp.cpp"
+#include "layer_stats.cpp"
+
+// Per-frame staging buffer (global; layers read it at 0-based offsets). See
+// eth_types.h. The frame FIFO feeding it is a static inside udp_echo below.
+uint32_t frame_buf[FRAME_BUF_WORDS];
+
+
+void udp_echo(
+    bool                      reset_n,
+    hls::stream<gmii_byte_t> &rx_stream,
+    hls::stream<gmii_byte_t> &tx_stream,
+    hls::stream<gmii_byte_t> &msg_stream,    // debug messages → UART IP
+    hls::stream<ap_uint<32> > &cfg_stream,   // P4b: 连接配置记录 → fast path CAM/TCB
+    bool                     &led_d0,        // LED D0 (M16)
+    bool                     &led_d1,        // LED D1 (N16)
+    bool                     &led_d2,        // LED D2 (P15)
+    bool                     &led_d3         // LED D3 (P16)
+) {
+    #pragma HLS INTERFACE ap_none port=reset_n
+    #pragma HLS INTERFACE axis port=rx_stream
+    #pragma HLS INTERFACE axis port=tx_stream
+    #pragma HLS INTERFACE axis port=msg_stream
+    #pragma HLS INTERFACE axis port=cfg_stream
+    #pragma HLS INTERFACE ap_none port=led_d0
+    #pragma HLS INTERFACE ap_none port=led_d1
+    #pragma HLS INTERFACE ap_none port=led_d2
+    #pragma HLS INTERFACE ap_none port=led_d3
+    #pragma HLS INTERFACE ap_ctrl_none port=return
+
+    // Shared resources
+    static uint32_t    buffer[BUFFER_DEPTH];
+    #pragma HLS RESOURCE variable=buffer core=RAM_2P_BRAM
+
+    // Race-free RX frame FIFO: MAC RX pushes frame words, udp_echo stages
+    // them into frame_buf. Replaces the shared RX buffer (UG1399 stream).
+    static hls::stream<uint32_t> frame_fifo;
+    #pragma HLS STREAM variable=frame_fifo depth=512
+
+    // TX request from upper layers to MAC TX
+    static mac_tx_req_t tx_req;
+    #pragma HLS RESET variable=tx_req
+
+    mac_rx_t mac_rx;
+    ip_rx_t  ip_rx;
+    udp_rx_t udp_rx;
+
+    static bool     data_received = false;
+    static uint16_t rx_udp_len    = 0;
+    static uint16_t rx_ip_len     = 0;
+    static uint16_t rx_src_port   = 0;
+    static ap_uint<32> rx_src_ip  = 0;
+    static bool     init_done     = false;
+
+    // P4b: TCP 控制帧延迟处理。tcp_send 直写共享 TX 区 (TX_UDP_BASE),
+    // 而 MAC TX 逐字节流式读同一区域 (每字节一拍) — 帧完成拍若恰有
+    // 在飞帧 (如 udp echo), SYN+ACK 构建会砸掉在飞帧 (实测: echo 载荷
+    // 3 字节被 SYN+ACK 的 WS 选项覆盖)。帧完成时若 MAC 忙, 先存元数据,
+    // 待 MAC 空闲再处理 (帧间距 >= ~1400 拍, 延迟 <= 1 帧, frame_buf
+    // 在下帧完成前不会被覆盖 — 安全)。
+    static bool     tcp_proc_pending = false;
+    static ip_rx_t  tcp_proc_ip;
+    static uint64_t tcp_proc_smac   = 0;
+
+    // DHCP state (Phase 5)
+    static uint8_t  dhcp_state   = DHCP_IDLE;
+    static uint32_t dhcp_xid     = 0;
+    static uint32_t dhcp_offered = 0;
+    static uint32_t dhcp_server  = 0;
+    static uint32_t dhcp_timer   = 0;
+    static bool     dhcp_start   = false;
+    static uint32_t dhcp_delay   = 0;
+
+    //=====================================================================
+    // Reset
+    //=====================================================================
+    if (!reset_n) {
+        tx_req.request = false;
+        data_received  = false;
+        rx_udp_len     = 0;
+        rx_ip_len      = 0;
+        rx_src_port    = 0;
+        rx_src_ip      = 0;
+        init_done      = false;
+        tcp_proc_pending = false;
+        tcp_proc_smac   = 0;
+        dhcp_state     = DHCP_IDLE;
+        dhcp_xid       = 0;
+        dhcp_offered   = 0;
+        dhcp_server    = 0;
+        dhcp_timer     = 0;
+        dhcp_start     = false;
+        dhcp_delay     = 0;
+    } else {
+        // One-time init
+        if (!init_done) {
+            buffer[TX_UDP_BASE + 7] = 0x48454C4C;
+            buffer[TX_UDP_BASE + 8] = 0x4F202020;
+            buffer[TX_UDP_BASE + 9] = 0x20202020;
+            buffer[TX_UDP_BASE + 10] = 0x50455246;
+            buffer[TX_UDP_BASE + 11] = 0x584C4142;
+            init_done = true;
+        }
+
+        // DHCP start delay (~1 second after init)
+        if (!dhcp_start && dhcp_state == DHCP_IDLE) {
+            dhcp_delay++;
+            if (dhcp_delay > 100000000) { dhcp_start = true; dhcp_delay = 0; }
+        }
+    }
+
+    // Always call layers (they handle reset internally)
+    bool mac_tx_busy = false;
+    mac_rx_process(reset_n, rx_stream, frame_fifo, mac_rx);
+    mac_tx_process(reset_n, tx_req, buffer, tx_stream, mac_tx_busy);
+
+    ip_rx.valid = false;
+    udp_rx.valid = false;
+
+    // Process EVERY frame in the SAME pass it completes (mac_rx.valid).
+    // The old 4-entry FIFO deferred processing when the MAC TX was busy, but
+    // it saved only the mac_rx METADATA — the payload stayed in BUF_A/BUF_B.
+    // With dual-buffer a BUF is reused every OTHER frame, so a burst deeper
+    // than 2 overwrote a still-queued frame's payload (deterministic 2000B
+    // corruption: a later segment's IP header surfaced mid-payload). Immediate
+    // processing is safe now: the TCP data path uses tcp_queue (always copies
+    // the payload into the private tcp_send_bufs BRAM, never touches the
+    // shared TX region), so the payload is lifted out at frame_done — long
+    // before the next frame (>=~22 passes away) can overwrite this BUF.
+    mac_rx_t proc_rx; bool do_process = false;
+    if (mac_rx.valid) { proc_rx = mac_rx; do_process = true; }
+    if (do_process) {
+        // 新帧完成即作废旧挂起 TCP 帧 (其 frame_buf 头区将被本帧覆盖,
+        // 再延迟处理只会解析错帧; 对端 TCP 重传兜底)。
+        tcp_proc_pending = false;
+        // Stage the whole frame from the race-free FIFO into frame_buf.
+        // The layers then parse frame_buf at 0-based offsets. Pop exactly
+        // nwords so the FIFO stays aligned to frame boundaries; cap at the
+        // staging size and drain any overflow (jumbo frames we don't echo).
+        int nw = proc_rx.nwords;
+        int stage = (nw > FRAME_BUF_WORDS) ? FRAME_BUF_WORDS : nw;
+        for (int i = 0; i < stage; i++) { frame_buf[i] = frame_fifo.read(); }
+        for (int i = stage; i < nw; i++) { (void)frame_fifo.read(); }
+
+        if (proc_rx.ethertype == ETHERTYPE_ARP) {
+            arp_rx_process(reset_n, proc_rx, buffer, tx_req, NULL);
+        } else if (proc_rx.ethertype == ETHERTYPE_IPV4) {
+            ip_rx_process(reset_n, proc_rx, buffer, ip_rx);
+            if (ip_rx.valid) {
+                if (ip_rx.protocol == IP_PROTO_ICMP) {
+                    icmp_rx_process(reset_n, ip_rx, buffer, tx_req);
+                } else if (ip_rx.protocol == IP_PROTO_IGMP) {
+                    igmp_rx_process(reset_n, ip_rx, buffer, tx_req);
+                } else if (ip_rx.protocol == IP_PROTO_TCP) {
+                    if (mac_tx_busy) {
+                        // MAC 在飞 — 延迟到空闲拍再处理 (见 tcp_proc_pending 注释)
+                        tcp_proc_pending = true;
+                        tcp_proc_ip      = ip_rx;
+                        tcp_proc_smac    = mac_rx.src_mac.to_uint64();
+                    } else {
+                        tcp_rx_process(reset_n, ip_rx, buffer, tx_req, mac_tx_busy,
+                                       cfg_stream, mac_rx.src_mac.to_uint64());
+                    }
+                } else if (ip_rx.protocol == IP_PROTO_UDP) {
+                    udp_rx_process(reset_n, ip_rx, buffer, udp_rx);
+                    if (udp_rx.valid) {
+                        // Check DHCP port first
+                        if (udp_rx.dst_port == DHCP_CLIENT_PORT) {
+                            dhcp_rx_process(reset_n, udp_rx, buffer, dhcp_state, dhcp_xid,
+                                           dhcp_offered, dhcp_server, dhcp_timer, dhcp_start);
+                        } else {
+                            // Copy payload for echo — read from the staged
+                            // frame buffer (word 7 = after 20B IP + 8B UDP),
+                            // write into the TX region of the shared buffer.
+                            int rx_pbase = 7;
+                            int tx_pbase = TX_UDP_BASE + 7;
+                            uint16_t pw = (udp_rx.payload_len + 3) >> 2;
+                            for (int i = 0; i < pw; i++) {
+                                #pragma HLS PIPELINE
+                                buffer[tx_pbase + i] = frame_buf[rx_pbase + i];
+                            }
+                            data_received = true;
+                            rx_udp_len    = udp_rx.length;
+                            rx_ip_len     = ip_rx.total_len;
+                            rx_src_port   = udp_rx.src_port;
+                            rx_src_ip     = ip_rx.src_ip;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // DHCP TX (before UDP TX — DHCP takes priority)
+    if (!tx_req.request) {
+        dhcp_tx_process(reset_n, buffer, tx_req, dhcp_start, dhcp_state,
+                       dhcp_xid, dhcp_offered, dhcp_server, dhcp_timer);
+    }
+
+    // TX arbitration: UDP echo (immediate) + periodic HELLO.
+    // udp_tx_process consumes data_received whenever it runs (immediate
+    // echo), so it is safe to clear the flag right after the call. When the
+    // MAC TX is busy (a frame is being sent/queued and the MAC would read
+    // the same buffer region) the call is skipped and the flag survives
+    // until the next pass — this prevents the builder from clobbering a
+    // frame mid-send.
+    if (!tx_req.request && !mac_tx_busy) {
+        udp_tx_process(reset_n, buffer, tx_req, NULL,
+                       data_received, rx_udp_len, rx_ip_len, rx_src_port, rx_src_ip);
+        data_received = false;
+    }
+
+    // TCP maintenance: flush queued echo data whenever the MAC is idle
+    if (!tx_req.request && !mac_tx_busy) {
+        tcp_maintenance(buffer, tx_req);
+    }
+
+    // TCP 控制帧延迟处理: 帧完成拍 MAC 在飞时挂起的 TCP 处理 (SYN/FIN/RST)
+    // 在 MAC 空闲拍补做 — tcp_send 写共享 TX 区, 必须等 MAC 不读该区。
+    if (tcp_proc_pending && !mac_tx_busy && !tx_req.request) {
+        tcp_rx_process(reset_n, tcp_proc_ip, buffer, tx_req, mac_tx_busy,
+                       cfg_stream, tcp_proc_smac);
+        tcp_proc_pending = false;
+    }
+
+    // Statistics tracking + periodic report
+    static bool dhcp_reported = false;
+    static uint32_t last_tx = 0;
+    if (do_process) {
+        if (proc_rx.ethertype == ETHERTYPE_ARP) stats_event(2,0);
+        else if (proc_rx.ethertype == ETHERTYPE_IPV4) stats_event(0, ip_rx.valid ? (uint16_t)ip_rx.total_len : (uint16_t)60);
+    }
+    if (dhcp_state == DHCP_DONE && !dhcp_reported) {
+        stats_event(4,0); stats_dhcp_done(dhcp_offered); dhcp_reported=true;
+    }
+    if (!reset_n) { dhcp_reported=false; last_tx=0; }
+    // TX counting: when TX request is consumed and MAC TX starts
+    if (tx_req.request && last_tx==0) { stats_event(1, tx_req.buf_len+18); } // +MAC+CRC
+    last_tx = tx_req.request ? 1 : 0;
+    stats_report(reset_n, msg_stream, stats_should_dump(), 0);
+
+    // DHCP status output for wrapper-level LED logic
+    led_d0 = (dhcp_state == DHCP_DONE);   // 1 = DHCP acquired
+    led_d1 = false;
+    led_d2 = false;
+    led_d3 = false;
+}

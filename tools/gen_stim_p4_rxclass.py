@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 """rx_classify xsim 刺激生成 + 周期精确参考模型 (规范驱动, 非 RTL 镜像)。
 
-DUT 规范: 3 字 skid (w0..w2), w2 拍定路由 (ethertype @w1[31:16]==0x0800 &&
-proto @w2[7:0]==6 -> fast, 否则 slow); w2 前 tlast -> runt 一律 slow。
-DRAIN 倒空 skid (s_tready=0), 然后 PASS 直通 (s_tready=所选路由 tready)。
+DUT 规范: 6 字 skid (w0..w5)。非 TCP (ethertype @w1[31:16]!=0x0800 或
+proto @w2[7:0]!=6) w2 拍定案 -> slow, 3 字倒空; TCP (0x0800 && 6) 等到 w5 拍
+读 flags @w5[7:0] (byte 47: FIN=0x01/SYN=0x02/RST=0x04): 任一置位 -> slow,
+否则 (数据/纯 ACK) -> fast。决策点之前 (含决策拍) tlast -> 残缺一律 slow
+(tlast 分支优先于 w2/w5 决策, 故 TCP fast 需 >=49B)。DRAIN 倒空 skid
+(s_tready=0), 然后 PASS 直通 (s_tready=所选路由 tready)。
 sideband {tdata,tkeep,tlast,tuser,tcrs,terr} 全透传。帧尾拍计 stat_fast/stat_slow。
 
 三模式: nostall / stall (fast 3高1低, slow 2高1低, 不同相) / hard (双路硬停窗)。
@@ -17,7 +20,7 @@ FILL, DRAIN, PASS = 0, 1, 2
 FAST, SLOW = 0, 1
 
 
-def mk_frame(ethertype, proto, nbytes, crs=1, err=0, gapmap=None):
+def mk_frame(ethertype, proto, nbytes, crs=1, err=0, tcp_flags=None, gapmap=None):
     """构造字流帧: [(data,keep,last,user,crs,err,gap_before)]。"""
     b = bytearray(nbytes)
     dst = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66]
@@ -37,6 +40,8 @@ def mk_frame(ethertype, proto, nbytes, crs=1, err=0, gapmap=None):
         b[23] = proto & 0xFF
     for i in range(24, nbytes):
         b[i] = (i * 5 + 1) & 0xFF
+    if tcp_flags is not None and nbytes > 47:
+        b[47] = tcp_flags & 0xFF     # TCP flags @byte 47 = w5[7:0]
     words = []
     nw = (nbytes + 7) // 8
     for wi in range(nw):
@@ -53,24 +58,38 @@ def mk_frame(ethertype, proto, nbytes, crs=1, err=0, gapmap=None):
 def build_stream():
     """帧序列 -> 字流 [(data,keep,last,user,crs,err,gap)]。"""
     F = []
-    F += mk_frame(0x0800, 6, 40, gapmap={0: 3})            # tcp5 -> fast
+    # ---- 旧矩阵保留: w2 拍可决的非 TCP 与 runt (行为不变) ----
     F += mk_frame(0x0800, 17, 32, gapmap={0: 2})           # udp4 -> slow
     F += mk_frame(0x0800, 1, 32, gapmap={0: 2})            # icmp4 -> slow
     F += mk_frame(0x0806, 0, 28, gapmap={0: 2})            # arp4 -> slow
     F += mk_frame(0x88B5, 0, 36, gapmap={0: 2})            # unknown et -> slow
     F += mk_frame(0x0800, 6, 6, gapmap={0: 2})             # runt 1 字 -> slow
     F += mk_frame(0x0800, 6, 12, gapmap={0: 2})            # runt 2 字 -> slow
-    F += mk_frame(0x0800, 6, 24, gapmap={0: 2})            # tlast@w2 TCP -> fast
+    F += mk_frame(0x0800, 6, 24, gapmap={0: 2})            # tlast@w2 TCP -> slow
     F += mk_frame(0x0800, 17, 24, gapmap={0: 2})           # tlast@w2 UDP -> slow
-    F += mk_frame(0x0800, 6, 32, gapmap={0: 2})            # tlast@w3 TCP -> fast
-    F += mk_frame(0x0800, 6, 40, crs=0, gapmap={0: 2})     # 坏 FCS 仍 fast
-    F += mk_frame(0x0800, 6, 40, err=1, gapmap={0: 2})     # rx_er 仍 fast
-    F += mk_frame(0x0800, 6, 96, gapmap={0: 2})            # 12 字长帧 fast
-    F += mk_frame(0x0800, 6, 40, gapmap={0: 0})            # b2b TCP
-    F += mk_frame(0x0800, 17, 40, gapmap={0: 0})           # b2b UDP (0 间隔)
-    F += mk_frame(0x0800, 6, 40, gapmap={0: 0})            # b2b TCP
-    F += mk_frame(0x0806, 0, 28, gapmap={0: 2})            # b2b ARP
-    F += mk_frame(0x0800, 6, 48, gapmap={0: 2, 2: 1, 4: 1})  # 帧内气泡
+    # ---- 旧矩阵保留但行为翻转: TCP 决策点 (w5) 前 tlast -> runt-ish slow ----
+    F += mk_frame(0x0800, 6, 40, tcp_flags=0x18, gapmap={0: 3})  # TCP tlast@w4 -> slow
+    F += mk_frame(0x0800, 6, 32, tcp_flags=0x18, gapmap={0: 2})  # TCP tlast@w3 -> slow
+    F += mk_frame(0x0800, 6, 40, crs=0, tcp_flags=0x18, gapmap={0: 2})   # 坏FCS+tlast@w4 -> slow
+    F += mk_frame(0x0800, 6, 40, err=1, tcp_flags=0x18, gapmap={0: 2})   # rx_er+tlast@w4 -> slow
+    F += mk_frame(0x0800, 6, 40, tcp_flags=0x18, gapmap={0: 0})  # b2b TCP tlast@w4 -> slow
+    F += mk_frame(0x0800, 17, 40, gapmap={0: 0})           # b2b UDP (0 间隔) -> slow
+    F += mk_frame(0x0800, 6, 40, tcp_flags=0x18, gapmap={0: 0})  # b2b TCP tlast@w4 -> slow
+    F += mk_frame(0x0806, 0, 28, gapmap={0: 2})            # b2b ARP -> slow
+    F += mk_frame(0x0800, 6, 48, tcp_flags=0x18, gapmap={0: 2, 2: 1, 4: 1})  # 帧内气泡+tlast@w5 -> slow
+    # ---- 新增: w5 拍决策的 TCP 用例 (>=49B 才能活到 w5 决策) ----
+    F += mk_frame(0x0800, 6, 96, tcp_flags=0x18, gapmap={0: 2})  # 12 字 TCP 数据 PSH+ACK -> fast
+    F += mk_frame(0x0800, 6, 56, tcp_flags=0x18, gapmap={0: 2})  # TCP 数据 PSH+ACK -> fast
+    F += mk_frame(0x0800, 6, 56, tcp_flags=0x10, gapmap={0: 2})  # TCP 纯 ACK -> fast
+    F += mk_frame(0x0800, 6, 56, tcp_flags=0x02, gapmap={0: 2})  # TCP SYN -> slow
+    F += mk_frame(0x0800, 6, 56, tcp_flags=0x11, gapmap={0: 2})  # TCP FIN+ACK -> slow
+    F += mk_frame(0x0800, 6, 56, tcp_flags=0x04, gapmap={0: 2})  # TCP RST -> slow
+    F += mk_frame(0x0800, 6, 56, crs=0, tcp_flags=0x18, gapmap={0: 2})  # 坏 FCS TCP 数据仍 fast
+    F += mk_frame(0x0800, 6, 56, err=1, tcp_flags=0x10, gapmap={0: 2})  # rx_er TCP 数据仍 fast
+    F += mk_frame(0x0800, 6, 56, tcp_flags=0x18, gapmap={0: 0})  # b2b TCP 数据 -> fast
+    F += mk_frame(0x0800, 6, 56, tcp_flags=0x10, gapmap={0: 0})  # b2b TCP 纯 ACK -> fast
+    F += mk_frame(0x0800, 17, 56, gapmap={0: 0})           # b2b UDP 长帧 -> slow
+    F += mk_frame(0x0800, 6, 64, tcp_flags=0x18, gapmap={0: 2, 3: 1, 6: 1})  # 帧内气泡 TCP 数据 -> fast
     return F
 
 
@@ -101,8 +120,9 @@ def model(words, mode, hw):
     # DUT 寄存器
     state = FILL
     route = SLOW
+    wait_w5 = 0
     n = 0
-    sk = [(0, 0, 0, 0, 0, 0)] * 3
+    sk = [(0, 0, 0, 0, 0, 0)] * 6
     stat_fast = 0
     stat_slow = 0
     lines = []
@@ -123,20 +143,31 @@ def model(words, mode, hw):
                          ('F' if route == FAST else 'S',
                           o[0], o[1], o[2], o[3], o[4], o[5]))
         # ---- DUT 状态更新 (NBA 语义: 全部由旧值计算) ----
-        state_n, route_n, n_n = state, route, n
+        state_n, route_n, n_n, w5_n = state, route, n, wait_w5
         sk_n = list(sk)
         if state == FILL:
             if s_acc:
                 sk_n[n] = (d, kk, l, u, c, e)
                 if l:
-                    route_n = SLOW
+                    route_n = SLOW             # 残缺/runt: slow (tlast 优先)
                     n_n = n + 1
                     state_n = DRAIN
-                elif n == 2:
-                    is_tcp = (sk[1][0] >> 16) & 0xFFFF == 0x0800 and (d & 0xFF) == 6
-                    route_n = FAST if is_tcp else SLOW
-                    n_n = 3
+                elif n == 2 and not wait_w5:
+                    is_tcp = (((sk[1][0] >> 16) & 0xFFFF) == 0x0800
+                              and (d & 0xFF) == 6)
+                    if is_tcp:
+                        w5_n = 1               # TCP: 等 w5 flags 再定路由
+                        n_n = n + 1
+                    else:
+                        route_n = SLOW         # 非 TCP: w2 拍定案
+                        n_n = n + 1
+                        state_n = DRAIN
+                elif n == 5:
+                    tcp_ctl = (d & 0x07) != 0  # FIN|SYN|RST @w5[2:0] (byte 47)
+                    route_n = SLOW if tcp_ctl else FAST
+                    n_n = 6
                     state_n = DRAIN
+                    w5_n = 0
                 else:
                     n_n = n + 1
         elif state == DRAIN:
@@ -144,12 +175,13 @@ def model(words, mode, hw):
                 if sk[0][2]:
                     state_n = FILL
                     n_n = 0
+                    w5_n = 0
                     if route == FAST:
                         stat_fast += 1
                     else:
                         stat_slow += 1
                 else:
-                    sk_n = [sk[1], sk[2], sk[2]]
+                    sk_n = [sk[1], sk[2], sk[3], sk[4], sk[5], sk[5]]
                     n_n = n - 1
                     if n == 1:
                         state_n = PASS
@@ -160,7 +192,7 @@ def model(words, mode, hw):
                     stat_fast += 1
                 else:
                     stat_slow += 1
-        state, route, n, sk = state_n, route_n, n_n, sk_n
+        state, route, n, wait_w5, sk = state_n, route_n, n_n, w5_n, sk_n
         # ---- TB 源更新 (与 tb_rx_classify.v NBA 一致) ----
         if v and s_tready:
             v = 0
@@ -180,9 +212,9 @@ def model(words, mode, hw):
 
 def generate(simdir):
     words = build_stream()
-    # hard 窗口 [40,60): 落在帧流中段 (全流 ~90 字, nostall 约 100 拍排完),
-    # 冻结双路输出 20 拍, 覆盖 DRAIN-hold 与 PASS-hold。
-    hw0, hw1 = 40, 60
+    # hard 窗口 [170,190): 帧流增长后 (~164 字, nostall ~340 拍) 落在中段,
+    # 约覆盖首个 TCP fast 帧 (96B) 的 6 深 DRAIN-hold 与 PASS-hold。
+    hw0, hw1 = 170, 190
 
     def w(fn, vals, fmt):
         with open(os.path.join(simdir, fn), 'w') as fh:

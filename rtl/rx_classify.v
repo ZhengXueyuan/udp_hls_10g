@@ -1,10 +1,14 @@
 `timescale 1ns/1ps
 // 帧级分流器: mac_rx_64 之后的 fast/slow 路由 (P4 慢路径入口)。
-//   ethertype @ w1[31:16] (byte 12-13), proto @ w2[7:0] (byte 23)
-//   路由: ethertype==0x0800 && proto==6 -> fast (TCP); 其他全部 -> slow
-// 3 字 skid 缓冲 w0..w2, 定路由后倒空再 cut-through; runt (<3 字即 tlast) 一律 slow。
-// DRAIN 期间 s_tready=0 (<=3 拍/帧, 由 mac_rx_64 的 8 深 FIFO 吸收; 1G 字流天然
-// >=3 拍帧间隔, stall 实际不传播。10G min-frame 洪泛极限场景: mac 层计数丢帧 — P6 复审)。
+//   ethertype @ w1[31:16] (byte 12-13), proto @ w2[7:0] (byte 23),
+//   TCP flags @ w5[7:0] (byte 47)
+//   路由: 非 IPv4/TCP -> slow; TCP 且 SYN|FIN|RST (w5 拍决策) -> slow (P4b:
+//   握手/拆除归慢路径 HLS); TCP 数据/纯 ACK -> fast。
+// 6 字 skid: 非 TCP 在 w2 拍定案 (3 字倒空即直通); TCP 等到 w5 (6 字)。
+// TCP 帧最小 54B 头 => 恒 >=7 字, w5 必存在; 提前 tlast 的残缺帧兜底 slow。
+// DRAIN 期间 s_tready=0 (<=6 拍/帧, 由 mac_rx_64 的 8 深 FIFO 吸收; 1G 字流
+// 天然 >=6 拍帧间隔, stall 不传播。10G min-frame 洪泛极限场景: mac 层计数
+// 丢帧 — P6 复审 (skid 改真 FIFO 已记入 P6 清单)。
 module rx_classify (
     input  wire        clk,
     input  wire        rst_n,
@@ -17,7 +21,7 @@ module rx_classify (
     input  wire        s_axis_tuser,   // SOP
     input  wire        s_axis_tcrs,    // TLAST: FCS 正确
     input  wire        s_axis_terr,    // TLAST: 帧内 rx_er
-    // fast 路由 (TCP)
+    // fast 路由 (TCP 数据面)
     output wire [63:0] m_fast_tdata,
     output wire [7:0]  m_fast_tkeep,
     output wire        m_fast_tvalid,
@@ -43,17 +47,22 @@ module rx_classify (
 
     reg [1:0]  state;
     reg        route;
-    reg [2:0]  n;            // skid 有效字数 (0..3)
+    reg        wait_w5;      // 本帧是 TCP: 等 w5 flags 再定路由
+    reg [3:0]  n;            // skid 有效字数 (0..6)
     // skid 字 = {tdata, tkeep, tlast, tuser, tcrs, terr} 共 76 位
-    reg [63:0] sk_d [0:2];
-    reg [7:0]  sk_k [0:2];
-    reg        sk_l [0:2];
-    reg        sk_u [0:2];
-    reg        sk_c [0:2];
-    reg        sk_e [0:2];
+    reg [63:0] sk_d [0:5];
+    reg [7:0]  sk_k [0:5];
+    reg        sk_l [0:5];
+    reg        sk_u [0:5];
+    reg        sk_c [0:5];
+    reg        sk_e [0:5];
 
-    // w2 拍决策: w1 在 sk_d[1], w2 = 当前 s_axis_tdata
-    wire is_tcp = (sk_d[1][31:16] == 16'h0800) && (s_axis_tdata[7:0] == 8'd6);
+    // w2 拍 (n==2 接受): w1 在 sk_d[1], w2 = 当前 s_axis_tdata
+    wire is_ipv4 = (sk_d[1][31:16] == 16'h0800);
+    wire is_tcp  = is_ipv4 && (s_axis_tdata[7:0] == 8'd6);
+    // w5 拍 (n==5 接受): flags = 当前 s_axis_tdata[7:0] (byte 47)
+    wire tcp_ctl = |{s_axis_tdata[2], s_axis_tdata[1], s_axis_tdata[0]};
+    //                                        // RST(bit2) SYN(bit1) FIN(bit0)
 
     wire out_fast = (route == RT_FAST);
     wire m_tready_sel = out_fast ? m_fast_tready : m_slow_tready;
@@ -89,45 +98,55 @@ module rx_classify (
     wire s_acc = s_axis_tvalid && s_axis_tready;          // 输入接受
     wire o_acc = o_v && m_tready_sel;                     // 输出接受 (DRAIN/PASS)
 
+    integer ii;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            state <= S_FILL; route <= RT_SLOW; n <= 3'd0;
+            state <= S_FILL; route <= RT_SLOW; wait_w5 <= 1'b0; n <= 4'd0;
             stat_fast <= 0; stat_slow <= 0;
         end else begin
             case (state)
                 S_FILL: if (s_acc) begin
-                    sk_d[n[1:0]] <= s_axis_tdata;
-                    sk_k[n[1:0]] <= s_axis_tkeep;
-                    sk_l[n[1:0]] <= s_axis_tlast;
-                    sk_u[n[1:0]] <= s_axis_tuser;
-                    sk_c[n[1:0]] <= s_axis_tcrs;
-                    sk_e[n[1:0]] <= s_axis_terr;
+                    sk_d[n[2:0]] <= s_axis_tdata;
+                    sk_k[n[2:0]] <= s_axis_tkeep;
+                    sk_l[n[2:0]] <= s_axis_tlast;
+                    sk_u[n[2:0]] <= s_axis_tuser;
+                    sk_c[n[2:0]] <= s_axis_tcrs;
+                    sk_e[n[2:0]] <= s_axis_terr;
                     if (s_axis_tlast) begin
-                        route <= RT_SLOW;            // runt: 无法判 proto -> slow
-                        n <= n + 3'd1;
+                        route <= RT_SLOW;            // 残缺/runt: slow
+                        n <= n + 4'd1;
                         state <= S_DRAIN;
-                    end else if (n == 3'd2) begin
-                        route <= is_tcp ? RT_FAST : RT_SLOW;
-                        n <= 3'd3;
+                    end else if (n == 4'd2 && !wait_w5) begin
+                        if (is_tcp) begin
+                            wait_w5 <= 1'b1;         // TCP: 等 w5 flags
+                            n <= n + 4'd1;
+                        end else begin
+                            route <= RT_SLOW;        // 非 TCP: w2 拍定案
+                            n <= n + 4'd1;
+                            state <= S_DRAIN;
+                        end
+                    end else if (n == 4'd5) begin
+                        route <= tcp_ctl ? RT_SLOW : RT_FAST;
+                        n <= 4'd6;
                         state <= S_DRAIN;
+                        wait_w5 <= 1'b0;
                     end else begin
-                        n <= n + 3'd1;
+                        n <= n + 4'd1;
                     end
                 end
                 S_DRAIN: if (o_acc) begin
                     if (sk_l[0]) begin               // 帧尾在 skid 内
-                        state <= S_FILL; n <= 3'd0;
+                        state <= S_FILL; n <= 4'd0; wait_w5 <= 1'b0;
                         if (out_fast) stat_fast <= stat_fast + 1;
                         else          stat_slow <= stat_slow + 1;
                     end else begin
-                        sk_d[0] <= sk_d[1]; sk_d[1] <= sk_d[2];
-                        sk_k[0] <= sk_k[1]; sk_k[1] <= sk_k[2];
-                        sk_l[0] <= sk_l[1]; sk_l[1] <= sk_l[2];
-                        sk_u[0] <= sk_u[1]; sk_u[1] <= sk_u[2];
-                        sk_c[0] <= sk_c[1]; sk_c[1] <= sk_c[2];
-                        sk_e[0] <= sk_e[1]; sk_e[1] <= sk_e[2];
-                        n <= n - 3'd1;
-                        if (n == 3'd1) state <= S_PASS;  // skid 空, 帧身切直通
+                        for (ii = 0; ii < 5; ii = ii + 1) begin
+                            sk_d[ii] <= sk_d[ii+1]; sk_k[ii] <= sk_k[ii+1];
+                            sk_l[ii] <= sk_l[ii+1]; sk_u[ii] <= sk_u[ii+1];
+                            sk_c[ii] <= sk_c[ii+1]; sk_e[ii] <= sk_e[ii+1];
+                        end
+                        n <= n - 4'd1;
+                        if (n == 4'd1) state <= S_PASS;  // skid 空, 帧身切直通
                     end
                 end
                 S_PASS: if (s_acc && s_axis_tlast) begin

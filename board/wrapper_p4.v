@@ -3,8 +3,9 @@
 // wrapper_p4.v — udp_hls_10g 板上 P4a 顶层 (1G RGMII): TCP fast path + HLS 慢路径
 //=============================================================================
 // 数据面: PC → PHY1 RGMII → util_gmii_to_rgmii → mac_rx_64 → rx_classify
-//   fast (IPv4/TCP): tcp_rx → tcp_echo → tcp_tx_frame ─┐
-//     (tcp_synp P4-lite 握手保留; CAM/TCB 同 P3 链)     ├→ tx_arb (fast 优先)
+//   fast (IPv4/TCP 数据/纯ACK): tcp_rx → tcp_echo → tcp_tx_frame ─┐
+//     (P4b: 握手/SYN/FIN/RST 分流慢路径 HLS 正式处理, tcp_synp 已拆; ├→ tx_arb (fast 优先)
+//      CAM/TCB 由 slow_cfg_adp 按 HLS cfg_stream 记录配置)          │
 //   slow (其他全部):  slow_rx_adp → udp_echo (HLS 慢路径)│
 //     udp_echo.tx_stream → slow_tx_adp ─────────────────┘
 //   tx_arb → mac_tx_64 → util → PHY1 → PC
@@ -248,18 +249,22 @@ module wrapper_p4 (
     wire [31:0] syn_seq;
     wire [15:0] syn_wnd;
 
-    wire        synp_cfg_wr;
-    wire [3:0]  synp_cfg_addr;
-    wire [31:0] synp_cfg_sip, synp_cfg_dip;
-    wire [15:0] synp_cfg_sport, synp_cfg_dport;
-    wire [47:0] synp_cfg_dmac;
-    wire        synp_upd_wr;
-    wire [3:0]  synp_upd_id;
-    wire [2:0]  synp_upd_sel;
-    wire [31:0] synp_upd_val;
-    wire        synp_sack_req;
-    wire [3:0]  synp_sack_id;
-    wire [31:0] synp_sack_ackval;
+    // ---- P4b: tcp_synp 已废除 (正式握手归慢路径 HLS) — CAM/TCB 配置 =
+    // slow_cfg_adp (解析 HLS cfg_stream 记录); syn_v sideband 端口留空 ----
+    wire        scfg_cam_wr;
+    wire [3:0]  scfg_cam_addr;
+    wire [31:0] scfg_cam_sip, scfg_cam_dip;
+    wire [15:0] scfg_cam_sport, scfg_cam_dport;
+    wire [47:0] scfg_cam_dmac;
+    wire        scfg_upd_wr;
+    wire [3:0]  scfg_upd_id;
+    wire [2:0]  scfg_upd_sel;
+    wire [31:0] scfg_upd_val;
+    wire        scfg_gnt;
+    wire [31:0] scfg_stat_add, scfg_stat_del;
+    wire [31:0] hls_cfg_tdata;      // P4b: 连接配置记录通道 (先声明后使用)
+    wire        hls_cfg_tvalid, hls_cfg_tready;
+    wire        hls_rst_n;          // 看门狗 (slow_rx_adp): HLS 饥饿超时复位
 
     wire [31:0] cam_q_sip, cam_q_dip;
     wire [15:0] cam_q_sport, cam_q_dport;
@@ -359,13 +364,13 @@ module wrapper_p4 (
     tcp_cam u_cam (
         .clk            (gmii_clk),
         .rst_n          (reset_n),
-        .cfg_wr         (synp_cfg_wr),
-        .cfg_addr       (synp_cfg_addr),
-        .cfg_sip        (synp_cfg_sip),
-        .cfg_dip        (synp_cfg_dip),
-        .cfg_sport      (synp_cfg_sport),
-        .cfg_dport      (synp_cfg_dport),
-        .cfg_dmac       (synp_cfg_dmac),
+        .cfg_wr         (scfg_cam_wr),
+        .cfg_addr       (scfg_cam_addr),
+        .cfg_sip        (scfg_cam_sip),
+        .cfg_dip        (scfg_cam_dip),
+        .cfg_sport      (scfg_cam_sport),
+        .cfg_dport      (scfg_cam_dport),
+        .cfg_dmac       (scfg_cam_dmac),
         .q_sip          (cam_q_sip),
         .q_dip          (cam_q_dip),
         .q_sport        (cam_q_sport),
@@ -403,48 +408,48 @@ module wrapper_p4 (
         .upd_val        (tcb_val)
     );
 
-    // ---- TCB 更新仲裁 (组合, tx > rx > cfg 级; cfg 级 = synp.upd) ----
+    // ---- TCB 更新仲裁 (组合, tx > rx > cfg 级; cfg 级 = slow_cfg_adp, 带 gnt) ----
     wire        sel_tx = tx_upd_wr;
     wire        sel_rx = !sel_tx && rx_upd_wr;
-    assign tcb_wr  = sel_tx || sel_rx || synp_upd_wr;
-    assign tcb_sel = sel_tx ? tx_upd_sel : (sel_rx ? rx_upd_sel : synp_upd_sel);
-    assign tcb_id  = sel_tx ? tx_upd_id  : (sel_rx ? rx_upd_id  : synp_upd_id);
-    assign tcb_val = sel_tx ? tx_upd_val : (sel_rx ? rx_upd_val : synp_upd_val);
+    assign tcb_wr  = sel_tx || sel_rx || (scfg_upd_wr && scfg_gnt);
+    assign tcb_sel = sel_tx ? tx_upd_sel : (sel_rx ? rx_upd_sel : scfg_upd_sel);
+    assign tcb_id  = sel_tx ? tx_upd_id  : (sel_rx ? rx_upd_id  : scfg_upd_id);
+    assign tcb_val = sel_tx ? tx_upd_val : (sel_rx ? rx_upd_val : scfg_upd_val);
     assign rx_upd_gnt = sel_rx;
+    assign scfg_gnt   = !sel_tx && !sel_rx && scfg_upd_wr;  // cfg 级授权: 空即给
 
-    tcp_synp u_synp (
+    // ---- SYN 应答器已拆除 (P4b 慢路径 HLS 正式握手) — slow_cfg_adp ----
+    // P4b-4 审查 finding: rst_n 必须跟 HLS 看门狗复位 — HLS 被 hls_rst_n
+    // 复位时若 8 词记录写一半 (FIFO 残留 1..7 词), 解析会永久错位
+    // (垃圾记录误开/误删连接)。同拍复位清 FIFO/state/wcnt。
+    slow_cfg_adp u_slow_cfg (
         .clk            (gmii_clk),
-        .rst_n          (reset_n),
-        .syn_v          (syn_v),
-        .syn_smac       (syn_smac),
-        .syn_sip        (syn_sip),
-        .syn_sport      (syn_sport),
-        .syn_dport      (syn_dport),
-        .syn_seq        (syn_seq),
-        .syn_wnd        (syn_wnd),
-        .cfg_wr         (synp_cfg_wr),
-        .cfg_addr       (synp_cfg_addr),
-        .cfg_sip        (synp_cfg_sip),
-        .cfg_dip        (synp_cfg_dip),
-        .cfg_sport      (synp_cfg_sport),
-        .cfg_dport      (synp_cfg_dport),
-        .cfg_dmac       (synp_cfg_dmac),
-        .upd_wr         (synp_upd_wr),
-        .upd_id         (synp_upd_id),
-        .upd_sel        (synp_upd_sel),
-        .upd_val        (synp_upd_val),
-        .sack_req       (synp_sack_req),
-        .sack_id        (synp_sack_id),
-        .sack_ackval    (synp_sack_ackval),
-        .cfg_my_ip      (32'hC0A86402),   // 192.168.100.2
-        .cfg_listen     (16'd8080),
-        .cfg_iss        (32'd5999)
+        .rst_n          (reset_n & hls_rst_n),
+        .s_axis_tdata   (hls_cfg_tdata),
+        .s_axis_tvalid  (hls_cfg_tvalid),
+        .s_axis_tready  (hls_cfg_tready),
+        .cam_cfg_wr     (scfg_cam_wr),
+        .cam_cfg_addr   (scfg_cam_addr),
+        .cam_cfg_sip    (scfg_cam_sip),
+        .cam_cfg_dip    (scfg_cam_dip),
+        .cam_cfg_sport  (scfg_cam_sport),
+        .cam_cfg_dport  (scfg_cam_dport),
+        .cam_cfg_dmac   (scfg_cam_dmac),
+        .upd_wr         (scfg_upd_wr),
+        .upd_id         (scfg_upd_id),
+        .upd_sel        (scfg_upd_sel),
+        .upd_val        (scfg_upd_val),
+        .cfg_gnt        (scfg_gnt),
+        .stat_add       (scfg_stat_add),
+        .stat_del       (scfg_stat_del)
     );
 
-    wire        tx_ack_req = synp_sack_req | rx_ack_req;
-    wire [3:0]  tx_ack_id  = synp_sack_req ? synp_sack_id     : rx_ack_id;
-    wire [31:0] tx_ack_val = synp_sack_req ? synp_sack_ackval : rx_ack_val;
-    wire        tx_ack_syn = synp_sack_req;
+    // ---- TX ACK: synp 已拆除, 仅 tcp_rx 的 ACK 请求 (P4b 握手 SYN+ACK 由
+    //      HLS 慢路径直接发出, 不走 fast TX) ----
+    wire        tx_ack_req = rx_ack_req;
+    wire [3:0]  tx_ack_id  = rx_ack_id;
+    wire [31:0] tx_ack_val = rx_ack_val;
+    wire        tx_ack_syn = 1'b0;
 
     tcp_tx_frame u_tcp_tx (
         .clk            (gmii_clk),
@@ -486,6 +491,7 @@ module wrapper_p4 (
     );
 
     // --- slow 路由: slow_rx_adp → udp_echo (HLS) → slow_tx_adp ---
+    //          + udp_echo.cfg_stream (P4b) → slow_cfg_adp → CAM/TCB
     wire [15:0] hls_rx_tdata;
     wire        hls_rx_tvalid, hls_rx_tready;
     wire [15:0] hls_tx_tdata;
@@ -512,16 +518,17 @@ module wrapper_p4 (
         .hls_rx_tdata   (hls_rx_tdata),
         .hls_rx_tvalid  (hls_rx_tvalid),
         .hls_rx_tready  (hls_rx_tready),
+        .hls_rst_n      (hls_rst_n),
         .stat_commit    (srx_stat_commit),
         .stat_drop      (srx_stat_drop)
     );
 
-    // HLS 慢路径协议栈 (udp_hls_eco 原样综合产物; ap_ctrl_none;
-    //  reset_n 是 ap_none 软复位必须显式接 — 悬空 = phi-mux X 死锁)
+    // HLS 慢路径协议栈 (udp_hls_10g/hls 副本综合, P4b 版: cfg_stream +
+    // 限次重传; ap_ctrl_none; 看门狗 hls_rst_n 脉冲复位; reset_n 软复位必接)
     udp_echo u_hls (
         .ap_clk           (gmii_clk),
-        .ap_rst_n         (reset_n),
-        .reset_n          (reset_n),
+        .ap_rst_n         (reset_n & hls_rst_n),
+        .reset_n          (reset_n & hls_rst_n),
         .rx_stream_TDATA  (hls_rx_tdata),
         .rx_stream_TVALID (hls_rx_tvalid),
         .rx_stream_TREADY (hls_rx_tready),
@@ -531,6 +538,9 @@ module wrapper_p4 (
         .msg_stream_TDATA (hls_msg_tdata),
         .msg_stream_TVALID(hls_msg_tvalid),
         .msg_stream_TREADY(1'b1),
+        .cfg_stream_TDATA (hls_cfg_tdata),
+        .cfg_stream_TVALID(hls_cfg_tvalid),
+        .cfg_stream_TREADY(hls_cfg_tready),
         .led_d0           (),
         .led_d1           (),
         .led_d2           (),

@@ -13,7 +13,7 @@ set part_name     xc7k325tffg676-2
 
 set script_dir [file dirname [file normalize [info script]]]
 set root_dir   [file dirname $script_dir]
-set hls_dir    D:/repo/ECO/udp_hls_eco/udp_echo_prj/solution1/syn/verilog
+set hls_dir    D:/repo/ECO/udp_hls_10g/hls/slowstack_prj/solution1/syn/verilog
 
 create_project -force $project_name ${root_dir}/vivado_prj -part $part_name
 import_files -norecurse ${root_dir}/rtl/crc32_8b.v \

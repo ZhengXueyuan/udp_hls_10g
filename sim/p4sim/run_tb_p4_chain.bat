@@ -4,7 +4,7 @@ REM 自生成刺激; 从 Git Bash: cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p4sim\ru
 cd /d %~dp0
 set PY=C:\Users\zhxue\anaconda3\python.exe
 set XV=C:\AMDDesignTools\2025.2\Vivado\bin
-set HLS=D:\repo\ECO\udp_hls_eco\udp_echo_prj\solution1\syn\verilog
+set HLS=D:\repo\ECO\udp_hls_10g\hls\slowstack_prj\solution1\syn\verilog
 
 copy /y %HLS%\*.dat . >nul
 (if exist %HLS%\ (dir /b /s %HLS%\*.v) else (echo HLS dir missing & exit /b 1)) > hls_files.f
@@ -24,8 +24,8 @@ call %XV%\xvlog.bat -work xil_defaultlib ^
   D:\repo\ECO\udp_hls_10g\rtl\tcp_rx.v ^
   D:\repo\ECO\udp_hls_10g\rtl\tcp_tx_frame.v ^
   D:\repo\ECO\udp_hls_10g\rtl\tcp_echo.v ^
-  D:\repo\ECO\udp_hls_10g\rtl\tcp_synp.v ^
   D:\repo\ECO\udp_hls_10g\rtl\rx_classify.v ^
+  D:\repo\ECO\udp_hls_10g\rtl\slow_cfg_adp.v ^
   D:\repo\ECO\udp_hls_10g\rtl\slow_rx_adp.v ^
   D:\repo\ECO\udp_hls_10g\rtl\slow_tx_adp.v ^
   D:\repo\ECO\udp_hls_10g\rtl\tx_arb.v ^

@@ -14,7 +14,8 @@ module slow_rx_adp #(
     // 看门狗阈值 (拍): hls_rx_tvalid && !tready 持续超此则复位 HLS (默认 2^21
     // ≈16.8ms @125MHz; TB 用小值)。防 HLS 内部死锁 (其 512 词内部帧 fifo 满
     // 则 mac_rx 写阻塞 → 永久停读 — 泛洪实测实锤) 后永久失联。
-    parameter [20:0] WDOG = 21'd2097152
+    // 位宽铁律: 2^21 需 22 位! [20:0] 会把 2097152 截成 0 (看门狗立刻乱触发)。
+    parameter [21:0] WDOG = 22'd2097152
 ) (
     input  wire        clk,
     input  wire        rst_n,
@@ -89,7 +90,7 @@ module slow_rx_adp #(
     reg  [11:0] occ;
     wire        o_pop = hls_rx_tvalid && hls_rx_tready;
     // ---- 看门狗: HLS 有数据可读 (tvalid) 但长期不读 = 内部死锁 -> 复位 ----
-    reg  [20:0] starv;
+    reg  [21:0] starv;      // 位宽 = WDOG 同宽 (22 位, 见参数注释)
     reg  [6:0]  rst_cnt;
     reg         hls_rst_n_r;
     assign hls_rst_n = hls_rst_n_r;

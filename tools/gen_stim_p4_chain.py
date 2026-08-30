@@ -33,6 +33,13 @@ payload = C.payload
 csum16 = C.csum16
 PRE = C.PRE
 
+# P4b: 握手归慢路径 HLS — conn0 的 TCP 帧源必须 = ARP 学到的 PC 身份
+# (192.168.100.1), 否则 HLS ARP 查不到 → SYN+ACK 走广播。CONN[0] 原为
+# 10.0.0.1 (chain 时代), 在此覆盖为 PC_IP。
+C.CONN[0]['sip'] = PC_IP
+HLS_ISS = 0x12345678          # HLS layer_tcp 的我方 ISS (cid=0)
+HS_ACKVAL = HLS_ISS + 1       # 握手 ACK 应确认的值 = SYN+ACK 发出后的 snd_nxt
+
 GAP_SLOW = 20000       # 慢帧后的 HLS 应答余量
 GAP_TCP = 1500         # TCP 段间 (tx 排空)
 
@@ -91,11 +98,15 @@ def build_rx_frames():
     add('udp1', fb, fcs, GAP_SLOW)
     fb, fcs = C.mk_tcp_frame(0, 999, 0, 0x02, 0, 0x2000, True)
     add('syn', fb, fcs, 300)
-    fb, fcs = C.mk_tcp_frame(0, 1000, 6000, 0x10, 0, 0x4000, True)
-    add('hs_ack', fb, fcs, GAP_TCP)
-    fb, fcs = C.mk_tcp_frame(0, 1000, 6000, 0x18, 7, 0x4000, True)
+    # P4b: hs_ack 前留 GAP_SLOW (gap 是帧前间距! 改 syn 的 gap 只会推迟 syn
+    # 自己) — 真实 TCP 里 PC 要等收到 SYN+ACK 才发数据; HLS 处理 SYN + cfg
+    # 落地 ~4k 拍 (wire 时间), 300B 的旧间距会让 hs_ack/data 在 fast 路径
+    # CAM/TCB 配好前到达被丢 (SYN 重传才能救)。
+    fb, fcs = C.mk_tcp_frame(0, 1000, HS_ACKVAL, 0x10, 0, 0x4000, True)
+    add('hs_ack', fb, fcs, GAP_SLOW)
+    fb, fcs = C.mk_tcp_frame(0, 1000, HS_ACKVAL, 0x18, 7, 0x4000, True)
     add('data7a', fb, fcs, GAP_TCP)
-    fb, fcs = C.mk_tcp_frame(0, 1007, 6000, 0x18, 9, 0x4000, True)
+    fb, fcs = C.mk_tcp_frame(0, 1007, HS_ACKVAL, 0x18, 9, 0x4000, True)
     add('data7b', fb, fcs, GAP_TCP)
     fb, fcs = mk_arp_req()
     add('arp2', fb, fcs, GAP_SLOW)
@@ -253,6 +264,50 @@ def check_udp_echo(body, errs, tag, n=24):
         errs.append('%s: udp payload mismatch' % tag)
 
 
+def check_synack(body, errs, tag):
+    """HLS SYN+ACK 语义: proto/flags/seq=HLS_ISS/ack=对端 ISS+1/doff=7 带 MSS=1460。"""
+    proto = ip_ok(body)
+    if proto != 6:
+        errs.append('%s: synack ip proto/csum %s' % (tag, proto))
+        return
+    if body[:6] != PC_MAC or body[6:12] != DUT_MAC:
+        errs.append('%s: synack eth addr' % tag)
+    sport, dport = struct.unpack('!HH', body[34:38])
+    if (sport, dport) != (0x1F90, 0x3039):
+        errs.append('%s: synack ports %04x/%04x' % (tag, sport, dport))
+    seq, = struct.unpack('!I', body[38:42])
+    ack, = struct.unpack('!I', body[42:46])
+    if seq != HLS_ISS:
+        errs.append('%s: synack seq %08x != HLS_ISS %08x' % (tag, seq, HLS_ISS))
+    if ack != 1000:
+        errs.append('%s: synack ack %d != 1000' % (tag, ack))
+    if body[46] >> 4 != 7:
+        errs.append('%s: synack doff %d != 7 (无选项!)' % (tag, body[46] >> 4))
+    if body[47] != 0x12:
+        errs.append('%s: synack flags %02x != 0x12' % (tag, body[47]))
+    # MSS 选项 (doff=7: 选项 8B 在 byte 54..61 = body[54:62]... body 含以太头:
+    # TCP 选项在 body[34+20:34+28] = body[54:62]): MSS kind=2 len=4 val=1460
+    if len(body) >= 62 and body[54:56] == b'\x02\x04':
+        mss, = struct.unpack('!H', body[56:58])
+        if mss != 1460:
+            errs.append('%s: synack MSS %d != 1460' % (tag, mss))
+    # TCP 校验和 fold
+    ihl = (body[14] & 0xF) * 4
+    total = struct.unpack('!H', body[16:18])[0]
+    tcb = body[14 + ihl:14 + total]
+    sip = struct.unpack('!I', body[26:30])[0]
+    dip = struct.unpack('!I', body[30:34])[0]
+    ph = struct.pack('!4s4sBBH', body[26:30], body[30:34], 0, 6, len(tcb))
+    buf = ph + tcb
+    if len(buf) % 2:
+        buf += b'\x00'
+    s = sum(struct.unpack('!%dH' % (len(buf) // 2), buf))
+    s = (s & 0xFFFF) + (s >> 16)
+    s = (s & 0xFFFF) + (s >> 16)
+    if s != 0xFFFF:
+        errs.append('%s: synack tcp csum bad (sip=%08x dip=%08x)' % (tag, sip, dip))
+
+
 def tcp_fields(body):
     sport, = struct.unpack('!H', body[34:36])
     flags = body[47]
@@ -269,11 +324,11 @@ def check(simdir):
     got, ev = parse_gmii(os.path.join(simdir, 'resp_p4_chain.memh'))
     errs = []
 
-    # ---- 期望快流 (TCP): synack + 每数据段 echo (板上 suppress_data_ack=1:
-    # 接受的数据段无纯 ACK, echo 帧自带 ack) ----
-    exp_fast = [dict(kind='synack', cid=0, seq=C.SYNP_ISS, ack=1000, plen=0, rx_i=-1)]
+    # ---- 期望快流 (TCP): 每数据段 echo (P4b: SYN+ACK 由 HLS 慢路径发,
+    # 不在快流; suppress_data_ack=1 无纯 ACK) ----
+    exp_fast = []
     rcv = {0: 1000, 1: 77}
-    snd = {0: 6000, 1: 900}
+    snd = {0: HS_ACKVAL, 1: 900}         # HLS 握手后 snd_nxt = ISS+1
     for i, f in enumerate(frames):
         if f['name'].startswith('data') or f['name'] == 'c1data':
             cid = 0 if f['name'].startswith('data') else 1
@@ -283,8 +338,8 @@ def check(simdir):
                                  plen=plen, rx_i=i))
             rcv[cid] = na
             snd[cid] += plen
-    # ---- 期望慢流 (HLS, 顺序 = RX 顺序) ----
-    exp_slow = ['arp', 'icmp', 'udp', 'arp']
+    # ---- 期望慢流 (HLS, 顺序 = RX 顺序): P4b SYN 进慢路径 -> SYN+ACK ----
+    exp_slow = ['arp', 'icmp', 'udp', 'synack', 'arp']
 
     # ---- 帧分类 ----
     slow_got = []
@@ -302,7 +357,12 @@ def check(simdir):
         elif et == 0x0800:
             proto = body[23]
             if proto == 6:
-                fast_got.append(fb)
+                # P4b: flags=0x12 (SYN+ACK) 来自慢路径 HLS; 数据 0x18 = fast echo
+                flags = body[47]
+                if flags == 0x12:
+                    slow_got.append(('synack', fb))
+                else:
+                    fast_got.append(fb)
             elif proto == 1:
                 slow_got.append(('icmp', fb))
             elif proto == 17:
@@ -326,6 +386,8 @@ def check(simdir):
             check_icmp_reply(body, errs, 'slow%d' % i)
         elif k == 'udp':
             check_udp_echo(body, errs, 'slow%d' % i)
+        elif k == 'synack':
+            check_synack(body, errs, 'slow%d' % i)
 
     # ---- 快流匹配 (逐字节, ip id = 快流序号) ----
     if len(fast_got) != len(exp_fast):
@@ -373,32 +435,31 @@ def check(simdir):
     # ---- 事件 / 统计 / 终态 ----
     if len(ev['fend']) != 4:
         errs.append('FEND count %d != 4' % len(ev['fend']))
-    if len(ev['ack']) != 1:          # suppress 模式: 仅 SYN+ACK (synp sack)
-        errs.append('ACK events %d != 1' % len(ev['ack']))
-    esyn = (int.from_bytes(C.CONN[0]['dmac'], 'big'), C.CONN[0]['sip'],
-            C.CONN[0]['sport'], C.CONN[0]['dport'], 999, 0x2000)
-    if ev['synp'] != [esyn]:
-        errs.append('SYNP exp %s got %s' % (esyn, ev['synp']))
+    if len(ev['ack']) != 0:          # P4b: suppress + 无 synp -> 无 fast ACK 事件
+        errs.append('ACK events %d != 0' % len(ev['ack']))
+    if ev['synp']:                   # P4b: SYN 进慢路径, tcp_rx 不再见 SYN
+        errs.append('SYNP should be empty, got %s' % (ev['synp'],))
     exp_bytes = 7 + 9 + 20     # stat_bytes 计载荷字节 (plen_l = ip_len-40)
-    # nonmatch=1: SYN 到达时 conn0 未配置 (CAM miss), 属正常 (syn sideband 另行处理)
-    # ack=0: suppress_data_ack 模式 (板上一致), 本刺激无 dup/ooo -> 无 ack_req
-    if ev['stats7'] != (4, 1, 0, 0, 0, 0, exp_bytes):
-        errs.append('STATS7 got %s exp (4,1,0,0,0,0,%d)' % (ev['stats7'], exp_bytes))
-    if ev['stx'] != (4, 36, 1, 0):
+    # nonmatch=0: SYN 已不进 fast 路径; ack=0: suppress 模式且无 dup/ooo
+    if ev['stats7'] != (4, 0, 0, 0, 0, 0, exp_bytes):
+        errs.append('STATS7 got %s exp (4,0,0,0,0,0,%d)' % (ev['stats7'], exp_bytes))
+    if ev['stx'] != (3, 36, 0, 0):   # fast TX 只剩 3 个 echo (SYN+ACK 走 HLS)
         errs.append('STATS_TX got %s' % (ev['stx'],))
     if ev['seco'] != (3, 0):
         errs.append('STATS_ECO got %s' % (ev['seco'],))
-    if ev['camf'] != (C.CONN[0]['sip'], C.CONN[0]['dip'], C.CONN[0]['sport'],
-                      C.CONN[0]['dport'], int.from_bytes(C.CONN[0]['dmac'], 'big')):
+    # CAMF: conn0 由 HLS cfg 记录写入 (peer=PC 192.168.100.1@PC_MAC, dport=8080)
+    if ev['camf'] != (PC_IP, DUT_IP, C.CONN[0]['sport'],
+                      C.CONN[0]['dport'], int.from_bytes(PC_MAC, 'big')):
         errs.append('CAMF got %s' % (ev['camf'],))
-    texp = (1016, 6016, 6000, 0x3000, 0x4000, 1,
+    # TCBF: conn0 = HLS 握手配置 + 数据推进; ISS 链 = 0x12345678
+    texp = (1016, 0x12345679 + 16, HS_ACKVAL, 0x3000, 0x4000, 1,
             97, 920, 900, 0x1800, 0x1A00, 1)
     if ev['tcbf'] != texp:
         errs.append('TCBF exp %s got %s' % (texp, ev['tcbf']))
-    if ev['srx'] != (4, 0):
-        errs.append('SLOWRX got %s exp (4,0)' % (ev['srx'],))
-    if ev['stx2'] != (4, 0):
-        errs.append('SLOWTX got %s exp (4,0)' % (ev['stx2'],))
+    if ev['srx'] != (5, 0):
+        errs.append('SLOWRX got %s exp (5,0)' % (ev['srx'],))
+    if ev['stx2'] != (5, 0):
+        errs.append('SLOWTX got %s exp (5,0)' % (ev['stx2'],))
 
     print('frames RX=%d TX=%d (fast=%d slow=%d)'
           % (len(frames), len(got), len(fast_got), len(slow_got)))
