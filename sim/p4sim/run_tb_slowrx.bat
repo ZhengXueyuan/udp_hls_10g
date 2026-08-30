@@ -16,5 +16,7 @@ call "%VIV_BIN%\xsim.bat" tb_slow_rx -tclbatch run.tcl -testplusarg STALL
 if errorlevel 1 exit /b 1
 call "%VIV_BIN%\xsim.bat" tb_slow_rx -tclbatch run.tcl -testplusarg HARD
 if errorlevel 1 exit /b 1
+call "%VIV_BIN%\xsim.bat" tb_slow_rx -tclbatch run.tcl -testplusarg WD
+if errorlevel 1 exit /b 1
 call C:\Users\zhxue\anaconda3\python.exe ..\..\tools\gen_stim_p4_slowrx.py . --check
 exit /b %errorlevel%

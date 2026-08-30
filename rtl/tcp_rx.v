@@ -26,6 +26,11 @@ module tcp_rx (
     input  wire        s_axis_tuser,   // SOP
     input  wire        s_axis_tcrs,    // TLAST: FCS 正确
     input  wire        s_axis_terr,    // TLAST: 帧内 rx_er
+    // 配置: echo 应用场景置 1 — 被接受的顺序数据段不再发纯 ACK (echo 帧自带
+    // ACK 位+ack 号, 纯 ACK 冗余)。板测实锤: 每段 2 帧使 TX 比 RX 慢 16%
+    // (536B 段) → echo fifo 持续净流入 → 溢出丢段 → 对端重传雪崩 (1.5Mbps)。
+    // dup/ooo (drop_ack) 路径不受此门控 (快速重传依赖), 纯 ACK 本就不回。
+    input  wire        cfg_suppress_data_ack,
     // 载荷直出 (左对齐; meta_valid 指示帧首)
     output wire [63:0] m_axis_tdata,
     output wire [7:0]  m_axis_tkeep,
@@ -204,8 +209,10 @@ module tcp_rx (
     wire fend_pad = (state == S_PAD) && accept && s_axis_tlast;
     assign fend   = fend_w6 || fend_pay || fend_pad;
     assign ferr   = !s_axis_tcrs || s_axis_terr;
-    // ACK 请求: 接受的数据段 (FCS 好) / 窗口内 seq 不符数据段 (丢数据仍回 ACK); 纯 ACK 绝不回
-    assign ack_req = (((fend_w6 && (plen_l != 16'd0)) || fend_pay) && s_axis_tcrs) ||
+    // ACK 请求: 接受的数据段 (FCS 好, 可被 cfg_suppress_data_ack 抑制 — echo 场景)
+    // / 窗口内 seq 不符数据段 (丢数据仍回 ACK); 纯 ACK 绝不回
+    assign ack_req = (((fend_w6 && (plen_l != 16'd0)) || fend_pay) && s_axis_tcrs &&
+                      !cfg_suppress_data_ack) ||
                      ((state == S_HDR) && accept && (wcnt == 3'd6) && s_axis_tlast &&
                       ackresp_l && s_axis_tcrs) ||
                      ((state == S_DROP) && accept && s_axis_tlast && drop_ack && s_axis_tcrs);

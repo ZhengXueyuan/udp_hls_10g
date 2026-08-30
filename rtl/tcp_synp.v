@@ -78,7 +78,7 @@ module tcp_synp (
                         3'd0: upd_val <= syn_seq + 32'd1;      // rcv_nxt
                         3'd1: upd_val <= cfg_iss;              // snd_nxt
                         3'd2: upd_val <= cfg_iss;              // snd_una
-                        3'd3: upd_val <= 32'h00002000;         // rcv_wnd (通告 8K)
+                        3'd3: upd_val <= 32'h00003000;         // rcv_wnd (通告 12K; echo fifo 16K 留 4K 余量)
                         3'd4: upd_val <= {16'b0, syn_wnd};     // snd_wnd = 对端通告
                         default: upd_val <= 32'd1;             // state = ESTABLISHED
                     endcase

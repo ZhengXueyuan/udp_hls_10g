@@ -90,8 +90,9 @@ def gen_memh(simdir, frames):
             fh.write('%X\n' % TCB1_INIT[fld])
 
 
-def expected_tx_frames(frames, good):
-    """RX 帧序 -> 期望 TX 帧序 (语义级, 不含拍级交错)。"""
+def expected_tx_frames(frames, good, suppress=False):
+    """RX 帧序 -> 期望 TX 帧序 (语义级, 不含拍级交错)。
+    suppress=True (板上 echo 配置): 接受的数据段不发纯 ACK (echo 帧自带 ack)。"""
     exp = []
     rcv = {0: 1000, 1: 77}
     snd = {0: 6000, 1: 900}
@@ -100,8 +101,9 @@ def expected_tx_frames(frames, good):
         if f['kind'] == 'data' and good[i]:
             na = rcv[f['cid']] + f['plen']
             # ACK 段也携带 seq = snd_nxt (DUT 对全部段统一锁存 snd_nxt)
-            exp.append(dict(kind='ack', cid=f['cid'], seq=snd[f['cid']],
-                            ack=na, plen=0, rx_i=i))
+            if not suppress:
+                exp.append(dict(kind='ack', cid=f['cid'], seq=snd[f['cid']],
+                                ack=na, plen=0, rx_i=i))
             exp.append(dict(kind='data', cid=f['cid'], seq=snd[f['cid']],
                             ack=na, plen=f['plen'], rx_i=i))
             rcv[f['cid']] = na
@@ -175,7 +177,9 @@ def check(simdir):
     frames = build_rx_frames()
     gen_memh(simdir, frames)
     good = [f['name'] != 'badcrc' for f in frames]
-    rx = C.rx_model(frames, snd_nxt_init={0: 6000, 1: 900}, good=good)
+    # 板上 wrapper_p4: cfg_suppress_data_ack=1 — 模型同配置 (覆盖板级行为)
+    rx = C.rx_model(frames, snd_nxt_init={0: 6000, 1: 900}, good=good,
+                    suppress_data_ack=True)
     got, ev = parse_gmii(os.path.join(simdir, 'resp_tcp_echo.memh'))
     errs = []
 
@@ -194,7 +198,7 @@ def check(simdir):
             errs.append('SYNP exp %s got %s' % (esyn, ev['synp']))
 
     # ---- TX 帧语义匹配 ----
-    exp, rcv_final, snd_final = expected_tx_frames(frames, good)
+    exp, rcv_final, snd_final = expected_tx_frames(frames, good, suppress=True)
     if len(got) != len(exp):
         errs.append('frame count %d != %d' % (len(got), len(exp)))
     else:
@@ -223,11 +227,11 @@ def check(simdir):
                 last_ack_i = e['rx_i']
             if kind == 'data':
                 last_echo_i = e['rx_i']
-            # 每数据帧: ACK 先于其 echo
+            # 每数据帧: ACK 先于其 echo (suppress 模式下无随行纯 ACK, 跳过)
             if kind == 'data':
-                aj = next(k for k in range(j + 1) if exp[k]['kind'] == 'ack'
-                          and exp[k]['rx_i'] == e['rx_i'])
-                if not used[aj]:
+                aj = next((k for k in range(j + 1) if exp[k]['kind'] == 'ack'
+                           and exp[k]['rx_i'] == e['rx_i']), None)
+                if aj is not None and not used[aj]:
                     errs.append('frame %d: echo of rx_i=%d before its ACK'
                                 % (i, e['rx_i']))
         for i, (j, fb) in enumerate(zip(used_by, got)):
@@ -251,8 +255,8 @@ def check(simdir):
     if ev['stats7'] != tuple(rx['stats'][k] for k in
                              ('pss', 'nonmatch', 'ipcsum', 'crc', 'seq', 'ack', 'bytes')):
         errs.append('STATS7 exp %s got %s' % (rx['stats'], ev['stats7']))
-    # stat_ack 计所有非数据帧 (含 SYN+ACK): 1 + 9 = 10
-    if ev['stx'] != (17, 194, 10, 0):
+    # stat_ack 计所有非数据帧 (含 SYN+ACK): suppress 后 = synack + dup/ooo = 3
+    if ev['stx'] != (10, 194, 3, 0):
         errs.append('STATS_TX got %s' % (ev['stx'],))
     if ev['seco'] != (7, 1):
         errs.append('STATS_ECO got %s' % (ev['seco'],))
@@ -260,7 +264,7 @@ def check(simdir):
                       CONN[0]['dport'], int.from_bytes(CONN[0]['dmac'], 'big')):
         errs.append('CAMF got %s' % (ev['camf'],))
     tcbf = rx['tcb']
-    texp = [tcbf[0]['rcv_nxt'], snd_final[0], 6000, 0x2000, 0x4000, 1,
+    texp = [tcbf[0]['rcv_nxt'], snd_final[0], 6000, 0x3000, 0x4000, 1,
             tcbf[1]['rcv_nxt'], snd_final[1], 900, 0x1800, 0x2200, 1]
     if ev['tcbf'] != tuple(texp):
         errs.append('TCBF exp %s got %s' % (texp, ev['tcbf']))

@@ -531,3 +531,89 @@ tb_slow_tx/tb_tx_arb。排错链挖出 **3 个真 RTL bug** (板测 PASS 都没�
 **修复后板级复测 ✅ (同日)**: 重建 WNS +0.217, 烧录重跑 pc_p4_test.py =
 P4a BOARD PASS (ARP 免静态 + ping 4/4 + TCP 14 块回归 + UDP echo)。
 **P4a 全部完成。**
+
+### P4a 吞吐率实测与破案 (2026-08-30, tools/pc_throughput_test.py + pktmon)
+
+**实测 (修复前)**: TCP 流式吞吐仅 **1.5 Mbps** (16MB/80s); UDP 慢路径泛洪
+300 发只回 24 (慢路径设计如此, 非 bug)。Windows Python 不支持 TCP_MAXSEG
+(10042), 段大小只能由对端 MSS 决定 — **我方 SYN+ACK 无 MSS 选项 → Windows
+退回默认 MSS=536** (P4b 正式握手时 HLS 的 SYN+ACK 带 MSS=1460 自然解决)。
+
+**pktmon 破案链**:
+1. 数据段线速到达无问题; FPGA 的 ack 会**卡死在某个序号** (如 246697256)
+   不推进 → PC 快速重传/RTO → 拥塞崩溃 → 吞吐崩塌到 1.5M。
+2. 根因 = **结构性带宽倒挂**: 每数据段 TX 要发 2 帧 (纯 ACK 84B + echo
+   610B) vs RX 610B — 536B 段下 TX 比 RX 慢 **16.6%** → echo fifo 持续
+   净流入 ~11 词/段 → ~186 段 (~0.9ms 满速流) 后填满 → mac_rx_64 截断丢段
+   → 重传 → 更堵 → 雪崩。1460B 段时倒挂 5.7% (同病较轻)。
+3. **修法 = 标准 TOE 做法: 顺序数据段的纯 ACK 抑制** (echo 帧本来就带
+   ACK 位+ack 号, 纯 ACK 冗余)。tcp_rx 加 cfg_suppress_data_ack: 只门控
+   fend_w6/fend_pay 路径; **dup/ooo 的 drop_ack 不抑制** (快速重传依赖);
+   纯 ACK 段本就不回 (防环)。抑制后 TX=RX 恰好同速, fifo 零净流入。
+4. **xsim 反向实证**: 板上还有一处一次性 ~1.95ms 首响应延迟 (空闲后首个
+   突发), 用"空闲 200k 拍 + 10 段 536B 背靠背"刺激跑 tb_p4_chain —
+   **xsim 里首 echo 仅 ~µs**, 复现不出来 → 该延迟不是本 RTL 链路的
+   (疑 PC NIC 中断聚合/pktmon 采集位置), 留观察清单。
+
+**回归覆盖**: tcp_rx/chain 保持 cfg=0 (覆盖未抑制路径); tcp_echo/p4_chain
+改 cfg=1 (与板上一致), 模型同步 (rx_model 加 suppress_data_ack 参数;
+期望流去掉随行纯 ACK; 统计同步)。四回归全绿。
+
+**pktmon 教训追加**: 同时间戳同内容的"重复帧"是 pktmon 双点采集伪影
+(NIC+协议栈两层), 分析前先按 (内容+时间戳) 去重, 别当真丢帧/重传。
+
+### P4a 续: 泛洪死锁破案 + 修复 (2026-08-30 上午, 板测+探针+TB 全链)
+
+**现象**: 150 个 UDP 64B 线速泛洪后, 慢路径永久失联 (ARP/ICMP 不应答),
+快路径照常 (静态 ARP 下 TCP echo 仍通)。重烧录复位即恢复 → 泛洪诱发死锁。
+
+**破案链 (全部 xsim 层级探针实锤, tools/gen_stim_p4_flood.py 复现)**:
+1. **HLS 内部 512 词帧 fifo 灌满 → mac_rx 写阻塞 → 永久停读** (hls_rx_tready
+   恒 0, o_fifo 剩 495B 半帧永不读) — 慢路径泛洪死锁的根因在 HLS 栈内部
+   (老工程从未泛洪测试过)。26 个 echo 后卡死。
+2. **修法 1 = 开播节流**: slow_rx_adp 只在 o_fifo 占用 ≤256B 时才开播下一帧
+   (occ 是 HLS 内部积压的直接代理) — HLS 内 backlog 恒 ≤4 帧 ≪ 512 词,
+   泛洪永不灌满它。吞吐影响: 控制面帧 ~30µs/帧, 无所谓。
+3. **修法 2 = abort 粘连修复**: "fifo 恰好 TLAST 拍首次满" 时, 帧尾的
+   `abort<=0` 清零与满置位同拍竞争, NBA 后写胜出 → abort 粘在 1 →
+   **下一帧无条件回卷 → 慢路径死** (ARP#2 被吞实锤)。修: 置位条件加
+   `!tlast` (tlast 拍的满已由 frame_bad 覆盖, 无需置 abort)。
+   单元 TB 未覆盖此角例 (4200B 大帧提前满, `!abort` 已 0 掩住) — 泛洪
+   集成 TB 抓到。**教训: 清零/置位同拍竞争审计 = 状态寄存器的死角**。
+4. **修法 3 = HLS 看门狗** (slow_rx_adp, WDOG 参数默认 2^21≈16.8ms):
+   tvalid&&!tready 持续超时 → 打 64 拍复位脉冲 (HLS MAC RX 按 0x55 前导
+   重同步, 半帧垃圾自动丢弃)。泛洪有了 1+2 后看门狗永不触发 (纯兜底);
+   单元 TB 新增 wd 模式 (tready 恒 0, 复位脉冲拍级对拍 PASS)。
+5. 附带: tb_p4_chain 加 PROBE 模式 (层级探针打内部状态) — 本次破案主力。
+
+**修后**: xsim 泛洪 = ARP#2 照常应答 (69 提交/83 丢弃/65 TX 帧全 accounted);
+四模式单元 TB 全绿; p4_chain/tcp_echo 回归绿。
+
+**pktmon/测量教训**: ① sendall 阻塞模式下的"吞吐"是 Windows/Python 调度
+假象 (16MB/80s = 1.5Mbps 是 app 侧节拍, 不是 FPGA) — 真吞吐要双线程 +
+稳态段速率。② 我方面无 MSS 选项 → Windows 退回 MSS=536, 小段放大了
+ACK 倒挂问题 (1460B 段倒挂 5.7% vs 536B 段 16.6%)。
+
+### P4a 终态: 吞吐率数字 + 边界归因 (板级实测, 全修复后)
+
+**修复后实测 (板上)**:
+- **TCP echo 持续流: ~110 Mbps 稳态** (32MB, 发送侧/稳态一致; 修复前 1.5Mbps
+  → 73×); 零丢段零重传。窗口 8K→12K 不动 → 非窗口限制。
+- **FPGA 瞬时线速能力 ~890Mbps** (迹线密区 4.8µs/echo 段, 536B 段) — 均值
+  被 PC 侧环路压制: pktmon 测得的段→echo 延迟 ~40µs 里, xsim 证明 FPGA 只占
+  ~9µs (536B 段 RX 4.7µs + 提交 + TX), 其余 ~30µs 是 PC 网卡 RX 中断/DPC
+  延迟 (pktmon Rx 时间戳在驱动层)。**所以 110Mbps 是 Windows 对端环路极限,
+  不是 FPGA 天花板**; 真天花板需硬件对端 (P6 后双口对打)。
+- UDP 慢路径: 控制面设计 (~几 Mbps), 泛洪按帧边界丢 — 不丢包不保证。
+- **泛洪存活 ✅**: 1200×64B UDP 线速泛洪后 ping 通 + TCP echo 通 (修复前
+  泛洪后慢路径永久失联)。
+
+**速查 — 当前吞吐率**: TCP fast path 持续 ~110 Mbps (Windows 对端环路限制);
+FPGA 本身近线速 (890Mbps 瞬时, xsim 段→echo ~9µs)。P4b 的 MSS 选项会把
+536B→1460B, 预期显著提升 (更少段数/更少轮次)。
+
+### P4b 展望 (下一里程碑)
+
+正式握手 (SYN/FIN/RST 分流慢路径 + HLS 握手结果写 CAM/TCB + 移除 tcp_synp);
+注意: ① HLS SYN+ACK 带 MSS=1460 (吞吐直接受益) ② HLS 看门狗已备
+(slow_rx_adp) ③ FIN/RST 进慢路径后 tcp_rx 的 fast 数据面不再见它们。

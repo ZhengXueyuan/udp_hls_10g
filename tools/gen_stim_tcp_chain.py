@@ -33,7 +33,7 @@ IFG = bytes([0x07] * 12)
 CONN = {
     0: dict(sip=0x0A000001, dip=0xC0A86402, sport=0x3039, dport=0x1F90,
             dmac=bytes([0x11, 0x22, 0x33, 0x44, 0x55, 0x66]),
-            pcmac=bytes([0x00, 0x0A, 0x35, 0x01, 0xFE, 0xC0]), rcv_wnd=0x2000),
+            pcmac=bytes([0x00, 0x0A, 0x35, 0x01, 0xFE, 0xC0]), rcv_wnd=0x3000),
     1: dict(sip=0x0A000009, dip=0xC0A86409, sport=0xD431, dport=0x1F91,
             dmac=bytes([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x01]),
             pcmac=bytes([0x00, 0x0A, 0x35, 0x01, 0xFE, 0xC9]), rcv_wnd=0x1800),
@@ -161,14 +161,18 @@ def fold16(v):
 
 # ---------------- RX 侧周期精确模型 (mac_rx_64 + fifo8 + tcp_rx 时序壳) ----------------
 
-def rx_model(frames, snd_nxt_init=None, snd_nxt_events=(), good=None):
+def rx_model(frames, snd_nxt_init=None, snd_nxt_events=(), good=None,
+             suppress_data_ack=False):
     """snd_nxt 时变处理: w5 判读的 ack_ok 需 ra_snd_nxt 真实时值。握手后 una 链
     (+1000) 前段会超过 TX 实发进度 (DUT 合法拒推进 una: ACK 了未发数据) — 终值
     等价假设不再成立, 按事件表应用: snd_nxt_events = [(beat, cid, val)]
     (synp sel1 写 iss + tx sel1 写)。bootstrap 用 snd_nxt_init 静态终值。
     字拍/fend/ack 流与 snd_nxt 无关 (acc 不看 ack_ok), 仅 drains 受影响。
-    good: 每帧 FCS 好坏列表 (None = 全好; echo 场景的坏 CRC 帧用)。"""
+    good: 每帧 FCS 好坏列表 (None = 全好; echo 场景的坏 CRC 帧用)。
+    suppress_data_ack: echo 应用场景 (wrapper_p4 置 1) — 接受的顺序数据段不发
+    纯 ACK (echo 帧自带 ack); dup/ooo 的 drop_ack 不抑制。"""
     nstim = max(f['first'] + f['B'] + 4 + 12 for f in frames)
+    tmax = nstim + 200
     tmax = nstim + 200
     # 帧字节 -> (byte, dv) 按索引
     sdata = [0] * nstim
@@ -216,7 +220,7 @@ def rx_model(frames, snd_nxt_init=None, snd_nxt_events=(), good=None):
         syns.append((kv, fi))
         camw_at[kv + 3] = (c['sip'], c['dip'], c['sport'], c['dport'])
         vals = [(f['seq'] + 1) & 0xFFFFFFFF, SYNP_ISS, SYNP_ISS,
-                0x2000, f['wnd'] & 0xFFFF, 1]
+                0x3000, f['wnd'] & 0xFFFF, 1]
         for fi2, v in enumerate(vals):
             tcbw_at.setdefault(kv + 3 + fi2, []).append((fi2, v))
             synp_tcbw.append((kv + 3 + fi2, fi2, 0, v))
@@ -479,7 +483,7 @@ def rx_model(frames, snd_nxt_init=None, snd_nxt_events=(), good=None):
             pend_una_val = ack32_l
             pend_wnd_val = ((w[0] >> 48) & 0xFFFF) if fend_w6 else wnd_l
             drn = 1
-            if plen_l != 0 and w[4]:
+            if plen_l != 0 and w[4] and not suppress_data_ack:
                 acks.append((t, conn_id_l, (rcv_nxt_l + plen_l) & 0xFFFFFFFF, 0))
                 stats['ack'] += 1
         if drn and not fend:

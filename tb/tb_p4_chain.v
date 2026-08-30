@@ -13,11 +13,11 @@ module tb_p4_chain;
     reg        clk, rst_n;
     reg [7:0]  rx_d;
     reg        rx_dv, rx_er;
-    reg [7:0]  stim_d [0:262143];
-    reg [7:0]  stim_v [0:262143];
-    reg [7:0]  stim_e [0:262143];
+    reg [7:0]  stim_d [0:524287];
+    reg [7:0]  stim_v [0:524287];
+    reg [7:0]  stim_e [0:524287];
     integer    nstim;
-    reg [18:0] i;
+    reg [19:0] i;
     reg [31:0] k;
     reg        done;
     // 配置阶段
@@ -191,6 +191,7 @@ module tb_p4_chain;
         .s_axis_tdata(f_tdata), .s_axis_tkeep(f_tkeep), .s_axis_tvalid(f_tvalid),
         .s_axis_tready(f_tready), .s_axis_tlast(f_tlast), .s_axis_tuser(f_tuser),
         .s_axis_tcrs(f_tcrs), .s_axis_terr(f_terr),
+        .cfg_suppress_data_ack(1'b1),   // 与板上 wrapper_p4 一致 (echo 应用)
         .m_axis_tdata(m_tdata), .m_axis_tkeep(m_tkeep), .m_axis_tvalid(m_tvalid),
         .m_axis_tready(m_tready), .m_axis_tlast(m_tlast), .m_axis_tuser(m_tuser),
         .fend(fend), .ferr(ferr),
@@ -380,7 +381,7 @@ module tb_p4_chain;
         $readmemh("stim_er.memh",   stim_e);
         $readmemh("cfg_tcb.memh",   tcbc);
         nstim = 0;
-        while (nstim < 262144 && stim_d[nstim] !== 8'hxx) nstim = nstim + 1;
+        while (nstim < 524288 && stim_d[nstim] !== 8'hxx) nstim = nstim + 1;
         fd = $fopen("resp_p4_chain.memh", "w");
         #200; rst_n = 1;
         wait (done == 1);
@@ -420,6 +421,51 @@ module tb_p4_chain;
             if (syn_v)
                 $fwrite(fd, "SYNP %012h %08h %04h %04h %08h %04h\n",
                         syn_smac, syn_sip, syn_sport, syn_dport, syn_seq, syn_wnd);
+        end
+    end
+
+    // ---- abort 转变沿侦测 (排障) ----
+    reg ab_d = 0;
+    always @(posedge clk) begin
+        if (rst_n && $test$plusargs("PROBE")) begin
+            ab_d <= u_slow_rx.abort;
+            if (u_slow_rx.abort != ab_d)
+                $display("ABCHG k=%0d ab=%b | s_acc=%b ffull=%b snap=%b ifm=%b rsd=%b | ps=%0d cmt=%0d ffw=%0d ffr=%0d",
+                         k, u_slow_rx.abort, u_slow_rx.s_acc, u_slow_rx.u_ff.full,
+                         u_slow_rx.ff_snap, u_slow_rx.in_frame, u_slow_rx.resync_drop,
+                         u_slow_rx.pstate, u_slow_rx.committed,
+                         u_slow_rx.u_ff.wptr, u_slow_rx.u_ff.rptr);
+            // 细粒度窗口: abort 翻转区逐拍
+            if (k >= 8530 && k <= 8560)
+                $display("FINE k=%0d ab=%b acc=%b u=%b l=%b crs=%b err=%b ful=%b snap=%b fe=%b te=%b ifm=%b rsd=%b",
+                         k, u_slow_rx.abort, u_slow_rx.s_acc, u_slow_rx.s_axis_tuser,
+                         u_slow_rx.s_axis_tlast, u_slow_rx.s_axis_tcrs, u_slow_rx.s_axis_terr,
+                         u_slow_rx.u_ff.full, u_slow_rx.ff_snap,
+                         u_slow_rx.frame_end, u_slow_rx.trunc_evt,
+                         u_slow_rx.in_frame, u_slow_rx.resync_drop);
+        end
+    end
+
+    // ---- PROBE 模式 (+PROBE): 每 5000 拍打印慢路径内部状态 (泛洪排障) ----
+    integer fd2 = 0;
+    always @(posedge clk) begin
+        if (rst_n && $test$plusargs("PROBE")) begin
+            if (fd2 == 0) fd2 = $fopen("hls_rx_bytes.memh", "w");
+            if (hls_rx_tvalid && hls_rx_tready)
+                $fwrite(fd2, "%0d %03h\n", k, hls_rx_tdata[8:0]);
+            if (w_tvalid && w_tready)
+                $fwrite(fd2, "SRX %0d u=%b l=%b c=%b e=%b k=%02h ab=%b rs=%b if=%b ful=%b cmt=%0d\n",
+                        k, w_tuser, w_tlast, w_tcrs, w_terr, w_tkeep,
+                        u_slow_rx.abort, u_slow_rx.resync_drop, u_slow_rx.in_frame,
+                        u_slow_rx.u_ff.full, u_slow_rx.committed);
+            if (k % 32'd5000 == 0)
+                $display("PROBE k=%0d | cls state=%0d | srx pstate=%0d cmt=%0d ab=%b rsd=%b ifm=%b ffw=%0d ffr=%0d occw=%0d | hls rxrdy=%b txv=%b txrdy=%b | stx tstate=%0d cmt=%0d",
+                         k, u_classify.state, u_slow_rx.pstate, u_slow_rx.committed,
+                         u_slow_rx.abort, u_slow_rx.resync_drop, u_slow_rx.in_frame,
+                         u_slow_rx.u_ff.wptr, u_slow_rx.u_ff.rptr,
+                         (u_slow_rx.u_ofifo.wptr - u_slow_rx.u_ofifo.rptr),
+                         hls_rx_tready, hls_tx_tvalid, hls_tx_tready,
+                         u_slow_tx.tstate, u_slow_tx.committed);
         end
     end
 endmodule

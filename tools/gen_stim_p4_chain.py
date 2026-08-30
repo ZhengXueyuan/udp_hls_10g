@@ -269,7 +269,8 @@ def check(simdir):
     got, ev = parse_gmii(os.path.join(simdir, 'resp_p4_chain.memh'))
     errs = []
 
-    # ---- 期望快流 (TCP): synack + 每数据段 (ack, echo) ----
+    # ---- 期望快流 (TCP): synack + 每数据段 echo (板上 suppress_data_ack=1:
+    # 接受的数据段无纯 ACK, echo 帧自带 ack) ----
     exp_fast = [dict(kind='synack', cid=0, seq=C.SYNP_ISS, ack=1000, plen=0, rx_i=-1)]
     rcv = {0: 1000, 1: 77}
     snd = {0: 6000, 1: 900}
@@ -278,8 +279,6 @@ def check(simdir):
             cid = 0 if f['name'].startswith('data') else 1
             plen = 7 if f['name'] == 'data7a' else (9 if f['name'] == 'data7b' else 20)
             na = rcv[cid] + plen
-            exp_fast.append(dict(kind='ack', cid=cid, seq=snd[cid], ack=na,
-                                 plen=0, rx_i=i))
             exp_fast.append(dict(kind='data', cid=cid, seq=snd[cid], ack=na,
                                  plen=plen, rx_i=i))
             rcv[cid] = na
@@ -357,9 +356,9 @@ def check(simdir):
                 last_ack_i = e['rx_i']
             if kind == 'data':
                 last_echo_i = e['rx_i']
-                aj = next(k for k in range(j + 1) if exp_fast[k]['kind'] == 'ack'
-                          and exp_fast[k]['rx_i'] == e['rx_i'])
-                if not used[aj]:
+                aj = next((k for k in range(j + 1) if exp_fast[k]['kind'] == 'ack'
+                           and exp_fast[k]['rx_i'] == e['rx_i']), None)
+                if aj is not None and not used[aj]:
                     errs.append('fast %d: echo before its ACK' % i)
         for i, (j, fb) in enumerate(zip(used_by, fast_got)):
             if j is None:
@@ -374,24 +373,25 @@ def check(simdir):
     # ---- 事件 / 统计 / 终态 ----
     if len(ev['fend']) != 4:
         errs.append('FEND count %d != 4' % len(ev['fend']))
-    if len(ev['ack']) != 4:          # 3 数据 ACK + 1 SYN+ACK
-        errs.append('ACK events %d != 4' % len(ev['ack']))
+    if len(ev['ack']) != 1:          # suppress 模式: 仅 SYN+ACK (synp sack)
+        errs.append('ACK events %d != 1' % len(ev['ack']))
     esyn = (int.from_bytes(C.CONN[0]['dmac'], 'big'), C.CONN[0]['sip'],
             C.CONN[0]['sport'], C.CONN[0]['dport'], 999, 0x2000)
     if ev['synp'] != [esyn]:
         errs.append('SYNP exp %s got %s' % (esyn, ev['synp']))
     exp_bytes = 7 + 9 + 20     # stat_bytes 计载荷字节 (plen_l = ip_len-40)
     # nonmatch=1: SYN 到达时 conn0 未配置 (CAM miss), 属正常 (syn sideband 另行处理)
-    if ev['stats7'] != (4, 1, 0, 0, 0, 3, exp_bytes):
-        errs.append('STATS7 got %s exp (4,0,0,0,0,3,%d)' % (ev['stats7'], exp_bytes))
-    if ev['stx'] != (7, 36, 4, 0):
+    # ack=0: suppress_data_ack 模式 (板上一致), 本刺激无 dup/ooo -> 无 ack_req
+    if ev['stats7'] != (4, 1, 0, 0, 0, 0, exp_bytes):
+        errs.append('STATS7 got %s exp (4,1,0,0,0,0,%d)' % (ev['stats7'], exp_bytes))
+    if ev['stx'] != (4, 36, 1, 0):
         errs.append('STATS_TX got %s' % (ev['stx'],))
     if ev['seco'] != (3, 0):
         errs.append('STATS_ECO got %s' % (ev['seco'],))
     if ev['camf'] != (C.CONN[0]['sip'], C.CONN[0]['dip'], C.CONN[0]['sport'],
                       C.CONN[0]['dport'], int.from_bytes(C.CONN[0]['dmac'], 'big')):
         errs.append('CAMF got %s' % (ev['camf'],))
-    texp = (1016, 6016, 6000, 0x2000, 0x4000, 1,
+    texp = (1016, 6016, 6000, 0x3000, 0x4000, 1,
             97, 920, 900, 0x1800, 0x1A00, 1)
     if ev['tcbf'] != texp:
         errs.append('TCBF exp %s got %s' % (texp, ev['tcbf']))

@@ -29,14 +29,17 @@ module tb_slow_rx;
 
     wire [15:0] h_tdata;
     wire        h_tvalid;
+    wire        h_rst_n;
     wire [31:0] stat_commit, stat_drop;
+    reg  [31:0] wd_fire_k;   // WD 模式: 首个复位下降沿拍
 
-    slow_rx_adp dut (
+    slow_rx_adp #(.WDOG(1000)) dut (
         .clk(clk), .rst_n(rst_n),
         .s_axis_tdata(s_tdata), .s_axis_tkeep(s_tkeep), .s_axis_tvalid(s_tvalid),
         .s_axis_tready(s_tready), .s_axis_tlast(s_tlast), .s_axis_tuser(s_tuser),
         .s_axis_tcrs(s_tcrs), .s_axis_terr(s_terr),
         .hls_rx_tdata(h_tdata), .hls_rx_tvalid(h_tvalid), .hls_rx_tready(h_rdy),
+        .hls_rst_n(h_rst_n),
         .stat_commit(stat_commit), .stat_drop(stat_drop)
     );
 
@@ -46,7 +49,7 @@ module tb_slow_rx;
         if (!rst_n) begin
             s_tvalid <= 0; s_tdata <= 0; s_tkeep <= 0; s_tlast <= 0;
             s_tuser <= 0; s_tcrs <= 0; s_terr <= 0;
-            idx <= 0; gap <= 0; k <= 0; done <= 0; h_rdy <= 1;
+        idx <= 0; gap <= 0; k <= 0; done <= 0; h_rdy <= 1; wd_fire_k <= 32'hFFFFFFFF;
         end else begin
             k <= k + 1;
             if (s_tvalid && s_tready) s_tvalid <= 0;
@@ -65,7 +68,9 @@ module tb_slow_rx;
                 end
             end
             if (idx >= nstim && !s_tvalid) done <= 1;
-            if ($test$plusargs("HARD"))
+            if ($test$plusargs("WD"))
+                h_rdy <= 0;                  // 永久不读 -> 看门狗应动作
+            else if ($test$plusargs("HARD"))
                 h_rdy <= !(k >= hw[0] && k < hw[1]);
             else if ($test$plusargs("STALL"))
                 h_rdy <= (k % 4 != 2);
@@ -76,26 +81,59 @@ module tb_slow_rx;
 
     initial begin
         clk = 0; rst_n = 0;
-        $readmemh("sr_data.memh", stim_d);
-        $readmemh("sr_keep.memh", stim_k);
-        $readmemh("sr_last.memh", stim_l);
-        $readmemh("sr_user.memh", stim_u);
-        $readmemh("sr_crs.memh",  stim_c);
-        $readmemh("sr_err.memh",  stim_e);
-        $readmemh("sr_gap.memh",  stim_g);
-        $readmemh("sr_nstim.memh", nstim_r);
+        if ($test$plusargs("WD")) begin
+            // WD 模式读独立单帧刺激 (泛洪刺激会让看门狗反复触发, 窗口不定)
+            $readmemh("sr_wd_data.memh", stim_d);
+            $readmemh("sr_wd_keep.memh", stim_k);
+            $readmemh("sr_wd_last.memh", stim_l);
+            $readmemh("sr_wd_user.memh", stim_u);
+            $readmemh("sr_wd_crs.memh",  stim_c);
+            $readmemh("sr_wd_err.memh",  stim_e);
+            $readmemh("sr_wd_gap.memh",  stim_g);
+            $readmemh("sr_wd_nstim.memh", nstim_r);
+        end else begin
+            $readmemh("sr_data.memh", stim_d);
+            $readmemh("sr_keep.memh", stim_k);
+            $readmemh("sr_last.memh", stim_l);
+            $readmemh("sr_user.memh", stim_u);
+            $readmemh("sr_crs.memh",  stim_c);
+            $readmemh("sr_err.memh",  stim_e);
+            $readmemh("sr_gap.memh",  stim_g);
+            $readmemh("sr_nstim.memh", nstim_r);
+        end
         nstim = nstim_r[0];
         if ($test$plusargs("HARD")) $readmemh("hardwin_sr.memh", hw);
-        if ($test$plusargs("STALL"))      fd = $fopen("resp_sr_stall.memh", "w");
+        if ($test$plusargs("WD"))         fd = $fopen("resp_sr_wd.memh", "w");
+        else if ($test$plusargs("STALL")) fd = $fopen("resp_sr_stall.memh", "w");
         else if ($test$plusargs("HARD"))  fd = $fopen("resp_sr_hard.memh", "w");
         else                              fd = $fopen("resp_sr_nostall.memh", "w");
         #200; rst_n = 1;
         wait (done == 1);
-        repeat (8000) @(posedge clk);
+        if ($test$plusargs("WD")) begin
+            // 等看门狗首个复位脉冲 (带超时上限: 等不到就落空 -> 比对 FAIL)
+            while (wd_fire_k == 32'hFFFFFFFF && k < 5000) @(posedge clk);
+            repeat (100) @(posedge clk);
+        end else begin
+            repeat (8000) @(posedge clk);
+        end
         $fwrite(fd, "STATS %0d %0d\n", stat_commit, stat_drop);
         $fclose(fd);
         $display("DONE commit=%0d drop=%0d", stat_commit, stat_drop);
         $finish;
+    end
+
+    // ---- 看门狗复位沿记录 (WD 模式; 与模型 WDRST 行对拍) ----
+    reg h_rst_d;
+    always @(posedge clk) begin
+        if (!rst_n) h_rst_d <= 1;
+        else begin
+            h_rst_d <= h_rst_n;
+            if ($test$plusargs("WD") && (h_rst_n != h_rst_d)) begin
+                $fwrite(fd, "WDRST %0d %0d\n", h_rst_n, k);
+                if (!h_rst_n && wd_fire_k == 32'hFFFFFFFF)
+                    wd_fire_k <= k;
+            end
+        end
     end
 
     always @(posedge clk) begin

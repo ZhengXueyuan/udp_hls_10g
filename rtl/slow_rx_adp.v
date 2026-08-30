@@ -10,7 +10,12 @@
 // 结构: 字流 -> frame_fifo (整帧缓冲, snap@SOP / commit@好帧尾 / rollback@坏帧)
 //       -> 字节播放器 (8B 前导 + 逐字节内容) -> 9bit 字节 FIFO -> HLS rx_stream。
 // 输入侧 s_tready 恒 1 (fifo 满则吞字打 abort, 帧尾回卷) — 绝不反压 classify。
-module slow_rx_adp (
+module slow_rx_adp #(
+    // 看门狗阈值 (拍): hls_rx_tvalid && !tready 持续超此则复位 HLS (默认 2^21
+    // ≈16.8ms @125MHz; TB 用小值)。防 HLS 内部死锁 (其 512 词内部帧 fifo 满
+    // 则 mac_rx 写阻塞 → 永久停读 — 泛洪实测实锤) 后永久失联。
+    parameter [20:0] WDOG = 21'd2097152
+) (
     input  wire        clk,
     input  wire        rst_n,
     // 来自 rx_classify (slow 路由)
@@ -26,6 +31,7 @@ module slow_rx_adp (
     output wire [15:0] hls_rx_tdata,
     output wire        hls_rx_tvalid,
     input  wire        hls_rx_tready,
+    output wire        hls_rst_n,      // 看门狗: 饥饿超时给 HLS 打 64 拍复位脉冲
     output reg  [31:0] stat_commit,    // 提交给 HLS 的帧数
     output reg  [31:0] stat_drop       // 回卷丢弃 (坏 FCS/rx_er/fifo 满)
 );
@@ -77,10 +83,49 @@ module slow_rx_adp (
     assign hls_rx_tdata  = {7'b0, o_dout};
     assign hls_rx_tvalid = !o_empty;
 
+    // ---- o_fifo 占用计数 (节流 + 观测) ----
+    // 与 fifo 精确同步: 写入接受 = o_wr && !o_full (播放器只在 !o_full 时写),
+    // 读出 = rd。占用 = 写-读滚动。
+    reg  [11:0] occ;
+    wire        o_pop = hls_rx_tvalid && hls_rx_tready;
+    // ---- 看门狗: HLS 有数据可读 (tvalid) 但长期不读 = 内部死锁 -> 复位 ----
+    reg  [20:0] starv;
+    reg  [6:0]  rst_cnt;
+    reg         hls_rst_n_r;
+    assign hls_rst_n = hls_rst_n_r;
+    wire        starve = hls_rx_tvalid && !hls_rx_tready;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            occ <= 12'd0; starv <= 21'd0; rst_cnt <= 7'd0; hls_rst_n_r <= 1'b1;
+        end else begin
+            occ <= occ + (o_wr ? 12'd1 : 12'd0) - (o_pop ? 12'd1 : 12'd0);
+            if (rst_cnt != 7'd0) begin
+                rst_cnt <= rst_cnt - 7'd1;
+                starv   <= 21'd0;
+                if (rst_cnt == 7'd1) hls_rst_n_r <= 1'b1;
+            end else if (starve) begin
+                if (starv >= WDOG) begin
+                    starv        <= 21'd0;
+                    rst_cnt      <= 7'd64;
+                    hls_rst_n_r  <= 1'b0;
+                end else begin
+                    starv <= starv + 21'd1;
+                end
+            end else begin
+                starv <= 21'd0;
+            end
+        end
+    end
+
     // ---------------- 字节播放器 ----------------
     // committed 语义: 提交未开播的帧数; P_IDLE 开播拍即 -1 (不等播完) —
     // 若等播完 (done_pulse 拍) 再减, P_IDLE 会在最后一帧播完的下拍读到
     // 未减的旧值 → 幻影开播 → 抢读下一帧的未提交词 (unit TB 实锤)。
+    // 开播节流: occ > 256 (o_fifo 约 3-4 帧) 不开新帧 — HLS 读速
+    // (~1B/20拍) 远慢于线速, 任其排队灌入会把 HLS 内部 512 词帧 fifo
+    // 灌满 → mac_rx 写阻塞 → HLS 永久停读 (泛洪实测实锤)。occ 是 HLS
+    // 内部积压的直接代理: 节流后 HLS 内 backlog 恒 ≤ ~4 帧 ≪ 512 词。
     localparam P_IDLE = 2'd0, P_PRE = 2'd1, P_LOAD = 2'd2, P_EMIT = 2'd3;
     reg [1:0]  pstate;
     reg [2:0]  pre_cnt;
@@ -89,7 +134,8 @@ module slow_rx_adp (
     reg [3:0]  nb;            // 本字有效字节数 (1..8)
     reg [3:0]  idx;
 
-    wire start_play = (pstate == P_IDLE) && (committed != 8'd0);
+    wire start_play = (pstate == P_IDLE) && (committed != 8'd0) &&
+                      (occ <= 12'd256);
 
     function [3:0] keep2n(input [7:0] k);
         casez (k)
@@ -146,8 +192,12 @@ module slow_rx_adp (
                 if (!s_axis_tlast) resync_drop <= 1'b1;
             end else if (resync_drop && s_acc && s_axis_tlast)
                 resync_drop <= 1'b0;
-            if (s_acc && !s_axis_tuser && ff_full && !abort && in_frame)
+            if (s_acc && !s_axis_tuser && ff_full && !abort && in_frame &&
+                !s_axis_tlast)
                 abort <= 1'b1;                       // 帧身写不下, 吞字打标记
+                // (!tlast 门控: 若恰好 TLAST 拍首次满, frame_end 的 frame_bad
+                //  已含 ff_full → 回卷, abort 必须留给下一帧清零 — 否则粘住
+                //  把下一帧也回卷, 慢路径永久死 (泛洪实测实锤))
             if (ff_snap && ff_full)
                 abort <= 1'b1;                       // SOP 即满
             if (sop_1w && !in_frame && !resync_drop)
@@ -155,7 +205,7 @@ module slow_rx_adp (
 
             // 播放器
             case (pstate)
-                P_IDLE: if (committed != 8'd0) begin
+                P_IDLE: if (committed != 8'd0 && occ <= 12'd256) begin
                     pstate  <= P_PRE; pre_cnt <= 3'd0;
                 end
                 P_PRE: if (!o_full) begin
