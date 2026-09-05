@@ -9,6 +9,15 @@
 //   /CAMF/TCBF + SLOWRX (commit drop) / SLOWTX (frames purge)。
 // 校验全语义 (gen_stim_p4_chain.py check): HLS 应答拍级不可预期, 快慢流自由交错。
 module tb_p4_chain;
+    // P4b-7 P4 (RTO 门): 默认 RTO_LIM 781250 在 60000 拍尾窗内凑不满 2000 次
+    // 连接扫描; 压到 2000 (2000 访问 x 16 连接轮扫 ≈ 32k 拍) 才落在尾窗内。
+    // 仅 +RTOLIM_FAST (burst 门) 压缩; chain 门 (无对端 ACK 模型) 保持默认,
+    // 压缩会让 conn0/conn1 在尾窗 RTO 风暴 (stat_retx>0) 破门。
+    // conn1 的 20B echo 无 PCACK 确认 — 压缩后其 RTO 风暴由 burst 刺激尾部
+    // 的 c1ack 纯 ACK (gen_stim_p4_chain.py) 追平 snd_una 平息。
+`ifdef RTOLIM_FAST
+    defparam u_tx.RTO_LIM = 2000;
+`endif
 
     reg        clk, rst_n;
     reg [7:0]  rx_d;
@@ -67,6 +76,10 @@ module tb_p4_chain;
     wire        ack_req;
     wire [3:0]  ack_id;
     wire [31:0] ack_val;
+    wire        retx_req;    // P4b-7 P3: dup-ACK 快速重传 (u_rx -> u_tx)
+    wire [3:0]  retx_id;
+    wire        retx_gnt;
+    wire [31:0] tx_stat_retx;
     wire [31:0] cam_q_sip, cam_q_dip;
     wire [15:0] cam_q_sport, cam_q_dport;
     wire        cam_q_hit;
@@ -197,6 +210,22 @@ module tb_p4_chain;
                           //  fend 的 drain 落地 = fend+3 拍, 否则注入帧带旧 seq
                           //  被 tcp_rx 拒收 — TB 模型噪声, 但污染统计)
 
+    // ---- P4b-7 P3: PCACK 空洞语义 (exp_seq/hole) + TXDROP 故障注入 ----
+    // P4b-7-P5: exp_seq 静态建于复位 — 真实对端从握手起就知其期望 seq =
+    // 我方首数据帧 seq = HLS ISS+1 (gen_stim_p4_chain.py HLS_ISS=0x12345678,
+    // SYN+ACK 消费 seq 1); 原"首帧捕获建序"在首帧被 TXDROP 时把第二帧当首帧,
+    // 累计 ACK 跳过空洞 -> 7B 永久头洞。TCBF 观序 (首 echo seq = 0x12345679)
+    // 与此初值一致 (tcbc 数组是 conn1 的预配字段, 与 conn0 握手链无关)。
+    reg [31:0] exp_seq;          // 对端已连续确认的下个字节 (期望 seq)
+    reg        hole;             // 检测到空洞 (排障探针)
+    reg [31:0] s_cur, p_cur;     // 帧尾解码暂存 (阻塞赋值, 同拍消费)
+    integer    fdi;
+    integer    txdrop_n1, txdrop_n2;   // 丢帧索引, 来自 txdrop.memh (0 = 关)
+    reg [7:0]  data_cnt;         // conn0 数据帧计数 (0 基, 仅活数据帧)
+    reg        drop_armed_a, drop_armed_b;
+    reg        drop_win_a, drop_win_b;  // 高 = 丢弃窗口 (对 GMII 捕获屏蔽)
+    wire       gmii_tx_en_mon = gmii_tx_en && !(drop_win_a || drop_win_b);
+
     function [7:0] inj_byte;
         input [6:0] idx;
         input [31:0] sq;
@@ -299,6 +328,7 @@ module tb_p4_chain;
         .upd_wr(rx_upd_wr), .upd_id(rx_upd_id), .upd_sel(rx_upd_sel), .upd_val(rx_upd_val),
         .upd_gnt(rx_upd_gnt),
         .ack_req(ack_req), .ack_id(ack_id), .ack_val(ack_val),
+        .retx_req(retx_req), .retx_id(retx_id), .retx_gnt(retx_gnt),
         .syn_v(syn_v), .syn_smac(syn_smac), .syn_sip(syn_sip),
         .syn_sport(syn_sport), .syn_dport(syn_dport),
         .syn_seq(syn_seq), .syn_wnd(syn_wnd),
@@ -375,7 +405,9 @@ module tb_p4_chain;
         .m_axis_tvalid(x_tvalid), .m_axis_tready(x_tready), .m_axis_tlast(x_tlast),
         .stat_frames(tx_stat_frames), .stat_bytes(tx_stat_bytes),
         .stat_ack(tx_stat_ack), .stat_ack_drop(tx_stat_ack_drop),
-        .stat_eend(tx_stat_eend)
+        .stat_eend(tx_stat_eend),
+        .retx_req(retx_req), .retx_id(retx_id), .retx_gnt(retx_gnt),
+        .stat_retx(tx_stat_retx)
     );
 
     // ---- 慢路径: slow_rx_adp -> udp_echo (HLS) -> slow_tx_adp ----
@@ -545,6 +577,16 @@ module tb_p4_chain;
         clk = 0; rst_n = 0;
         pcack_en = $test$plusargs("PCACK");
         inj_wnd = $test$plusargs("PCWND1K") ? 16'h0010 : 16'h4000;
+        txdrop_n1 = 0; txdrop_n2 = 0;
+        // TXDROP 索引经 txdrop.memh 传入 (run_tb_p4_burst.bat 由 %7/%8 生成):
+        // xsim.bat 经 loader 会把含 '=' 的 plusarg 拆碎 ("Expected a switch
+        // but found 5"), -testplusarg TXDROP=N 到不了 TB — 文件通道绕开
+        fdi = $fopen("txdrop.memh", "r");
+        if (fdi != 0) begin
+            $fscanf(fdi, "%d", txdrop_n1);
+            $fscanf(fdi, "%d", txdrop_n2);
+            $fclose(fdi);
+        end
         $readmemh("stim_data.memh", stim_d);
         $readmemh("stim_dv.memh",   stim_v);
         $readmemh("stim_er.memh",   stim_e);
@@ -560,6 +602,7 @@ module tb_p4_chain;
                 rx_stat_seq, rx_stat_ack, rx_stat_bytes);
         $fwrite(fd, "STATS_TX %0d %0d %0d %0d\n",
                 tx_stat_frames, tx_stat_bytes, tx_stat_ack, tx_stat_ack_drop);
+        $fwrite(fd, "RETX %0d\n", tx_stat_retx);
         $fwrite(fd, "STATS_ECO %0d %0d\n", eco_stat_echo, eco_stat_drop_crc);
         $fwrite(fd, "CAMF %08h %08h %04h %04h %012h\n",
                 u_cam.sip_r[0], u_cam.dip_r[0], u_cam.sport_r[0],
@@ -584,7 +627,7 @@ module tb_p4_chain;
     // ---- GMII 字节捕获 + 事件捕获 ----
     always @(posedge clk) begin
         if (rst_n) begin
-            $fwrite(fd, "%02h %d\n", gmii_txd, gmii_tx_en);
+            $fwrite(fd, "%02h %d\n", gmii_txd, gmii_tx_en_mon);
             if (fend)
                 $fwrite(fd, "FEND %0d %0d\n", k, ferr);
             if (tx_ack_req)
@@ -635,14 +678,18 @@ module tb_p4_chain;
     end
 
 
-    // ---- TX echo 帧捕获: 帧尾锁存 echo_end_seq, echo_seen++ ----
+    // ---- TX echo 帧捕获 (gmii_tx_en_mon: TXDROP 丢弃帧对模型不可见):
+    //      帧尾按空洞语义调度 ACK — 顺序帧累计推进; OOO 帧每个恰好注入一个
+    //      dup (ack = exp_seq, Windows 行为); 全重包 (s+p<=exp) 也回 dup ----
     always @(posedge clk) begin
         if (!rst_n) begin
             tx_en_d <= 0; tx_inf <= 0; txbc <= 0;
             echo_seen <= 0; inj_ack_val <= 0;
+            exp_seq <= 32'h12345678 + 32'd1;   // HLS_ISS+1 = 首数据帧 seq
+            hole <= 0;
         end else begin
-            tx_en_d <= gmii_tx_en;
-            if (gmii_tx_en) begin
+            tx_en_d <= gmii_tx_en_mon;
+            if (gmii_tx_en_mon) begin
                 if (!tx_en_d) begin tx_inf <= 0; txbc <= 0; end
                 else if (!tx_inf) begin
                     if (gmii_txd == 8'hD5) begin tx_inf <= 1; txbc <= 0; end
@@ -651,15 +698,65 @@ module tb_p4_chain;
                     txbc <= txbc + 6'd1;
                 end
             end else if (tx_en_d) begin
-                // 帧尾: conn0 echo 数据帧 → 其累计 ACK 待注入
+                // 帧尾: conn0 echo 数据帧
                 if (cap[12] == 8'h08 && cap[13] == 8'h00 && cap[23] == 8'h06 &&
                     cap[34] == 8'h1F && cap[35] == 8'h90 && cap[36] == 8'h30 &&
                     cap[37] == 8'h39 && cap[47] == 8'h18 &&
                     {cap[16], cap[17]} > 16'd40) begin
-                    echo_seen   <= echo_seen + 16'd1;
-                    inj_ack_val <= {cap[38], cap[39], cap[40], cap[41]} +
-                                   {16'b0, cap[16], cap[17]} - 32'd40;
+                    echo_seen <= echo_seen + 16'd1;
+                    s_cur = {cap[38], cap[39], cap[40], cap[41]};
+                    p_cur = {16'b0, cap[16], cap[17]} - 32'd40;
+                    if (s_cur == exp_seq) begin
+                        // 顺序帧: 累计推进
+                        exp_seq <= s_cur + p_cur;
+                        hole    <= 1'b0;
+                        inj_ack_val <= s_cur + p_cur;
+                    end else if (s_cur > exp_seq) begin
+                        // OOO: 一个乱序帧 = 一个 dup
+                        hole    <= 1'b1;
+                        inj_ack_val <= exp_seq;
+                    end else begin
+                        // 全重包 (s+p <= exp_seq): 仍回 dup
+                        inj_ack_val <= exp_seq;
+                    end
                 end
+            end
+        end
+    end
+
+    // ---- P4b-7 TXDROP 故障注入: 丢弃第 N (TXDROP2: M) 个 conn0 数据帧的
+    //      GMII 捕获 (DUT/mac 无感 — 模拟链路丢帧; mac_stat_frames 仍计该帧,
+    //      对账用)。计数 = tcp_tx_frame 活数据帧启动拍 (ring 重放走 S_RING
+    //      不计, 重传不扰动编号)。两阶段窗口: drop_armed = 等该帧上线
+    //      (S_IFG 只关窗不撤 arm — mac TX FIFO 16 深, armed 帧启动拍时 mac
+    //      仍在发上一帧尾部, 其 S_IFG 抢在 armed 帧 S_PRE 之前; 若此时撤
+    //      arm 丢帧必落空, P3 gate3 实测抓到); 首个 S_PRE 开窗转 phase2,
+    //      drop_win, 该帧自己的 S_IFG 才关窗 (整帧对捕获消失) ----
+    always @(posedge clk) begin
+        if (!rst_n) begin
+            data_cnt <= 0;
+            drop_armed_a <= 0; drop_armed_b <= 0;
+            drop_win_a <= 0; drop_win_b <= 0;
+        end else begin
+            if (u_mactx.state == 3'd1) begin          // S_PRE: armed 帧上线
+                if (drop_armed_a) begin
+                    drop_armed_a <= 1'b0;
+                    drop_win_a   <= 1'b1;
+                end
+                if (drop_armed_b) begin
+                    drop_armed_b <= 1'b0;
+                    drop_win_b   <= 1'b1;
+                end
+            end else if (u_mactx.state == 3'd5) begin // S_IFG: 被遮帧下线
+                drop_win_a <= 1'b0;
+                drop_win_b <= 1'b0;
+            end
+            if (u_tx.start_data && u_tx.s_axis_tid == 4'd0) begin
+                data_cnt <= data_cnt + 8'd1;
+                if (txdrop_n1 > 0 && data_cnt == txdrop_n1 - 8'd1)
+                    drop_armed_a <= 1'b1;
+                if (txdrop_n2 > 0 && data_cnt == txdrop_n2 - 8'd1)
+                    drop_armed_b <= 1'b1;
             end
         end
     end

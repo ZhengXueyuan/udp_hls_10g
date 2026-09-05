@@ -258,6 +258,11 @@ module wrapper_tcp (
         .stat_bytes     (rx_stat_bytes)
     );
 
+    // ---- P4b-7 P3: dup-ACK 快速重传 tcp_rx -> tcp_tx_frame ----
+    wire        tx_retx_req;
+    wire [3:0]  tx_retx_id;
+    wire        tx_retx_gnt;
+
     tcp_rx u_tcp_rx (
         .clk            (gmii_clk),
         .rst_n          (reset_n),
@@ -298,6 +303,9 @@ module wrapper_tcp (
         .ack_req        (rx_ack_req),
         .ack_id         (rx_ack_id),
         .ack_val        (rx_ack_val),
+        .retx_req       (tx_retx_req),
+        .retx_id        (tx_retx_id),
+        .retx_gnt       (tx_retx_gnt),
         .syn_v          (syn_v),
         .syn_smac       (syn_smac),
         .syn_sip        (syn_sip),
@@ -478,7 +486,11 @@ module wrapper_tcp (
         .stat_bytes     (tx_stat_bytes),
         .stat_ack       (),
         .stat_ack_drop  (),
-        .stat_eend      ()
+        .stat_eend      (),
+        .retx_req       (tx_retx_req),
+        .retx_id        (tx_retx_id),
+        .retx_gnt       (tx_retx_gnt),
+        .stat_retx      ()
     );
 
     mac_tx_64 u_mac_tx (

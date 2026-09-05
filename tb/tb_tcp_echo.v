@@ -244,7 +244,8 @@ module tb_tcp_echo;
         .m_axis_tdata(x_tdata), .m_axis_tkeep(x_tkeep),
         .m_axis_tvalid(x_tvalid), .m_axis_tready(x_tready), .m_axis_tlast(x_tlast),
         .stat_frames(tx_stat_frames), .stat_bytes(tx_stat_bytes),
-        .stat_ack(tx_stat_ack), .stat_ack_drop(tx_stat_ack_drop), .stat_eend()
+        .stat_ack(tx_stat_ack), .stat_ack_drop(tx_stat_ack_drop), .stat_eend(),
+        .retx_req(1'b0), .retx_id(4'b0), .retx_gnt(), .stat_retx()
     );
 
     mac_tx_64 u_mactx (

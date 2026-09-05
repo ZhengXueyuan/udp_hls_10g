@@ -47,6 +47,11 @@ module tcp_tx_frame (
     // 永久空洞, 对端等缺失字节 -> 双向死锁 -> RST)
     input  wire [31:0] rb_snd_una,
     input  wire [15:0] rb_snd_wnd,
+    // 重传请求 (P3: tcp_rx dup-ACK 检测电平保持至 retx_gnt; P2 先接地, RTO 自触发)
+    input  wire        retx_req,
+    input  wire [3:0]  retx_id,
+    output wire        retx_gnt,           // 脉冲: retx_req 已服务 (回卷或确认空)
+    output reg  [31:0] stat_retx,          // 回卷次数 (重传会话启动数)
     // TCB 更新 (数据段末字消费拍组合脉冲: sel=1 snd_nxt <= seq+plen;
     // 与状态回 S_IDLE 同拍写入 — 下一帧最早下拍启动, 读到的是更新后的值)
     output wire        upd_wr,
@@ -76,8 +81,11 @@ module tcp_tx_frame (
     output reg  [31:0] stat_eend        // S_PAY 欠载提前收帧 (结构不可达; 亮灯即缺陷 A)
 );
 
+    parameter integer RTO_LIM  = 781250;   // RTO 扫描数 (~100ms @125MHz /16 连接)
+    parameter [15:0]  RING_CAP = 16'h3000; // 窗口门控帽 = ring 容量 (在飞不溢 ring)
+
     localparam [2:0] S_IDLE = 3'd0, S_RECV = 3'd1, S_WAIT = 3'd2, S_HDR = 3'd3,
-                     S_PAY  = 3'd4, S_TAIL = 3'd5, S_DONE = 3'd6;
+                     S_PAY  = 3'd4, S_TAIL = 3'd5, S_DONE = 3'd6, S_RING = 3'd7;
 
     reg  [2:0]  state;
     reg  [11:0] plen;
@@ -98,6 +106,23 @@ module tcp_tx_frame (
     reg  [47:0] dmac_r;
     reg  [31:0] dip_r;
     reg  [15:0] sport_r, dport_r;
+    // ---- P4b-7 重传状态 (retx 空闲时全部静止, 零行为影响) ----
+    reg         retx_active;              // 重传会话进行中 (ring 帧源仲裁门)
+    reg  [3:0]  retx_id_r;                // 会话连接
+    reg  [31:0] retx_hi;                  // 会话重发上界 (svc 拍锁存回卷前 snd_nxt)
+    reg  [3:0]  scan_id;                  // RTO 扫描指针 0..15 (每空闲拍 +1)
+    reg  [20:0] rto_timer [0:15];         // 每连接 RTO 计时 (以该连接扫描次数计)
+    reg  [15:0] rto_pend;                 // 每连接 RTO 未决 (等 svc 回卷)
+    reg  [31:0] ring_seq;                 // ring 读游标 (S_RING 内待读字 seq)
+    reg  [11:0] ring_rem;                 // 本 ring 帧剩余字节数
+    reg  [31:0] tap_seq;                  // ring 写游标 (下一待写字节 seq)
+    // ---- P4b-7-P5 SEV2-1: RTO 无进展上限 (每连接) ----
+    reg  [31:0] snd_una_prev [0:15];      // 上次 svc 拍的 snd_una (进展比对基)
+    reg  [3:0]  epoch [0:15];             // 连续 svc 无进展会话计数 (封顶 15)
+    // ---- P4b-7-P5 SEV2-2: force_scan (门关+tvalid 扫描饿死解药) ----
+    reg  [3:0]  block_cnt;                // 门关阻塞展示拍计数
+    reg         force_scan;               // 计数到 16 后下一 S_IDLE 强制扫 1 拍
+    integer     ri;
 
     // ---- ACK 请求队列 ([36:33]=id [32]=syn [31:0]=ack_val) ----
     wire        ackq_full, ackq_empty;
@@ -106,32 +131,71 @@ module tcp_tx_frame (
     wire        ack_pend = !ackq_empty;
     wire [3:0]  start_id = ack_pend ? ackq_dout[36:33] : s_axis_tid;
 
-    assign rb_id     = (state == S_IDLE) ? start_id : cur_id;
-    assign cam_rd_id = (state == S_IDLE) ? start_id : cur_id;
-
-    assign upd_wr  = (state == S_DONE) && (is_data_r || is_syn_r) &&
-                     m_axis_tvalid && m_axis_tready;
-    assign upd_id  = cur_id;
-    assign upd_sel = 3'd1;
-    assign upd_val = seq_r + (is_data_r ? {20'b0, plen_r} : 32'd1);
-
+    // ---- S_IDLE 帧启动仲裁链 (P4b-7): ack > retx svc > ring 帧 > RTO 扫描 > 活数据 ----
+    // svc: 回卷一次重传会话 (snd_nxt <= snd_una, 占 TCB 写口 1 拍); svc_id 请求源
+    // 优先 retx_req (电平, tcp_rx), 否则 RTO 未决最低位连接
+    wire [3:0]  svc_id  = retx_req ? retx_id : prio_lo(rto_pend);
+    wire        svc     = (state == S_IDLE) && !ack_pend && !retx_active &&
+                          (retx_req || (|rto_pend));
+    // ring_eval: retx 会话期间每个无 ACK 的 S_IDLE 拍评估 (ack 插帧不打断会话)
+    wire        ring_eval = (state == S_IDLE) && !ack_pend && retx_active && !svc;
+    wire [31:0] ring_delta = retx_hi - rb_snd_nxt;   // rb_* 已 mux 到 retx_id_r
+    wire        ring_start = ring_eval && (ring_delta != 32'd0);
+    // SEV2-2: 门关 + 数据展示 (tvalid 常高) 曾使扫描饿死 — 丢帧 + 对端静默 +
+    // 在飞钉死 RING_CAP + app 持续展示 (tvalid 每拍=1) 时, start_data 永不开
+    // (wnd_open=0) 而 scan_now 又被 !s_axis_tvalid 挡死 -> RTO 永不触发, 无
+    // 自愈路径。解药: data_blocked (register 计数, 无组合环) 连续 16 拍置
+    // force_scan, 下一 S_IDLE 拍强制扫 scan_id 一次 (rb_* mux 指向 scan_id)。
+    // 该拍 start_data 必须加 !scan_now (否则锁错连接 snd_nxt), s_axis_tready
+    // S_IDLE 项必须加 !scan_now (否则 accept=1 吞帧首字 + ring 写错游标)。
+    // 扫描恢复间隔 ~16 拍/次, rto_timer 按访问计数 — 墙钟计时不变。
+    wire        scan_now = (state == S_IDLE) && !ack_pend && !svc && !ring_eval &&
+                           (!s_axis_tvalid || force_scan);
     wire        start_ack  = (state == S_IDLE) && ack_pend;
-    // 窗口门控: 仅在飞 < snd_wnd 才开数据帧 (rb_* 组合按 start_id 寻址, 本拍即
-    // 本连接的值)。snd_wnd=0 (未配置槽/对端关窗) 天然禁发。
+    // 窗口门控: 在飞 < min(snd_wnd, RING_CAP) 才开新数据帧。在飞硬上界 =
+    // RING_CAP-1 + plen_max 4095 = 16382 < 16384 = ring 容量, 结构性不溢出 ring。
+    wire [15:0] wnd_eff  = (rb_snd_wnd < RING_CAP) ? rb_snd_wnd : RING_CAP;
     wire [31:0] in_flight = rb_snd_nxt - rb_snd_una;
-    wire        wnd_open  = (in_flight < {16'b0, rb_snd_wnd});
-    wire        start_data = (state == S_IDLE) && !ack_pend &&
-                             s_axis_tvalid && !pay_full && wnd_open;
+    wire        wnd_open  = (in_flight < {16'b0, wnd_eff});
+    // SEV2-2 阻塞判据 (见 scan_now 注释): 窗关 + 展示中, 数据无法启动的拍
+    wire        data_blocked = (state == S_IDLE) && !ack_pend && !svc &&
+                               !ring_eval && s_axis_tvalid && !pay_full &&
+                               !wnd_open;
+    wire        start_data = (state == S_IDLE) && !ack_pend && !svc && !ring_eval &&
+                             !scan_now && s_axis_tvalid && !pay_full && wnd_open;
 
+    // rb/cam 读口 mux: svc/ring_eval/scan_now 拍旁路 start_id (TCB/CAM 组合读,
+    // 本拍即目标连接值)。scan_now 与 start_data 靠 tvalid 互斥, 无组合环。
+    assign rb_id     = svc ? svc_id : ring_eval ? retx_id_r : scan_now ? scan_id :
+                       (state == S_IDLE) ? start_id : cur_id;
+    assign cam_rd_id = rb_id;
+
+    // TCB 更新 (sel=1 snd_nxt): S_DONE 数据段末字消费拍 或 svc 回卷拍。两拍互斥
+    // (svc 仅 S_IDLE, S_DONE 段仅 S_DONE), TCB 单写口无冲突。
+    // SEV2-1: blocked = 该连接连续 16 次 svc 无 snd_una 进展 (对端死), 停回卷 —
+    // 回卷写/stat_retx 全经 svc_rewind 门控; retx_gnt 不门控 (tcp_rx 电平请求
+    // 始终释放), rto_pend 清/计时器重装亦无条件 (svc 每次照常应答)。
+    wire        blocked = (epoch[svc_id] >= 4'd15);
+    wire        svc_rewind = svc && (rb_snd_nxt != rb_snd_una) && !blocked;
+    assign upd_wr  = ((state == S_DONE) && (is_data_r || is_syn_r) &&
+                      m_axis_tvalid && m_axis_tready) || svc_rewind;
+    assign upd_id  = svc_rewind ? svc_id : cur_id;
+    assign upd_sel = 3'd1;
+    assign upd_val = svc_rewind ? rb_snd_una :
+                     seq_r + (is_data_r ? {20'b0, plen_r} : 32'd1);
+    assign retx_gnt = svc && retx_req;
+
+    // svc 拍 accept 必须禁 (start_data 被 svc 压制, accept 不再等于帧首拍消费,
+    // 否则会吞一个既不入 FIFO 计数也不入 plen 的字)
     assign s_axis_tready = ((state == S_RECV) ||
-                            ((state == S_IDLE) && !ack_pend && wnd_open)) &&
+                            ((state == S_IDLE) && !ack_pend && !svc &&
+                             !ring_eval && !scan_now && wnd_open)) &&
                            !pay_full;
     wire        accept = s_axis_tvalid && s_axis_tready;
 
-    // ---- 载荷 FIFO + 校验和 ----
-    wire [72:0] fdin   = {s_axis_tlast, s_axis_tkeep, s_axis_tdata};
+    // ---- 载荷 FIFO + 校验和 (活帧与 ring 帧共用写口; wr/fdin 定义见下, 需先
+    //      声明 ring_beat/fdin_ring) ----
     wire [72:0] fdout;
-    wire        wr = accept && (s_axis_tkeep != 8'h00);
     wire        pay_load = (state == S_PAY) && (m_axis_tready || !m_axis_tvalid);
     wire        rd = pay_load && (plen_r != 12'd0) && !pay_empty;
 
@@ -163,6 +227,70 @@ module tcp_tx_frame (
         end
     endfunction
 
+    // RTO 未决最低位优先 (bit0 先服务)
+    function [3:0] prio_lo;
+        input [15:0] v;
+        integer i;
+        begin
+            prio_lo = 4'd0;
+            for (i = 15; i >= 0; i = i - 1)
+                if (v[i]) prio_lo = i[3:0];
+        end
+    endfunction
+
+    // ring 末拍字节掩码 (按字节 lane, rem=0 视为 8 全保留; 界外清零)
+    function [63:0] rm_mask;
+        input [2:0] rem;
+        begin
+            case (rem)
+                3'd0: rm_mask = 64'hFFFFFFFFFFFFFFFF;
+                3'd1: rm_mask = 64'hFF00000000000000;
+                3'd2: rm_mask = 64'hFFFF000000000000;
+                3'd3: rm_mask = 64'hFFFFFF0000000000;
+                3'd4: rm_mask = 64'hFFFFFFFF00000000;
+                3'd5: rm_mask = 64'hFFFFFFFFFF000000;
+                3'd6: rm_mask = 64'hFFFFFFFFFFFF0000;
+                default: rm_mask = 64'hFFFFFFFFFFFFFF00;
+            endcase
+        end
+    endfunction
+
+    // ---- P4b-7 重传 ring: 写拍点 = 活帧每个有效 accept 拍 (ring 源帧 accept=0
+    //      天然不重写); 读口数据 rd_en 后 1 拍 ----
+    wire        wr_tap = accept && (s_axis_tkeep != 8'h00);
+    wire [3:0]  w_tap_conn = (state == S_RECV) ? cur_id : start_id;
+    wire [31:0] w_tap_seq  = start_data ? rb_snd_nxt : tap_seq;
+
+    // ---- ring 源帧 (S_RING): 每拍 1 beat 入 u_fifo + u_csum ----
+    wire        ring_beat = (state == S_RING);
+    wire        ring_last = ring_beat && (ring_rem <= 12'd8);
+    wire [7:0]  ring_tkeep = ring_last ?
+                             ((ring_rem == 12'd8) ? 8'hFF :
+                              (8'hFF << (4'd8 - {1'b0, ring_rem[2:0]}))) : 8'hFF;
+    wire [63:0] ring_d;
+    // 末拍界外 lane (ring 读回的后续字节) 清零, 不进 FIFO/校验和
+    wire [63:0] ring_w = ring_last ? (ring_d & rm_mask(ring_rem[2:0])) : ring_d;
+    wire [72:0] fdin_ring = {ring_last, ring_tkeep, ring_w};
+    // ring 读口: 首读在 ring_start 拍 (数据下拍 = S_RING 首拍可用), S_RING 内每
+    // 非末拍预读下一字 (下拍写入)
+    wire        rd_tap = ring_start || (ring_beat && !ring_last);
+    wire [13:0] r_tap_seq = ring_start ? rb_snd_nxt[13:0] : ring_seq[13:0];
+    // ring 帧载荷 = min(1460, 会话剩余区间); delta<1460 时 12 位精确不截断
+    wire [11:0] plen_preset = (ring_delta >= 32'd1460) ? 12'd1460 :
+                              ring_delta[11:0];
+
+    retx_ram u_retx (
+        .clk(clk), .rst_n(rst_n),
+        .wr_en(wr_tap), .w_conn(w_tap_conn), .w_seq(w_tap_seq[13:0]),
+        .w_data(s_axis_tdata), .w_n(pop8(s_axis_tkeep)),
+        .rd_en(rd_tap), .r_conn(retx_id_r), .r_seq(r_tap_seq), .r_data(ring_d)
+    );
+
+    // ---- 载荷 FIFO/校验和 写口 mux (活帧与 ring 帧按状态互斥) ----
+    wire        wr  = (accept && (s_axis_tkeep != 8'h00)) || ring_beat;
+    wire [72:0] fdin = ring_beat ? fdin_ring :
+                       {s_axis_tlast, s_axis_tkeep, s_axis_tdata};
+
     // IP 头校验和 (组合树): S_WAIT 首拍算 (所有字段已锁存)
     function [15:0] ip_csum_calc;
         input [15:0] tlen;
@@ -185,9 +313,11 @@ module tcp_tx_frame (
     wire [31:0] csum_init_val = {4'b0, cfg_src_ip[31:16]} + {4'b0, cfg_src_ip[15:0]} +
                                 {4'b0, cam_rd_sip[31:16]} + {4'b0, cam_rd_sip[15:0]} +
                                 32'h0006;
-    wire        csum_init = start_ack || start_data;
-    wire        csum_den  = (start_data || (state == S_RECV)) && accept &&
-                            (s_axis_tkeep != 8'h00);
+    wire        csum_init = start_ack || start_data || ring_start;
+    wire        csum_den  = ((start_data || (state == S_RECV)) && accept &&
+                             (s_axis_tkeep != 8'h00)) || ring_beat;
+    wire [63:0] csum_din   = ring_beat ? ring_w : s_axis_tdata;
+    wire [7:0]  csum_dkeep = ring_beat ? ring_tkeep : s_axis_tkeep;
     // aen 三拍补足 9 半字 (每组 ≤4 项 < 2^18): 伪头 tcp_len + TCP 头 (csum/urg=0 不参与)
     wire        csum_aen  = (state == S_WAIT) && (wait_cnt <= 3'd2);
     wire [17:0] aen_v1 = {2'b0, tcp_len_r} + {2'b0, sport_r} + {2'b0, dport_r} +
@@ -204,7 +334,7 @@ module tcp_tx_frame (
     checksum16 u_csum (
         .clk(clk), .rst_n(rst_n),
         .init(csum_init), .init_val(csum_init_val),
-        .den(csum_den), .din(s_axis_tdata), .dkeep(s_axis_tkeep),
+        .den(csum_den), .din(csum_din), .dkeep(csum_dkeep),
         .aen(csum_aen), .add_val(aen_val),
         .fin(csum_fin),
         .csum(csum), .csum_valid(csum_valid)
@@ -237,11 +367,94 @@ module tcp_tx_frame (
             m_axis_tdata <= 0; m_axis_tkeep <= 0; m_axis_tvalid <= 0; m_axis_tlast <= 0;
             stat_frames <= 0; stat_bytes <= 0; stat_ack <= 0; stat_ack_drop <= 0;
             stat_eend <= 0;
+            retx_active <= 0; retx_id_r <= 0; retx_hi <= 0; scan_id <= 0;
+            rto_pend <= 16'h0; ring_seq <= 0; ring_rem <= 0; tap_seq <= 0;
+            stat_retx <= 0;
+            block_cnt <= 4'd0; force_scan <= 1'b0;
+            for (ri = 0; ri < 16; ri = ri + 1) begin
+                rto_timer[ri] <= 21'd0;
+                snd_una_prev[ri] <= 32'd0;
+                epoch[ri] <= 4'd0;
+            end
         end else begin
             if (m_axis_tready && m_axis_tvalid) m_axis_tvalid <= 1'b0;
             if (ack_req && ackq_full) stat_ack_drop <= stat_ack_drop + 1;
             case (state)
                 S_IDLE: begin
+                    // 重传服务拍: 锁存会话 (上界 = 回卷前 snd_nxt, 连接 = svc_id),
+                    // 回卷 snd_nxt -> snd_una (svc_rewind 组合脉冲突发), 清该连接
+                    // RTO 未决并重装计时器; 请求应答与回卷同拍
+                    if (svc) begin
+                        // SEV2-1: snd_una 进展比对 — 无进展会话计数 +1 (封顶
+                        // 15), 有进展清零; blocked 后 svc 仍应答但不回卷
+                        if (rb_snd_una == snd_una_prev[svc_id]) begin
+                            if (epoch[svc_id] < 4'd15)
+                                epoch[svc_id] <= epoch[svc_id] + 4'd1;
+                        end else
+                            epoch[svc_id] <= 4'd0;
+                        snd_una_prev[svc_id] <= rb_snd_una;
+                        retx_hi <= rb_snd_nxt;
+                        retx_id_r <= svc_id;
+                        retx_active <= 1'b1;
+                        rto_pend[svc_id] <= 1'b0;
+                        rto_timer[svc_id] <= RTO_LIM;
+                        if (svc_rewind) stat_retx <= stat_retx + 32'd1;
+                    end
+                    // ring 帧启动拍: 帧首锁存同活帧 (rb/cam_rd 已 mux 到
+                    // retx_id_r); ring_seq 预推进 8 = 下拍(S_RING 首拍)预读地址
+                    if (ring_eval) begin
+                        if (ring_start) begin
+                            cur_id <= retx_id_r;
+                            is_data_r <= 1'b1;
+                            is_syn_r <= 1'b0;
+                            seq_r <= rb_snd_nxt;
+                            ack_r <= rb_rcv_nxt;
+                            wnd_r <= rb_rcv_wnd;
+                            doff_flags_r <= 16'h5018;   // 数据帧 PSH+ACK
+                            dmac_r <= cam_rd_dmac;
+                            dip_r <= cam_rd_sip;       // 对端 IP
+                            sport_r <= cam_rd_dport;   // 本地端口
+                            dport_r <= cam_rd_sport;   // 对端端口
+                            id_cap <= id_r;
+                            id_r <= id_r + 1;
+                            plen_r <= plen_preset;
+                            tcp_len_r <= {4'b0, plen_preset} + 16'd20;
+                            total_len_r <= {4'b0, plen_preset} + 16'd40;
+                            ring_rem <= plen_preset;
+                            ring_seq <= rb_snd_nxt + 32'd8;
+                            state <= S_RING;
+                        end else begin
+                            retx_active <= 1'b0;    // 区间发完: 1 拍气泡回活数据
+                        end
+                    end
+                    // SEV2-2: 门关阻塞计数 — 16 拍展示无法启动置 force_scan
+                    // (data_blocked 不挡 svc/ack/ring 拍); scan_now 拍清零。
+                    // 两者同拍时本段先执行, scan_now 段的清零后写覆盖 (最后赋值胜)
+                    if (data_blocked) begin
+                        block_cnt <= block_cnt + 4'd1;
+                        if (block_cnt == 4'd15) force_scan <= 1'b1;
+                    end
+                    // RTO 扫描: 每 scan_now 拍访 scan_id 连接 (rb_* mux 到 scan_id;
+                    // 该连接在飞且窗开: 计时 0->装 / 1->置未决并重装 / 否则自减)
+                    if (scan_now) begin
+                        // SEV3-4: 原 '!(retx_active && (scan_id==retx_id_r))' 排除项
+                        // 是死代码 — scan_now 要求 !ring_eval; retx_active 期间
+                        // ring_eval 覆盖全部 S_IDLE&&!ack_pend 拍 (ack_pend 也
+                        // 排除 scan_now), 故 scan_now 拍 retx_active 恒 0
+                        if (rb_snd_wnd != 16'd0 && rb_snd_nxt != rb_snd_una) begin
+                            if (rto_timer[scan_id] == 21'd0)
+                                rto_timer[scan_id] <= RTO_LIM;
+                            else if (rto_timer[scan_id] == 21'd1) begin
+                                rto_pend[scan_id] <= 1'b1;
+                                rto_timer[scan_id] <= RTO_LIM;
+                            end else
+                                rto_timer[scan_id] <= rto_timer[scan_id] - 21'd1;
+                        end else
+                            rto_timer[scan_id] <= 21'd0;
+                        scan_id <= scan_id + 4'd1;
+                        force_scan <= 1'b0;
+                        block_cnt <= 4'd0;
+                    end
                     if (start_ack || start_data) begin
                         // 帧首拍: 锁存连接上下文 (rb/cam_rd 组合输出对 start_id 有效)
                         cur_id <= start_id;
@@ -264,6 +477,9 @@ module tcp_tx_frame (
                             total_len_r <= 16'd40;
                             state <= S_WAIT; wait_cnt <= 3'd0;
                         end else begin
+                            // ring 写游标越过本拍字节 (首拍 beat0 写 rb_snd_nxt,
+                            // 游标 = 下一 beat 偏移)
+                            tap_seq <= rb_snd_nxt + {20'b0, pop8(s_axis_tkeep)};
                             plen <= {8'b0, pop8(s_axis_tkeep)};
                             if (s_axis_tlast) begin
                                 plen_r <= plen_n;
@@ -278,6 +494,7 @@ module tcp_tx_frame (
                 end
                 S_RECV: begin
                     if (accept) begin
+                        tap_seq <= tap_seq + {20'b0, pop8(s_axis_tkeep)};
                         plen <= plen + {8'b0, pop8(s_axis_tkeep)};
                         if (s_axis_tlast) begin
                             plen_r <= plen_n;
@@ -375,6 +592,15 @@ module tcp_tx_frame (
                         m_axis_tkeep <= tail_k;
                         m_axis_tlast <= 1'b1;
                         state <= S_DONE;
+                    end
+                end
+                3'd7: begin   // S_RING: ring 字流拍 (每拍 1 beat 写 u_fifo+u_csum;
+                    // 首字已在 ring_start 拍读出, ring_last 拍后转 S_WAIT)
+                    if (ring_last) begin
+                        state <= S_WAIT; wait_cnt <= 3'd0;
+                    end else begin
+                        ring_rem <= ring_rem - 12'd8;
+                        ring_seq <= ring_seq + 32'd8;
                     end
                 end
                 default: begin   // S_DONE: 等末字消费 (upd_* 组合脉冲突发于本拍)

@@ -66,6 +66,11 @@ module tcp_rx (
     output wire        ack_req,
     output wire [3:0]  ack_id,
     output wire [31:0] ack_val,
+    // dup-ACK 快速重传请求 (P3): 3 个 dup-ACK 检出置位, 电平保持至 tcp_tx_frame
+    // 的 retx_gnt; in_retx 屏蔽会话内重复计数, 真推进 ACK 也解锁
+    output reg         retx_req,
+    output reg  [3:0]  retx_id,
+    input  wire        retx_gnt,
     // SYN sideband (P4-lite 握手用): 纯 SYN 段帧尾脉冲 (FCS 好才发), 字段全锁存
     output reg         syn_v,
     output wire [47:0] syn_smac,
@@ -131,6 +136,12 @@ module tcp_rx (
     reg  [31:0] pend_rcv_val, pend_una_val;
     reg  [15:0] pend_wnd_val;
     reg  [1:0]  drn;
+    // P3 dup-ACK 检测: dup_l = w5 拍判出"纯 ACK 且 ack==snd_una"(w5->w6 沿锁存);
+    // dup_cnt 每连接 2 位计数, in_retx 位屏蔽已请求连接
+    reg         dup_l;
+    reg  [1:0]  dup_cnt [0:15];
+    reg  [15:0] in_retx;
+    integer     di;
 
     wire        accept = s_axis_tvalid && s_axis_tready;
 
@@ -196,6 +207,10 @@ module tcp_rx (
     wire        frag_ok  = (w2_r[29:16] == 14'h0);   // MF=0 且片偏移=0 (分片段丢给 P4)
     wire        base_ok  = cam_hit_l && state_ok && flags_ok && doff_ok && len_ok &&
                            frag_ok;
+    // P3: dup-ACK 判据 — 无载荷纯 ACK 且 ack 不推进 (ack==snd_una) 且还有在飞
+    // 未确认数据 (snd_nxt != snd_una: 排除空闲连接的窗口探测 ACK 被误计)
+    wire        dup_ack  = base_ok && (plen_w == 16'd0) && ack_ok && !ack_adv &&
+                           (ra_snd_nxt != ra_snd_una);
     wire        acc      = base_ok && win_ok && seq_eq;
     // 窗口内乱序 (seq > rcv_nxt) 与重复 (seq < rcv_nxt): 丢数据仍回 ACK (快速重传/dup-ACK 依赖)
     wire        ackresp  = base_ok && !seq_eq && (win_ok || seq_lt) && (plen_w != 16'd0);
@@ -276,7 +291,7 @@ module tcp_rx (
             mac_lo <= 0; mac_hi <= 0;
             syn_l <= 0; drop_syn_r <= 0; syn_wnd_r <= 0; syn_v <= 0;
             cam_hit_l <= 0; conn_id_l <= 0;
-            acc_l <= 0; ackresp_l <= 0; ack_adv_l <= 0;
+            acc_l <= 0; ackresp_l <= 0; ack_adv_l <= 0; dup_l <= 0;
             ack32_l <= 0; seq32_l <= 0; rcv_nxt_l <= 0; plen_l <= 0; wnd_l <= 0;
             drop_ack <= 0; hold16 <= 0; pcount <= 0;
             emit_v <= 0; emit_d <= 0; emit_k <= 0; emit_l <= 0; emit_u <= 0;
@@ -284,6 +299,8 @@ module tcp_rx (
             pend_rcv <= 0; pend_una <= 0; pend_wnd <= 0;
             pend_id <= 0; pend_rcv_val <= 0; pend_una_val <= 0; pend_wnd_val <= 0;
             drn <= 0;
+            retx_req <= 0; retx_id <= 0; in_retx <= 0;
+            for (di = 0; di < 16; di = di + 1) dup_cnt[di] <= 2'd0;
             stat_pass <= 0; stat_drop_nonmatch <= 0; stat_drop_ipcsum <= 0;
             stat_drop_crc <= 0; stat_drop_seq <= 0; stat_ack <= 0; stat_bytes <= 0;
         end else begin
@@ -307,6 +324,37 @@ module tcp_rx (
                     2'd3: if (!pend_wnd || upd_gnt) drn <= 2'd0;
                     default: ;
                 endcase
+            end
+            // ---- P3 dup-ACK 快速重传检测: fend 拍 (纯 ACK 完整到达, FCS 好)
+            //      且本帧是 dup (dup_l), 按 conn_id_l 计数 ----
+            if (fend && s_axis_tcrs && dup_l) begin
+                if (!in_retx[conn_id_l]) begin
+                    if (dup_cnt[conn_id_l] == 2'd2) begin
+                        // 第 3 个 dup: 发重传请求。retx_req 未服务前保持 dup_cnt=2
+                        // (不继续累加防回绕), retx_gnt 路径统一归零
+                        if (!retx_req) begin
+                            retx_req <= 1'b1;
+                            retx_id  <= conn_id_l;
+                            in_retx[conn_id_l] <= 1'b1;
+                            dup_cnt[conn_id_l] <= 2'd0;
+                        end
+                    end else begin
+                        dup_cnt[conn_id_l] <= dup_cnt[conn_id_l] + 2'd1;
+                    end
+                end
+            end
+            // 服务确认 (tcp_tx_frame svc 回卷拍) 或真实推进 ACK — 解锁该连接计数
+            if (retx_gnt) begin
+                retx_req <= 1'b0;
+                in_retx[retx_id] <= 1'b0;
+                dup_cnt[retx_id] <= 2'd0;
+            end else if (fend && s_axis_tcrs && ack_adv_l) begin
+                in_retx[conn_id_l] <= 1'b0;
+                dup_cnt[conn_id_l] <= 2'd0;
+                // SEV2-3: 真推进 ACK 已在 svc 前解决空洞 — 取消挂起重传请求,
+                // 否则迟到的 svc 触发至多 12KB 无谓全量重放 (数据已确认)
+                if (retx_req && (conn_id_l == retx_id))
+                    retx_req <= 1'b0;
             end
             if (ack_req) stat_ack <= stat_ack + 1;
             case (state)
@@ -387,6 +435,7 @@ module tcp_rx (
                                         acc_l <= acc;
                                         ackresp_l <= ackresp;
                                         ack_adv_l <= ack_adv;
+                                        dup_l <= dup_ack;
                                         ack32_l <= ack32;
                                         seq32_l <= seq32;
                                         plen_l <= plen_w;

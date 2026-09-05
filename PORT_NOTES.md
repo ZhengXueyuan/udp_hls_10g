@@ -1048,3 +1048,113 @@ snd_wnd=4096 生效。板级重建中。
 - 板测方法论沉淀: pktmon --pkt-size 0 必带; 抓包帧 IP csum 因
   NIC 卸载无效需重算; 每次 RST 后板子僵死必须重烧; 重放 = 区分
   "RTL 缺陷" 与 "物理链路问题" 的决定性手段。
+
+## 2026-09-05 P4b-7 开工 (fast 路径快速重传: dup-ACK + RTO) — P1/P2 完成
+
+### 目标与方案 (用户拍板: 继续 P4 自愈; DDR 暂不用, BRAM ring 够 12KB 窗口)
+- **retx_ram.v**: 16 conn × 16KB ring, 偶/奇字双 bank (跨字写每 bank 每拍至多
+  1 写), 8 字节写使能, 1 拍读延迟漏斗 `(W_w<<8o)|(W_{w+1}>>8(8-o))`。
+  移位方向血案: 计划文档 w+1 字写 "<<8(8-o)" 被我当 typo 改成 ">>", 单元 TB
+  字节级参考模型穷举证明 **原方向 (左移) 才对** — agent 用 TB 证伪了我的
+  "修正"。教训: lane 数学必须穷举 TB 仲裁, 人工推导两次都出过号。
+- **tcp_tx_frame**: RING_CAP=0x3000 门控帽 (对端窗口可 64KB > ring!); S_IDLE
+  仲裁链 ack > svc > ring_eval > scan > data; svc 拍回卷 snd_nxt<=snd_una 走
+  原 TCB 写口 (tx 优先天然成立); S_RING 2 级流水读 ring 写 u_fifo (共用
+  checksum16); RTO 扫描器 16 连接 × 21bit 计时 (781250 次访问 ≈ 100ms)。
+- **组合环规避**: scan_now 仅依赖 !s_axis_tvalid (不得依赖 start_data/wnd_open,
+  否则 rb_id mux 与 wnd_open 成环震荡)。门关+数据展示时无扫描 = 已接受局限
+  (板级 1MB 有效窗门不关; sim 尾丢激励耗尽 tvalid=0)。
+- **P2 三处规格修正 (实现 agent 提, TL 复核认可)**: tap_seq 首拍即 +pop8
+  (我原规格差一拍); ring_seq 锁存 = snd_nxt+8 (首读在 ring_start 拍);
+  s_axis_tready 加 !svc (svc 拍 accept 必须禁, 防吞帧首字)。
+- **bat 约定修正**: `burst N 0 0 wnd` 的 0 0 被 gen_stim 当 pause_len=0 →
+  帧融合塌缩 (基线发现); 现 `%2==0&&%3==0` = 无暂停 (等价 -1 0)。
+- **TL 巡检实绩**: P1 agent 输出超限 (32k token) 未落盘 → 换新 agent 带防爆
+  纪律重派; P2 agent 基线先行发现 harness bug 并停手请示 → 批准后完成。
+  P3 agent 首轮 13 次调用全读无写超限 → 同法重派。
+
+### P4b-7 P3 完成 (dup-ACK 快速重传全链, 6 门 TL 独立复跑全绿)
+
+- **tcp_rx**: dup-ACK 判据 = 纯 ACK 且 ack==snd_una 且有在飞 (排除空闲窗口探测);
+  w5->w6 沿锁存 (同 ack_adv_l), fend+FCS 好拍计数; 每连接 2bit 计数 + in_retx
+  位; 第 3 个 dup -> retx_req 电平保持至 retx_gnt; retx_req 忙时其他连接计数
+  停在 2 等待; gnt/真推进 ACK 双路径解锁。
+- **TB PCACK exp_seq 模型**: 首帧建序 / 顺序推进 / OOO 每个恰好 1 个 dup
+  (ack=exp_seq, Windows 行为) / 全重包也回 dup。
+- **TXDROP 故障注入**: **-testplusarg TXDROP=N 被 xsim loader 拆碎 '=' 到不了
+  TB** -> 改 txdrop.memh 文件通道 ($fscanf)。丢窗两阶段: N 帧 start_data 武装,
+  mac S_PRE 开窗, S_IFG 关窗 — **S_IFG 不能撤武装** (mac TX FIFO 16 深背压下
+  上一帧 S_IFG 抢在目标帧 S_PRE 之前, 提前撤武装丢帧落空, 实测抓到)。
+  监视侧 gmii_tx_en_mon 屏蔽, DUT/mac_stat_frames 无感 (对账用)。
+- **burstcheck 重传容错**: 区间并集覆盖检查 (OOO 原发帧先于回卷修复帧上线,
+  顺序 merge 会误判洞, 实测抓到); RETX == 会话数 (相邻双丢 = 1 会话)。
+- **tcp_echo FIFO 加宽 2048->4096** (真根因, 故障注入暴露): 重传会话期间
+  tcp_tx_frame 只喂 ring 不接新帧 -> 回声管道饿死, 而 PC 滑动窗口持续发送
+  (rcv_wnd 通告恒定) -> FIFO 累积; 双会话背靠背超 2048 字 -> **丢 1 个 PC 数据帧
+  -> 永久空洞 (该帧 echo 从未发送, ring 无此数据, 重传救不了)**。4096 字
+  (=32KB) 覆盖双会话+12KB 常驻。结构性极限 = 常驻 12KB + 每会话 ~2.6KB,
+  ~7 会话余量; 极端情况仍会溢 -> 后续加固候选: echo FIFO 满时延迟 tcp_rx ACK
+  (窗口闭合式背压), 本轮不做。
+- **TL 修补**: chain/probe bat 开头清 txdrop.memh (burst 中途被杀残留文件会
+  污染无注入门)。
+- **RTO_LIM 未压缩的原因 (agent 决策, TL 认可)**: chain 场景无 conn0/1 ACK 模型,
+  压缩到 2000 会在 60k 尾窗内 RTO 风暴破 chain 门; P4 用 `ifdef RTOLIM_FAST`
+  + burst 激励补 conn1 累计 ACK 解决。
+
+### P4b-7 P4 完成 (RTO 兜底验证, 7+1 门 TL 独立复跑全绿)
+
+- **机制**: 扫描器每 scan_now 拍访 1 连接; 计时 0->装 RTO_LIM / 1->置未决重装 /
+  否则自减; 未决走同一 svc 回卷路径 (每次回卷重装 timer = 双丢自愈)。
+- **sim 压缩通道**: `ifdef RTOLIM_FAST defparam u_tx.RTO_LIM=2000` (TB 内),
+  burst bat 的 TB xvlog 行加 `-d RTOLIM_FAST`; chain/probe bat 不加
+  (chain 无对端 ACK 模型, 压缩会在尾窗 RTO 风暴破门)。
+- **conn1 20B 永久未确认问题**: PCACK 只建模 conn0 -> 压缩 RTO_LIM 后 conn1
+  RTO 风暴 (+RETX 破所有 burst 门)。修: burst 刺激在 c1data20 后加 c1ack 纯
+  ACK (seq=97, ack=920, 1500 拍间隙 ≫ echo ~300 拍延迟), snd_una 追平 920。
+  **教训: 仿真模型只覆盖一个连接 = 陷阱, 真实对端 ACK 所有连接**。
+- **TL 预判失误修正**: 我原以为 segment-3 位置安全 (echo 应已发出), agent 实测
+  snd_nxt 仍 900 被拒 -> c1ack 紧贴 c1data20 + 1500 拍间隙。信任门禁而非我
+  的时序心算。
+- **门结果**: TXDROP=202 纯尾丢 (0 dup) RTO 自愈 RETX=1; TXDROP=200 (2 dup
+  不足) RTO 自愈 RETX=1; TXDROP=199 (3 dup) 快速重传自愈; P3 全门在
+  RTOLIM_FAST+c1ack 下复绿。
+
+### P4b-7 P5 审查+测试轮 (agent 工作流, 结论与裁决)
+
+- **审查 agent: 无 SEV1 数据损坏**。ring 溢出数学/写拍点对齐/S_RING 帧化/
+  svc 互斥/dup 计数组态全部复核干净。
+- **SEV2-1 (修)**: RTO 无限重放无退避 — 每连接无进展 epoch 计数, 16 会话后
+  停回卷 (svc 仍应答释放), 进展即复位。
+- **SEV2-2 (修)**: 门关+tvalid 时扫描饿死 (比原注释更广的僵局: 丢帧+对端静默+
+  在飞钉死 RING_CAP+app 持续展示) — force_scan: 阻塞 16 拍后强制扫 1 拍
+  (register 破组合环; start_data/s_axis_tready 必须加 !scan_now, 否则
+  rb_id 指 scan_id 时吞帧首字+ring 写错游标)。
+- **SEV2-3 (修)**: 真推进 ACK 只清 in_retx 不清 retx_req — 迟到的 svc 会无谓
+  重放至多 12KB 重复数据; 修: ack_adv 且同连接时取消挂起请求。
+- **SEV3-4 (删)**: 扫描器 retx_active 排除条件死代码 (ring_eval 覆盖全部
+  S_IDLE&&!ack_pend)。
+- **SEV3-5 (不改, 记档)**: 窗口更新/探测纯 ACK 计 dup — 与 Linux dupthresh
+  语义一致 (任何不推进 snd_una 的 ACK 都是 dup), 3 次触发重传是标准行为。
+- **SEV3-6 (记档后续)**: S_RING 尾拍 rem 只被 {0,4} 覆盖 (激励 plen 集合全
+  ≡0 mod 4, 会话尾帧 rem 恒 0/4); rem∈{1..7}/小会话需要向 TB (P4b-7-hardening);
+  c1ack 的 1500 拍间隙对 conn0 重传会话延迟 conn1 echo 的情况时序脆 (无害
+  但依赖时序)。
+- **测试 agent: 14/16 通过**。TXDROP=1 首帧丢失探针证实 TB 模型缺陷 (exp_seen
+  首帧建序把第二帧当首帧, 累计 ACK 跳过空洞 -> 7B 永久头洞, RETX=0) —
+  **真实对端从握手起就知道期望 seq**, 模型修复 = exp_seq 静态初始化为
+  tcbc snd_nxt+1。xvlog_wp4b.bat 用陈旧 hls_files_new.f (缺 8 个 HLS 文件)
+  且无错误传播 — bat 修复。
+
+### P4b-7 P5 第二轮: retx_ram 读漏斗一拍偏斜 (重大发现)
+
+- **真 bug**: retx_ram 读漏斗的选择 (r_seq[3:0]) 是组合信号, 而 q_e/q_o 数据是
+  rd_en 前一拍的寄存器 — S_RING 逐拍推进地址时, 当拍漏斗用"新地址的偏移/奇偶"
+  选"旧地址的数据" -> 每两拍错一个 bank, ring 重发帧载荷是垃圾。
+- **为什么所有门都放行了**: 单元 TB 采样拍 r_seq 保持不变 (漏测背靠背推进);
+  burstcheck 只查 seq 覆盖 + RETX, **从不校验载荷字节** — seq 头字段与载荷
+  独立计算, 坏载荷完全隐身。**铁律: 覆盖检查 ≠ 数据检查; 重传路径必须做
+  字节级比对** (板级 pc_tcp_rate_test 会抓, 但 sim 里就该抓)。
+- **修**: r_sel 随 rd_en 寄存器化 (r_sel <= r_seq[3:0]), 选择与数据同源。
+- **补测**: tb_retx_ram 新组 G (流式背靠背读, 逐拍推进地址) — 旧代码必挂;
+  burstcheck 加 payload_map.json 侧车: 生成器记录每个 conn0 数据段的
+  echo seq -> 载荷字节, 检查器对每个捕获 echo (含重发帧) 逐字节比对。

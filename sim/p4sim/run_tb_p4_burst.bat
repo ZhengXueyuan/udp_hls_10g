@@ -4,8 +4,14 @@ REM   usage (Git Bash): cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p4sim\run_tb_p4_bur
 REM   %1 = burst segment count (default 200)
 REM   %2/%3 = pause_at/pause_len (cycles, optional; that segment becomes 352B,
 REM           next segment gets the long pre-gap) -- PC send pause-resume
+REM          (P4b-7 convention: %2==0 and %3==0 = no pause, same as -1 0;
+REM          %2==0 with %3>0 still pauses at segment 0)
 REM   %4 = burst advertised window in hex (default 4000); =10 also sets
 REM        +PCWND1K (raw 0010 << wscale8 = effective 4096, gate stress)
+REM   %5/%6 = forwarded gen_stim tail args (608 / dup), keeps positional layout
+REM   %7/%8 = TXDROP/TXDROP2 (P4b-7 fault injection: drop conn0 data frame
+REM           #%7 and #%8 from the GMII capture; 0/empty = no drop); also
+REM           forwarded to burstcheck which asserts RETX == expected sessions
 REM   P4b-6: always runs with +PCACK (window gating needs ACK injection to
 REM          advance snd_una, otherwise the gate deadlocks the echo)
 cd /d %~dp0
@@ -15,19 +21,31 @@ set HLS=D:\repo\ECO\udp_hls_10g\hls\slowstack_prj\solution1\syn\verilog
 set NB=%1
 if "%NB%"=="" set NB=200
 set PAUSE=
-if not "%2"=="" set PAUSE=%2 %3
+if "%2"=="-1" set PAUSE=-1 0
+if not "%2"=="" if not "%2"=="0" if not "%2"=="-1" set PAUSE=%2 %3
+if "%2"=="0" if not "%3"=="" if not "%3"=="0" set PAUSE=0 %3
+if "%2"=="0" if "%3"=="0" set PAUSE=-1 0
 set WND=
 if not "%4"=="" set WND=%4
+set XTRA=
+if not "%5"=="" set XTRA=%5 %6
 set XPA=-testplusarg PCACK
 if "%4"=="10" set XPA=-testplusarg PCACK -testplusarg PCWND1K
+REM TXDROP/TXDROP2 reach the TB via txdrop.memh (%7/%8 written here):
+REM xsim.bat's loader splits any arg containing '=' ("Expected a switch
+REM but found 5"), so -testplusarg TXDROP=N never arrives. File channel
+REM avoids '=' entirely; TB $fscanf reads the two indices (default 0).
+if not "%7"=="" > txdrop.memh echo %7
+if not "%8"=="" >> txdrop.memh echo %8
+if "%7"=="" if "%8"=="" if exist txdrop.memh del /q txdrop.memh
 
 copy /y %HLS%\*.dat . >nul
 (if exist %HLS%\ (dir /b /s %HLS%\*.v) else (echo HLS dir missing & exit /b 1)) > hls_files.f
 
-%PY% D:\repo\ECO\udp_hls_10g\tools\gen_stim_p4_chain.py D:\repo\ECO\udp_hls_10g\sim\p4sim burst %NB% %PAUSE% %WND% || exit /b 1
+%PY% D:\repo\ECO\udp_hls_10g\tools\gen_stim_p4_chain.py D:\repo\ECO\udp_hls_10g\sim\p4sim burst %NB% %PAUSE% %WND% %XTRA% || exit /b 1
 
 call %XV%\xvlog.bat -work xil_defaultlib -f hls_files.f > xvlog_hls.log 2>&1 || (type xvlog_hls.log & exit /b 1)
-call %XV%\xvlog.bat -work xil_defaultlib ^
+call %XV%\xvlog.bat -work xil_defaultlib -d RTOLIM_FAST ^
   D:\repo\ECO\udp_hls_10g\rtl\crc32_8b.v ^
   D:\repo\ECO\udp_hls_10g\rtl\fifo_sync.v ^
   D:\repo\ECO\udp_hls_10g\rtl\checksum16.v ^
@@ -38,6 +56,7 @@ call %XV%\xvlog.bat -work xil_defaultlib ^
   D:\repo\ECO\udp_hls_10g\rtl\tcb.v ^
   D:\repo\ECO\udp_hls_10g\rtl\tcp_rx.v ^
   D:\repo\ECO\udp_hls_10g\rtl\tcp_tx_frame.v ^
+  D:\repo\ECO\udp_hls_10g\rtl\retx_ram.v ^
   D:\repo\ECO\udp_hls_10g\rtl\tcp_echo.v ^
   D:\repo\ECO\udp_hls_10g\rtl\rx_classify.v ^
   D:\repo\ECO\udp_hls_10g\rtl\slow_rx_adp.v ^
@@ -48,5 +67,6 @@ call %XV%\xvlog.bat -work xil_defaultlib ^
 
 call %XV%\xelab.bat -debug typical xil_defaultlib.tb_p4_chain -s tb_p4_chain -log xelab_run.log > NUL 2>&1 || (type xelab_run.log & exit /b 1)
 call %XV%\xsim.bat tb_p4_chain -runall %XPA% -log xsim_run.log > NUL 2>&1 || (type xsim_run.log & exit /b 1)
+if exist txdrop.memh del /q txdrop.memh
 
-%PY% D:\repo\ECO\udp_hls_10g\tools\gen_stim_p4_chain.py D:\repo\ECO\udp_hls_10g\sim\p4sim burstcheck %NB%
+%PY% D:\repo\ECO\udp_hls_10g\tools\gen_stim_p4_chain.py D:\repo\ECO\udp_hls_10g\sim\p4sim burstcheck %NB% %7 %8

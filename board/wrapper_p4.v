@@ -208,6 +208,10 @@ module wrapper_p4 (
     wire [7:0]  tx_tkeep;
     wire        tx_tvalid, tx_tready, tx_tlast;
     wire [31:0] tx_stat_frames, tx_stat_bytes, tx_stat_abort;
+    wire [31:0] tx_stat_retx;    // P4b-7: 重传回卷计数 (暂留内部 wire, LED 后议)
+    wire        tx_retx_req;     // P4b-7 P3: dup-ACK 快速重传 tcp_rx -> tcp_tx_frame
+    wire [3:0]  tx_retx_id;
+    wire        tx_retx_gnt;
 
     wire [31:0] rx_stat_pass, rx_stat_nonmatch, rx_stat_ipcsum, rx_stat_crc,
                 rx_stat_seq, rx_stat_ack, rx_stat_bytes_tcp;
@@ -317,6 +321,9 @@ module wrapper_p4 (
         .ack_req        (rx_ack_req),
         .ack_id         (rx_ack_id),
         .ack_val        (rx_ack_val),
+        .retx_req       (tx_retx_req),
+        .retx_id        (tx_retx_id),
+        .retx_gnt       (tx_retx_gnt),
         .syn_v          (syn_v),
         .syn_smac       (syn_smac),
         .syn_sip        (syn_sip),
@@ -493,7 +500,11 @@ module wrapper_p4 (
         .stat_bytes     (tx_stat_bytes),
         .stat_ack       (),
         .stat_ack_drop  (),
-        .stat_eend      ()
+        .stat_eend      (),
+        .retx_req       (tx_retx_req),
+        .retx_id        (tx_retx_id),
+        .retx_gnt       (tx_retx_gnt),
+        .stat_retx      (tx_stat_retx)
     );
 
     // --- slow 路由: slow_rx_adp → udp_echo (HLS) → slow_tx_adp ---

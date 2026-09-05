@@ -2,6 +2,7 @@
 REM run_tb_p4_chain.bat — P4a 全链 (含真 HLS udp_echo) xsim 一条线
 REM 自生成刺激; 从 Git Bash: cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p4sim\run_tb_p4_chain.bat'
 cd /d %~dp0
+if exist txdrop.memh del /q txdrop.memh
 set PY=C:\Users\zhxue\anaconda3\python.exe
 set XV=C:\AMDDesignTools\2025.2\Vivado\bin
 set HLS=D:\repo\ECO\udp_hls_10g\hls\slowstack_prj\solution1\syn\verilog
@@ -23,6 +24,7 @@ call %XV%\xvlog.bat -work xil_defaultlib ^
   D:\repo\ECO\udp_hls_10g\rtl\tcb.v ^
   D:\repo\ECO\udp_hls_10g\rtl\tcp_rx.v ^
   D:\repo\ECO\udp_hls_10g\rtl\tcp_tx_frame.v ^
+  D:\repo\ECO\udp_hls_10g\rtl\retx_ram.v ^
   D:\repo\ECO\udp_hls_10g\rtl\tcp_echo.v ^
   D:\repo\ECO\udp_hls_10g\rtl\rx_classify.v ^
   D:\repo\ECO\udp_hls_10g\rtl\slow_cfg_adp.v ^

@@ -45,7 +45,7 @@ module tcp_echo (
     reg         pend;                   // fend 已见, 等载荷末字实际交付
     reg         p_err;                  // 本帧坏 (fend 拍锁存)
     reg         rback;                  // 回卷脉冲 (判定拍)
-    reg  [3:0]  fq;                     // 已判定好帧队列深度 (cq 深度冗余, fq 是权威计数)
+    reg  [4:0]  fq;                     // 已判定好帧队列深度 (cq 深度冗余, fq 是权威计数)
 
     wire        accept = s_axis_tvalid && s_axis_tready;
     wire [72:0] fdin   = {s_axis_tlast, s_axis_tkeep, s_axis_tdata};
@@ -63,7 +63,13 @@ module tcp_echo (
     assign m_axis_tvalid = (state == S_FWD) && !fifo_empty;
     assign m_axis_tid    = cq_dout;
 
-    frame_fifo #(.W(73), .D(2048), .AW(11)) u_fifo (
+    // P4b-7 弹性实录: 重传回卷会话 (ring 每会话最多重发 RING_CAP 0x3000 =
+    // 12288B ≈ 8.4 帧) 期间 tcp_tx_frame 只喂 ring 不接新帧 -> 回声管道被饿死;
+    // 2048 字 ≈ 11 帧 + mac_rx 1 帧余量刚够单会话 (P3 gate 50: 0 丢失), 但 50+60
+    // 双会话背靠背 (≈17 帧) 差 1 帧 -> mac 丢 1 个 PC 数据帧, 静态 PC 永不重发
+    // -> 永久空洞. 加深到 4096 字 ≈ 22 帧覆盖双会话; cq/fq 同步加宽防判定后
+    // 入队截断 (cq 满则 judged 帧滞留 fifo 且 fq 失配). 深度仍满足 ≥ 单帧 190 字.
+    frame_fifo #(.W(73), .D(4096), .AW(12)) u_fifo (
         .clk(clk), .rst_n(rst_n),
         .wr(accept), .din(fdin),
         .snap(accept && first_b),
@@ -75,7 +81,7 @@ module tcp_echo (
     // conn_id 队列: 判定好帧推入, 转发完弹出 (与载荷帧同序)
     wire cq_push = judged && !p_err;
     wire cq_pop  = fwd_rd && fdout[72];
-    fifo_sync #(.W(4), .D(16), .AW(4)) u_cq (
+    fifo_sync #(.W(4), .D(32), .AW(5)) u_cq (
         .clk(clk), .rst_n(rst_n),
         .wr(cq_push && !cq_full), .din(meta_conn_id),
         .rd(cq_pop), .dout(cq_dout),
