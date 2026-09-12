@@ -86,6 +86,11 @@ module tb_tcp_chain;
     wire [31:0] rb_rcv_nxt, rb_snd_nxt, rb_snd_una;
     wire [15:0] rb_rcv_wnd, rb_snd_wnd;
     wire [3:0]  rb_state;
+    // P4b-7-P6: tcb 注册窗口读口 -> tcp_tx_frame 门控 (win_id = rb_id 同一条线)
+    // P4b-7-P6-fix: win_open = 注册 32 位回绕正确门 (替代已废 win_hi_eq)
+    wire        win_open;
+    wire [15:0] win_inflight;
+    wire [15:0] win_wnd_eff;
     wire        tx_upd_wr;
     wire [3:0]  tx_upd_id;
     wire [2:0]  tx_upd_sel;
@@ -208,6 +213,8 @@ module tb_tcp_chain;
         .rb_id(rb_id), .rb_rcv_nxt(rb_rcv_nxt), .rb_snd_nxt(rb_snd_nxt),
         .rb_snd_una(rb_snd_una), .rb_rcv_wnd(rb_rcv_wnd), .rb_snd_wnd(rb_snd_wnd),
         .rb_state(rb_state),
+        .win_id(rb_id), .win_open(win_open),
+        .win_inflight(win_inflight), .win_wnd_eff(win_wnd_eff),
         .upd_wr(tcb_wr), .upd_id(tcb_id), .upd_sel(tcb_sel), .upd_val(tcb_val)
     );
 
@@ -235,6 +242,7 @@ module tb_tcp_chain;
         .ack_syn(tx_ack_syn),
         .rb_id(rb_id), .rb_snd_nxt(rb_snd_nxt), .rb_rcv_nxt(rb_rcv_nxt),
         .rb_rcv_wnd(rb_rcv_wnd), .rb_snd_una(rb_snd_una), .rb_snd_wnd(rb_snd_wnd),
+        .win_open(win_open), .win_inflight(win_inflight), .win_wnd_eff(win_wnd_eff),
         .upd_wr(tx_upd_wr), .upd_id(tx_upd_id), .upd_sel(tx_upd_sel), .upd_val(tx_upd_val),
         .cam_rd_id(cam_rd_id), .cam_rd_dmac(cam_rd_dmac), .cam_rd_sip(cam_rd_sip),
         .cam_rd_sport(cam_rd_sport), .cam_rd_dport(cam_rd_dport),

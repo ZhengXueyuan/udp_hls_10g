@@ -24,7 +24,12 @@ module mac_rx_64 (
     output reg  [31:0] stat_frames,
     output reg  [31:0] stat_crc_err,
     output reg  [31:0] stat_drop,
-    output reg  [31:0] stat_bytes
+    output reg  [31:0] stat_bytes,
+    // P4b-7-P6 三站词计数 (第 1 站, UART 行尾 MW 字段): 发出的 m_axis 字计数
+    //   (tvalid && tready)。与下游 CW (rx_classify 进/出) / RW (tcp_rx 进) 对账:
+    //   MW 增长而下游不增长 = 本层 FIFO 后段/下游拒收期间词被滞压 (非丢失);
+    //   MW 与 CW 同步增长而 RW 落后 = 丢词发生在 rx_classify 或其后。
+    output reg  [31:0] dbg_stat_words_out
 );
 
     localparam [2:0] S_IDLE = 3'd0, S_PRE = 3'd1, S_DATA = 3'd2,
@@ -102,7 +107,11 @@ module mac_rx_64 (
             push <= 0; push_last <= 0; push_sop <= 0; push_crs <= 0; push_err <= 0;
             push_data <= 0; push_keep <= 0;
             stat_frames <= 0; stat_crc_err <= 0; stat_drop <= 0; stat_bytes <= 0;
+            dbg_stat_words_out <= 32'd0;
         end else begin
+            // P4b-7-P6 三站词计数 (第 1 站): 输出字握手拍 +1
+            if (m_axis_tvalid && m_axis_tready)
+                dbg_stat_words_out <= dbg_stat_words_out + 32'd1;
             push      <= 1'b0;
             push_last <= 1'b0;
             push_sop  <= 1'b0;

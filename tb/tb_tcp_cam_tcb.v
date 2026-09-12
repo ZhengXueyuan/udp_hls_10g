@@ -52,6 +52,7 @@ module tb_tcp_cam_tcb;
         .rb_id(rb_id), .rb_rcv_nxt(rb_rcv_nxt), .rb_snd_nxt(rb_snd_nxt),
         .rb_snd_una(rb_snd_una), .rb_rcv_wnd(rb_rcv_wnd), .rb_snd_wnd(rb_snd_wnd),
         .rb_state(rb_state),
+        .win_id(4'b0), .win_open(), .win_inflight(), .win_wnd_eff(),   // 无消费方
         .upd_wr(upd_wr), .upd_id(upd_id), .upd_sel(upd_sel), .upd_val(upd_val)
     );
 

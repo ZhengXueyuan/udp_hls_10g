@@ -9,14 +9,15 @@
 //   /CAMF/TCBF + SLOWRX (commit drop) / SLOWTX (frames purge)。
 // 校验全语义 (gen_stim_p4_chain.py check): HLS 应答拍级不可预期, 快慢流自由交错。
 module tb_p4_chain;
-    // P4b-7 P4 (RTO 门): 默认 RTO_LIM 781250 在 60000 拍尾窗内凑不满 2000 次
-    // 连接扫描; 压到 2000 (2000 访问 x 16 连接轮扫 ≈ 32k 拍) 才落在尾窗内。
-    // 仅 +RTOLIM_FAST (burst 门) 压缩; chain 门 (无对端 ACK 模型) 保持默认,
-    // 压缩会让 conn0/conn1 在尾窗 RTO 风暴 (stat_retx>0) 破门。
-    // conn1 的 20B echo 无 PCACK 确认 — 压缩后其 RTO 风暴由 burst 刺激尾部
-    // 的 c1ack 纯 ACK (gen_stim_p4_chain.py) 追平 snd_una 平息。
+    // P4b-7 P4 (RTO 门): tick 版扫描下 RTO = RTO_LIM x 16 tick x 16 连接 =
+    // RTO_LIM x 256 拍; 默认 48828 ≈ 12.5M 拍 ≈ 100ms 板级。sim 尾窗 60k 拍
+    // -> RTOLIM_FAST 压到 125 (125x256 = 32k 拍) 落在尾窗内。仅 +RTOLIM_FAST
+    // (burst 门) 压缩; chain 门 (无对端 ACK 模型) 保持默认, 压缩会让
+    // conn0/conn1 在尾窗 RTO 风暴 (stat_retx>0) 破门。conn1 的 20B echo 无
+    // PCACK 确认 — 压缩后其 RTO 风暴由 burst 刺激尾部的 c1ack 纯 ACK
+    // (gen_stim_p4_chain.py) 追平 snd_una 平息。
 `ifdef RTOLIM_FAST
-    defparam u_tx.RTO_LIM = 2000;
+    defparam u_tx.RTO_LIM = 125;
 `endif
 
     reg        clk, rst_n;
@@ -86,17 +87,31 @@ module tb_p4_chain;
     wire [3:0]  cam_q_id;
     wire [31:0] rx_stat_pass, rx_stat_nonmatch, rx_stat_ipcsum, rx_stat_crc,
                 rx_stat_seq, rx_stat_ack, rx_stat_bytes;
+    wire [31:0] rx_stat_trunc;   // P4b-7-P6: 截断帧计数 (stat_drop_trunc)
     // tcp_echo -> tcp_tx_frame
     wire [63:0] eco_tdata;
     wire [7:0]  eco_tkeep;
     wire        eco_tvalid, eco_tready, eco_tlast;
     wire [3:0]  eco_tid;
+
+    // P4b-7-P6: echo -> tx_frame 流水寄存器总线 (拆 frame_fifo RAMB -> csum 临界路径)
+    wire [63:0] eco2_tdata;
+    wire [7:0]  eco2_tkeep;
+    wire        eco2_tvalid, eco2_tready, eco2_tlast;
+    wire [3:0]  eco2_tid;
+    wire [76:0] eco2_pack;
+    assign {eco2_tkeep, eco2_tlast, eco2_tdata, eco2_tid} = eco2_pack;
     wire [31:0] eco_stat_echo, eco_stat_drop_crc;
     // tcp_tx_frame
     wire [3:0]  rb_id;
     wire [31:0] rb_rcv_nxt, rb_snd_nxt, rb_snd_una;
     wire [15:0] rb_rcv_wnd, rb_snd_wnd;
     wire [3:0]  rb_state;
+    // P4b-7-P6: tcb 注册窗口读口 -> tcp_tx_frame 门控 (win_id = rb_id 同一条线)
+    // P4b-7-P6-fix: win_open = 注册 32 位回绕正确门 (替代已废 win_hi_eq)
+    wire        win_open;
+    wire [15:0] win_inflight;
+    wire [15:0] win_wnd_eff;
     wire        tx_upd_wr;
     wire [3:0]  tx_upd_id;
     wire [2:0]  tx_upd_sel;
@@ -221,6 +236,8 @@ module tb_p4_chain;
     reg [31:0] s_cur, p_cur;     // 帧尾解码暂存 (阻塞赋值, 同拍消费)
     integer    fdi;
     integer    txdrop_n1, txdrop_n2;   // 丢帧索引, 来自 txdrop.memh (0 = 关)
+    integer    trunc_n, trunc_m;       // P4b-7-P6 截断注入 (trunc.memh, 0 = 关)
+    integer    eco_run, eco_max;       // echo 出口最长无 tlast 词串 (合并哨兵)
     reg [7:0]  data_cnt;         // conn0 数据帧计数 (0 基, 仅活数据帧)
     reg        drop_armed_a, drop_armed_b;
     reg        drop_win_a, drop_win_b;  // 高 = 丢弃窗口 (对 GMII 捕获屏蔽)
@@ -337,7 +354,8 @@ module tb_p4_chain;
         .cam_q_hit(cam_q_hit), .cam_q_id(cam_q_id),
         .stat_pass(rx_stat_pass), .stat_drop_nonmatch(rx_stat_nonmatch),
         .stat_drop_ipcsum(rx_stat_ipcsum), .stat_drop_crc(rx_stat_crc),
-        .stat_drop_seq(rx_stat_seq), .stat_ack(rx_stat_ack), .stat_bytes(rx_stat_bytes)
+        .stat_drop_seq(rx_stat_seq), .stat_ack(rx_stat_ack), .stat_bytes(rx_stat_bytes),
+        .stat_drop_trunc(rx_stat_trunc)
     );
 
     tcp_echo u_echo (
@@ -349,6 +367,14 @@ module tb_p4_chain;
         .m_axis_tdata(eco_tdata), .m_axis_tkeep(eco_tkeep), .m_axis_tvalid(eco_tvalid),
         .m_axis_tready(eco_tready), .m_axis_tlast(eco_tlast), .m_axis_tid(eco_tid),
         .stat_echo(eco_stat_echo), .stat_drop_crc(eco_stat_drop_crc)
+    );
+
+    // ---- P4b-7-P6: echo -> tx_frame 1-deep 全速流水寄存器 (拆临界路径) ----
+    axis_pipe #(.W(77)) u_eco_pipe (
+        .clk(clk), .rst_n(rst_n),
+        .s_data({eco_tkeep, eco_tlast, eco_tdata, eco_tid}),
+        .s_valid(eco_tvalid), .s_ready(eco_tready),
+        .m_data(eco2_pack), .m_valid(eco2_tvalid), .m_ready(eco2_tready)
     );
 
     tcp_cam u_cam (
@@ -371,6 +397,8 @@ module tb_p4_chain;
         .rb_id(rb_id), .rb_rcv_nxt(rb_rcv_nxt), .rb_snd_nxt(rb_snd_nxt),
         .rb_snd_una(rb_snd_una), .rb_rcv_wnd(rb_rcv_wnd), .rb_snd_wnd(rb_snd_wnd),
         .rb_state(rb_state),
+        .win_id(rb_id), .win_open(win_open),
+        .win_inflight(win_inflight), .win_wnd_eff(win_wnd_eff),
         .upd_wr(tcb_wr), .upd_id(tcb_id), .upd_sel(tcb_sel), .upd_val(tcb_val)
     );
 
@@ -390,13 +418,14 @@ module tb_p4_chain;
 
     tcp_tx_frame u_tx (
         .clk(clk), .rst_n(rst_n),
-        .s_axis_tdata(eco_tdata), .s_axis_tkeep(eco_tkeep),
-        .s_axis_tvalid(eco_tvalid), .s_axis_tready(eco_tready), .s_axis_tlast(eco_tlast),
-        .s_axis_tid(eco_tid),
+        .s_axis_tdata(eco2_tdata), .s_axis_tkeep(eco2_tkeep),
+        .s_axis_tvalid(eco2_tvalid), .s_axis_tready(eco2_tready), .s_axis_tlast(eco2_tlast),
+        .s_axis_tid(eco2_tid),
         .ack_req(tx_ack_req), .ack_id(tx_ack_id), .ack_val(tx_ack_val),
         .ack_syn(tx_ack_syn),
         .rb_id(rb_id), .rb_snd_nxt(rb_snd_nxt), .rb_rcv_nxt(rb_rcv_nxt),
         .rb_rcv_wnd(rb_rcv_wnd), .rb_snd_una(rb_snd_una), .rb_snd_wnd(rb_snd_wnd),
+        .win_open(win_open), .win_inflight(win_inflight), .win_wnd_eff(win_wnd_eff),
         .upd_wr(tx_upd_wr), .upd_id(tx_upd_id), .upd_sel(tx_upd_sel), .upd_val(tx_upd_val),
         .cam_rd_id(cam_rd_id), .cam_rd_dmac(cam_rd_dmac), .cam_rd_sip(cam_rd_sip),
         .cam_rd_sport(cam_rd_sport), .cam_rd_dport(cam_rd_dport),
@@ -409,6 +438,90 @@ module tb_p4_chain;
         .retx_req(retx_req), .retx_id(retx_id), .retx_gnt(retx_gnt),
         .stat_retx(tx_stat_retx)
     );
+
+    // ---- P4b-7-P6 门控对账探针 (sim-only, 零 RTL 改动): 逐拍比较 u_tx 门控消费
+    //      的注册 win_* (tcb 1 拍注册, 键 = 上拍 rb_id) 与 rb_* 组合读口按本拍
+    //      rb_id 的 fresh 计算。差 1 拍 → 写后/连接切换后 1 拍失配属构造瞬态;
+    //      长串失配 = 门控系统性问题 (板上冻结特征 = 错关长串且真在飞 < 帽)。
+    //      P4b-7-P6-fix: fresh 公式改 32 位回绕正确 (f_diff = 全 32 位差 < 帽),
+    //      与修复后的注册门同式对照; f_16hi 保留 = 旧 16 位公式的对照 (straddle
+    //      探针): 在飞区间跨任意 64K 边界时 f_16hi=0 — 旧门此时误关, 新 32 位
+    //      fresh 门必须仍开且注册门 (wnd_open) 必须保持开 (str_mm 必须 ~0)。
+    //      全经 $display (写 resp 会炸 burstcheck 的 parse_gmii int(p[0],16))。
+    wire [31:0] f_diff = rb_snd_nxt - rb_snd_una;  // 32 位回绕正确在飞差
+    wire [15:0] f_wnd  = (rb_snd_wnd < 16'h2FFE) ? rb_snd_wnd : 16'h2FFE;
+    wire        f_open = (f_diff < {16'b0, f_wnd});
+    wire        f_16hi = (rb_snd_nxt[31:16] == rb_snd_una[31:16]);  // 旧 16 位门对照
+    wire        mm_est = (rb_snd_wnd != 16'd0);    // 连接已建立 (窗非 0)
+    wire        mm_dis = mm_est && (u_tx.wnd_open != f_open);   // 门/注册失配
+    wire        mm_wro = mm_est &&  u_tx.wnd_open && !f_open;   // 误开
+    wire        mm_wrc = mm_est && !u_tx.wnd_open && f_open;    // 误关
+    wire        mm_ez  = mm_est && (win_wnd_eff == 16'd0);      // 注册窗损坏 0
+    wire        mm_bs  = mm_wrc && eco2_tvalid && (u_tx.state == 3'd0) &&
+                         !u_tx.ack_pend_r && !u_tx.pay_full &&
+                         !u_tx.svc && !u_tx.ring_eval && !u_tx.scan_now;
+                                                     // 误关挡了本可启动的活帧
+    // ---- straddle 探针 (P4b-7-P6-fix 定向验证): 跨 64K 边界 (高 16 位不等)
+    //      + fresh 32 位门开 = 旧 16 位公式必误关的周期; str_cnt 应 > 0 (burst
+    //      seq 0x12345679 起 292KB 每次跨界都扫过), str_mm 应 ~0 (注册门跨边界
+    //      期必须保持开 — 旧门正是这里关死导致板上冻结) ----
+    wire        strad  = mm_est && !f_16hi && f_open;
+    wire        str_mm = strad && !u_tx.wnd_open;  // 跨界期注册门误关
+    reg  [31:0] mm_cnt, mm_wro_c, mm_wrc_c, mm_bs_c, mm_ez_c, mm_id0_c;
+    reg  [31:0] mm_run, mm_run_op, mm_run_cl;
+    reg  [31:0] mm_runmax, mm_oprunmax, mm_clrunmax;
+    reg  [31:0] mm_prc, mm_bprc;
+    reg  [31:0] str_cnt, str_mm_c;
+    always @(posedge clk) begin
+        if (!rst_n) begin
+            mm_cnt <= 0; mm_wro_c <= 0; mm_wrc_c <= 0; mm_bs_c <= 0;
+            mm_ez_c <= 0; mm_id0_c <= 0;
+            mm_run <= 0; mm_run_op <= 0; mm_run_cl <= 0;
+            mm_runmax <= 0; mm_oprunmax <= 0; mm_clrunmax <= 0;
+            mm_prc <= 0; mm_bprc <= 0;
+            str_cnt <= 0; str_mm_c <= 0;
+        end else begin
+            if (mm_ez) mm_ez_c <= mm_ez_c + 32'd1;
+            if (strad) str_cnt <= str_cnt + 32'd1;
+            if (str_mm) str_mm_c <= str_mm_c + 32'd1;
+            if (mm_dis) begin
+                mm_cnt <= mm_cnt + 32'd1;
+                mm_run <= mm_run + 32'd1;
+                if (mm_run + 32'd1 > mm_runmax) mm_runmax <= mm_run + 32'd1;
+                if (rb_id == 4'd0) mm_id0_c <= mm_id0_c + 32'd1;
+                if (u_tx.wnd_open) begin              // 误开
+                    mm_wro_c <= mm_wro_c + 32'd1;
+                    mm_run_op <= mm_run_op + 32'd1;
+                    mm_run_cl <= 32'd0;
+                    if (mm_run_op + 32'd1 > mm_oprunmax)
+                        mm_oprunmax <= mm_run_op + 32'd1;
+                end else begin                        // 误关
+                    mm_wrc_c <= mm_wrc_c + 32'd1;
+                    mm_run_cl <= mm_run_cl + 32'd1;
+                    mm_run_op <= 32'd0;
+                    if (mm_run_cl + 32'd1 > mm_clrunmax)
+                        mm_clrunmax <= mm_run_cl + 32'd1;
+                    if (mm_bs) begin
+                        mm_bs_c <= mm_bs_c + 32'd1;
+                        if (mm_bprc < 32'd8) begin
+                            $display("MMB t=%0d rb_id=%d win=(%b %d %d) fresh=(%d %d) hi16=%b",
+                                     k, rb_id, win_open, win_inflight,
+                                     win_wnd_eff, f_diff[15:0], f_wnd, f_16hi);
+                            mm_bprc <= mm_bprc + 32'd1;
+                        end
+                    end
+                end
+                if (mm_prc < 32'd8) begin
+                    $display("MM t=%0d rb_id=%d win=(%b %d %d) fresh=(%d %d) hi16=%b",
+                             k, rb_id, win_open, win_inflight, win_wnd_eff,
+                             f_diff[15:0], f_wnd, f_16hi);
+                    mm_prc <= mm_prc + 32'd1;
+                end
+            end else begin
+                mm_run <= 0; mm_run_op <= 0; mm_run_cl <= 0;
+            end
+        end
+    end
 
     // ---- 慢路径: slow_rx_adp -> udp_echo (HLS) -> slow_tx_adp ----
     slow_rx_adp u_slow_rx (
@@ -497,15 +610,22 @@ module tb_p4_chain;
                     // 注入帧播放 (静态流暂停, i 冻结 — rcv_nxt 播放期不变)。
                     // 前 12 拍播 IFG (dv=0)! 直接进前导会让 mac_rx_64 收不到
                     // 帧间间隙 → 注入帧与静态前帧融合成一帧 (PCACK 首版实锤)。
+                    // P4b-7-P6: 尾 12 拍同样必须 IFG — 注入帧紧贴下一刺激帧
+                    // (零空闲, 12B 帧隙被注入吃光时) 会反向融合, MAC 整帧
+                    // CRC 失败双丢 (drop50 实锤: 注入 ACK 吞掉 burst 第 148
+                    // 段 → rcv_nxt 冻结 → 尾部全拒收)。12+72+12 = 96 拍。
                     if (inj_idx < 7'd12) begin
                         rx_d  <= 8'h07;
                         rx_dv <= 1'b0;
-                    end else begin
+                    end else if (inj_idx < 7'd84) begin
                         rx_d  <= inj_buf[inj_idx - 7'd12];
                         rx_dv <= 1'b1;
+                    end else begin
+                        rx_d  <= 8'h07;
+                        rx_dv <= 1'b0;
                     end
                     rx_er <= 1'b0;
-                    if (inj_idx == 7'd83) inj_play <= 1'b0;   // 12 IFG + 72 帧
+                    if (inj_idx == 7'd95) inj_play <= 1'b0;
                     inj_idx <= inj_idx + 7'd1;
                 end else if (i < nstim) begin
                     if (pcack_en && inj_pend && !stim_v[i][0] &&
@@ -587,6 +707,15 @@ module tb_p4_chain;
             $fscanf(fdi, "%d", txdrop_n2);
             $fclose(fdi);
         end
+        // P4b-7-P6 TRUNC 同通道 (trunc.memh: "N M" = 第 N 个 conn0 数据段裁到
+        // M 字节; 0 = 关)。同 txdrop: xsim loader 拆含 '=' 的 plusarg, 到不了 TB
+        trunc_n = 0; trunc_m = 8;
+        fdi = $fopen("trunc.memh", "r");
+        if (fdi != 0) begin
+            $fscanf(fdi, "%d", trunc_n);
+            $fscanf(fdi, "%d", trunc_m);
+            $fclose(fdi);
+        end
         $readmemh("stim_data.memh", stim_d);
         $readmemh("stim_dv.memh",   stim_v);
         $readmemh("stim_er.memh",   stim_e);
@@ -616,12 +745,52 @@ module tb_p4_chain;
         $fwrite(fd, "SLOWTX %0d %0d\n", stx_frames, stx_purge);
         $fwrite(fd, "STATS_MAC %0d %0d %0d\n", mac_stat_frames, mac_stat_abort,
                 tx_stat_eend);
+        // P4b-7-P6: 截断注入参数 + 截断支计数 + echo 出口最长词串
+        $fwrite(fd, "TRUNCS %0d %0d\n", trunc_n, rx_stat_trunc);
+        $fwrite(fd, "ECOMAX %0d\n", eco_max);
         $fclose(fd);
+        if (trunc_n > 0 && rx_stat_trunc == 0)
+            $display("TRUNC_MISS n=%0d stat_drop_trunc=0 (截断支未走过)", trunc_n);
         $display("DONE rx(pass=%0d nm=%0d ack=%0d) tx(fr=%0d ack=%0d) eco(echo=%0d) slow(cmt=%0d drp=%0d tx=%0d pg=%0d)",
                  rx_stat_pass, rx_stat_nonmatch, rx_stat_ack,
                  tx_stat_frames, tx_stat_ack, eco_stat_echo,
                  srx_commit, srx_drop, stx_frames, stx_purge);
+        $display("GATEPROBE mm=%0d wro=%0d wrc=%0d id0=%0d blk=%0d eff0=%0d runmax=%0d oprun=%0d clrun=%0d strad=%0d strmm=%0d",
+                 mm_cnt, mm_wro_c, mm_wrc_c, mm_id0_c, mm_bs_c, mm_ez_c,
+                 mm_runmax, mm_oprunmax, mm_clrunmax, str_cnt, str_mm_c);
         $finish;
+    end
+
+    // ---- P4b-7-P6: tcp_rx w6 判定拍全信号转储 (触发定位, 每数据帧 1 行) ----
+    reg rxdbg_prev = 0;
+    always @(posedge clk) begin
+        if (!rst_n) rxdbg_prev <= 0;
+        else if (u_rx.state == 3'd0 && u_rx.wcnt == 3'd6 &&
+                 u_rx.s_axis_tvalid && u_rx.s_axis_tready && !rxdbg_prev)
+            $display("RXDBG k=%0d seq=%08h ack=%08h plen=%0d acc=%b arsp=%b adv=%b dup=%b cam=%b st=%0d rn=%08h rw=%04h su=%08h sn=%08h tk=%02h tl=%b",
+                     k, u_rx.seq32_l, u_rx.ack32_l, u_rx.plen_l, u_rx.acc_l,
+                     u_rx.ackresp_l, u_rx.ack_adv_l, u_rx.dup_l, u_rx.cam_hit_l,
+                     ra_state, ra_rcv_nxt, ra_rcv_wnd, ra_snd_una, ra_snd_nxt,
+                     u_rx.s_axis_tkeep, u_rx.s_axis_tlast);
+        if (u_rx.state == 3'd0 && u_rx.wcnt == 3'd6 &&
+            u_rx.s_axis_tvalid && u_rx.s_axis_tready) rxdbg_prev <= 1;
+        else rxdbg_prev <= 0;
+    end
+
+    // ---- P4b-7-P6 echo 出口最长无 tlast 词串 (帧合并/无尽帧哨兵) ----
+    // tcp_echo 载荷出口 (64bit 字流, tlast 后清): 1450..1460B 单帧 = 182 个
+    // 非尾词; P6 冻结签名 (tlast 丢失 -> 多段合并 = 256+ 词无尽帧) 在此现行。
+    always @(posedge clk) begin
+        if (!rst_n) begin
+            eco_run <= 0; eco_max <= 0;
+        end else if (eco_tvalid && eco_tready) begin
+            if (eco_tlast) begin
+                eco_run <= 0;
+            end else begin
+                if (eco_run + 1 > eco_max) eco_max <= eco_run + 1;
+                eco_run <= eco_run + 1;
+            end
+        end
     end
 
     // ---- GMII 字节捕获 + 事件捕获 ----
@@ -676,7 +845,6 @@ module tb_p4_chain;
             nm_prev <= rx_stat_nonmatch;
         end
     end
-
 
     // ---- TX echo 帧捕获 (gmii_tx_en_mon: TXDROP 丢弃帧对模型不可见):
     //      帧尾按空洞语义调度 ACK — 顺序帧累计推进; OOO 帧每个恰好注入一个

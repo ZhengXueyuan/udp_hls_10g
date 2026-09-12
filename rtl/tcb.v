@@ -27,6 +27,25 @@ module tcb #(
     output wire [15:0] rb_rcv_wnd,
     output wire [15:0] rb_snd_wnd,
     output wire [3:0]  rb_state,
+    // 窗口读口 (P4b-7-P6 时序: 注册输出, tcp_tx_frame 门控专用 — 门控决策
+    // 只消费寄存器, 切断 rb_id -> TCB mux -> 减法/比较 -> tready -> retx_ram
+    // 写口的最差前向链; ra/rb 组合读口及语义全部不动)
+    // P4b-7-P6-fix (64K 边界误关根因): 16 位 hi_eq+低 16 位差门在在飞区间跨越
+    // 任意 64K 边界时高半不等而误关 (板上 ISS 0x12345678 首跨 ~43KB 处实锤
+    // 永久冻结) — 改为 32 位回绕正确减法 + 比较, 全部注册在本模块内, 输出
+    // win_open 1 位即最终门; win_inflight/win_wnd_eff 保留 (低 16 位差/帽值,
+    // wrapper 锁存 debug 用, 不再参与门控决策)。
+    input  wire [3:0]  win_id,
+    output reg         win_open,         // 32 位回绕正确门: (snd_nxt-snd_una) < 帽
+    output reg  [15:0] win_inflight,     // 32 位差低 16 位 (debug 用)
+    output reg  [15:0] win_wnd_eff,      // min(snd_wnd, 0x2FFE = RING_CAP)
+    // ---- P6 冻结诊断: conn0 阵列快照 (纯 assign 组合读 entry[0], 无时序影响) ----
+    output wire [31:0] dbg_snd_nxt0,
+    output wire [31:0] dbg_snd_una0,
+    output wire [31:0] dbg_rcv_nxt0,
+    output wire [15:0] dbg_snd_wnd0,
+    output wire [3:0]  dbg_wscale0,
+    output wire [3:0]  dbg_state0,
     // 更新口
     input  wire        upd_wr,
     input  wire [3:0]  upd_id,
@@ -77,4 +96,26 @@ module tcb #(
     assign rb_rcv_wnd = rcv_wnd_r[rb_id];
     assign rb_snd_wnd = snd_wnd_r[rb_id];
     assign rb_state   = state_r[rb_id];
+
+    // ---- P6 冻结诊断: conn0 快照 (恒等 array[0], 与 ra/rb mux 无关) ----
+    assign dbg_snd_nxt0 = snd_nxt_r[0];
+    assign dbg_snd_una0 = snd_una_r[0];
+    assign dbg_rcv_nxt0 = rcv_nxt_r[0];
+    assign dbg_snd_wnd0 = snd_wnd_r[0];
+    assign dbg_wscale0  = wscale_r[0];
+    assign dbg_state0   = state_r[0];
+
+    // ---- 注册窗口读口 (无复位: 初值无意义, 门控只在 ESTAB 状态才起作用;
+    //      1 拍旧值的影响见 tcp_tx_frame RING_CAP 注释: 最坏误开 1 拍) ----
+    // P4b-7-P6-fix: 32 位回绕正确减法 win_diff (wrap-correct, snd_nxt 回绕过
+    // 0xFFFFFFFF 也精确) + 16 位帽值 mux, 比较 < 帽后全注册输出 — tcb 到
+    // tx 决策无任何组合链 (减/比较 皆在寄存器块内, 输入是 win_id 读出的
+    // 阵列寄存器, 输出仍 1 拍后稳定)。
+    wire [31:0] win_diff = snd_nxt_r[win_id] - snd_una_r[win_id];   // 32-bit wrap-correct
+    wire [15:0] win_cap  = (snd_wnd_r[win_id] < 16'h2FFE) ? snd_wnd_r[win_id] : 16'h2FFE;
+    always @(posedge clk) begin
+        win_open     <= (win_diff < {16'b0, win_cap});
+        win_inflight <= win_diff[15:0];
+        win_wnd_eff  <= win_cap;
+    end
 endmodule

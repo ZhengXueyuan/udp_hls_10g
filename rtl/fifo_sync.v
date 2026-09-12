@@ -13,13 +13,23 @@ module fifo_sync #(
     input  wire        rd,
     output reg  [W-1:0] dout,
     output wire        empty,
-    output wire        full
+    output wire        full,
+    // ---- P4b-7-P6 调试探针 (纯 assign 线束输出, 与上述逻辑零耦合) ----
+    output wire [AW:0]  dbg_wptr,      // 写指针 (含绕回位)
+    output wire [AW:0]  dbg_rptr,      // 读指针 (含绕回位)
+    output wire         dbg_full,      // = full
+    output wire         dbg_empty      // = empty
 );
     reg [AW:0]  wptr, rptr;
     reg [W-1:0] mem [0:D-1];
 
     assign full  = (wptr[AW-1:0] == rptr[AW-1:0]) && (wptr[AW] != rptr[AW]);
     assign empty = (wptr == rptr);
+
+    assign dbg_wptr  = wptr;
+    assign dbg_rptr  = rptr;
+    assign dbg_full  = full;
+    assign dbg_empty = empty;
 
     wire [AW:0] rptr_n = rptr + ((rd && !empty) ? 1'b1 : 1'b0);
     wire        bypass = (wr && !full) && (rptr_n[AW-1:0] == wptr[AW-1:0]);

@@ -69,7 +69,8 @@ module slow_tx_adp (
         .clk(clk), .rst_n(rst_n),
         .wr(wf_wr), .din(wf_din),
         .snap(wf_snap), .rollback(wf_rlbk),
-        .rd(wf_rd), .dout(wf_dout), .empty(wf_empty), .full(wf_full)
+        .rd(wf_rd), .dout(wf_dout), .empty(wf_empty), .full(wf_full),
+        .dbg_rd_addr(9'd0), .dbg_rd_side()   // P6c 诊断读口未用 (tcp_echo 实例才接)
     );
 
     wire start_play = (ostate == O_IDLE) && (committed != 8'd0) && !wf_empty;

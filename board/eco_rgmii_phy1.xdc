@@ -1,7 +1,8 @@
 #=============================================================================
 # eco_rgmii_phy1.xdc — Kintex7 ECO 板 (XC7K325T-2FFG676C) 1G RGMII PHY1 引脚+时钟约束
 # 来源: D:\repo\ECO\udp_hls_eco\xdc\eco_rgmii_phy1.xdc (板上 7/7 PASS 配方),
-#       逐字复用; 仅删去 UART 约束 (本阶段 wrapper_1g.v 无 UART 端口)。
+#       逐字复用; UART 约束 (P4b-7-P6 冻结诊断) 按 udp_hls_eco 原配方重新加入。
+#       其余部分逐字同 wrapper_1g.v 时代的 eco_rgmii_phy1.xdc。
 #=============================================================================
 # 引脚策略 (2026-08-16 板上验证, 详见 udp_hls_eco/PORT_NOTES.md):
 #   - PHY1 RGMII = k719/k720 DEMO 引脚组 — 板载验证: AB2 上有真实 2.5MHz
@@ -67,6 +68,13 @@ set_property IOSTANDARD LVCMOS33 [get_ports fpga_gclk]
 set_property PACKAGE_PIN D26 [get_ports reset_n]
 set_property IOSTANDARD LVCMOS33 [get_ports reset_n]
 set_property PULLUP true [get_ports reset_n]
+
+# --- UART TX (板载 CH340E USB 串口 → PC; k707 demo + udp_hls_eco 配方引脚 A17,
+#     P4b-7-P6 冻结态全精度读出; 9600-8N1, LVCMOS33 TTL) ---
+set_property PACKAGE_PIN A17 [get_ports uart_txd]
+set_property IOSTANDARD LVCMOS33 [get_ports uart_txd]
+set_property DRIVE 12 [get_ports uart_txd]
+set_property SLEW SLOW [get_ports uart_txd]
 
 # --- LEDs (k701/k720 demo 引脚; 板上 8 个 LED 中仅这 4 个有验证映射,
 #          本工程 wrapper 只用这 4 个) ---

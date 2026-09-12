@@ -56,7 +56,13 @@ module tcp_rx (
     input  wire [3:0]  ra_state,
     input  wire [3:0]  ra_wscale,   // 对端 window scale (snd_wnd drain 缩放用)
     // TCB 更新 (fend 后 drain: 拍1 rcv_nxt, 拍2 snd_una, 拍3 snd_wnd;
-    // 组合电平输出, upd_gnt 未给则保持该字段 — 顶层仲裁必须无损 (tx 优先时 rx 靠 gnt 顺延)
+    // 组合电平输出, upd_gnt 未给则保持该字段 — 顶层仲裁必须无损 (tx 优先时 rx 靠 gnt 顺延)。
+    // P4b-7-P6 ROOT CAUSE #2 修复: pend 标志 sticky — fend 只置位不覆盖, drain 在
+    // 写被 gnt 时逐字段清除。旧实现每 fend 重锁存 (非推进帧的 fend — 重复纯 ACK
+    // 突发 / 坏 FCS 帧 — 把未写出的推进 pend_una/pend_rcv 重锁成 0 → snd_una/
+    // rcv_nxt 永久停滞 → 在飞涨到 RING_CAP → 窗门误关 → 死锁)。值寄存器只在
+    // 对应条件成立时更新 (否则挂起推进值被重复帧的旧 ack/旧窗口覆盖)。
+    // pend_id 假设: 三个 pend 同一连接 (单连接数据面; 多连接需逐字段 pend_id)。
     output wire        upd_wr,
     output wire [3:0]  upd_id,
     output wire [2:0]  upd_sel,
@@ -89,12 +95,50 @@ module tcp_rx (
     input  wire [3:0]  cam_q_id,
     // 统计
     output reg  [31:0] stat_pass,          // 接受且 FCS 好 (含纯 ACK)
-    output reg  [31:0] stat_drop_nonmatch, // 头坏/非 TCP/CAM 未命中/状态/标志/带选项/窗口外/截断
+    output reg  [31:0] stat_drop_nonmatch, // 头坏/非 TCP/CAM 未命中/状态/标志/带选项/窗口外
+    output reg  [31:0] stat_drop_trunc,    // P4b-7-P6: 截断帧 (线上 tlast 早于承诺载荷) — 修复后按真实字节收下转发
     output reg  [31:0] stat_drop_ipcsum,   // IP 头校验和错
     output reg  [31:0] stat_drop_crc,      // 接受但 FCS 坏 (载荷交付, 不回 ACK)
     output reg  [31:0] stat_drop_seq,      // 窗口内 seq 不符 (重复/乱序): 丢数据仍回 ACK
     output reg  [31:0] stat_ack,           // ACK 请求数
-    output reg  [31:0] stat_bytes          // 接受且 FCS 好的载荷字节
+    output reg  [31:0] stat_bytes,         // 接受且 FCS 好的载荷字节
+    // P4b-7-P6 诊断 (UART RX 侧快照, 纯 assign): FSM 位点 + 接受/发射状态
+    output wire [2:0]  dbg_state,          // FSM state (S_HDR/S_PAY/S_PAD/S_DROP/S_TAIL)
+    output wire        dbg_accept,         // 接受拍 = s_axis_tvalid && s_axis_tready
+    output wire        dbg_emitv,          // emit_v (载荷输出字挂起)
+    // P4b-7-P6 追加 (UART 行尾 RXPL/RXPC/RXT/DROPS/PASS, 纯 assign 零逻辑):
+    //   plen_l = IP total_len-40 的锁存 (帧判读依据; 腐败则 over-length 守卫
+    //   S_DROP 中段断尾 → TX 侧永久等 tlast), pcount = 帧内已累计载荷字,
+    //   w2_tlen = w2_r[63:48] 原始 total_len 字段 (plen_l 的上游真值) + 五路
+    //   丢弃/通过计数 (冻结期逐行对比: 哪一路在递增 = 哪条判据在持续触发)
+    output wire [15:0] dbg_plen_l,
+    output wire [15:0] dbg_pcount,
+    output wire [15:0] dbg_w2_tlen,
+    output wire [31:0] dbg_stat_drop_seq,
+    output wire [31:0] dbg_stat_drop_crc,
+    output wire [31:0] dbg_stat_drop_nonmatch,
+    output wire [31:0] dbg_stat_drop_ipcsum,
+    output wire [31:0] dbg_stat_drop_trunc,   // P4b-7-P6: 截断帧计数 (DROPS 第 5 字段)
+    output wire [31:0] dbg_stat_pass,
+    // P4b-7-P6 RX emit 轨迹 (UART RXT 行; 纯 assign 零逻辑):
+    //   emit_l  = m_axis_tlast (尾字 emit 是否带帧尾 — 帧边界是否发出)
+    //   pay_r   = plen_l - pcount (TLAST 拍剩余载荷字节 = 尾分支判据)
+    //   pcount2 = pcount 别名 (RXT 环专用连线; 与 dbg_pcount 同寄存器同值,
+    //             dbg_pcount 已被 UART 快照行 RXPC 占用, 分开走线免串扰)
+    //   fend    = 接受帧完成脉冲 (RXT 环触发源: fend 拍 pcount 落后 plen_l
+    //             超 4 字节 = 尾分支误走/帧尾丢失)
+    output wire        dbg_emit_l,
+    output wire [15:0] dbg_pay_r,
+    output wire [15:0] dbg_pcount2,
+    output wire        dbg_fend,
+    // P4b-7-P6 三站词计数 (第 2 站, UART 行尾 RW 字段): dbg_stat_words_in =
+    //   本模块接受的 s_axis 字计数 (accept = tvalid && tready, 含全部头字与
+    //   载荷字, 每拍至多 1)。与上游 MW (mac_rx_64 出词) / CW (rx_classify
+    //   进/出词) 对账: 三站差额直接裁决丢词发生在哪一级。
+    // dbg_wcnt = 头字计数器 wcnt (RXT 轨迹条目 [26:24]): 帧头判读是否错拍
+    //   (= w2_r 锁存到旧帧长度字段的假设) 由轨迹逐拍裁决。
+    output wire [31:0] dbg_stat_words_in,
+    output wire [2:0]  dbg_wcnt
 );
 
     localparam [2:0] S_HDR = 3'd0, S_PAY = 3'd1, S_PAD = 3'd2, S_DROP = 3'd3, S_TAIL = 3'd4;
@@ -136,6 +180,8 @@ module tcp_rx (
     reg  [31:0] pend_rcv_val, pend_una_val;
     reg  [15:0] pend_wnd_val;
     reg  [1:0]  drn;
+    // P4b-7-P6 三站词计数 (第 2 站): 接受的 s_axis 字 (accept 拍, 含头字)
+    reg  [31:0] words_in;
     // P3 dup-ACK 检测: dup_l = w5 拍判出"纯 ACK 且 ack==snd_una"(w5->w6 沿锁存);
     // dup_cnt 每连接 2 位计数, in_retx 位屏蔽已请求连接
     reg         dup_l;
@@ -219,21 +265,40 @@ module tcp_rx (
     wire [3:0] pop8w   = pop8(s_axis_tkeep);
     wire [15:0] pay_r   = plen_l - pcount;      // TLAST 拍剩余载荷字节
     wire w6_tlast_ok = acc_l && (plen_l <= 16'd2) && (pop8w == 4'd6 + plen_l[3:0]);
-    wire fend_w6 = (state == S_HDR) && accept && (wcnt == 3'd6) && s_axis_tlast && w6_tlast_ok;
+    // P4b-7-P6 trunc 修复: 线上 tlast 早于 IP 承诺载荷 = 截断帧 (PC/NIC 侧怪帧,
+    // 板级 WL=72 字节实证)。旧行为: 静默吞尾不发 fend/不闭合 emit_l -> echo 帧
+    // 永不判尾 -> 后续帧全合并成无尽帧 -> TX 卡死。修复: 收多少转发多少
+    // (真实字节计数), 帧边界闭合, TCB 按真实字节推进 — PC 靠重传补回缺口。
+    wire        trunc_pay = (state == S_PAY) && accept && s_axis_tlast &&
+                            ({12'b0, pop8w} < pay_r);
+    // w6 帧尾截断 (plen_l > 2 但帧在 w6 就结束, 无载荷字): 发 fend 闭合边界,
+    // 不 emit 不推进 rcv_nxt (≤2 字节损失交给 PC 重传) — 防与后续帧合并
+    // 审查 P2-4: !s_axis_tuser 防 SOP 拍 (单字 runt 防御) 带陈旧 acc_l/plen_l
+    // 触发假 fend (fend_w6 同病)
+    wire fend_w6t = (state == S_HDR) && accept && (wcnt == 3'd6) && s_axis_tlast &&
+                    !s_axis_tuser && !w6_tlast_ok && acc_l && !ackresp_l && !syn_l;
+    wire fend_w6 = (state == S_HDR) && accept && (wcnt == 3'd6) && s_axis_tlast &&
+                   !s_axis_tuser && w6_tlast_ok;
     wire fend_pay = (state == S_PAY) && (!emit_v || m_axis_tready) && accept &&
-                    s_axis_tlast && ({12'b0, pop8w} >= pay_r);
+                    s_axis_tlast && (({12'b0, pop8w} >= pay_r) || trunc_pay);
     wire fend_pad = (state == S_PAD) && accept && s_axis_tlast;
-    assign fend   = fend_w6 || fend_pay || fend_pad;
+    assign fend   = fend_w6 || fend_w6t || fend_pay || fend_pad;
     assign ferr   = !s_axis_tcrs || s_axis_terr;
+    // 帧真实载荷字节 (截断帧 = 实际到达字节; w6 截断 = 0; 正常帧 = plen_l)
+    wire [15:0] adv_cnt = trunc_pay ? (pcount + {12'b0, pop8w}) :
+                          (fend_w6t ? 16'd0 : plen_l);
     // ACK 请求: 接受的数据段 (FCS 好, 可被 cfg_suppress_data_ack 抑制 — echo 场景)
     // / 窗口内 seq 不符数据段 (丢数据仍回 ACK); 纯 ACK 绝不回
-    assign ack_req = (((fend_w6 && (plen_l != 16'd0)) || fend_pay) && s_axis_tcrs &&
+    assign ack_req = (((fend_w6 && (plen_l != 16'd0)) || fend_pay ||
+                       // 审查 P2-6: w6 截断帧 (adv_cnt=0) 也回 ACK = rcv_nxt —
+                       // 对端立刻知道本帧未推进, 不等 RTO
+                       fend_w6t) && s_axis_tcrs &&
                       !cfg_suppress_data_ack) ||
                      ((state == S_HDR) && accept && (wcnt == 3'd6) && s_axis_tlast &&
                       ackresp_l && s_axis_tcrs) ||
                      ((state == S_DROP) && accept && s_axis_tlast && drop_ack && s_axis_tcrs);
     assign ack_id  = conn_id_l;
-    assign ack_val = (fend_w6 || fend_pay) ? (rcv_nxt_l + {16'b0, plen_l}) : rcv_nxt_l;
+    assign ack_val = (fend_w6 || fend_pay) ? (rcv_nxt_l + {16'b0, adv_cnt}) : rcv_nxt_l;
 
     assign meta_valid   = (state == S_HDR) && accept && (wcnt == 3'd6) &&
                           acc_l && (plen_l != 16'd0) &&
@@ -267,6 +332,29 @@ module tcp_rx (
     assign syn_dport = dport_r;
     assign syn_seq   = seq32_l;
     assign syn_wnd   = syn_wnd_r;
+
+    // P4b-7-P6 诊断读出 (纯线束, 与逻辑零耦合)
+    assign dbg_state  = state;
+    assign dbg_accept = accept;
+    assign dbg_emitv  = emit_v;
+    // P4b-7-P6 追加: 帧判读锁存值/原始 total_len + 丢弃·通过计数 (纯 assign)
+    assign dbg_plen_l           = plen_l;
+    assign dbg_pcount           = pcount;
+    assign dbg_w2_tlen          = w2_r[63:48];
+    assign dbg_stat_drop_seq    = stat_drop_seq;
+    assign dbg_stat_drop_crc    = stat_drop_crc;
+    assign dbg_stat_drop_nonmatch = stat_drop_nonmatch;
+    assign dbg_stat_drop_ipcsum = stat_drop_ipcsum;
+    assign dbg_stat_drop_trunc  = stat_drop_trunc;
+    assign dbg_stat_pass        = stat_pass;
+    // P4b-7-P6 RX emit 轨迹 (纯 assign, 零逻辑; 位宽/语义见端口注释)
+    assign dbg_emit_l  = emit_l;
+    assign dbg_pay_r   = pay_r;
+    assign dbg_pcount2 = pcount;
+    assign dbg_fend    = fend;
+    // P4b-7-P6 三站词计数 (第 2 站) + 头字计数器 (RXT 条目高位)
+    assign dbg_stat_words_in = words_in;
+    assign dbg_wcnt          = wcnt;
 
     wire [15:0] wnd_f = fend_w6 ? s_axis_tdata[63:48] : wnd_l;
     // snd_wnd drain 按握手 wscale 缩放 (P4b-6 窗口门控的真实量纲; 钳 16 位 —
@@ -303,25 +391,48 @@ module tcp_rx (
             for (di = 0; di < 16; di = di + 1) dup_cnt[di] <= 2'd0;
             stat_pass <= 0; stat_drop_nonmatch <= 0; stat_drop_ipcsum <= 0;
             stat_drop_crc <= 0; stat_drop_seq <= 0; stat_ack <= 0; stat_bytes <= 0;
+            stat_drop_trunc <= 0;
+            words_in <= 32'd0;
         end else begin
             if (m_axis_tready && emit_v) emit_v <= 1'b0;   // 输出被消费
             syn_v <= 1'b0;                                 // 脉冲型: 每拍默认清零
-            // ---- fend 拍锁存 TCB 更新 (drain 下拍开始, 一字段一拍, gnt 未给则保持) ----
+            // ---- fend 拍锁存 TCB 更新 (P4b-7-P6: sticky pend — fend 只置位不覆盖;
+            //      值寄存器只在对应条件成立时更新; 本帧置任一 pend 即重启 drain 到
+            //      拍1 (fend 拍 drain 分支互斥, 重启保证新置 pend 不会被越过) ----
             if (fend) begin
-                pend_rcv <= acc_l && (plen_l != 16'd0) && s_axis_tcrs;
-                pend_una <= ack_adv_l && s_axis_tcrs;
-                pend_wnd <= s_axis_tcrs;
-                pend_id <= conn_id_l;
-                pend_rcv_val <= rcv_nxt_l + {16'b0, plen_l};
-                pend_una_val <= ack32_l;
-                pend_wnd_val <= wnd_ws;
+                // P4b-7-P6 trunc: adv_cnt = 真实字节 (截断帧按到达量, w6 截断 0)
+                pend_rcv <= (acc_l && (adv_cnt != 16'd0) && s_axis_tcrs) || pend_rcv;
+                pend_una <= (ack_adv_l && s_axis_tcrs) || pend_una;
+                pend_wnd <= s_axis_tcrs || pend_wnd;
+                if (acc_l && (adv_cnt != 16'd0) && s_axis_tcrs) begin
+                    pend_rcv_val <= rcv_nxt_l + {16'b0, adv_cnt};
+                    pend_id <= conn_id_l;
+                end
+                if (ack_adv_l && s_axis_tcrs) begin
+                    pend_una_val <= ack32_l;
+                    pend_id <= conn_id_l;
+                end
+                if (s_axis_tcrs) begin
+                    pend_wnd_val <= wnd_ws;
+                    pend_id <= conn_id_l;
+                end
                 drn <= 2'd1;
             end else begin
-                // ---- drain FSM (upd_* 组合输出, gnt 拍才前进) ----
+                // ---- drain FSM (upd_* 组合输出; 该字段写被 gnt 的当拍清除其 pend,
+                //      每推进恰好写一次; 非推进帧的 fend 不再能清掉未写出的推进) ----
                 case (drn)
-                    2'd1: if (!pend_rcv || upd_gnt) drn <= 2'd2;
-                    2'd2: if (!pend_una || upd_gnt) drn <= 2'd3;
-                    2'd3: if (!pend_wnd || upd_gnt) drn <= 2'd0;
+                    2'd1: if (!pend_rcv || upd_gnt) begin
+                              if (upd_gnt) pend_rcv <= 1'b0;
+                              drn <= 2'd2;
+                          end
+                    2'd2: if (!pend_una || upd_gnt) begin
+                              if (upd_gnt) pend_una <= 1'b0;
+                              drn <= 2'd3;
+                          end
+                    2'd3: if (!pend_wnd || upd_gnt) begin
+                              if (upd_gnt) pend_wnd <= 1'b0;
+                              drn <= 2'd0;
+                          end
                     default: ;
                 endcase
             end
@@ -356,6 +467,8 @@ module tcp_rx (
                 if (retx_req && (conn_id_l == retx_id))
                     retx_req <= 1'b0;
             end
+            // P4b-7-P6 三站词计数 (第 2 站): 接受拍 +1 (头字与载荷字同一计法)
+            if (accept) words_in <= words_in + 32'd1;
             if (ack_req) stat_ack <= stat_ack + 1;
             case (state)
                 S_HDR: begin
@@ -446,6 +559,10 @@ module tcp_rx (
                                 end
                                 default: begin   // wcnt==6: 判定 + 载荷入口
                                     syn_wnd_r <= s_axis_tdata[63:48];
+                                    // 审查 P2-5: w6-tlast 拍锁存 wnd_l (fend_w6t
+                                    // 会置 pend_wnd 取 wnd_f = wnd_l — 旧代码漏锁存,
+                                    // 多连接下会把别连接的旧窗口写进本连接)
+                                    wnd_l <= s_axis_tdata[63:48];
                                     if (s_axis_tlast) begin
                                         state <= S_HDR; wcnt <= 3'd0;
                                         if (w6_tlast_ok) begin
@@ -469,7 +586,12 @@ module tcp_rx (
                                             // 纯 SYN 短帧 (w6-tlast): 帧尾即报握手
                                             if (syn_l && s_axis_tcrs && !s_axis_terr)
                                                 syn_v <= 1'b1;
-                                            stat_drop_nonmatch <= stat_drop_nonmatch + 1;
+                                            // P4b-7-P6 trunc: acc_l=1 的 w6 截断帧
+                                            // (fend_w6t) 计入 trunc, 其余仍 nonmatch
+                                            if (acc_l)
+                                                stat_drop_trunc <= stat_drop_trunc + 1;
+                                            else
+                                                stat_drop_nonmatch <= stat_drop_nonmatch + 1;
                                         end
                                     end else if (acc_l) begin
                                         if (plen_l == 16'd0) begin
@@ -513,8 +635,38 @@ module tcp_rx (
                         end else if (s_axis_tlast) begin
                             state <= S_HDR; wcnt <= 3'd0;
                             if ({12'b0, pop8w} < pay_r) begin
-                                // 截断
-                                stat_drop_nonmatch <= stat_drop_nonmatch + 1;
+                                // P4b-7-P6 trunc 修复: 截断帧 (承诺 > 到达)。帧真实
+                                // 结束 — 尾 = hold16 + 本字有效字节 (pop8w), 按真实
+                                // 字节数闭合 emit_l (或走 S_TAIL 溢出), fend 已由
+                                // fend_pay 含 trunc_pay 覆盖, TCB 按真实字节推进。
+                                // 旧行为 (静默吞尾无 fend 无 emit_l=1) = 冻结根源。
+                                // 审查 P2-3: 计数按 tcrs 分流 (好 FCS pass/bytes,
+                                // 坏 FCS drop_crc), trunc 维度独立计数
+                                stat_drop_trunc <= stat_drop_trunc + 1;
+                                if (s_axis_tcrs) begin
+                                    stat_pass  <= stat_pass + 1;
+                                    stat_bytes <= stat_bytes + pcount +
+                                                  {12'b0, pop8w};
+                                end else begin
+                                    stat_drop_crc <= stat_drop_crc + 1;
+                                end
+                                emit_v <= 1'b1;
+                                emit_u <= {s_axis_terr, s_axis_tcrs};
+                                emit_d <= {hold16, s_axis_tdata[63:16]};
+                                if (pop8w <= 4'd6) begin
+                                    // 3..8 字节: 单尾字闭合 (emit_k 按真实数掩)
+                                    emit_k <= 8'hFF << (4'd8 - pop8w[3:0] - 4'd2);
+                                    emit_l <= 1'b1;
+                                end else begin
+                                    // 9..10 字节: 主字 8B + S_TAIL 溢出 1..2B
+                                    emit_k <= 8'hFF;
+                                    emit_l <= 1'b0;
+                                    state <= S_TAIL; tail_stage <= 1'b0;
+                                    tail_d <= ljust2(s_axis_tdata[15:0],
+                                                     pop8w[3:0] - 4'd6);
+                                    tail_k <= 8'hFF << (4'd8 - pop8w[3:0] + 4'd6);
+                                    tail_u <= {s_axis_terr, s_axis_tcrs};
+                                end
                             end else begin
                                 if (s_axis_tcrs) begin
                                     stat_pass <= stat_pass + 1;

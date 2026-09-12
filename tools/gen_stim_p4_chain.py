@@ -111,12 +111,32 @@ def mk_syn_ws(wnd=0x2000, wscale=SYN_WSCALE):
     return finish(fb)
 
 
+def read_trunc(simdir):
+    """P4b-7-P6 截断注入参数: trunc.memh 由 run_tb_p4_burst.bat 写入 ("N M",
+    bat 环境变量 TRUNC/TRUNCM); 文件缺失 = (0, 8) 关。与 txdrop.memh 同通道 —
+    xsim loader 会拆含 '=' 的 -testplusarg ("TRUNC=N" 到不了 TB), 文件绕开。"""
+    try:
+        with open(os.path.join(simdir, 'trunc.memh')) as fh:
+            v = [int(x) for x in fh.read().split()]
+        return (v[0], v[1] if len(v) > 1 else 8)
+    except (OSError, ValueError, IndexError):
+        return (0, 8)
+
+
 def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000,
-                    tail608=False, dupstorm=False):
+                    tail608=False, dupstorm=False, trunc_at=0, trunc_len=8):
     """返回 (F, pmap)。pmap: conn0 每数据段的 echo seq (hex str) -> 该段载荷
     (hex str, 全 plen 字节)。echo seq = conn0 snd_nxt 链 (握手后 = HS_ACKVAL,
     每段累加实际 plen)。burstcheck 用它逐字节验证 echo 与 ring 重放帧 (P4b-7-P5):
-    ring 回放帧是原字节流的连续切片, 不保证切在段界 — 校验按流偏移做。"""
+    ring 回放帧是原字节流的连续切片, 不保证切在段界 — 校验按流偏移做。
+
+    P4b-7-P6 截断注入: trunc_at = 第 N 个 conn0 数据段 (1 基, 与 TXDROP 同编号:
+    data7a=1, data7b=2, burst_k=k+3), 0 = 关。该段线上帧头全保原样 (同 seq /
+    IP total_len=40+plen=1500 / TCP 头 / 源端口) 而载荷只发前 trunc_len 字节,
+    FCS 按截断后内容重算 — 复现板级 PC/NIC 截断帧 (线上 54+trunc_len+4 字节,
+    FCS 有效)。后续段 seq/载荷不变 (PC 无感, 板上全判 OOO)。截断缺口只能由
+    PC 侧重传补回 (板上 ring 只有真实的 trunc_len 字节): 尾部追加 PC RTO
+    重传 — 自 seq+trunc_len 重发本段剩余, 其后被丢各段按原样重放。"""
     F = []
     pmap = {}
 
@@ -153,8 +173,21 @@ def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000,
     # 吞吐测试的 echo 停滞。seq 从 1016 起每段 +1460。
     # P4b-6: pause_at >= 0 时, 第 pause_at 段改 352B 载荷 (停顿前末段尾包),
     # 其后一段 gap 拉 pause_len — 模拟板测抓到的 PC 发送停顿-恢复。
+    # P4b-7-P6 截断注入合法性 — S_PAY 截断支 + 逐字节可验的 M 范围:
+    #  (a) M <= 10: 帧 ≤ 64B 体, 末字必为部分字 (pop8w < pay_r) → 走 S_PAY 截断支;
+    #      M >= 55 会变成满载荷多字 (不再截断);
+    #  (b) M >= 6: finish() 只补到 60B 最小帧 — M<=5 的帧 (54+M<60) 被填零到
+    #      60B, 板上把填充当载荷收 (echo plen=6+), 注入语义不再等长;
+    #  (c) M=1..2 落到 w6-截断支 (fend_w6t, 另一条路径), 不在本注入范围。
+    #      RTL 侧真实字节 = pop8w+2 (M<=8) / 8+尾字 (M=9,10) = M 恒等。
+    if trunc_at and not (3 <= trunc_at <= burst + 2 and 6 <= trunc_len <= 10):
+        print('TRUNC 参数非法: at=%d len=%d (需 at 3..%d, len 6..10)'
+              % (trunc_at, trunc_len, burst + 2))
+        sys.exit(2)
     seq = 1016
     seq_hist = []
+    segs = []          # burst 各段 (seq, plen) — 截断自愈重传重放用
+    dfi = 2            # conn0 数据段计数 (data7a=1, data7b=2 已过)
     for b in range(burst):
         if b == pause_at:
             plen = 352
@@ -162,7 +195,14 @@ def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000,
             plen = 608      # PC 12KB 窗口尾包 (8x1460+608) — 板测段模式
         else:
             plen = 1460
+        segs.append((seq, plen))
+        dfi += 1
         fb, fcs = C.mk_tcp_frame(0, seq, HS_ACKVAL, 0x18, plen, burst_wnd, True)
+        if dfi == trunc_at:
+            # 截断帧: 头 (:total_len=40+plen=1500 / seq / 端口 / 原 csum) 原样,
+            # 载荷只留前 trunc_len 字节, FCS 按截断后内容重算 (finish 补足 60B)
+            hdr = 14 + (fb[14] & 0xF) * 4 + 20      # eth + IP + TCP = 54
+            fb, fcs = finish(fb[:hdr] + C.payload(plen)[:trunc_len])
         add('burst%d' % b, fb, fcs, 12)
         seq_hist.append(seq)
         seq += plen
@@ -181,6 +221,29 @@ def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000,
                 F[-1]['gap'] = 12500
     if 0 <= pause_at < burst - 1:
         F[pause_at + 1 + 7]['gap'] = pause_len   # +7: 前 7 帧 (arp..data7b)
+    # ---- P4b-7-P6 截断自愈 (仅 trunc_at): 截断段之后的原发段在板上全判 OOO
+    #      (rcv_nxt 停在 S+trunc_len, 板上逐帧回 dup-ACK 但丢载荷), 缺口只能由
+    #      PC 重传补回。模型 = PC RTO 自 snd_una=S+trunc_len 起重发剩余字节,
+    #      其后被丢各段按原样重放 (seq/plen 不变)。板上顺序收下 → echo 流
+    #      (截断段 8B 短帧 + 续传帧) 重新连续, 覆盖并集回到完整原计划。----
+    if trunc_at:
+        hi = trunc_at - 3
+        s0, p0 = segs[hi]
+        # 重传段恰为缺口长度 (snd_nxt - snd_una = p0 - trunc_len, < MSS):
+        # 不能补满 1460 — 多发的 8 字节会越过下一段起点, 板上把下一段判 dup
+        # 丢掉 → 覆盖反而破洞 (真实 TCP tcp_retransmit_skb 同样按 snd_nxt
+        # 截断到 MSS 或更短)。载荷必须按流偏移切 payload(p0)[trunc_len:]
+        # (payload(n) 是序号索引函数: payload(p0-trunc_len) 会从段头重来,
+        #  板级实测 = echo 载荷整体回退 trunc_len 字节)
+        fb, fcs = C.mk_tcp_frame(0, s0 + trunc_len, HS_ACKVAL, 0x18,
+                                 p0 - trunc_len, burst_wnd, True)
+        hdr = 14 + (fb[14] & 0xF) * 4 + 20
+        fb, fcs = finish(fb[:hdr] + C.payload(p0)[trunc_len:])
+        add('healrem', fb, fcs, 24)
+        for j in range(hi + 1, burst):
+            s1, p1 = segs[j]
+            fb, fcs = C.mk_tcp_frame(0, s1, HS_ACKVAL, 0x18, p1, burst_wnd, True)
+            add('heal%d' % j, fb, fcs, 12)
     fb, fcs = mk_arp_req()
     add('arp2', fb, fcs, GAP_SLOW)
     fb, fcs = C.mk_tcp_frame(1, 77, 900, 0x18, 20, 0x1A00, True)
@@ -233,7 +296,8 @@ def gen_memh(simdir, frames):
 def parse_gmii(fn):
     byte_lines = []
     ev = dict(fend=[], ack=[], synp=[], stats7=None, stx=None, seco=None,
-              camf=None, tcbf=None, srx=None, stx2=None, smac=None, retx=None)
+              camf=None, tcbf=None, srx=None, stx2=None, smac=None, retx=None,
+              truncs=None, ecomax=None)
     with open(fn) as fh:
         for line in fh:
             p = line.split()
@@ -263,6 +327,10 @@ def parse_gmii(fn):
                 ev['smac'] = tuple(int(x) for x in p[1:])
             elif p[0] == 'RETX':
                 ev['retx'] = int(p[1])
+            elif p[0] == 'TRUNCS':
+                ev['truncs'] = tuple(int(x) for x in p[1:])
+            elif p[0] == 'ECOMAX':
+                ev['ecomax'] = int(p[1])
             else:
                 byte_lines.append((int(p[0], 16), int(p[1])))
     frames = []
@@ -552,6 +620,11 @@ def check(simdir):
     # 缺陷 A 哨兵: mac abort / tx 欠载提前收帧 恒 0
     if ev['smac'] is None or ev['smac'][1] != 0 or ev['smac'][2] != 0:
         errs.append('STATS_MAC (frames,abort,eend) got %s' % (ev['smac'],))
+    # P4b-7-P6: 全链不含截断 -> stat_drop_trunc 恒 0; echo 无合并 (<= 182 词)
+    if ev['truncs'] not in (None, (0, 0)):
+        errs.append('TRUNCS got %s exp (0, 0) (全链不应有截断)' % (ev['truncs'],))
+    if ev['ecomax'] is not None and ev['ecomax'] > 182:
+        errs.append('ECOMAX got %s > 182 (echo 帧合并/无尽帧)' % (ev['ecomax'],))
 
     print('frames RX=%d TX=%d (fast=%d slow=%d)'
           % (len(frames), len(got), len(fast_got), len(slow_got)))
@@ -564,23 +637,35 @@ def check(simdir):
     return True
 
 
-def check_burst(simdir, nburst, txdrop1=0, txdrop2=0):
+def check_burst(simdir, nburst, txdrop1=0, txdrop2=0, trunc_at=0, trunc_len=8):
     """burst 诊断: conn0 echo 字节覆盖 + RETX/计数/统计终态。
 
     无 TXDROP (txdrop1==0): 严格 — echo 数 = nburst+2 (data7a/data7b+burst) 且
     seq 链连续, RETX 必须 0 (无丢帧无重传)。
     有 TXDROP: 重传容错 merge (区间并集) — 修复需 3 dup, OOO 原发帧先于修复
     帧上线, 顺序 merge 不可行; 并集必须恰为 [base, base+16+nburst*1460)
-    连续无洞 (洞 = FAIL)。RETX == 期望会话数: 单丢 = 1; 双丢相邻
-    (txdrop2==txdrop1+1, 一次回卷覆盖) = 1, 否则 2。
+    连续无洞 (洞 = FAIL)。RETX 按连接语义 (全局计数 = conn0 + conn1 会话):
+    conn0 期望 = 单丢 1; 双丢相邻 (txdrop2==txdrop1+1, 一次回卷覆盖) 1, 否则 2;
+    conn1 允许独立自愈 +1 (TAILDROP 场景: conn0 洞后凑不满 3 dup 走 RTO 回卷,
+    重放帧压后 c1ack 窗口假设被打破 → conn1 自身 RTO 重发, RTL 行为正确)。
+    conn1 数据面独立验: echo <= 2 帧, 每帧 plen=20 且载荷 == 首发; snd_nxt=920。
     mac abort / 欠载提前收帧恒 0 (缺陷 A 哨兵)。PCACK 注入的纯 ACK 不上 TX。
     P4b-7-P5: 逐字节载荷验证 — payload_map.json (生成器按段 echo seq 建) 重建
     echo 字节流; 每个 conn0 echo (live 或 ring 回放) 的载荷必须 = 流内
     [seq-base, +plen) 切片。ring 回放帧是流的连续切片 (不保证切在段界),
-    流偏移比对两者皆验 — 旧 r_sel 漏斗错位 (回放选口超前) 在此逐字节现行。"""
+    流偏移比对两者皆验 — 旧 r_sel 漏斗错位 (回放选口超前) 在此逐字节现行。
+
+    P4b-7-P6 截断注入 (trunc_at > 0): 判据 = ①TB 的 stat_drop_trunc >= 1 (截断支
+    被走过); ②截断段 echo 恰 trunc_len 字节且 ACK 号只推进真实字节 (板上
+    rcv_nxt 不按承诺 plen 走); ③板上对后续 OOO 段的 dup-ACK 纯 ACK 一律只确认
+    S+trunc_len; ④echo 无合并 (单帧 plen <= 1460, TB ECOMAX <= 182 词);
+    ⑤覆盖并集 = 完整原计划 (PC RTO 重传补回缺口, 覆盖率自愈)。"""
     got, ev = parse_gmii(os.path.join(simdir, 'resp_p4_chain.memh'))
-    echoes = []     # conn0 数据 echo: (seq, plen, 载荷字节 body[54:54+plen])
+    echoes = []     # conn0 数据 echo: (seq, plen, 载荷 body[54:54+plen], ack 号)
+    ackf = []       # conn0 纯 ACK (板上 rcv_nxt 应答帧) 的 ack 号 (dup-ACK 证据)
+    c1_echoes = []  # conn1 数据 echo (P4b-7-P6-fix: 连接级自愈判据用)
     other_fast = 0
+    max_plen = 0
     for fb in got:
         body = fb[8:-4]
         if len(body) >= 48 and body[12:14] == b'\x08\x00' and body[23] == 6:
@@ -588,11 +673,20 @@ def check_burst(simdir, nburst, txdrop1=0, txdrop2=0):
             sport, dport = struct.unpack('!HH', body[34:38])
             if flags == 0x18:
                 seq, = struct.unpack('!I', body[38:42])
+                ackn, = struct.unpack('!I', body[42:46])
                 plen = struct.unpack('!H', body[16:18])[0] - 40
                 if sport == 0x1F90 and dport == 0x3039:
-                    echoes.append((seq, plen, body[54:54 + plen]))
+                    echoes.append((seq, plen, body[54:54 + plen], ackn))
+                    if plen > max_plen:
+                        max_plen = plen
                 else:
                     other_fast += 1   # conn1 echo
+                    if (sport, dport) == (C.CONN[1]['dport'], C.CONN[1]['sport']):
+                        c1_echoes.append((seq, plen, body[54:54 + plen], ackn))
+            elif flags == 0x10 and sport == 0x1F90 and dport == 0x3039:
+                plen = struct.unpack('!H', body[16:18])[0] - 40
+                if plen == 0:
+                    ackf.append(struct.unpack('!I', body[42:46])[0])
 
     # ---- P4b-7-P5 载荷逐字节验证: 每 conn0 echo 的载荷必须 = 生成器原段
     #      字节流在该 seq 偏移处的切片 (地图按段 echo seq 建)。live echo 切在
@@ -621,7 +715,7 @@ def check_burst(simdir, nburst, txdrop1=0, txdrop2=0):
             cur += len(bytes.fromhex(pm['%X' % s]))
         pstream = b''.join(bytes.fromhex(pm['%X' % s]) for s in mseqs)
         pv_n = 0
-        for seq, plen, pay in echoes:
+        for seq, plen, pay, _ack in echoes:
             off = seq - pbase
             if off < 0 or off + plen > len(pstream):
                 print('MISMATCH: echo seq=%X plen=%d 越出期望载荷流 [%X, %X)'
@@ -647,12 +741,13 @@ def check_burst(simdir, nburst, txdrop1=0, txdrop2=0):
     # conn0 TX 字节总数 = data7a(7) + data7b(9) + nburst*1460
     exp_total = 16 + nburst * 1460
     ok = True
+    union_ok = False
     if not echoes:
         print('MISMATCH: no conn0 echoes')
         ok = False
     else:
         base = echoes[0][0]
-        if ndrops == 0:
+        if ndrops == 0 and trunc_at == 0:
             # 无注入丢帧: 严格计数 + 连续链
             if len(echoes) != nburst + 2:
                 print('MISMATCH: conn0 echo %d != %d' % (len(echoes), nburst + 2))
@@ -665,7 +760,7 @@ def check_burst(simdir, nburst, txdrop1=0, txdrop2=0):
                     ok = False
             if ok:
                 print('echo seq 链连续: %d 帧, %d 字节, 无空洞'
-                      % (len(echoes), sum(p for _, p, _b in echoes)))
+                      % (len(echoes), sum(p for _, p, _b, _a in echoes)))
         else:
             # 重传容错 merge (区间并集): 修复回卷需 3 个 dup-ACK 才触发, TX
             # 顺序里 OOO 原发帧必然先于回卷修复帧上线 — 顺序 merge 会把 OOO
@@ -675,20 +770,22 @@ def check_burst(simdir, nburst, txdrop1=0, txdrop2=0):
             # 基准 = snd_una = 全部 echo (含回卷修复帧) 的最小 seq。TXDROP 丢
             # 首帧 (data7a) 时 echoes[0] = data7b (snd_una+7), 若用 RX 首帧当
             # 基准, 修复帧按 snd_una 补回的 7 字节会落在基准之外 → 假 FAIL。
-            base = min(s for s, p, _b in echoes)
+            base = min(s for s, p, _b, _a in echoes)
             iv = []
-            for lo, hi in sorted((s, s + p) for s, p, _b in echoes):
+            for lo, hi in sorted((s, s + p) for s, p, _b, _a in echoes):
                 if iv and lo <= iv[-1][1]:
                     iv[-1][1] = max(iv[-1][1], hi)
                 else:
                     iv.append([lo, hi])
             if iv == [[base, base + exp_total]]:
+                union_ok = True
                 print('重传容错 merge 干净: 覆盖 %d 字节 (含重传)' % exp_total)
             else:
+                union_ok = False
                 ok = False
                 exp2 = base
                 holed = False
-                for lo, hi in sorted((s, s + p) for s, p, _b in echoes):
+                for lo, hi in sorted((s, s + p) for s, p, _b, _a in echoes):
                     if lo > exp2:
                         print('MISMATCH: 洞 %d 字节 @seq=%d (exp=%d)'
                               % (lo - exp2, lo, exp2))
@@ -698,16 +795,121 @@ def check_burst(simdir, nburst, txdrop1=0, txdrop2=0):
                 if not holed:
                     print('MISMATCH: 覆盖末字节 %d != 期望 %d'
                           % (exp2, base + exp_total))
-    retx = ev['retx'] if ev['retx'] is not None else 0
-    if ndrops == 0 and retx != 0:
-        print('MISMATCH: RETX %d != 0 (无丢帧出现重传)' % retx)
+    # ---- P4b-7-P6 截断注入验证 (trunc_at 来自 trunc.memh; 仅 plain burst) ----
+    if trunc_at > 0:
+        tr_n, tr_stat = ev['truncs'] if ev['truncs'] else (0, 0)
+        hi = trunc_at - 3
+        s_tr = 1016 + hi * 1460                             # 截断段 PC seq
+        e_tr = (HS_ACKVAL + 16 + hi * 1460) & 0xFFFFFFFF    # 截断段 echo seq
+        # ① 截断支被走过 (RTL 按真实字节收下, 而非旧行为静默吞尾不发 fend)
+        if tr_n != trunc_at:
+            print('MISMATCH: TB TRUNCS n=%d != 期望 %d (trunc.memh 未同步)'
+                  % (tr_n, trunc_at))
+            ok = False
+        if tr_stat < 1:
+            print('MISMATCH: stat_drop_trunc=%d < 1 (截断支未走过 — RTL 未修/激励未截断)'
+                  % tr_stat)
+            ok = False
+        # ② 截断段 echo 恰 trunc_len 字节, 且该帧 ACK 号只推进真实字节
+        #    (板上 rcv_nxt 不按承诺的 plen=1460 走 — dup-ACK 语义根源)
+        hit = [e for e in echoes if e[0] == e_tr]
+        if not hit:
+            print('MISMATCH: 截断段无 echo (seq=%X)' % e_tr)
+            ok = False
+        elif hit[0][1] != trunc_len:
+            print('MISMATCH: 截断段 echo plen=%d != %d (未按真实字节交付)'
+                  % (hit[0][1], trunc_len))
+            ok = False
+        elif hit[0][3] != (s_tr + trunc_len) & 0xFFFFFFFF:
+            print('MISMATCH: 截断段 echo ack=%08X != %08X (rcv_nxt 未只按真实字节推进)'
+                  % (hit[0][3], (s_tr + trunc_len) & 0xFFFFFFFF))
+            ok = False
+        else:
+            print('截断验证: echo seq=%X plen=%d ack=%08X (只确认真实 %d 字节)'
+                  % (hit[0][0], hit[0][1], hit[0][3], trunc_len))
+        # ③ 板上对后续 OOO 段的 dup-ACK 纯 ACK 一律只确认 S+trunc_len
+        if not ackf:
+            print('MISMATCH: 未见板上 dup-ACK 纯 ACK 帧 (OOO 段应触发 ackresp)')
+            ok = False
+        elif any(a != (s_tr + trunc_len) & 0xFFFFFFFF for a in ackf):
+            print('MISMATCH: 板上纯 ACK ack 号 %s 含非 %08X (OOO dup-ACK 越推进)'
+                  % (['%08X' % a for a in ackf[:4]], (s_tr + trunc_len) & 0xFFFFFFFF))
+            ok = False
+        else:
+            print('dup-ACK 证据: %d 帧纯 ACK 全部 ack=%08X (OOO 段只确认真实字节)'
+                  % (len(ackf), (s_tr + trunc_len) & 0xFFFFFFFF))
+        # ⑤ 好 FCS 截断帧必须按真实字节计入 pass/bytes (RTL 审查 P2-3: 截断支
+        #    按 tcrs 分流 — 好 FCS -> stat_pass/stat_bytes, 坏 -> drop_crc)。
+        #    RX 载荷总字节 = 原计划 + conn1 20B: 截断段 8B + 续传 1452B 恰补满
+        #    该段 1460B (若按承诺字节记账会多计入 1452)
+        if ev['stats7'] and ev['stats7'][6] != exp_total + 20:
+            print('MISMATCH: STATS7 bytes %d != 期望 %d (截断帧记账异常 — 按承诺字节?)'
+                  % (ev['stats7'][6], exp_total + 20))
+            ok = False
+        # ④ 覆盖并集完整 = 原计划 (截断缺口经 PC 重传 / 板上 ring 重放补齐)
+        if union_ok:
+            print('自愈覆盖: 并集完整 = 原计划 %d 字节 (截断缺口已补齐)' % exp_total)
+        else:
+            print('MISMATCH: 覆盖并集不完整 (截断缺口未补回 — 见上 merge 诊断)')
+            ok = False
+    # ---- echo 无合并 (全局不变量: 单帧 <= 1460 = ring 回放 plen_preset 上限;
+    #      合并帧 = P6 冻结签名 2048B/256 词, 在此现行) ----
+    if max_plen > 1460:
+        print('MISMATCH: echo 帧 plen=%d > 1460 (帧合并 — tlast 丢失)' % max_plen)
         ok = False
-    if ndrops > 0:
+    if ev['ecomax'] is None or ev['ecomax'] > 182:
+        print('MISMATCH: echo 出口 ECOMAX %s > 182 词 (无尽帧)' % (ev['ecomax'],))
+        ok = False
+    retx = ev['retx'] if ev['retx'] is not None else 0
+    # ---- P4b-7-P6-fix: RETX 按连接语义 (全局计数器 = conn0 会话 + conn1 会话) ----
+    # conn1 独立自愈: c1data 的 20B echo 发在 GMII 上, c1ack (seq=97, ack=920)
+    # 靠 1500 拍窗口才落在 [snd_una, snd_nxt]=[900,920] 内。conn0 尾部丢帧
+    # (如 TXDROP=200) 时 conn0 洞后凑不满 3 dup → 走 RTO 回卷, 重放帧压在
+    # conn1 echo 之前 → c1ack 来时 snd_nxt 仍 900 被拒 (ack > snd_nxt) →
+    # conn1 走自身 RTO 自愈重发 (+1 会话)。RTL 行为正确 (双连接独立自愈),
+    # 判据必须按连接拆: 多出的一次会话只允许由 conn1 重发解释 (echo 帧 ≥2),
+    # conn0 侧仍严格 (无 conn1 重发时 RETX 必须恰为原期望)。
+    c1_extra = 1 if len(c1_echoes) > 1 else 0
+    c1_exp_pay = C.payload(20)
+    if not c1_echoes:
+        print('MISMATCH: conn1 无 echo 帧 (c1data 20B 未交付)')
+        ok = False
+    else:
+        if len(c1_echoes) > 2:
+            print('MISMATCH: conn1 echo %d 帧 > 2 (自愈会话过多)' % len(c1_echoes))
+            ok = False
+        for _i, (_sq, _pl, _pay, _ak) in enumerate(c1_echoes):
+            if _pl != 20 or _pay != c1_exp_pay:
+                print('MISMATCH: conn1 echo #%d seq=%X plen=%d 载荷 != 首发 20B'
+                      % (_i, _sq, _pl))
+                ok = False
+        # conn1 终态: 20B 必须全部发出 (snd_nxt = 900+20); snd_una 覆盖程度
+        # 受 TB 模型限制 (无 conn1 ACK 注入) — 首个 c1ack 被拒后不会被重发,
+        # 故只断言 900 <= snd_una <= snd_nxt 并打印实际值
+        tcbf = ev['tcbf']
+        if tcbf:
+            if tcbf[7] != 920:
+                print('MISMATCH: conn1 snd_nxt %X != 920 (20B 未全发出)' % tcbf[7])
+                ok = False
+            if not (900 <= tcbf[8] <= tcbf[7]):
+                print('MISMATCH: conn1 snd_una %X 越界 (snd_nxt %X)'
+                      % (tcbf[8], tcbf[7]))
+                ok = False
+            print('conn1 连接级: echo %d 帧 (载荷全等首发), snd_nxt=%d snd_una=%d%s'
+                  % (len(c1_echoes), tcbf[7], tcbf[8],
+                     '' if tcbf[8] == tcbf[7] else ' (无 conn1 ACK 模型: c1ack 被拒后不重发)'))
+    if ndrops == 0:
+        # 无丢帧/无截断: conn0 不该重传; 只允许 conn1 独立自愈的会话数
+        if retx != c1_extra:
+            print('MISMATCH: RETX %d != 期望 %d (无丢帧: 只允许 conn1 自愈会话)'
+                  % (retx, c1_extra))
+            ok = False
+    else:
         # 双丢相邻 (txdrop2 == txdrop1+1) = 一次回卷覆盖两个洞 = 1 会话
-        exp_retx = 1 if (ndrops == 1 or txdrop2 == txdrop1 + 1) else 2
+        exp_retx = (1 if (ndrops == 1 or txdrop2 == txdrop1 + 1) else 2) + c1_extra
         if retx != exp_retx:
-            print('MISMATCH: RETX %d != 期望 %d (drop %d,%d)'
-                  % (retx, exp_retx, txdrop1, txdrop2))
+            print('MISMATCH: RETX %d != 期望 %d (drop %d,%d conn0 会话 + conn1 自愈 %d)'
+                  % (retx, exp_retx, txdrop1, txdrop2, c1_extra))
             ok = False
     print('burst sent=%d  conn0 echoes=%d  conn1 echoes=%d  RETX=%d'
           % (nburst, len(echoes), other_fast, retx))
@@ -716,6 +918,8 @@ def check_burst(simdir, nburst, txdrop1=0, txdrop2=0):
     print('STATS_ECO %s' % (ev['seco'],))
     print('STATS_MAC (mac_frames,abort,eend) %s' % (ev['smac'],))
     print('TCBF %s' % (ev['tcbf'],))
+    print('TRUNCS %s  ECOMAX %s (注入 at=%d len=%d; ECOMAX 上限 182 词)'
+          % (ev['truncs'], ev['ecomax'], trunc_at, trunc_len))
     if ev['smac'] is None or ev['smac'][1] != 0 or ev['smac'][2] != 0:
         print('MISMATCH: mac abort / tx eend 非零 (缺陷 A 哨兵)')
         ok = False
@@ -841,14 +1045,21 @@ if __name__ == '__main__':
             gen_memh(simdir, frames)
             print('replay memh written')
             sys.exit(0)
+    # P4b-7-P6: 截断注入参数与 TB 同源 (trunc.memh, 由 run_tb_p4_burst.bat 写入;
+    # xsim 到不了含 '=' 的 -testplusarg, 与 txdrop.memh 同通道)
+    trunc_at, trunc_len = read_trunc(simdir)
+    if trunc_at:
+        print('TRUNC 注入: 第 %d 个 conn0 数据段裁到 %d 字节' % (trunc_at, trunc_len))
     frames, pmap = build_rx_frames(burst=nburst, pause_at=pause_at,
                                    pause_len=pause_len, burst_wnd=burst_wnd,
-                                   tail608=tail608, dupstorm=dupstorm)
+                                   tail608=tail608, dupstorm=dupstorm,
+                                   trunc_at=trunc_at, trunc_len=trunc_len)
     print('%d RX frames' % len(frames))
     if mode == 'check':
         sys.exit(0 if check(simdir) else 1)
     if mode == 'burstcheck':
-        sys.exit(0 if check_burst(simdir, nburst, txdrop1, txdrop2) else 1)
+        sys.exit(0 if check_burst(simdir, nburst, txdrop1, txdrop2,
+                                  trunc_at, trunc_len) else 1)
     gen_memh(simdir, frames)
     # P4b-7-P5: echo 载荷地图 sidecar (burstcheck 逐字节验证用)
     if pmap:

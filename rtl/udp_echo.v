@@ -79,7 +79,8 @@ module udp_echo (
         .snap(accept && first_b),
         .rollback(rback),
         .rd(fwd_rd), .dout(fdout),
-        .empty(fifo_empty), .full(fifo_full)
+        .empty(fifo_empty), .full(fifo_full),
+        .dbg_rd_addr(11'd0), .dbg_rd_side()  // P6c 诊断读口未用 (tcp_echo 实例才接)
     );
 
     always @(posedge clk or negedge rst_n) begin

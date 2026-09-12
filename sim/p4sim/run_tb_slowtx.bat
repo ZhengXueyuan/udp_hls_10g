@@ -8,7 +8,10 @@ rmdir /s /q xsim.dir 2>nul
 del /q tb_slow_tx.wdb 2>nul
 call "%VIV_BIN%\xvlog.bat" -work xil_defaultlib ..\..\rtl\fifo_sync.v ..\..\rtl\frame_fifo.v ..\..\rtl\slow_tx_adp.v ..\..\tb\tb_slow_tx.v
 if errorlevel 1 exit /b 1
-call "%VIV_BIN%\xelab.bat" -debug typical -timescale 1ns/1ps -L xil_defaultlib xil_defaultlib.tb_slow_tx -s tb_slow_tx -log xelab_run.log > NUL 2>&1
+call "%VIV_BIN%\xvlog.bat" -work xil_defaultlib "%VIV_BIN%\..\..\data\verilog\src\glbl.v"
+
+call "%VIV_BIN%\xelab.bat" -debug typical -timescale 1ns/1ps -L unisims_ver -L xil_defaultlib xil_defaultlib.tb_slow_tx xil_defaultlib.glbl -s tb_slow_tx -log xelab_run.log > NUL 2>&1
+
 if errorlevel 1 (type xelab_run.log & exit /b 1)
 call "%VIV_BIN%\xsim.bat" tb_slow_tx -tclbatch run.tcl -log xsim_run.log > NUL 2>&1
 if errorlevel 1 (type xsim_run.log & exit /b 1)

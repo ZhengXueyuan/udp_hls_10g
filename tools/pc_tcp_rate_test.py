@@ -32,6 +32,8 @@ def main():
     global stop_flag
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.settimeout(10)
+    # 显式绑定本地源 (PC 网卡 IP 重置后栈源选择会挑错接口, SYN 不上线)
+    s.bind(('192.168.100.1', 0))
     s.connect((HOST, PORT))
     s.settimeout(None)        # 阻塞: sendall 仅受窗口流控
     s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)

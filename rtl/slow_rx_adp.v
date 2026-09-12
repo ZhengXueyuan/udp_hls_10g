@@ -34,7 +34,11 @@ module slow_rx_adp #(
     input  wire        hls_rx_tready,
     output wire        hls_rst_n,      // 看门狗: 饥饿超时给 HLS 打 64 拍复位脉冲
     output reg  [31:0] stat_commit,    // 提交给 HLS 的帧数
-    output reg  [31:0] stat_drop       // 回卷丢弃 (坏 FCS/rx_er/fifo 满)
+    output reg  [31:0] stat_drop,      // 回卷丢弃 (坏 FCS/rx_er/fifo 满)
+    // diag18 看门狗诊断 (纯 assign, UART 快照 SV/HR 字段): starv = 饥饿累计拍
+    // (有数据不读; 每 ~16.8ms 回到 0 = 看门狗循环复位 HLS), hls_rst_n 直出
+    output wire [21:0] dbg_starv,
+    output wire        dbg_hls_rst
 );
     // ---------------- 输入侧: 整帧缓冲 + 提交/回卷 ----------------
     // frame_fifo 字 = {tlast, tkeep, tdata} 73 位
@@ -66,7 +70,8 @@ module slow_rx_adp #(
         .clk(clk), .rst_n(rst_n),
         .wr(ff_wr), .din({s_axis_tlast, s_axis_tkeep, s_axis_tdata}),
         .snap(ff_snap), .rollback(do_rollbk),
-        .rd(ff_rd), .dout(ff_dout), .empty(ff_empty), .full(ff_full)
+        .rd(ff_rd), .dout(ff_dout), .empty(ff_empty), .full(ff_full),
+        .dbg_rd_addr(9'd0), .dbg_rd_side()   // P6c 诊断读口未用 (tcp_echo 实例才接)
     );
 
     // ---------------- 输出侧: 9bit 字节 FIFO -> HLS ----------------
@@ -94,6 +99,9 @@ module slow_rx_adp #(
     reg  [6:0]  rst_cnt;
     reg         hls_rst_n_r;
     assign hls_rst_n = hls_rst_n_r;
+    // diag18 看门狗诊断直出 (纯 assign, 零行为耦合)
+    assign dbg_starv  = starv;
+    assign dbg_hls_rst = hls_rst_n_r;
     wire        starve = hls_rx_tvalid && !hls_rx_tready;
 
     always @(posedge clk or negedge rst_n) begin

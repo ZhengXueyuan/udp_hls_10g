@@ -71,12 +71,25 @@ module tb_tcp_echo;
     wire [7:0]  eco_tkeep;
     wire        eco_tvalid, eco_tready, eco_tlast;
     wire [3:0]  eco_tid;
+
+    // P4b-7-P6: echo -> tx_frame 流水寄存器总线 (拆 frame_fifo RAMB -> csum 临界路径)
+    wire [63:0] eco2_tdata;
+    wire [7:0]  eco2_tkeep;
+    wire        eco2_tvalid, eco2_tready, eco2_tlast;
+    wire [3:0]  eco2_tid;
+    wire [76:0] eco2_pack;
+    assign {eco2_tkeep, eco2_tlast, eco2_tdata, eco2_tid} = eco2_pack;
     wire [31:0] eco_stat_echo, eco_stat_drop_crc;
     // tcp_tx_frame
     wire [3:0]  rb_id;
     wire [31:0] rb_rcv_nxt, rb_snd_nxt, rb_snd_una;
     wire [15:0] rb_rcv_wnd, rb_snd_wnd;
     wire [3:0]  rb_state;
+    // P4b-7-P6: tcb 注册窗口读口 -> tcp_tx_frame 门控 (win_id = rb_id 同一条线)
+    // P4b-7-P6-fix: win_open = 注册 32 位回绕正确门 (替代已废 win_hi_eq)
+    wire        win_open;
+    wire [15:0] win_inflight;
+    wire [15:0] win_wnd_eff;
     wire        tx_upd_wr;
     wire [3:0]  tx_upd_id;
     wire [2:0]  tx_upd_sel;
@@ -190,6 +203,14 @@ module tb_tcp_echo;
         .stat_echo(eco_stat_echo), .stat_drop_crc(eco_stat_drop_crc)
     );
 
+    // ---- P4b-7-P6: echo -> tx_frame 1-deep 全速流水寄存器 (拆临界路径) ----
+    axis_pipe #(.W(77)) u_eco_pipe (
+        .clk(clk), .rst_n(rst_n),
+        .s_data({eco_tkeep, eco_tlast, eco_tdata, eco_tid}),
+        .s_valid(eco_tvalid), .s_ready(eco_tready),
+        .m_data(eco2_pack), .m_valid(eco2_tvalid), .m_ready(eco2_tready)
+    );
+
     tcp_cam u_cam (
         .clk(clk), .rst_n(rst_n),
         .cfg_wr(cam_cfg_wr), .cfg_addr(cam_cfg_addr),
@@ -210,6 +231,8 @@ module tb_tcp_echo;
         .rb_id(rb_id), .rb_rcv_nxt(rb_rcv_nxt), .rb_snd_nxt(rb_snd_nxt),
         .rb_snd_una(rb_snd_una), .rb_rcv_wnd(rb_rcv_wnd), .rb_snd_wnd(rb_snd_wnd),
         .rb_state(rb_state),
+        .win_id(rb_id), .win_open(win_open),
+        .win_inflight(win_inflight), .win_wnd_eff(win_wnd_eff),
         .upd_wr(tcb_wr), .upd_id(tcb_id), .upd_sel(tcb_sel), .upd_val(tcb_val)
     );
 
@@ -230,13 +253,14 @@ module tb_tcp_echo;
 
     tcp_tx_frame u_tx (
         .clk(clk), .rst_n(rst_n),
-        .s_axis_tdata(eco_tdata), .s_axis_tkeep(eco_tkeep),
-        .s_axis_tvalid(eco_tvalid), .s_axis_tready(eco_tready), .s_axis_tlast(eco_tlast),
-        .s_axis_tid(eco_tid),
+        .s_axis_tdata(eco2_tdata), .s_axis_tkeep(eco2_tkeep),
+        .s_axis_tvalid(eco2_tvalid), .s_axis_tready(eco2_tready), .s_axis_tlast(eco2_tlast),
+        .s_axis_tid(eco2_tid),
         .ack_req(tx_ack_req), .ack_id(tx_ack_id), .ack_val(tx_ack_val),
         .ack_syn(tx_ack_syn),
         .rb_id(rb_id), .rb_snd_nxt(rb_snd_nxt), .rb_rcv_nxt(rb_rcv_nxt),
         .rb_rcv_wnd(rb_rcv_wnd), .rb_snd_una(rb_snd_una), .rb_snd_wnd(rb_snd_wnd),
+        .win_open(win_open), .win_inflight(win_inflight), .win_wnd_eff(win_wnd_eff),
         .upd_wr(tx_upd_wr), .upd_id(tx_upd_id), .upd_sel(tx_upd_sel), .upd_val(tx_upd_val),
         .cam_rd_id(cam_rd_id), .cam_rd_dmac(cam_rd_dmac), .cam_rd_sip(cam_rd_sip),
         .cam_rd_sport(cam_rd_sport), .cam_rd_dport(cam_rd_dport),

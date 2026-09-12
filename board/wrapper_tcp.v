@@ -166,6 +166,14 @@ module wrapper_tcp (
     wire        eco_tvalid, eco_tready, eco_tlast;
     wire [3:0]  eco_tid;
 
+    // P4b-7-P6: echo -> tx_frame 流水寄存器总线 (拆 frame_fifo RAMB -> csum 临界路径)
+    wire [63:0] eco2_tdata;
+    wire [7:0]  eco2_tkeep;
+    wire        eco2_tvalid, eco2_tready, eco2_tlast;
+    wire [3:0]  eco2_tid;
+    wire [76:0] eco2_pack;
+    assign {eco2_tkeep, eco2_tlast, eco2_tdata, eco2_tid} = eco2_pack;
+
     // tcp_tx_frame → mac_tx_64
     wire [63:0] tx_tdata;
     wire [7:0]  tx_tkeep;
@@ -189,6 +197,11 @@ module wrapper_tcp (
     wire [31:0] rb_rcv_nxt, rb_snd_nxt, rb_snd_una;
     wire [15:0] rb_rcv_wnd, rb_snd_wnd;
     wire [3:0]  rb_state;
+    // P4b-7-P6: tcb 注册窗口读口 -> tcp_tx_frame 门控 (win_id = rb_id 同一条线)
+    // P4b-7-P6-fix: win_open = 注册 32 位回绕正确门 (替代已废 win_hi_eq)
+    wire        win_open;
+    wire [15:0] win_inflight;
+    wire [15:0] win_wnd_eff;
 
     // ---- TCB 更新仲裁 (tx > rx > cfg 级; cfg 级 = synp.upd) ----
     wire        rx_upd_wr, rx_upd_gnt;
@@ -352,6 +365,19 @@ module wrapper_tcp (
         .stat_drop_crc  (eco_stat_drop_crc)
     );
 
+    // ---- P4b-7-P6: tcp_echo -> tcp_tx_frame 1-deep 全速流水寄存器 (拆临界
+    //     路径: tcp_echo u_fifo RAMB36E1 -> u_csum acc; 77b = tkeep+last+data+tid) ----
+    axis_pipe #(.W(77)) u_eco_pipe (
+        .clk            (gmii_clk),
+        .rst_n          (reset_n),
+        .s_data         ({eco_tkeep, eco_tlast, eco_tdata, eco_tid}),
+        .s_valid        (eco_tvalid),
+        .s_ready        (eco_tready),
+        .m_data         (eco2_pack),
+        .m_valid        (eco2_tvalid),
+        .m_ready        (eco2_tready)
+    );
+
     // ---- CAM: 板上配置口由 synp 独占 (无其它写者, 直连) ----
     tcp_cam u_cam (
         .clk            (gmii_clk),
@@ -396,6 +422,10 @@ module wrapper_tcp (
         .rb_rcv_wnd     (rb_rcv_wnd),
         .rb_snd_wnd     (rb_snd_wnd),
         .rb_state       (rb_state),
+        .win_id         (rb_id),
+        .win_open       (win_open),
+        .win_inflight   (win_inflight),
+        .win_wnd_eff    (win_wnd_eff),
         .upd_wr         (tcb_wr),
         .upd_id         (tcb_id),
         .upd_sel        (tcb_sel),
@@ -450,12 +480,12 @@ module wrapper_tcp (
     tcp_tx_frame u_tcp_tx (
         .clk            (gmii_clk),
         .rst_n          (reset_n),
-        .s_axis_tdata   (eco_tdata),
-        .s_axis_tkeep   (eco_tkeep),
-        .s_axis_tvalid  (eco_tvalid),
-        .s_axis_tready  (eco_tready),
-        .s_axis_tlast   (eco_tlast),
-        .s_axis_tid     (eco_tid),
+        .s_axis_tdata   (eco2_tdata),
+        .s_axis_tkeep   (eco2_tkeep),
+        .s_axis_tvalid  (eco2_tvalid),
+        .s_axis_tready  (eco2_tready),
+        .s_axis_tlast   (eco2_tlast),
+        .s_axis_tid     (eco2_tid),
         .ack_req        (tx_ack_req),
         .ack_id         (tx_ack_id),
         .ack_val        (tx_ack_val),
@@ -466,6 +496,9 @@ module wrapper_tcp (
         .rb_rcv_wnd     (rb_rcv_wnd),
         .rb_snd_una     (rb_snd_una),
         .rb_snd_wnd     (rb_snd_wnd),
+        .win_open       (win_open),
+        .win_inflight   (win_inflight),
+        .win_wnd_eff    (win_wnd_eff),
         .upd_wr         (tx_upd_wr),
         .upd_id         (tx_upd_id),
         .upd_sel        (tx_upd_sel),

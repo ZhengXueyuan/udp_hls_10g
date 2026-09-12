@@ -40,7 +40,14 @@ module rx_classify (
     output wire        m_slow_tcrs,
     output wire        m_slow_terr,
     output reg  [31:0] stat_fast,
-    output reg  [31:0] stat_slow
+    output reg  [31:0] stat_slow,
+    // P4b-7-P6 三站词计数 (中间站, UART 行尾 CW 字段): dbg_stat_words_in =
+    //   接受的 s_axis 字 (tvalid && tready); dbg_stat_words_out = fast 路发出
+    //   的字 (m_fast_tvalid && m_fast_tready)。与上游 MW (mac_rx_64 出词) /
+    //   下游 RW (tcp_rx 进词) 对账: MW-CWin 差额 = skew 未消费, CWout-RW
+    //   差额 = fast 路在途词 (本模块丢词则差额永久沉淀)。
+    output wire [31:0] dbg_stat_words_in,
+    output wire [31:0] dbg_stat_words_out
 );
     localparam S_FILL = 2'd0, S_DRAIN = 2'd1, S_PASS = 2'd2;
     localparam RT_FAST = 1'b0, RT_SLOW = 1'b1;
@@ -97,13 +104,20 @@ module rx_classify (
 
     wire s_acc = s_axis_tvalid && s_axis_tready;          // 输入接受
     wire o_acc = o_v && m_tready_sel;                     // 输出接受 (DRAIN/PASS)
+    // P4b-7-P6 三站词计数 (中间站): fast 路字接受 (tvalid && tready 两侧)
+    wire f_acc = m_fast_tvalid && m_fast_tready;
+    reg  [31:0] words_in, words_out;
 
     integer ii;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state <= S_FILL; route <= RT_SLOW; wait_w5 <= 1'b0; n <= 4'd0;
             stat_fast <= 0; stat_slow <= 0;
+            words_in <= 32'd0; words_out <= 32'd0;
         end else begin
+            // P4b-7-P6 三站词计数 (中间站, 纯计数零耦合)
+            if (s_acc) words_in  <= words_in + 32'd1;
+            if (f_acc) words_out <= words_out + 32'd1;
             case (state)
                 S_FILL: if (s_acc) begin
                     sk_d[n[2:0]] <= s_axis_tdata;
@@ -158,4 +172,8 @@ module rx_classify (
             endcase
         end
     end
+
+    // P4b-7-P6 三站词计数 (中间站) 读出
+    assign dbg_stat_words_in  = words_in;
+    assign dbg_stat_words_out = words_out;
 endmodule

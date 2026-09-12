@@ -27,6 +27,7 @@ import_files -norecurse ${root_dir}/rtl/crc32_8b.v \
                          ${root_dir}/rtl/tcp_rx.v \
                          ${root_dir}/rtl/tcp_tx_frame.v \
                          ${root_dir}/rtl/tcp_echo.v \
+                         ${root_dir}/rtl/axis_pipe.v \
                          ${root_dir}/rtl/tcp_synp.v
 import_files -norecurse ${script_dir}/wrapper_tcp.v ${script_dir}/util_gmii_to_rgmii.v
 add_files -fileset constrs_1 ${script_dir}/eco_rgmii_phy1.xdc
