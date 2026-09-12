@@ -2177,3 +2177,44 @@ HALFDROP=50k6,100k990 / TXDROP=50 (55,200) / gate4096 / dupstorm /
 PCACKOOB / uart_dbg / retx_ram (7 GRP, 含 latency=2cyc) / frame_fifo (D=8192)。
 待办: 板级重建烧录 + ACK-early 吞吐重测 (修复后 suppress=0 预期 ~900Mbps
 破 echo 铁律) + UART 复活确认。
+
+### P4c 板级重建 + UART 复活 (2026-09-12 晚)
+
+- 板级重建: WNS=+0.271 WHS=+0.022 (tcp_rx w6a 修复未伤时序), bitstream 0 错 0 警
+- 烧录 PROGRAM_OK (DONE=HIGH)
+- **UART 静默真凶 = CH340 USB 设备挂死** (COM8 打开报"设备没有发挥作用", 设备树
+  状态 OK 但端口句柄卡死; Disable/Enable 重新枚举即复活)。快照行完整 (443 字符
+  + TL 位图, WPT/RPT 4 位 hex 板级确认); 上电快照: HLS 活 (SC=16 SF=4 HR=1),
+  TCB 空, MW=366。板级静默与 bitstream/P2-3 无关。
+- 待: ACK-early 64MB 吞吐重测结果 (修复后 suppress=0 预期 ~900Mbps)
+
+### P4c ACK-early 板级复测 + 最终裁决 (2026-09-12 深夜)
+
+**64MB 板测 (suppress=0 + w6a 修复)**: 数据完整收齐 (无 RST, echo 64MB 全等),
+snd_una 完全推进 (UA=NX=0x12402151 — ACK 丢弃 bug 修复板级实锤)。但吞吐
+28.4Mbps < 124Mbps 基线, PC 重传 3917 帧, 51 次 ~285ms RTO 停发 (264/307ms
+交替 = RTO 退避, 占总时长 77%)。
+
+**机制定位** (UART 终态快照 + RXT 环 + tshark 三方对账):
+- TRU=32 截断帧 (FPGA 唯一观察点; tshark 是 NDIS 层抓不到线级截断 —
+  P4b-7-P6 怪帧机制复发); RXT 环冻结现场 0x71120E2 = S_PAY/accept=0 背压
+  卡 64+ 拍/pay_r=14/pcount=226 = ~240B 处中断的线级截断帧
+- drop_seq=1791 = PC RTO 重传的重复段 (51 次 × ~35 帧, FPGA 正确丢弃);
+  CW 进-出差额 725 词 = slow 路词 (words_out 只计 fast), 非丢弃
+- PC 发帧结构: 48K 帧 us 级连发 (线速正常) + 周期性停发 = PC 网卡 TX 截断
+  与 FPGA->PC 线丢 (缺陷 A) 在 TX 帧率翻倍下触发率上升 -> RTO 自愈周期
+- UART 静默真凶: CH340 USB 挂死 (COM8 "设备没有发挥作用", 设备树 OK;
+  Disable/Enable 重新枚举即复活) — 与 bitstream/P2-3 无关
+
+**裁决**: ACK-early 失败于线级物理层 (PC Killer 网卡 TX DMA 截断 + 缺陷 A),
+非 RTL。RTL w6a 修复保留 (纯 ACK 窗口内接受 = RFC 零长段正确性, 防潜伏
+bug); 板级 cfg_suppress_data_ack 回 1 (124Mbps 稳定基线); TB 保持 suppress=0
+(验证 ACK 路径全功能 + PCACKOOB 门)。P4c 冲 1G 结论: **瓶颈已从 FPGA 架构
+(125Mbps 帧级判定铁律) 转移到 PC 网卡/线级物理层**, FPGA 侧可做项已尽。
+
+### P4c suppress=1 回归复测 (2026-09-12 深夜)
+
+- 重建烧录 (WNS=0.237 WHS=0.034), 64MB 板测: echo 完整收齐 67108864 B,
+  稳态 (10-90%) 105.9 Mbps, exit 0。PC 重传 1614 帧偏多 (本次线级丢帧
+  波动) 但自愈完整。P4c 里程碑收尾: 窗口 48KB + retx_ram 64KB + w6a 纯 ACK
+  修复 + 全矩阵绿, 板级基线稳定 (~106-124Mbps 区间 = 线级波动带)。

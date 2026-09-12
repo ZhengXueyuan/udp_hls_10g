@@ -596,9 +596,13 @@ module wrapper_p4 (
         .s_axis_tuser   (f_tuser),
         .s_axis_tcrs    (f_tcrs),
         .s_axis_terr    (f_terr),
-        .cfg_suppress_data_ack(1'b0),   // P4c: 数据 ACK 提前 (不等 echo piggyback) —
-                                        // 帧级判定排队的 125Mbps 铁律的唯一破口
-                                        // (PC 窗口周转解耦到 RTT, 预期 ~900Mbps)
+        .cfg_suppress_data_ack(1'b1),   // P4c ACK-early 实验裁决 (板级回退 1):
+                                        // suppress=0 板测 28.4Mbps < 124Mbps —
+                                        // TX 帧率翻倍使 PC 网卡线级截断帧 (TRU=32)
+                                        // 与 FPGA->PC 线丢 (缺陷 A) 触发率翻倍,
+                                        // PC RTO 停发 77% 时间吃掉全部理论收益。
+                                        // RTL w6a 修复 (纯 ACK 窗口内接受) 保留;
+                                        // TB 保持 suppress=0 验证 ACK 路径全功能
         .m_axis_tdata   (pay_tdata),
         .m_axis_tkeep   (pay_tkeep),
         .m_axis_tvalid  (pay_tvalid),
