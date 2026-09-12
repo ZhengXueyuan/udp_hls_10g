@@ -11,7 +11,7 @@
 //   w7 = snd_nxt (= 我方 ISS+1, SYN+ACK 已占一个序号)
 //
 // ADD: CAM 写一条 (sip/dip/sport/dport/dmac) + TCB 七字段
-//      (rcv_nxt / snd_nxt / snd_una=snd_nxt / rcv_wnd=0x3000 / snd_wnd=peer_wnd
+//      (rcv_nxt / snd_nxt / snd_una=snd_nxt / rcv_wnd=0xC000 = 48K / snd_wnd=peer_wnd
 //       / state=1 ESTABLISHED / wscale)。
 // DEL: CAM 该槽清零 (sip=0 永不匹配) + TCB state=0。
 // TCB 写经 cfg 仲裁级 (tx>rx>cfg): upd_wr 电平保持到 cfg_gnt 才前进 —
@@ -70,7 +70,9 @@ module slow_cfg_adp (
             3'd0:    tcb_val_c = w6;                    // rcv_nxt
             3'd1:    tcb_val_c = w7;                    // snd_nxt
             3'd2:    tcb_val_c = w7;                    // snd_una
-            3'd3:    tcb_val_c = 32'h00003000;          // rcv_wnd 通告 12K
+            3'd3:    tcb_val_c = 32'h0000C000;          // rcv_wnd 通告 48K (P4c: 12K->48K;
+                                                    // 此值 = echo 帧窗口字段 + tcp_rx
+                                                    // 接受窗, 与 HLS SYN-ACK 通告一致)
             3'd4:    tcb_val_c = {16'b0, w5[15:0]};     // snd_wnd = 对端窗口(已缩放)
             3'd5:    tcb_val_c = 32'd1;                 // state = ESTABLISHED
             default: tcb_val_c = {28'b0, w0[19:16]};    // 3'd6: wscale

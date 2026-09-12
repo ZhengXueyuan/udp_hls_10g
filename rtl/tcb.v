@@ -38,7 +38,7 @@ module tcb #(
     input  wire [3:0]  win_id,
     output reg         win_open,         // 32 位回绕正确门: (snd_nxt-snd_una) < 帽
     output reg  [15:0] win_inflight,     // 32 位差低 16 位 (debug 用)
-    output reg  [15:0] win_wnd_eff,      // min(snd_wnd, 0x2FFE = RING_CAP)
+    output reg  [15:0] win_wnd_eff,      // min(snd_wnd, 0xBFFE = RING_CAP)
     // ---- P6 冻结诊断: conn0 阵列快照 (纯 assign 组合读 entry[0], 无时序影响) ----
     output wire [31:0] dbg_snd_nxt0,
     output wire [31:0] dbg_snd_una0,
@@ -111,8 +111,12 @@ module tcb #(
     // 0xFFFFFFFF 也精确) + 16 位帽值 mux, 比较 < 帽后全注册输出 — tcb 到
     // tx 决策无任何组合链 (减/比较 皆在寄存器块内, 输入是 win_id 读出的
     // 阵列寄存器, 输出仍 1 拍后稳定)。
+    // P4c: 门控帽 0x2FFE -> 0xBFFE (窗口 12KB -> 48KB-2; 与 tcp_tx_frame
+    // RING_CAP 硬编码同值, 两处必须一致)。结构性安全界同步放宽: ring 物理
+    // 容量 65536 字节/conn (retx_ram 13 位 ring 字 idx), 最坏在飞 =
+    // (0xBFFE-1) + plen_max 4095 = 53244 < 65536 — 硬 ring 界仍成立。
     wire [31:0] win_diff = snd_nxt_r[win_id] - snd_una_r[win_id];   // 32-bit wrap-correct
-    wire [15:0] win_cap  = (snd_wnd_r[win_id] < 16'h2FFE) ? snd_wnd_r[win_id] : 16'h2FFE;
+    wire [15:0] win_cap  = (snd_wnd_r[win_id] < 16'hBFFE) ? snd_wnd_r[win_id] : 16'hBFFE;
     always @(posedge clk) begin
         win_open     <= (win_diff < {16'b0, win_cap});
         win_inflight <= win_diff[15:0];

@@ -84,3 +84,27 @@ set_property PACKAGE_PIN D23 [get_ports led_d2]
 set_property PACKAGE_PIN C24 [get_ports led_d3]
 set_property IOSTANDARD LVCMOS33 [get_ports {led_d0 led_d1 led_d2 led_d3}]
 set_property SLEW FAST [get_ports {led_d0 led_d1 led_d2 led_d3}]
+
+#=============================================================================
+# P4c 时序修复 (步骤 2, 2026-09-12): retx_ram 读地址/环地址网强制复制
+# 依据 (impl 报告 wrapper_p4_timing_summary_routed.rpt + report_timing -unique_pins):
+#   300/300 失败终点全部同源: u_tcp_tx/FSM_sequential_state_reg[1]_replica →
+#   组合深锥 (scan_id → retx_hi → rb_snd_nxt → nbeats/ring_rem → r_tap_seq → rpe)
+#   → u_retx/g_byte[*] 的 RAMB36 地址/使能脚 (282 ADDRBWRADDR + 16 ENBWREN + 2 WEA)。
+#   最差网 rpe[11] 扇出 128 (全为 BRAM 宏负载), 布线 2.43ns = 该路径 7.5ns 的 1/3。
+#   负载全为宏原语的网被 phys_opt 扇出优化直接排除 (log: Physopt 32-1132 / 32-572),
+#   FORCE_MAX_FANOUT 是其官方强制开关 (取值 < 负载数即触发复制), 不改变逻辑语义。
+# 取值: 地址网 32 (2 bank x 8 lane x 16 深级联 = 128 脚/网, 期望 >= 4 份就近布局);
+#       锥内高扇出网 64 (各 ~50..150 负载)。
+# 注: 写地址网 (wa_e_r/wa_o_r) 综合已按 RTL max_fanout=64 自行复制 (384/1152 网),
+#     读侧此前的 1 拍读延迟合同 (tcp_tx_frame S_RING) 未做任何改动。
+#=============================================================================
+# 注 1: XDC 禁用 foreach/if 等 Tcl 控制结构 (Designutils 20-1307)。实测: 循环会被
+#       静默忽略 → 属性 0 个生效; 故按族展开为独立 set_property 语句。
+# 注 2: wrapper_1g / wrapper_echo 无 retx 层次, 这 5 条会报 CRITICAL WARNING
+#       [Common 17-55] 'set_property' expects at least one object (非致命, 不中断流程)。
+set_property FORCE_MAX_FANOUT 32 [get_nets -hier -quiet -filter {NAME =~ "*u_retx/rpe*"}]
+set_property FORCE_MAX_FANOUT 32 [get_nets -hier -quiet -filter {NAME =~ "*u_retx/r_tap_seq*"}]
+set_property FORCE_MAX_FANOUT 64 [get_nets -hier -quiet -filter {NAME =~ "*u_retx/ring_rem*"}]
+set_property FORCE_MAX_FANOUT 64 [get_nets -hier -quiet -filter {NAME =~ "*u_retx/nbeats*"}]
+set_property FORCE_MAX_FANOUT 64 [get_nets -hier -quiet -filter {NAME =~ "*u_retx/rb_snd_nxt*"}]

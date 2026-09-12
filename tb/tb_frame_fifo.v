@@ -1,8 +1,11 @@
 `timescale 1ns/1ps
-// tb_frame_fifo.v -- frame_fifo (W=73) 单元测试: D=512 与 D=4096 双实例 + 队列参考模型
-// 逐拍比较 empty/full/dout (73 位全字节级); 驱动侧另持写入日志做 pop 内容逐字断言。
+// tb_frame_fifo.v -- frame_fifo (W=73) 单元测试: D=512 / D=4096 / D=8192(AW=13) 三实例
+// + 队列参考模型逐拍比较 empty/full/dout (73 位全字节级); 驱动侧另持写入日志做 pop
+// 内容逐字断言 (日志按 D 最大 8192 环形索引 — 未弹字数恒 <= 深度, 环写不覆盖未弹字)。
 // 阶段: (a) 空写直通 FWFT  (b) 每拍流式写读 (深度1 bypass 链)  (b2) 带停顿流
 //       (c) 灌满后顺序弹出  (d) snap/rollback  (e) 空读 gating
+//       (f) P4c D=8192/AW=13 回归: 8191/8192 灌满边界 + 512k-1/512k 回卷浸泡
+//           (占用贴满, 13 位指针回卷 64 次) + 回卷后 snap/rollback
 // 用法: xvlog <frame_fifo 源码> tb_frame_fifo.v glbl; xelab -L unisims_ver tb_frame_fifo glbl
 // 驱动约束 (消费端语义同此): rollback 不与 rd/snap 同拍; snap 与帧首字写同拍。
 // 空态 dout = 旧槽残留 (不定), 仅 !empty 时比较 dout (消费者亦按 !empty 取用)。
@@ -55,35 +58,38 @@ module tb_frame_fifo;
     reg rst_n = 0;
     reg chk_en = 0;
 
-    // 被测双实例: D=512 (slow 通道) 与 D=4096 (tcp_echo 主 FIFO)
-    reg        wr_s  [1:0];
-    reg [72:0] din_s [1:0];
-    reg        snap_s[1:0];
-    reg        rb_s  [1:0];
-    reg        rd_s  [1:0];
-    wire [72:0] dout_s [1:0];
-    wire        empty_s[1:0];
-    wire        full_s [1:0];
-    wire [72:0] dref_s [1:0];
-    wire        eref_s [1:0];
-    wire        fref_s [1:0];
-    wire        rdok_s [1:0];
-    wire        wrok_s [1:0];
+    // 被测三实例: D=512 (slow 通道) / D=4096 (tcp_echo 主 FIFO) / D=8192 (P4c echo FIFO)
+    reg        wr_s  [2:0];
+    reg [72:0] din_s [2:0];
+    reg        snap_s[2:0];
+    reg        rb_s  [2:0];
+    reg        rd_s  [2:0];
+    wire [72:0] dout_s [2:0];
+    wire        empty_s[2:0];
+    wire        full_s [2:0];
+    wire [72:0] dref_s [2:0];
+    wire        eref_s [2:0];
+    wire        fref_s [2:0];
+    wire        rdok_s [2:0];
+    wire        wrok_s [2:0];
 
     // 驱动侧逐字日志 (独立内容断言): 每个被接受写记录 din, 每次实际 pop 比对 dout
-    reg [72:0] wlog [1:0][0:8191];
-    integer    wpos [1:0], snap_pos[1:0], pop_pos[1:0];
-    integer    pop_cnt[1:0], wr_cnt[1:0];
+    // P4c: 环形容器 8192 槽 (最大深度); 未弹字数 <= 深度 ⇒ 环写绝不覆盖未弹字
+    reg [72:0] wlog [2:0][0:8191];
+    integer    wpos [2:0], snap_pos[2:0], pop_pos[2:0];
+    integer    pop_cnt[2:0], wr_cnt[2:0];
     integer    wbase0, wbase1, pbase0, pbase1;
 
     genvar gd;
     generate
-    for (gd = 0; gd < 2; gd = gd + 1) begin : GEN_FF
-        frame_fifo #(.W(73), .D(gd == 0 ? 512 : 4096), .AW(gd == 0 ? 9 : 12))
+    for (gd = 0; gd < 3; gd = gd + 1) begin : GEN_FF
+        frame_fifo #(.W(73), .D(gd == 0 ? 512 : (gd == 1 ? 4096 : 8192)),
+                     .AW(gd == 0 ? 9   : (gd == 1 ? 12   : 13)))
         uut (clk, rst_n, wr_s[gd], din_s[gd], snap_s[gd], rb_s[gd], rd_s[gd],
              dout_s[gd], empty_s[gd], full_s[gd]);
 
-        frame_fifo_ref #(.W(73), .D(gd == 0 ? 512 : 4096), .AW(gd == 0 ? 9 : 12))
+        frame_fifo_ref #(.W(73), .D(gd == 0 ? 512 : (gd == 1 ? 4096 : 8192)),
+                         .AW(gd == 0 ? 9   : (gd == 1 ? 12   : 13)))
         uref (clk, rst_n, wr_s[gd], snap_s[gd], rb_s[gd], rd_s[gd], din_s[gd],
               dref_s[gd], eref_s[gd], fref_s[gd], rdok_s[gd], wrok_s[gd]);
 
@@ -113,6 +119,8 @@ module tb_frame_fifo;
 
     integer cyc = 0;
     integer sd, i, k;
+    integer soak_full_cyc;       // (f2) 浸泡期 full=1 拍数 (贴满证据)
+    integer ghost2;              // (f2) rollback 幽灵偏移 (见 f1 后注释)
 
     task automatic step1();
         begin
@@ -141,18 +149,19 @@ module tb_frame_fifo;
         integer d;
         begin
             if (snap_v) begin
-                for (d = 0; d < 2; d = d + 1) snap_pos[d] = wpos[d];  // 写前位
+                for (d = 0; d < 3; d = d + 1) snap_pos[d] = wpos[d];  // 写前位
             end
-            for (d = 0; d < 2; d = d + 1) begin
+            for (d = 0; d < 3; d = d + 1) begin
                 if (wr_v && !full_s[d]) begin             // 本拍将写
-                    wlog[d][wpos[d]] = dnv;
+                    wlog[d][wpos[d] % 8192] = dnv;        // 环形槽 (见头注释不变量)
                     wpos[d] = wpos[d] + 1;
                     wr_cnt[d] = wr_cnt[d] + 1;
                 end
                 if (rd_v && !empty_s[d]) begin            // 本拍将 pop
-                    if (dout_s[d] !== wlog[d][pop_pos[d]]) begin
+                    if (dout_s[d] !== wlog[d][pop_pos[d] % 8192]) begin
                         $display("FATAL SIDE%d T=%0t POP%0d expect=%h got=%h",
-                                 d, $time, pop_pos[d], wlog[d][pop_pos[d]], dout_s[d]);
+                                 d, $time, pop_pos[d],
+                                 wlog[d][pop_pos[d] % 8192], dout_s[d]);
                         $fatal;
                     end
                     pop_pos[d] = pop_pos[d] + 1;
@@ -160,9 +169,9 @@ module tb_frame_fifo;
                 end
             end
             if (rb_v) begin
-                for (d = 0; d < 2; d = d + 1) wpos[d] = snap_pos[d];
+                for (d = 0; d < 3; d = d + 1) wpos[d] = snap_pos[d];
             end
-            for (d = 0; d < 2; d = d + 1) begin
+            for (d = 0; d < 3; d = d + 1) begin
                 wr_s[d] = wr_v; rd_s[d] = rd_v; snap_s[d] = snap_v; rb_s[d] = rb_v;
                 din_s[d] = dnv;
             end
@@ -182,11 +191,11 @@ module tb_frame_fifo;
     endtask
 
     initial begin
-        for (sd = 0; sd < 2; sd = sd + 1) begin
+        for (sd = 0; sd < 3; sd = sd + 1) begin
             wpos[sd] = 0; snap_pos[sd] = 0; pop_pos[sd] = 0;
             pop_cnt[sd] = 0; wr_cnt[sd] = 0;
         end
-        for (sd = 0; sd < 2; sd = sd + 1) begin
+        for (sd = 0; sd < 3; sd = sd + 1) begin
             wr_s[sd] = 0; rd_s[sd] = 0; snap_s[sd] = 0; rb_s[sd] = 0; din_s[sd] = 0;
         end
 
@@ -328,6 +337,7 @@ module tb_frame_fifo;
             cyc_drive(0, 1, 0, 0, 73'h0);
             expect_empty(0, 1);
             expect_empty(1, 1);
+            expect_empty(2, 1);
         end
         cyc_drive(1, 0, 0, 0, mkword(9, 0, 0));
         cyc_drive(1, 0, 0, 0, mkword(9, 1, 1));
@@ -335,9 +345,106 @@ module tb_frame_fifo;
         cyc_drive(0, 1, 0, 0, 73'h0);
         expect_empty(0, 1);
         expect_empty(1, 1);
+        expect_empty(2, 1);
         $display("PASS_ph_e  rd gating on empty: no corruption, data intact after");
-        $display("PASS_ALL  frame_fifo unit: writes A=%0d B=%0d popsA=%0d cycles=%0d",
-                 wr_cnt[0], wr_cnt[1], pop_cnt[0], cyc);
+
+        // ============ (f) D=8192 (AW=13) 边界回归 (P4c: 12→13 位, 回卷点 4096→8192) ====
+        //  (f1) 8191/8192 灌满边界: i=8190 拍后必须未满 (恰 8191 字入, 余 1 槽),
+        //       i=8191 拍后必须满且接受数恰 8192, i=8192 拍后再试写被拒 (计数不涨)。
+        //       full 判定靠 wptr[13] 回卷位 — 12 位实现在 4096 处提前满/8192 处
+        //       不满 → 两处断言 + 逐拍 ref 比较必炸。
+        wbase1 = wr_cnt[2]; pbase1 = pop_cnt[2];
+        for (i = 0; i < 8192 + 64; i = i + 1) begin
+            cyc_drive(1, 0, 0, 0, mkword(10, i, 0));
+            if (i == 8190) begin
+                if (full_s[2] !== 1'b0) begin
+                    $display("FATAL C full early at 8191 words (D=8192)"); $fatal;
+                end
+                if (wr_cnt[2] != wbase1 + 8191) begin
+                    $display("FATAL C wcnt=%0d at 8191 words", wr_cnt[2]); $fatal;
+                end
+            end
+            if (i == 8191) begin
+                if (full_s[2] !== 1'b1) begin
+                    $display("FATAL C not full at 8192 words (D=8192)"); $fatal;
+                end
+                if (wr_cnt[2] != wbase1 + 8192) begin
+                    $display("FATAL C wcnt=%0d at 8192 words", wr_cnt[2]); $fatal;
+                end
+            end
+            if (i == 8192) begin
+                if (full_s[2] !== 1'b1) begin
+                    $display("FATAL C full dropped at overflow attempt"); $fatal;
+                end
+                if (wr_cnt[2] != wbase1 + 8192) begin
+                    $display("FATAL C over-accepted at 8192"); $fatal;
+                end
+            end
+        end
+        for (i = 0; i < 8192 + 64; i = i + 1) cyc_drive(0, 1, 0, 0, 73'h0);  // 排空
+        expect_empty(2, 1);
+        if (pop_cnt[2] != pbase1 + 8192) begin
+            $display("FATAL C pops=%0d (expect %0d)", pop_cnt[2], pbase1 + 8192); $fatal;
+        end
+        $display("PASS_ph_f1 D=8192 fill-to-full: not-full@8191, full@8192, drain byte-exact");
+
+        // 占用真值 = (wr_cnt-pop_cnt) - 幽灵偏移: (d)/(f3) 的 rollback 丢弃字仍留在
+        // wr_cnt (历史接受数) 里; f1 排空后 FIFO 必空 (上面 expect_empty 已断言) →
+        // 此刻的差值即纯幽灵偏移, 后续占用断言全部减去它。
+        ghost2 = wr_cnt[2] - pop_cnt[2];
+
+        //  (f2) 512k-1 / 512k 回卷浸泡: 先灌满 (wptr 走 0..8191 停在回卷点), 再持续
+        //       wr=1 + rd 每 97 拍停 1 拍 → 占用恒贴满 (8191/8192), 13 位指针在
+        //       满态下回卷 ~64 次; 每拍 ref 模型比对 empty/full/dout + 每次 pop 逐字断言。
+        //       本阶段是 TB 最慢段 (~52 万拍 x 3 实例)。
+        for (i = 0; i < 8192; i = i + 1) cyc_drive(1, 0, 0, 0, mkword(11, i, 0));
+        soak_full_cyc = 0;
+        for (i = 0; i < 524287; i = i + 1) begin            // 512k-1 拍
+            cyc_drive(1, (i % 97) == 96 ? 0 : 1, 0, 0, mkword(11, 8192 + i, 0));
+            if (full_s[2] === 1'b1) soak_full_cyc = soak_full_cyc + 1;
+        end
+        if ((wr_cnt[2] - pop_cnt[2] - ghost2) < 8191) begin
+            $display("FATAL C soak occ=%0d at 512k-1 (expect 8191/8192)",
+                     wr_cnt[2] - pop_cnt[2] - ghost2); $fatal;
+        end
+        if ((wr_cnt[2] - pop_cnt[2] - ghost2) > 8192) begin
+            $display("FATAL C soak occ=%0d > depth at 512k-1",
+                     wr_cnt[2] - pop_cnt[2] - ghost2); $fatal;
+        end
+        if (soak_full_cyc < 4096) begin
+            $display("FATAL C soak full-cycles=%0d at 512k-1", soak_full_cyc); $fatal;
+        end
+        cyc_drive(1, (524287 % 97) == 96 ? 0 : 1, 0, 0, mkword(11, 8192 + 524287, 0));
+        if (full_s[2] === 1'b1) soak_full_cyc = soak_full_cyc + 1;
+        if ((wr_cnt[2] - pop_cnt[2] - ghost2) < 8191) begin // 512k 点
+            $display("FATAL C soak occ=%0d at 512k", wr_cnt[2] - pop_cnt[2] - ghost2);
+            $fatal;
+        end
+        $display("PASS_ph_f2 D=8192 soak 512k-1/512k cycles pinned at full (occ=%0d, full-cycles=%0d, wptr wraps=%0d)",
+                 wr_cnt[2] - pop_cnt[2] - ghost2, soak_full_cyc, wr_cnt[2] / 8192);
+
+        //  (f3) 回卷后 snap/rollback: 满态排半空 → 帧 A (3 字, 提交) 弹 A0 →
+        //       帧 B (帧首 snap 后 rollback 全丢; 大帧持续写跨 wptr 回卷点) →
+        //       残余 A1/A2 逐字内容仍对 (环形容器 + 13 位回卷快照双路径)
+        for (i = 0; i < 4096; i = i + 1) cyc_drive(0, 1, 0, 0, 73'h0);   // 排到半满
+        expect_empty(2, 0);
+        cyc_drive(1, 0, 1, 0, mkword(12, 0, 0));            // A0 (帧首 snap)
+        cyc_drive(1, 0, 0, 0, mkword(12, 1, 0));
+        cyc_drive(1, 0, 0, 0, mkword(12, 2, 1));            // A2 (last)
+        cyc_drive(0, 1, 0, 0, 73'h0);                       // 弹 A0
+        cyc_drive(1, 0, 1, 0, mkword(12, 3, 0));            // B0 (帧首 snap)
+        for (i = 1; i < 8192; i = i + 1)                     // 8192 字大帧 (跨回卷点)
+            cyc_drive(1, 0, 0, 0, mkword(12, 3 + i, i == 8191 ? 1 : 0));
+        cyc_drive(0, 0, 0, 1, 73'h0);                       // rollback: 帧 B 全丢
+        expect_empty(2, 0);                                 // 残余未动
+        cyc_drive(0, 1, 0, 0, 73'h0);                       // A1 (内容断言)
+        cyc_drive(0, 1, 0, 0, 73'h0);                       // A2
+        for (i = 0; i < 4200; i = i + 1) cyc_drive(0, 1, 0, 0, 73'h0);   // 排空
+        expect_empty(2, 1);
+        $display("PASS_ph_f3 D=8192 snap/rollback after pointer wrap: discarded frame gone, prior words intact");
+
+        $display("PASS_ALL  frame_fifo unit: writes A=%0d B=%0d C=%0d pops A=%0d B=%0d C=%0d cycles=%0d",
+                 wr_cnt[0], wr_cnt[1], wr_cnt[2], pop_cnt[0], pop_cnt[1], pop_cnt[2], cyc);
         $finish;
     end
 endmodule

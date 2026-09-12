@@ -50,7 +50,7 @@
 //   snd_wnd/wscale/state, dbg_* 口 = 阵列 entry[0] 纯组合读) + win 读口
 //   16 位全值; 锁存后 dbg_line_tx 立即发首行、此后每 ~5s 重复一行 358 字符
 //   ASCII (9600 下 ~373ms/行, 重复防 PC 漏读)。行格式:
-//     NX=%08X UA=%08X WN=%04X WS=%01X ST=%01X W=%d%d%d%d I=%04X E=%04X TXST=%1X RXST=%1X ACC=%d EMV=%d EST=%1X FFE=%d%d WPT=%03X RPT=%03X PF=%d TV=%d PV=%d SV=%d PLEN=%03X TW=%08X TF=%08X TI=%08X PW=%03X PR=%03X PFL=%d PEM=%d PLN=%03X RXPL=%04X RXPC=%04X RXT=%04X DROPS=%08X/%08X/%08X/%08X PASS=%08X RXTR=%d MW=%08X CW=%08X/%08X RW=%08X WC=%d WL=%04X\r\n
+//     NX=%08X UA=%08X WN=%04X WS=%01X ST=%01X W=%d%d%d%d I=%04X E=%04X TXST=%1X RXST=%1X ACC=%d EMV=%d EST=%1X FFE=%d%dWPT=%04XRPT=%04X PF=%d TV=%d PV=%d SV=%d PLEN=%03X TW=%08X TF=%08X TI=%08X PW=%03X PR=%03X PFL=%d PEM=%d PLN=%03X RXPL=%04X RXPC=%04X RXT=%04X DROPS=%08X/%08X/%08X/%08X PASS=%08X RXTR=%d MW=%08X CW=%08X/%08X RW=%08X WC=%d WL=%04X\r\n
 //   NX=snap snd_nxt0  UA=snap snd_una0  WN=snap snd_wnd0  (32/32/16 位 hex)
 //   WS=snap wscale0   ST=snap tcb state0                (4 位 hex 各 1 位)
 //   W = latch_val 4 位 '0'/'1' MSB 前: {wnd,0,eff0,infge} (与 LED blink 同;
@@ -63,7 +63,8 @@
 //   EMV = tcp_rx emit_v ('0'/'1' — 载荷输出字挂起, 背压链阻塞位点)
 //   EST = tcp_echo FSM state[1:0]     每行开头重采 (S_IDLE=0/S_FWD=1)
 //   FFE = echo frame_fifo {full, empty} 逐位 '0'/'1' (冻结时 11=回卷后仍堵)
-//   WPT/RPT = echo frame_fifo wptr/rptr[11:0] 每行开头重采 (差 ≈ 占用字数)
+//   WPT/RPT = echo frame_fifo wptr/rptr[12:0] 每行开头重采 (P4c AW=13: 4 位 hex,
+//             字段 8 字符无前导分隔空格; 差 mod 8192 ≈ 占用字数)
 //   PF = tcp_tx_frame dbg_pay_full  TX 载荷 FIFO 满 (S_RECV 失 tlast 停吞位点)
 //   TV = tcp_tx_frame s_axis_tvalid PV = u_eco_pipe m_valid  SV = u_eco_pipe
 //        s_valid (TX 输入侧握手链, 每行开头重采; 失 tlast 时 SV=1 PV=0?)
@@ -100,7 +101,7 @@
 //     tlast=0, accept=0), 与快照行严格同点, 不再依赖 stall 探测器。
 //   P4b-7-P6 TL (TR 行之后 8 行, 仅锁存后发 = 帧 FIFO 边存 tlast 位图):
 //     TL=%02X%02X%02X%02X%02X%02X%02X%02X 每行 8 字节 (21 字符), 8 行 = 64 槽;
-//     行 k 字节 j = 边存址 (rptr-32+8k+j) & 4095 的 bit8 (tlast), 打印 00/01
+//     行 k 字节 j = 边存址 (rptr-32+8k+j) & 8191 的 bit8 (tlast), 打印 00/01
 //     (一字节一槽, 地址顺序)。基址 rptr 在 TL 段首拍 (快照行末/TR4 行末) 锁存。
 //     上游 = frame_fifo dbg_rd_addr/dbg_rd_side 边存组合读口 (P6c); 位图直接
 //     给出「tlast=1 的帧末拍落在哪些槽、间隔是否 = 帧长」, 用于定位丢 tlast。
@@ -394,10 +395,13 @@ module wrapper_p4 (
     wire [31:0] rx_dbg_drop_nonmatch, rx_dbg_drop_ipcsum, rx_dbg_drop_trunc, rx_dbg_pass;
     wire [2:0]  eco_dbg_state;
     wire        eco_dbg_fifo_empty;
-    wire [12:0] eco_dbg_fifo_wptr, eco_dbg_fifo_rptr;
+    // P4c: frame_fifo 8192 字 (AW=13) -> 指针 14 位 (含回卷位), 地址低 13 位;
+    // uart_dbg 侧吃 [12:0] (WPT/RPT 4 位 hex 显示字段), 占用差用全宽算。
+    wire [13:0] eco_dbg_fifo_wptr, eco_dbg_fifo_rptr;
     // P4b-7-P6 TL: echo frame_fifo 边存组合读口 (dbg_line_tx 驱动读址, 上游边存
     // LUTRAM 直出该址值; bit8 = tlast)。UART 快照/TR 行之后 8 行 tlast 位图转储。
-    wire [11:0] eco_dbg_fifo_tladdr;
+    // P4c: 读址 13 位 (AW=13, 与 frame_fifo dbg_rd_addr 同宽, 直连不再补位)
+    wire [12:0] eco_dbg_fifo_tladdr;
     wire [8:0]  eco_dbg_fifo_tlside;
     // P4b-7-P6: u_eco_pipe 握手观测线 (纯 debug 别名, 零逻辑)
     wire        pipe_mv = eco2_tvalid;  // pipe m_valid (tx 帧器输入侧)
@@ -426,10 +430,10 @@ module wrapper_p4 (
     //   [15]    tx accept     s_axis_tvalid && s_axis_tready (本拍帧器真吞拍)
     //   [14:0]  echo fifo 占用 (wptr-rptr) 低 15 位 (帧内进度; 堵死态恒值)
     wire        tx_dbg_accept = tx_dbg_saxis_tvalid && tx_dbg_sready;
-    wire [14:0] eco_dbg_occ   = {2'b0, eco_dbg_fifo_wptr} - {2'b0, eco_dbg_fifo_rptr};
+    wire [15:0] eco_dbg_occ   = {2'b0, eco_dbg_fifo_wptr} - {2'b0, eco_dbg_fifo_rptr};
     wire [23:0] trace_entry   = {tx_dbg_state, pipe_mv, pipe_sv,
                                  tx_dbg_saxis_tvalid, tx_dbg_sready,
-                                 eco_tlast, tx_dbg_accept, eco_dbg_occ};
+                                 eco_tlast, tx_dbg_accept, eco_dbg_occ[14:0]};
     wire          trace_rewind = (tx_stat_retx != 32'd0);  // 首次 RTO 回卷 (同 snap 锁存)
     reg           trace_frozen;  // 一次性: 回卷即锁, 环停写
     reg  [5:0]    trace_waddr;   // 下一写址 (冻结后恒值 = 最老条目址)
@@ -592,7 +596,9 @@ module wrapper_p4 (
         .s_axis_tuser   (f_tuser),
         .s_axis_tcrs    (f_tcrs),
         .s_axis_terr    (f_terr),
-        .cfg_suppress_data_ack(1'b1),   // echo 应用: 纯 ACK 冗余 (吞吐实测实锤)
+        .cfg_suppress_data_ack(1'b0),   // P4c: 数据 ACK 提前 (不等 echo piggyback) —
+                                        // 帧级判定排队的 125Mbps 铁律的唯一破口
+                                        // (PC 窗口周转解耦到 RTT, 预期 ~900Mbps)
         .m_axis_tdata   (pay_tdata),
         .m_axis_tkeep   (pay_tkeep),
         .m_axis_tvalid  (pay_tvalid),
@@ -696,7 +702,7 @@ module wrapper_p4 (
         .dbg_fifo_empty (eco_dbg_fifo_empty),
         .dbg_fifo_wptr  (eco_dbg_fifo_wptr),
         .dbg_fifo_rptr  (eco_dbg_fifo_rptr),
-        .dbg_rd_addr    (eco_dbg_fifo_tladdr),
+        .dbg_rd_addr    (eco_dbg_fifo_tladdr),     // P4c: [12:0] 直连 (AW=13)
         .dbg_rd_side    (eco_dbg_fifo_tlside)
     );
 
@@ -1132,8 +1138,8 @@ module wrapper_p4 (
         .echo_state     (eco_dbg_state),
         .fifo_full      (eco_dbg_fifo_full),
         .fifo_empty     (eco_dbg_fifo_empty),
-        .fifo_wptr      (eco_dbg_fifo_wptr[11:0]),
-        .fifo_rptr      (eco_dbg_fifo_rptr[11:0]),
+        .fifo_wptr      (eco_dbg_fifo_wptr[12:0]),  // P4c: 13 位 (直连低 13 位)
+        .fifo_rptr      (eco_dbg_fifo_rptr[12:0]),  // P4c: 13 位 (直连低 13 位)
         .tx_pay_full    (tx_dbg_pay_full),
         .tx_saxis_tv    (tx_dbg_saxis_tvalid),
         .pipe_mv        (pipe_mv),

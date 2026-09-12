@@ -7,7 +7,7 @@
 //                  ASCII hex 快照, 366 字符 @9600 = ~381ms/行
 //
 // 行格式 (与 wrapper_p4 头注释逐字一致):
-//   NX=%08X UA=%08X WN=%04X WS=%01X ST=%01X W=%d%d%d%d I=%04X E=%04X TXST=%1X RXST=%1X ACC=%d EMV=%d EST=%1X FFE=%d%d WPT=%03X RPT=%03X PF=%d TV=%d PV=%d SV=%d PLEN=%03X TW=%08X TF=%08X TI=%08X PW=%03X PR=%03X PFL=%d PEM=%d PLN=%03X RXPL=%04X RXPC=%04X RXT=%04X DROPS=%08X/%08X/%08X/%08X PASS=%08X RXTR=%d MW=%08X CW=%08X/%08X RW=%08X WC=%d WL=%04X\r\n
+//   NX=%08X UA=%08X WN=%04X WS=%01X ST=%01X W=%d%d%d%d I=%04X E=%04X TXST=%1X RXST=%1X ACC=%d EMV=%d EST=%1X FFE=%d%dWPT=%04XRPT=%04X PF=%d TV=%d PV=%d SV=%d PLEN=%03X TW=%08X TF=%08X TI=%08X PW=%03X PR=%03X PFL=%d PEM=%d PLN=%03X RXPL=%04X RXPC=%04X RXT=%04X DROPS=%08X/%08X/%08X/%08X PASS=%08X RXTR=%d MW=%08X CW=%08X/%08X RW=%08X WC=%d WL=%04X\r\n
 //   NX = snd_nxt0   UA = snd_una0   WN = snd_wnd0    (32/32/16 位 hex)
 //   WS = wscale0    ST = tcb state0                  (4 位 hex, 各 1 位)
 //   W  = latch_val 4 位逐位 '0'/'1': {wnd_open, 1'b0(was hi_eq), (eff==0), (inf>=eff)}
@@ -20,7 +20,9 @@
 //   EMV  = tcp_rx emit_v                  ('0'/'1'; 载荷输出字是否挂起)
 //   EST  = tcp_echo FSM state[1:0]        (每行开始重采)
 //   FFE  = echo frame_fifo {full, empty} 逐位 '0'/'1'
-//   WPT/RPT = echo frame_fifo wptr/rptr[11:0] (差值 ≈ 已占用字数)
+//   WPT/RPT = echo frame_fifo wptr/rptr[12:0] (P4c AW=13; 值域 0..1FFF 需 4 位
+//             hex — 字段仍 8 字符 101..108/109..116, 无前导分隔空格, 与 FFE 的
+//             末位字符直接相邻; 差值 mod 8192 ≈ 已占用字数)
 //   PF   = tcp_tx_frame 载荷 FIFO 满 pay_full     (S_RECV 停吞位点诊断)
 //   TV   = tcp_tx_frame s_axis_tvalid             (帧器输入侧活请求)
 //   PV   = u_eco_pipe m_valid  SV = u_eco_pipe s_valid (echo→tx 握手链;
@@ -64,7 +66,7 @@
 //   以上 RXST..WC (含 RXPL/RXPC/RXT/DROPS/PASS/MW/CW/RW/WC/WL) 与 TXST 同语义:
 //   每行开始一次重采, 行内不变。CR LF 收尾。计数类 (DROPS/PASS/MW/CW/RW)
 //   为 8 位 hex 定宽 — 32 位十进制定宽需 10 位/字段, 行宽与时序代价不值,
-//   值本身精确无损 (本行 366 字符 + CR LF = 368)。
+//   值本身精确无损 (本行 443 字符 + CR LF = 445; SNAP_M1 = 444)。
 //
 // P4b-7-P6 TRACE 追加 (快照行之后, 仅 tr_run=trace_frozen 时发, 共 4 行):
 //   TR=%06X %06X %06X %06X %06X %06X %06X %06X %06X %06X %06X %06X %06X %06X
@@ -125,7 +127,8 @@
 //   判别「62 字节去哪了」: WL≈0042 (66) = PC/NIC 真发 66 字节短帧 (PC 侧);
 //   WL≈05EA (1514) = 线上整帧而 mac_rx/classify/tcp_rx 只入账 62 字节
 //   (FPGA 侧丢词, 配合 MW/CW/RW 三站计数定位)。未触发恒 0。
-//   行宽: 358 → 366 字符 (CR 在 366, LF 在 367), SNAP_M1 = 367。
+//   行宽: 358 → 366 字符 (WL 追加); 其后 diag18 (SC/SD/SF/SP/SV/HR) + TRU 追加
+//   至 443 字符 (CR 在 443, LF 在 444), SNAP_M1 = 444。
 //=============================================================================
 
 //-------------------------------------------------------------------------
@@ -208,8 +211,8 @@ module dbg_line_tx #(
     input  wire [2:0]  echo_state,      // 实时 tcp_echo FSM state (每行重采)
     input  wire        fifo_full,       // 实时 echo frame_fifo full
     input  wire        fifo_empty,      // 实时 echo frame_fifo empty
-    input  wire [11:0] fifo_wptr,       // 实时 echo frame_fifo wptr[11:0]
-    input  wire [11:0] fifo_rptr,       // 实时 echo frame_fifo rptr[11:0]
+    input  wire [12:0] fifo_wptr,       // 实时 echo frame_fifo wptr[12:0] (P4c AW=13)
+    input  wire [12:0] fifo_rptr,       // 实时 echo frame_fifo rptr[12:0] (P4c AW=13)
     input  wire        tx_pay_full,     // 实时 tcp_tx_frame 载荷 FIFO 满 (每行重采)
     input  wire        tx_saxis_tv,     // 实时 tcp_tx_frame s_axis_tvalid
     input  wire        pipe_mv,         // 实时 u_eco_pipe m_valid
@@ -294,7 +297,7 @@ module dbg_line_tx #(
     //   dbg_rd_addr = 本拍边存读址 (TL 读引擎驱动), dbg_rd_side[8] = 该址 tlast;
     //   行 k 字节 j 打印址 (rptr-32+8k+j) 的 tlast (00/01), 基址 TL 段首拍锁存。
     //   见头注释 TL 段; 上游 = frame_fifo dbg_rd_addr/dbg_rd_side 组合读口。
-    output wire [11:0]   dbg_rd_addr,
+    output wire [12:0]   dbg_rd_addr,
     input  wire [8:0]    dbg_rd_side,
     output wire          txd
 );
@@ -321,7 +324,7 @@ module dbg_line_tx #(
     reg        acc_l, emv_l;            // 行起始拍 accept / emit_v 快照
     reg [2:0]  est_l;                   // 行起始拍 tcp_echo state 快照
     reg        ffl_l, fel_l;            // 行起始拍 fifo full/empty 快照
-    reg [11:0] wpt_l, rpt_l;            // 行起始拍 fifo wptr/rptr 快照
+    reg [12:0] wpt_l, rpt_l;            // 行起始拍 fifo wptr/rptr 快照 (P4c AW=13)
     reg        pf_l, tv_l, pv_l, sv_l;  // 行起始拍 tx 握手链快照 (P4b-7-P6)
     reg [11:0] plen_l;                  // 行起始拍 tcp_tx_frame plen_r 快照
     reg [31:0] tw_l, tf_l, ti_l;        // 行起始拍 tlast 三计数快照 (P4b-7-P6)
@@ -340,7 +343,7 @@ module dbg_line_tx #(
     reg        hr_l;
     reg [31:0] tru_l;                   // P4b-7-P6 trunc 计数快照 (行尾 TRU)
     reg [63:0] tl_bits;                 // P4b-7-P6 TL: 64 址 tlast 位图 (位 g)
-    reg [11:0] tl_base;                 // TL 基址 = TL 段首拍 rptr - 32 (12 位回卷)
+    reg [12:0] tl_base;                 // TL 基址 = TL 段首拍 rptr - 32 (13 位回卷)
     reg [5:0]  tl_g;                    // TL 读引擎址偏移 0..63 (每拍 +1)
     reg        tl_run;                  // TL 读引擎忙 (64 拍)
     wire       ubusy;
@@ -390,16 +393,16 @@ module dbg_line_tx #(
     // ---- P4b-7-P6 TL: 边存 tlast 位图转储 (行 5..12, 64 址 x 1 位) ----
     // 进入 TL 段的拍 (快照行末 或 TR4 行末; 本行 LF 已入 uart) 锁 rptr 起读引擎:
     // 之后 64 拍逐拍读 1 址, dbg_rd_side[8] (tlast) 入 tl_bits[g]。址 = tl_base+tl_g
-    // (12 位自然回卷 = mod 4096 = 边存槽数)。读引擎 64 拍 << 首字节所需 3*10 位
+    // (13 位自然回卷 = mod 8192 = 边存槽数, P4c AW=13)。读引擎 64 拍 << 首字节所需 3*10 位
     // 时间 (行首 'T','L','=' 三字符 = ~390k 拍 @125M/9600), 故首 hex 前必就绪。
     // 边存 = LUTRAM 组合读, 冻结期内容静态; 逐拍步址无收敛风险。
     wire tl_enter = (st == S_CH) && !ubusy && (ci == nl_m1) &&
                     (((lno == 4'd0) && !tr_run) || ((lno == 4'd4) && run));
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            tl_bits <= 64'd0; tl_base <= 12'd0; tl_g <= 6'd0; tl_run <= 1'b0;
+            tl_bits <= 64'd0; tl_base <= 13'd0; tl_g <= 6'd0; tl_run <= 1'b0;
         end else if (tl_enter) begin
-            tl_base <= fifo_rptr - 12'd32;      // 基址 = rptr-32 (锁存拍实时值)
+            tl_base <= fifo_rptr - 13'd32;      // 基址 = rptr-32 (13 位回卷, 锁存拍实时值)
             tl_g    <= 6'd0;
             tl_run  <= 1'b1;
         end else if (tl_run) begin
@@ -431,7 +434,7 @@ module dbg_line_tx #(
         end
     endfunction
 
-    // 快照行字符生成 (pos 0..302, 字段位置见头注释; hex 高位在前)
+    // 快照行字符生成 (pos 0..444, 字段位置见头注释; hex 高位在前)
     function [7:0] snap_char;
         input [8:0]  pos;
         input [31:0] v_nx, v_ua;
@@ -439,7 +442,7 @@ module dbg_line_tx #(
         input [3:0]  v_ws, v_st, v_lv;
         input [2:0]  v_ts, v_rxs, v_est;
         input        v_acc, v_emv, v_ff, v_fe;
-        input [11:0] v_wpt, v_rpt;
+        input [12:0] v_wpt, v_rpt;
         input        v_pf, v_tv, v_pv, v_sv;
         input [11:0] v_plen;
         input [31:0] v_tw, v_tf, v_ti;
@@ -524,17 +527,18 @@ module dbg_line_tx #(
                                                  (pos == 7'd98) ? 8'h3D :       // =
                                                  (pos == 7'd99) ? 8'h30 + v_ff :
                                                                   8'h30 + v_fe;
-            else if (pos <= 7'd108)   snap_char =(pos == 7'd101) ? 8'h20 :
-                                                 (pos == 7'd102) ? 8'h57 :      // W
-                                                 (pos == 7'd103) ? 8'h50 :      // P
-                                                 (pos == 7'd104) ? 8'h54 :      // T
-                                                 (pos == 7'd105) ? 8'h3D :      // =
+            // P4c: WPT/RPT 加宽 4 位 hex (AW=13 → 值域 0..1FFF) — 字段保持
+            // 8 字符 (101..108 / 109..116), 弃前导分隔空格; 其余字符位置与
+            // SNAP_M1 全不变 (TB 只按本行位置表比对)
+            else if (pos <= 7'd108)   snap_char =(pos == 7'd101) ? 8'h57 :      // W
+                                                 (pos == 7'd102) ? 8'h50 :      // P
+                                                 (pos == 7'd103) ? 8'h54 :      // T
+                                                 (pos == 7'd104) ? 8'h3D :      // =
                                                  hexc(v_wpt >> (4 * (7'd108 - pos)));
-            else if (pos <= 7'd116)   snap_char =(pos == 7'd109) ? 8'h20 :
-                                                 (pos == 7'd110) ? 8'h52 :      // R
-                                                 (pos == 7'd111) ? 8'h50 :      // P
-                                                 (pos == 7'd112) ? 8'h54 :      // T
-                                                 (pos == 7'd113) ? 8'h3D :      // =
+            else if (pos <= 7'd116)   snap_char =(pos == 7'd109) ? 8'h52 :      // R
+                                                 (pos == 7'd110) ? 8'h50 :      // P
+                                                 (pos == 7'd111) ? 8'h54 :      // T
+                                                 (pos == 7'd112) ? 8'h3D :      // =
                                                  hexc(v_rpt >> (4 * (7'd116 - pos)));
             else if (pos <= 7'd121)   snap_char =(pos == 7'd117) ? 8'h20 :     // ' '
                                                  (pos == 7'd118) ? 8'h50 :      // P
@@ -834,7 +838,7 @@ module dbg_line_tx #(
         input [3:0]  v_ws, v_st, v_lv;
         input [2:0]  v_ts, v_rxs, v_est;
         input        v_acc, v_emv, v_ff, v_fe;
-        input [11:0] v_wpt, v_rpt;
+        input [12:0] v_wpt, v_rpt;
         input        v_pf, v_tv, v_pv, v_sv;
         input [11:0] v_plen;
         input [31:0] v_tw, v_tf, v_ti;
@@ -885,7 +889,7 @@ module dbg_line_tx #(
             lno <= 4'd0; tid <= 4'd0; tph <= 3'd0; tr_word <= 24'd0;
             ts_l <= 3'd0; rxs_l <= 3'd0; acc_l <= 0; emv_l <= 0;
             est_l <= 3'd0; ffl_l <= 0; fel_l <= 0;
-            wpt_l <= 12'd0; rpt_l <= 12'd0;
+            wpt_l <= 13'd0; rpt_l <= 13'd0;
             pf_l <= 0; tv_l <= 0; pv_l <= 0; sv_l <= 0;
             plen_l <= 12'd0;
             tw_l <= 32'd0; tf_l <= 32'd0; ti_l <= 32'd0;

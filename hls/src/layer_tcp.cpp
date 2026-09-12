@@ -152,10 +152,11 @@ static void tcp_build_hdr(uint8_t*b,uint16_t sp,uint16_t dp,uint32_t seq,uint32_
     b[12]=(doff<<4);b[13]=f;b[14]=(w>>8)&0xFF;b[15]=w&0xFF;
     b[16]=0;b[17]=0;b[18]=0;b[19]=0;
     if(has_opts){
-        // P4b-6 板测实锤: 不再通告 WS — 若通告 our_wscale=7, rcv_wnd 0x3000 被
-        // 对端放大 128 倍 (1.5MB), 远超 echo 管道容量 (~17KB); 门控一关闭 PC
+        // P4b-6 板测实锤: 不再通告 WS — 若通告 our_wscale=7, rcv_wnd (P4c: 0xC000)
+        // 被对端放大 128 倍 (24MB), 远超 echo 管道容量; 门控一关闭 PC
         // 继续狂发把管道塞满 → RX 拥塞连 ACK 都进不来 → 永久死锁 (需重烧板)。
-        // 不缩放时 PC 在飞 ≤ 0x3000 < 管道容量, ACK 恒可穿过, 门控自然恢复。
+        // 不缩放时 PC 在飞 ≤ 0xC000 (48K) < 管道容量 (echo fifo 64K + retx ring
+        // 64K/conn), ACK 恒可穿过, 门控自然恢复。
         b[20]=2;b[21]=4;b[22]=(TCP_MSS>>8)&0xFF;b[23]=TCP_MSS&0xFF; // MSS=1460
     }
 }
@@ -226,7 +227,10 @@ static void tcp_send(uint32_t *buf, mac_tx_req_t &tx_req, int8_t cid,
     bool has_opts=(flags&TCP_SYN)!=0;
     uint16_t total=(has_opts?TCP_MAX_HDR:TCP_HEADER_BYTES)+pay_len;
     uint32_t sip=(BOARD_IP_BYTE0<<24)|(BOARD_IP_BYTE1<<16)|(BOARD_IP_BYTE2<<8)|BOARD_IP_BYTE3;
-    tcp_build_hdr(seg,TCP_PORT_ECHO,c.peer_port,c.seq,c.peer_seq,flags,0xFFFF,has_opts);
+    // P4c: 我方通告窗 48K (0xC000) — 与 fast 侧 TCB rcv_wnd (slow_cfg_adp 常量
+    // 0xC000) 及门控帽 RING_CAP 0xBFFE 同量纲; 48K < 64K 故不引入 WS
+    // (P4b-6 死锁前科: WS=7 通告被放大 128 倍塞满管道, 见下 SYN 选项注释)。
+    tcp_build_hdr(seg,TCP_PORT_ECHO,c.peer_port,c.seq,c.peer_seq,flags,0xC000,has_opts);
     if(payload&&pay_len>0){for(int i=0;i<pay_len;i++)seg[TCP_HEADER_BYTES+i]=payload[i];}
     uint16_t cs=tcp_csum(sip,c.peer_ip,seg,total);seg[16]=(cs>>8)&0xFF;seg[17]=cs&0xFF;
     // Update SEQ and flight size

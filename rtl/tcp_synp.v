@@ -1,5 +1,7 @@
 `timescale 1ns/1ps
 // P4-lite SYN 应答器 (板测/bring-up 用; 正式慢路径归 P4 HLS 层)。
+// [DEPRECATED] 当前 wrapper_p4 未例化 (SYN 应答走 HLS 慢路径); 保留仅作对照参考,
+//   rcv_wnd 常量已随 P4c 同步 12K → 48K (0xC000), 与 slow_cfg_adp 一致。
 // 监听 tcp_rx SYN sideband: 纯 SYN 且目的端口 == cfg_listen 时, 占用 CAM 条目 0 +
 // TCB0, 配置 4 元组+对端 MAC 并把连接置 ESTABLISHED (rcv_nxt=对端 iss+1,
 // snd_nxt=snd_una=cfg_iss), 然后请 tcp_tx_frame 回 SYN+ACK (ack=rcv_nxt)。
@@ -78,7 +80,8 @@ module tcp_synp (
                         3'd0: upd_val <= syn_seq + 32'd1;      // rcv_nxt
                         3'd1: upd_val <= cfg_iss;              // snd_nxt
                         3'd2: upd_val <= cfg_iss;              // snd_una
-                        3'd3: upd_val <= 32'h00003000;         // rcv_wnd (通告 12K; echo fifo 16K 留 4K 余量)
+                        3'd3: upd_val <= 32'h0000C000;         // rcv_wnd (P4c: 通告 48K,
+                                                               // 与 HLS slow_cfg_adp / tcb 窗口上限一致)
                         3'd4: upd_val <= {16'b0, syn_wnd};     // snd_wnd = 对端通告
                         default: upd_val <= 32'd1;             // state = ESTABLISHED
                     endcase

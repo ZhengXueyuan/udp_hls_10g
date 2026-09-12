@@ -228,6 +228,11 @@ module tb_p4_chain;
     reg [3:0]  gap_cnt;   // 已连续播放的间隙字节数 (采样 rcv_nxt 须等上一帧
                           //  fend 的 drain 落地 = fend+3 拍, 否则注入帧带旧 seq
                           //  被 tcp_rx 拒收 — TB 模型噪声, 但污染统计)
+    // P4c ACK-early 复现 (+PCACKOOB): 注入 ACK 的 seq = 窗口右沿 (PC 满窗
+    // 停发后的纯 ACK 语义 — seq = PC snd_nxt ≈ FPGA rcv_nxt+rcv_wnd, 零长段
+    // RFC 合法)。旧 tcp_rx 对 seq 非边界纯 ACK 无 fend -> ACK 丢弃 -> snd_una
+    // 停滞 -> RTO 风暴 (板级 17.6Mbps 暴跌复现); 修复后应正常推进。
+    reg        pcack_oob;
 
     // ---- P4b-7 P3: PCACK 空洞语义 (exp_seq/hole) + TXDROP 故障注入 ----
     // P4b-7-P5: exp_seq 静态建于复位 — 真实对端从握手起就知其期望 seq =
@@ -245,10 +250,29 @@ module tb_p4_chain;
     reg        hd_fired;               // 掩码已触发 (半帧残段 tlast 已抹)
     reg [31:0] tdstk_run, tdstk_max;   // tcp_tx_frame S_RECV + pay_full 连拍哨兵
     integer    eco_run, eco_max;       // echo 出口最长无 tlast 词串 (合并哨兵)
-    reg [7:0]  data_cnt;         // conn0 数据帧计数 (0 基, 仅活数据帧)
-    reg        drop_armed_a, drop_armed_b;
-    reg        drop_win_a, drop_win_b;  // 高 = 丢弃窗口 (对 GMII 捕获屏蔽)
-    wire       gmii_tx_en_mon = gmii_tx_en && !(drop_win_a || drop_win_b);
+    reg [7:0]  data_cnt;         // conn0 活数据帧计数 (0 基, 丢帧编号用)
+    reg        tx_en_dr;         // 原始 gmii_tx_en 打拍 (帧尾下降沿检测)
+    reg [7:0]  fcb [0:2047];     // 帧字节缓冲 (整帧收齐, 帧尾判据决定写/丢)
+    reg [11:0] fcl;              // 缓冲内字节数 (饱和 4095, 真帧 <= 1538)
+    integer    fbi;              // 落盘循环变量
+    // P4c TXDROP 帧头匹配: 帧尾 (tx_en_dr && !gmii_tx_en) 拍为判据建立拍。
+    // suppress=0 下板上每段先发纯 ACK 再发 echo, 旧"arm 后首个 S_PRE"遮的是
+    // ACK 帧 (数据帧全在 + 残片) -> 必须按帧头 (conn0 echo 数据帧) 匹配。
+    // cur_is_d0 = 帧头字段判 conn0 echo 数据帧; cur_live = 新数据 (s>=exp,
+    // ring 重放/全重包不计编号, 与原 start_data 语义一致); cur_drop = 命中。
+    // 建立拍上 cap[0..47] = 本帧 body[0..47] (PC 模型前 48 拍收齐) 稳定可读。
+    wire       tx_frame_end = tx_en_dr && !gmii_tx_en;
+    wire [31:0] fs_cur = {cap[38], cap[39], cap[40], cap[41]};
+    wire       cur_is_d0 = (txbc >= 6'd48) && cap[12] == 8'h08 && cap[13] == 8'h00 &&
+                           cap[23] == 8'h06 && cap[34] == 8'h1F && cap[35] == 8'h90 &&
+                           cap[36] == 8'h30 && cap[37] == 8'h39 && cap[47] == 8'h18 &&
+                           {cap[16], cap[17]} > 16'd40;
+    wire       cur_live = cur_is_d0 && ((fs_cur > exp_seq) ||
+                                        (fs_cur == exp_seq && !hole));
+    wire [7:0] d0_ord_w = data_cnt + 8'd1;
+    wire       cur_drop = tx_frame_end && cur_live &&
+                          ((txdrop_n1 > 0 && d0_ord_w == txdrop_n1) ||
+                           (txdrop_n2 > 0 && d0_ord_w == txdrop_n2));
 
     function [7:0] inj_byte;
         input [6:0] idx;
@@ -365,7 +389,7 @@ module tb_p4_chain;
         .s_axis_tdata(f_tdata), .s_axis_tkeep(f_tkeep), .s_axis_tvalid(f_tvalid),
         .s_axis_tready(f_tready), .s_axis_tlast(f_tlast), .s_axis_tuser(f_tuser),
         .s_axis_tcrs(f_tcrs), .s_axis_terr(f_terr),
-        .cfg_suppress_data_ack(1'b1),   // 与板上 wrapper_p4 一致 (echo 应用)
+        .cfg_suppress_data_ack(1'b0),   // P4c: 与板上 wrapper_p4 一致 (数据 ACK 提前)
         .m_axis_tdata(m_tdata), .m_axis_tkeep(m_tkeep), .m_axis_tvalid(m_tvalid),
         .m_axis_tready(m_tready), .m_axis_tlast(m_tlast), .m_axis_tuser(m_tuser),
         .fend(fend), .ferr(ferr),
@@ -481,7 +505,8 @@ module tb_p4_chain;
     //      fresh 门必须仍开且注册门 (wnd_open) 必须保持开 (str_mm 必须 ~0)。
     //      全经 $display (写 resp 会炸 burstcheck 的 parse_gmii int(p[0],16))。
     wire [31:0] f_diff = rb_snd_nxt - rb_snd_una;  // 32 位回绕正确在飞差
-    wire [15:0] f_wnd  = (rb_snd_wnd < 16'h2FFE) ? rb_snd_wnd : 16'h2FFE;
+    // P4c: 帽直接引用 DUT 参数 (u_tx.RING_CAP = 0xBFFE), 不再镜像字面量
+    wire [15:0] f_wnd  = (rb_snd_wnd < u_tx.RING_CAP) ? rb_snd_wnd : u_tx.RING_CAP;
     wire        f_open = (f_diff < {16'b0, f_wnd});
     wire        f_16hi = (rb_snd_nxt[31:16] == rb_snd_una[31:16]);  // 旧 16 位门对照
     wire        mm_est = (rb_snd_wnd != 16'd0);    // 连接已建立 (窗非 0)
@@ -664,7 +689,10 @@ module tb_p4_chain;
                         gap_cnt >= 4'd11) begin
                         // 帧间隙: 构建纯 ACK (此刻静态流在间隙, rcv_nxt 冻结)。
                         // 本拍仍播该间隙字节, 下拍起 12 拍 IFG 再进前导。
-                        seq_b  = u_tcb.rcv_nxt_r[0];
+                        // P4c PCACKOOB: seq = 窗口右沿 (板级满窗纯 ACK 语义)
+                        seq_b  = pcack_oob ?
+                                 (u_tcb.rcv_nxt_r[0] + {16'b0, u_tcb.rcv_wnd_r[0]}) :
+                                 u_tcb.rcv_nxt_r[0];
                         ack_b  = inj_ack_val;
                         ipcs_c = ip_csum_inj(1'b0);
                         inj_crc = 32'hFFFFFFFF;
@@ -696,7 +724,10 @@ module tb_p4_chain;
                     end
                 end else if (pcack_en && inj_pend && gap_cnt >= 4'd11) begin
                     // 静态流已尽, 尾帧 echo 的 ACK 仍需注入 (否则门控卡住尾批)
-                    seq_b  = u_tcb.rcv_nxt_r[0];
+                    // P4c PCACKOOB: seq = 窗口右沿 (板级满窗纯 ACK 语义)
+                    seq_b  = pcack_oob ?
+                             (u_tcb.rcv_nxt_r[0] + {16'b0, u_tcb.rcv_wnd_r[0]}) :
+                             u_tcb.rcv_nxt_r[0];
                     ack_b  = inj_ack_val;
                     ipcs_c = ip_csum_inj(1'b0);
                     inj_crc = 32'hFFFFFFFF;
@@ -728,6 +759,7 @@ module tb_p4_chain;
     initial begin
         clk = 0; rst_n = 0;
         pcack_en = $test$plusargs("PCACK");
+        pcack_oob = $test$plusargs("PCACKOOB");
         inj_wnd = $test$plusargs("PCWND1K") ? 16'h0010 : 16'h4000;
         txdrop_n1 = 0; txdrop_n2 = 0;
         // TXDROP 索引经 txdrop.memh 传入 (run_tb_p4_burst.bat 由 %7/%8 生成):
@@ -856,9 +888,24 @@ module tb_p4_chain;
     end
 
     // ---- GMII 字节捕获 + 事件捕获 ----
+    // P4c: 帧字节先入 fcb 缓冲, 帧尾 (原始 en 下降沿) 再按 cur_drop 判据整帧
+    // 写/丢 — 只有帧尾才拿得到帧头判据。事件行仍即时写: checker 按 en 沿切帧 +
+    // 事件行独立解析 (parse_gmii), 与文件内行序无关。帧间必须写分隔行 (否则
+    // 相邻帧字节行会被解析器并成一帧)。
     always @(posedge clk) begin
         if (rst_n) begin
-            $fwrite(fd, "%02h %d\n", gmii_txd, gmii_tx_en_mon);
+            tx_en_dr <= gmii_tx_en;
+            if (gmii_tx_en) begin
+                if (!tx_en_dr) fcl <= 12'd1;
+                else if (fcl != 12'hFFF) fcl <= fcl + 12'd1;
+                if ((!tx_en_dr) || (fcl < 12'd2048))
+                    fcb[(!tx_en_dr) ? 12'd0 : fcl] <= gmii_txd;
+            end else if (tx_en_dr) begin
+                if (!cur_drop)
+                    for (fbi = 0; fbi < 2048; fbi = fbi + 1)
+                        if (fbi < fcl) $fwrite(fd, "%02h 1\n", fcb[fbi]);
+                $fwrite(fd, "00 0\n");
+            end
             if (fend)
                 $fwrite(fd, "FEND %0d %0d\n", k, ferr);
             if (tx_ack_req)
@@ -908,7 +955,8 @@ module tb_p4_chain;
         end
     end
 
-    // ---- TX echo 帧捕获 (gmii_tx_en_mon: TXDROP 丢弃帧对模型不可见):
+    // ---- TX echo 帧捕获 (原始 gmii_tx_en; TXDROP 命中帧在帧尾按 cur_drop 整
+    //      帧跳过 = 等效"该帧对模型不可见", 但判据由帧头匹配给出):
     //      帧尾按空洞语义调度 ACK — 顺序帧累计推进; OOO 帧每个恰好注入一个
     //      dup (ack = exp_seq, Windows 行为); 全重包 (s+p<=exp) 也回 dup ----
     always @(posedge clk) begin
@@ -918,8 +966,8 @@ module tb_p4_chain;
             exp_seq <= 32'h12345678 + 32'd1;   // HLS_ISS+1 = 首数据帧 seq
             hole <= 0;
         end else begin
-            tx_en_d <= gmii_tx_en_mon;
-            if (gmii_tx_en_mon) begin
+            tx_en_d <= gmii_tx_en;
+            if (gmii_tx_en) begin
                 if (!tx_en_d) begin tx_inf <= 0; txbc <= 0; end
                 else if (!tx_inf) begin
                     if (gmii_txd == 8'hD5) begin tx_inf <= 1; txbc <= 0; end
@@ -927,8 +975,8 @@ module tb_p4_chain;
                     cap[txbc] <= gmii_txd;
                     txbc <= txbc + 6'd1;
                 end
-            end else if (tx_en_d) begin
-                // 帧尾: conn0 echo 数据帧
+            end else if (tx_en_d && !cur_drop) begin
+                // 帧尾: conn0 echo 数据帧 (TXDROP 命中帧整帧跳过 — 不计数不 ACK)
                 if (cap[12] == 8'h08 && cap[13] == 8'h00 && cap[23] == 8'h06 &&
                     cap[34] == 8'h1F && cap[35] == 8'h90 && cap[36] == 8'h30 &&
                     cap[37] == 8'h39 && cap[47] == 8'h18 &&
@@ -954,41 +1002,15 @@ module tb_p4_chain;
         end
     end
 
-    // ---- P4b-7 TXDROP 故障注入: 丢弃第 N (TXDROP2: M) 个 conn0 数据帧的
-    //      GMII 捕获 (DUT/mac 无感 — 模拟链路丢帧; mac_stat_frames 仍计该帧,
-    //      对账用)。计数 = tcp_tx_frame 活数据帧启动拍 (ring 重放走 S_RING
-    //      不计, 重传不扰动编号)。两阶段窗口: drop_armed = 等该帧上线
-    //      (S_IFG 只关窗不撤 arm — mac TX FIFO 16 深, armed 帧启动拍时 mac
-    //      仍在发上一帧尾部, 其 S_IFG 抢在 armed 帧 S_PRE 之前; 若此时撤
-    //      arm 丢帧必落空, P3 gate3 实测抓到); 首个 S_PRE 开窗转 phase2,
-    //      drop_win, 该帧自己的 S_IFG 才关窗 (整帧对捕获消失) ----
+    // ---- P4c TXDROP 故障注入 (帧头匹配版, 取代旧两阶段窗口): 计数在帧尾按
+    //      cur_live (conn0 新数据 echo 帧) 自增; 序号命中拍 (帧尾) 整帧丢弃,
+    //      判据与帧头一致, 不再依赖 u_mactx S_PRE 时序 (suppress=0 下 S_PRE 先
+    //      落在纯 ACK 帧上 — 旧机制遮错帧: 数据帧全在 + 残片, RETX=0)。ring
+    //      重放帧 (s<exp) 不计编号, 与旧 start_data 语义等价。DUT/mac 无感 =
+    //      模拟链路丢帧; mac_stat_frames 仍计该帧 (对账用)。 ----
     always @(posedge clk) begin
-        if (!rst_n) begin
-            data_cnt <= 0;
-            drop_armed_a <= 0; drop_armed_b <= 0;
-            drop_win_a <= 0; drop_win_b <= 0;
-        end else begin
-            if (u_mactx.state == 3'd1) begin          // S_PRE: armed 帧上线
-                if (drop_armed_a) begin
-                    drop_armed_a <= 1'b0;
-                    drop_win_a   <= 1'b1;
-                end
-                if (drop_armed_b) begin
-                    drop_armed_b <= 1'b0;
-                    drop_win_b   <= 1'b1;
-                end
-            end else if (u_mactx.state == 3'd5) begin // S_IFG: 被遮帧下线
-                drop_win_a <= 1'b0;
-                drop_win_b <= 1'b0;
-            end
-            if (u_tx.start_data && u_tx.s_axis_tid == 4'd0) begin
-                data_cnt <= data_cnt + 8'd1;
-                if (txdrop_n1 > 0 && data_cnt == txdrop_n1 - 8'd1)
-                    drop_armed_a <= 1'b1;
-                if (txdrop_n2 > 0 && data_cnt == txdrop_n2 - 8'd1)
-                    drop_armed_b <= 1'b1;
-            end
-        end
+        if (!rst_n) data_cnt <= 0;
+        else if (tx_frame_end && cur_live) data_cnt <= data_cnt + 8'd1;
     end
 
     // ---- slow_cfg 排障: 记录 cfg_stream 每词 + S_CAM 拍的 w 寄存器 ----

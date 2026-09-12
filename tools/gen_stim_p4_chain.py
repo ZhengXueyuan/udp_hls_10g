@@ -38,6 +38,12 @@ PRE = C.PRE
 # (192.168.100.1), 否则 HLS ARP 查不到 → SYN+ACK 走广播。CONN[0] 原为
 # 10.0.0.1 (chain 时代), 在此覆盖为 PC_IP。
 C.CONN[0]['sip'] = PC_IP
+# P4c: conn0 的我方通告窗 = 48K。RTL 实际写 TCB 的值 = slow_cfg_adp 里手打
+# 的 0x0000C000 (HLS cfg 记录只带对端窗, 我方 rcv_wnd 由 RTL 常量落盘); 此处
+# 覆盖 CONN[0]['rcv_wnd'] 使 expected_frame_bytes 的 echo 帧窗口字段 (由 RTL
+# rb_rcv_wnd 生成) 与之一致。旧 TB (tb_tcp_chain/echo) 仍走各自生成器的
+# 0x3000 模型 (tcp_synp 路径), 不受影响。
+C.CONN[0]['rcv_wnd'] = 0xC000
 HLS_ISS = 0x12345678          # HLS layer_tcp 的我方 ISS (cid=0)
 HS_ACKVAL = HLS_ISS + 1       # 握手 ACK 应确认的值 = SYN+ACK 发出后的 snd_nxt
 
@@ -555,8 +561,10 @@ def check(simdir):
     got, ev = parse_gmii(os.path.join(simdir, 'resp_p4_chain.memh'))
     errs = []
 
-    # ---- 期望快流 (TCP): 每数据段 echo (P4b: SYN+ACK 由 HLS 慢路径发,
-    # 不在快流; suppress_data_ack=1 无纯 ACK) ----
+    # ---- 期望快流 (TCP): 每数据段先纯 ACK 再 echo (P4b: SYN+ACK 由 HLS
+    # 慢路径发, 不在快流; P4c: suppress_data_ack=0 — 每接受段发 ACK 帧,
+    # 板上帧序实测 = [ACK, echo] 交替, ACK 与 echo 同 seq (= snd_nxt),
+    # ack 字段 = rcv_nxt 推进值; echo 拍 snd_nxt 才推进) ----
     exp_fast = []
     rcv = {0: 1000, 1: 77}
     snd = {0: HS_ACKVAL, 1: 900}         # HLS 握手后 snd_nxt = ISS+1
@@ -565,6 +573,8 @@ def check(simdir):
             cid = 0 if f['name'].startswith('data') else 1
             plen = 7 if f['name'] == 'data7a' else (9 if f['name'] == 'data7b' else 20)
             na = rcv[cid] + plen
+            exp_fast.append(dict(kind='ack', cid=cid, seq=snd[cid], ack=na,
+                                 plen=0, rx_i=i))
             exp_fast.append(dict(kind='data', cid=cid, seq=snd[cid], ack=na,
                                  plen=plen, rx_i=i))
             rcv[cid] = na
@@ -666,15 +676,17 @@ def check(simdir):
     # ---- 事件 / 统计 / 终态 ----
     if len(ev['fend']) != 4:
         errs.append('FEND count %d != 4' % len(ev['fend']))
-    if len(ev['ack']) != 0:          # P4b: suppress + 无 synp -> 无 fast ACK 事件
-        errs.append('ACK events %d != 0' % len(ev['ack']))
+    # P4c suppress=0: 每接受数据段 (3 段) 一条 ACK 事件, (id, val) = 数据段序
+    if [(i, v) for _k, i, v in ev['ack']] != [(0, 1007), (0, 1016), (1, 97)]:
+        errs.append('ACK events got %s exp [(0,1007),(0,1016),(1,97)]'
+                    % ([(i, v) for _k, i, v in ev['ack']],))
     if ev['synp']:                   # P4b: SYN 进慢路径, tcp_rx 不再见 SYN
         errs.append('SYNP should be empty, got %s' % (ev['synp'],))
     exp_bytes = 7 + 9 + 20     # stat_bytes 计载荷字节 (plen_l = ip_len-40)
-    # nonmatch=0: SYN 已不进 fast 路径; ack=0: suppress 模式且无 dup/ooo
-    if ev['stats7'] != (4, 0, 0, 0, 0, 0, exp_bytes):
-        errs.append('STATS7 got %s exp (4,0,0,0,0,0,%d)' % (ev['stats7'], exp_bytes))
-    if ev['stx'] != (3, 36, 0, 0):   # fast TX 只剩 3 个 echo (SYN+ACK 走 HLS)
+    # nonmatch=0: SYN 已不进 fast 路径; ack=3: suppress=0 每段一 ACK 事件
+    if ev['stats7'] != (4, 0, 0, 0, 0, 3, exp_bytes):
+        errs.append('STATS7 got %s exp (4,0,0,0,0,3,%d)' % (ev['stats7'], exp_bytes))
+    if ev['stx'] != (6, 36, 3, 0):   # 6 帧 = 3 纯 ACK + 3 echo (SYN+ACK 走 HLS)
         errs.append('STATS_TX got %s' % (ev['stx'],))
     if ev['seco'] != (3, 0):
         errs.append('STATS_ECO got %s' % (ev['seco'],))
@@ -683,8 +695,9 @@ def check(simdir):
                       C.CONN[0]['dport'], int.from_bytes(PC_MAC, 'big')):
         errs.append('CAMF got %s' % (ev['camf'],))
     # TCBF: conn0 = HLS 握手配置 + 数据推进; ISS 链 = 0x12345678;
-    # snd_wnd: SYN WS=2 后 drain 缩放 0x4000<<2=0x10000 → 钳 0xFFFF
-    texp = (1016, 0x12345679 + 16, HS_ACKVAL, 0x3000, 0xFFFF, 1,
+    # rcv_wnd: P4c 48K (slow_cfg_adp 常量 0xC000, echo 帧窗口字段同源);
+    # snd_wnd: SYN WS=8 后 drain 缩放 0x4000<<8=0x400000 → 钳 0xFFFF
+    texp = (1016, 0x12345679 + 16, HS_ACKVAL, 0xC000, 0xFFFF, 1,
             97, 920, 900, 0x1800, 0x1A00, 1)
     if ev['tcbf'] != texp:
         errs.append('TCBF exp %s got %s' % (texp, ev['tcbf']))
@@ -903,17 +916,69 @@ def check_burst(simdir, nburst, txdrop1=0, txdrop2=0, trunc_at=0, trunc_len=8,
         else:
             print('截断验证: echo seq=%X plen=%d ack=%08X (只确认真实 %d 字节)'
                   % (hit[0][0], hit[0][1], hit[0][3], trunc_len))
-        # ③ 板上对后续 OOO 段的 dup-ACK 纯 ACK 一律只确认 S+trunc_len
-        if not ackf:
-            print('MISMATCH: 未见板上 dup-ACK 纯 ACK 帧 (OOO 段应触发 ackresp)')
-            ok = False
-        elif any(a != (s_tr + trunc_len) & 0xFFFFFFFF for a in ackf):
-            print('MISMATCH: 板上纯 ACK ack 号 %s 含非 %08X (OOO dup-ACK 越推进)'
-                  % (['%08X' % a for a in ackf[:4]], (s_tr + trunc_len) & 0xFFFFFFFF))
+        # ③ 板上 ACK 位置合法性 (P4c suppress=0: 每 conn0 数据段触发一个纯 ACK,
+        #    GMII 顺序 = 段序; ackf[i] = 第 i+1 段的 ACK):
+        #    i < trunc_at-1            正常推进 (ackf[0]=1007, [1]=1016, 步进 1460,
+        #                              截断段前一拍 ackf[trunc_at-2] == s_tr)
+        #    i == trunc_at-1           截断段: s_tr+trunc_len (只确认真实字节)
+        #    trunc_at-1 < i <= trunc_at+n_ooo_w-1  OOO 段 dup-ACK 停 s_tr+trunc_len
+        #    i == trunc_at+n_ooo_w     RTO 补缺口段: s_tr+1460 (缺口补齐)
+        #    i >  补缺口段             被丢各段重放: 正常推进, 单调无回退
+        #    OOO 段 dup-ACK 只在窗口内回 (tcp_rx 设计: 窗口外丢段不回 ACK):
+        #    第 k 段 (k>trunc_at) 的 seq diff = (1460-trunc_len) + (k-trunc_at-1)*1460,
+        #    窗口内 ⇔ k-trunc_at-1 <= floor((rcv_wnd-1452)/1460) = 32 (48K 窗)
+        #    -> 前 33 个 OOO 段回 dup-ACK, 其后超窗静默 (TRUNC=100/200 实测 33 帧;
+        #    TRUNC=50/55 全部 OOO 段在窗口内不受此限)。旧判据 (全 = s_tr+trunc_len)
+        #    是 suppress=1 时代语义; suppress=0 下正常段 ACK 也推进, 必须按位置分流
+        a_tr = (s_tr + trunc_len) & 0xFFFFFFFF
+        # 窗口内 OOO 段数: 第 k 段 (k>trunc_at) 的 seq diff =
+        # (1460-trunc_len) + (k-trunc_at-1)*1460, k-trunc_at-1 = 0..n-1 共 n 段
+        # 窗口内 ⇔ 偏移 n-1 <= (rcv_wnd-1452)//1460 = 32 (48K 窗) -> n = 33
+        n_ooo_w = min(nburst + 2 - trunc_at,
+                      (C.CONN[0]['rcv_wnd'] - (1460 - trunc_len)) // 1460 + 1)
+        ack_ok3 = True
+        if len(ackf) < trunc_at + n_ooo_w + 1:
+            print('MISMATCH: 板上纯 ACK %d 帧 < %d (截断段+窗口内 OOO+补缺口段)'
+                  % (len(ackf), trunc_at + n_ooo_w + 1))
+            ack_ok3 = False
+        else:
+            if ackf[0] != 1007 or ackf[1] != 1016:
+                print('MISMATCH: 前两段 ACK %s != [1007, 1016]' % ackf[:2])
+                ack_ok3 = False
+            for i in range(2, trunc_at - 1):
+                if ackf[i] != 1016 + (i - 1) * 1460:
+                    print('MISMATCH: 正常段 ACK[%d]=%08X != %d (推进链断裂)'
+                          % (i, ackf[i], 1016 + (i - 1) * 1460))
+                    ack_ok3 = False
+                    break
+            if ack_ok3 and ackf[trunc_at - 1] != a_tr:
+                print('MISMATCH: 截断段 ACK=%08X != %08X (未按真实字节推进)'
+                      % (ackf[trunc_at - 1], a_tr))
+                ack_ok3 = False
+            for i in range(trunc_at, trunc_at + n_ooo_w):
+                if ackf[i] != a_tr:
+                    print('MISMATCH: OOO 段 ACK[%d]=%08X != %08X (dup-ACK 越推进)'
+                          % (i, ackf[i], a_tr))
+                    ack_ok3 = False
+                    break
+            if ack_ok3 and ackf[trunc_at + n_ooo_w] != (s_tr + 1460) & 0xFFFFFFFF:
+                print('MISMATCH: 补缺口段 ACK[%d]=%08X != %08X (RTO 重传未补回)'
+                      % (trunc_at + n_ooo_w, ackf[trunc_at + n_ooo_w],
+                         (s_tr + 1460) & 0xFFFFFFFF))
+                ack_ok3 = False
+            for i in range(1, len(ackf)):
+                if ackf[i] < ackf[i - 1]:
+                    print('MISMATCH: ACK 序列回退 [%d]=%08X < [%d]=%08X'
+                          % (i, ackf[i], i - 1, ackf[i - 1]))
+                    ack_ok3 = False
+                    break
+        if not ack_ok3:
             ok = False
         else:
-            print('dup-ACK 证据: %d 帧纯 ACK 全部 ack=%08X (OOO 段只确认真实字节)'
-                  % (len(ackf), (s_tr + trunc_len) & 0xFFFFFFFF))
+            print('ACK 位置合法性: %d 帧 — 前 %d 段推进, 截断段+窗口内 %d 个 OOO '
+                  '停 %08X, 补缺口段 %08X, 重放段推进到 %08X (全链无回退)'
+                  % (len(ackf), trunc_at - 1, n_ooo_w, a_tr,
+                     (s_tr + 1460) & 0xFFFFFFFF, ackf[-1]))
         # ⑤ 好 FCS 截断帧必须按真实字节计入 pass/bytes (RTL 审查 P2-3: 截断支
         #    按 tcrs 分流 — 好 FCS -> stat_pass/stat_bytes, 坏 -> drop_crc)。
         #    RX 载荷总字节 = 原计划 + conn1 20B: 截断段 8B + 续传 1452B 恰补满

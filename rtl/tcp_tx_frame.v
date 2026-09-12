@@ -110,14 +110,16 @@ module tcp_tx_frame (
 
     parameter integer RTO_LIM  = 48828;    // RTO = RTO_LIM 次连接访问 x 16 tick x 16 连接
                                            // = 12.5M 拍 ≈ 100ms @125MHz (tick 版扫描, 见 scan_now)
-    // P4b-7-P6-fix: 门控帽 0x3000 -> 0x2FFE (tcb win 读口内亦硬编码同值, 两处必须一致)。
+    // P4c: 门控帽 0x2FFE -> 0xBFFE (窗口 12KB -> 48KB-2; tcb win 读口内亦硬编码
+    // 同值, 两处必须一致)。
     // 门控消费 1 拍注册在飞 (win_open = 32 位回绕差 < 帽, 见下): 帧完成写
     // snd_nxt 的当拍, 下一 S_IDLE 决策读到的仍是旧值, 可误开 1 拍 (OPEN
     // 方向, 每次最多多放 1 帧); 连接切换 (scan/svc/ack 旁路 rb_id) 同效。
-    // 实际在飞最坏 = (RING_CAP-1) + plen_max 4095 = 16380 < 16384 ring 字节 —
-    // 硬 ring 界仍结构性成立, 永不溢出。窗帽与在飞差均 32 位计算, 全 4GB
-    // 序列空间回绕正确 (帽 0x2FFE << 64K, 无 16 位化边角)。
-    parameter [15:0]  RING_CAP = 16'h2FFE; // 窗口门控帽 (ring 容量的收紧版, 见上)
+    // 实际在飞最坏 = (RING_CAP-1) + plen_max 4095 = 53244 < 65536 ring 字节
+    // (retx_ram 13 位 ring 字 idx = 64KB/conn) — 硬 ring 界仍结构性成立,
+    // 永不溢出。窗帽与在飞差均 32 位计算, 全 4GB 序列空间回绕正确
+    // (帽 0xBFFE << 64K, 无 16 位化边角)。
+    parameter [15:0]  RING_CAP = 16'hBFFE; // 窗口门控帽 (ring 容量的收紧版, 见上)
 
     localparam [2:0] S_IDLE = 3'd0, S_RECV = 3'd1, S_WAIT = 3'd2, S_HDR = 3'd3,
                      S_PAY  = 3'd4, S_TAIL = 3'd5, S_DONE = 3'd6, S_RING = 3'd7;
@@ -210,13 +212,13 @@ module tcp_tx_frame (
     wire        start_ack  = (state == S_IDLE) && ack_pend_r && !ackq_empty;
     // P4b-7-P6-fix 窗口门控: wnd_open = tcb 注册输出的 win_open — 门 =
     // REGISTERED 32 位回绕正确的在飞 (snd_nxt - snd_una, 全 32 位) vs
-    // RING_CAP 帽 (0x2FFE) 钳位后的对端通告窗, 比较在 tcb win 读口内完成
+    // RING_CAP 帽 (0xBFFE) 钳位后的对端通告窗, 比较在 tcb win 读口内完成
     // (32 位减法 + 16 位比较 + 帽 mux 全在寄存器块前, 输出即寄存器) —
     // rb_id -> TCB mux -> 减法/比较 -> tready -> accept -> retx_ram WEA/ADDR
     // 的最差前向链已断 (win_* 比 rb_* 旧 1 拍且按 rb_id 上一拍取值, 误开界见
     // RING_CAP 注释)。rb_* 仍供帧首锁存与 svc/ring 逻辑 (那些链以 FF 端点
-    // 为终点, 不是最差路径)。1 拍陈旧性分析 (RING_CAP 0x2FFE, 最坏误开 ≤
-    // (CAP-1)+4095 = 16380 < 16384 ring 字节) 保持不变 — 本修复只把 16 位
+    // 为终点, 不是最差路径)。1 拍陈旧性分析 (RING_CAP 0xBFFE, 最坏误开 ≤
+    // (CAP-1)+4095 = 53244 < 65536 ring 字节) 保持不变 — 本修复只把 16 位
     // 高半相等门换成 32 位回绕正确比较, 无跨 64K 边界误关边角。
     wire        wnd_open  = win_open;
     wire        start_data = (state == S_IDLE) && !ack_pend_r && !svc && !ring_eval &&
@@ -322,14 +324,16 @@ module tcp_tx_frame (
 
     // ---- ring 源帧 (S_RING, P4b-7-P6 2 级读出 ring_d -> ring_d_r) ----
     // 时序 (c0 = ring_start 预读 beat1 拍; nbeats = (plen_preset+7)>>3):
-    //   c(k) 拍 (S_RING, beat_cnt = k = 已发读次数): ring_d = beat k (c(k-1) 读),
-    //   ring_d_r = beat k-1; 写拍 c2..c(nbeats+1) 每拍写 1 beat (写 beat =
-    //   beat_cnt-1 = ring_d_r, 即读于 2 拍前); 末写拍 (beat_cnt == nbeats+1,
+    //   c(k) 拍 (S_RING, beat_cnt = k = 已发读次数): ring_d = beat k-1 (c(k-2) 读),
+    //   ring_d_r = beat k-2; 写拍 c3..c(nbeats+2) 每拍写 1 beat (写 beat =
+    //   beat_cnt-2 = ring_d_r, 即读于 3 拍前); 末写拍 (beat_cnt == nbeats+2,
     //   tlast) 边沿转 S_WAIT; 读 beat_cnt+1 直到 beat_cnt == nbeats — 读序列与
-    //   旧版逐拍相同, 写序列整体后移 1 拍 (S_RING 总长 nbeats+1 拍)
+    //   旧版逐拍相同, 写序列整体后移 2 拍 (S_RING 总长 nbeats+2 拍)
+    // P4c 时序修复 步骤 3 (2026-09-12): retx_ram 读地址入口寄存 1 拍 => 读延迟
+    //   1 拍变 2 拍; 上表已按 2 拍重算 (读请求 rd_tap/r_tap_seq 与 §342 逐字不变)。
     wire        ring_act = (state == S_RING);
-    wire [7:0]  ring_end = nbeats + 8'd1;
-    wire        ring_wr  = ring_act && (beat_cnt >= 8'd2);     // 写拍 c2..c(nbeats+1)
+    wire [7:0]  ring_end = nbeats + 8'd2;
+    wire        ring_wr  = ring_act && (beat_cnt >= 8'd3);     // 写拍 c3..c(nbeats+2)
     wire        ring_fin = ring_act && (beat_cnt == ring_end); // 末 beat 写拍 (tlast)
     wire [7:0]  ring_tkeep = ring_fin ? ((ring_rem == 12'd8) ? 8'hFF :
                              (8'hFF << (4'd8 - {1'b0, ring_rem[2:0]}))) : 8'hFF;
@@ -339,14 +343,15 @@ module tcp_tx_frame (
     wire [72:0] fdin_ring = {ring_fin, ring_tkeep, ring_w};
     // ring 读口: 首读在 ring_start 拍 (地址 rb_snd_nxt), S_RING 内每拍预读下一字
     wire        rd_tap = ring_start || (ring_act && (beat_cnt < nbeats));
-    wire [13:0] r_tap_seq = ring_start ? rb_snd_nxt[13:0] : ring_seq[13:0];
+    // P4c: ring 字节偏移 [15:0] (64KB/conn = 2^16 字节, 回绕恰在 16 位)
+    wire [15:0] r_tap_seq = ring_start ? rb_snd_nxt[15:0] : ring_seq[15:0];
     // ring 帧载荷 = min(1460, 会话剩余区间); delta<1460 时 12 位精确不截断
     wire [11:0] plen_preset = (ring_delta >= 32'd1460) ? 12'd1460 :
                               ring_delta[11:0];
 
     retx_ram u_retx (
         .clk(clk), .rst_n(rst_n),
-        .wr_en(wr_tap), .w_conn(w_tap_conn), .w_seq(w_tap_seq[13:0]),
+        .wr_en(wr_tap), .w_conn(w_tap_conn), .w_seq(w_tap_seq[15:0]),
         .w_data(s_axis_tdata), .w_n(pop8(s_axis_tkeep)),
         .rd_en(rd_tap), .r_conn(retx_id_r), .r_seq(r_tap_seq), .r_data(ring_d)
     );
@@ -669,8 +674,10 @@ module tcp_tx_frame (
                         state <= S_DONE;
                     end
                 end
-                3'd7: begin   // S_RING (P4b-7-P6 2 级读出): 每拍写 1 beat
-                    // (ring_d_r 入 u_fifo+u_csum); 末写拍 ring_fin 边沿转 S_WAIT
+                3'd7: begin   // S_RING (P4b-7-P6 2 级读出; P4c 步骤 3: 读延迟
+                    // 2 拍 => S_RING 总长 nbeats+2 拍, 见 §325 时序表)
+                    // 每拍写 1 beat (ring_d_r 入 u_fifo+u_csum); 末写拍 ring_fin
+                    // 边沿转 S_WAIT
                     if (ring_fin) begin
                         state <= S_WAIT; wait_cnt <= 3'd0;
                     end else begin

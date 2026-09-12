@@ -1964,3 +1964,216 @@ checker 打印 `HALFDROP 未复现合并/冻结` + `半帧段 echo: seq=12367FBD
 四门 + TXDROP/门控 5 命令组成的靶场可直接作为 P6 类改动的固定回归门 (总耗时约 13 min)。
 **遗留 (未验, 供板测)**: 本矩阵只覆盖"半帧中止 + 后续重传自愈"的仿真形; 板上 PC/NIC 重启的真实半帧
 是否每次都能在 `fend_trunc` 拍被捕获 (即 mac_rx 交付的残段拍 `tcrs=0 && 无 tlast` 的形态) 仍需 bitstream 实测。
+
+### P4c 里程碑: 窗口扩张 12KB→48KB (2026-09-12 下午)
+
+**瓶颈实证** (板级免费项验证): 吞吐 125.5Mbps = 12KB 窗口 ÷ ~96us burst 周期
+(PC ACK 节奏主导; RTT 中位 104us 非瓶颈; echo 84% 帧 <20us 爆发式; delayed
+ACK 关反而 -59% = ACK 洪水挤 TCB 写仲裁)。主线 = 扩窗口。
+
+**实现 (agent)**: HLS SYN-ACK 0x3000→0xC000 (免 WS 避 P4b-6 死锁); echo FIFO
+4096→8192 字 (fq/cq 加宽); retx_ram 16→64KB/连接 (TL 批准偏离 48KB: 2 幂掩码
+回绕零组合逻辑 + 最坏在飞 53244>48KB 会损坏数据); RING_CAP/win_cap 0xBFFE;
+slow_cfg_adp rcv_wnd 0xC000; TB 期望同步; HLS 网表重建核验 (8'd192)。四门矩阵
++ retx_ram/frame_fifo 单元 TB 全绿。
+
+**时序崩 (审查 P1-1 应验)**: WNS -0.848, 912 端点全在 retx_ram 写地址族 —
+FSM 状态 → 256 片 RAMB36 ADDRBWRADDR 的布线拥塞 (logic 1.5ns + route 6.3ns,
+80% 布线)。修复中: 写地址寄存器化 + bank 复制 → 不够则内部递增器 (顺序写
+只给帧首基址) → 再不够 TL 裁决砍连接数 16→12 (256→192 片)。
+
+**审查 P2 处置**: P2-3 uart_dbg 12 位别名 (agent 修中); P2-4 frame_fifo 单元
+TB 补 D=8192; P2-5 tcp_synp.v 0x3000 残留; P2-6 HLS csim 窗口断言; P1-2
+已由 TXDROP=50 RETX=1 覆盖; P2-7 (0xBFFE 帽仿真不绑定) 板测兜底。
+
+### P4c 测试矩阵独立复跑 (2026-09-12 晚, 独立测试 agent)
+
+**任务**: P4c = 窗口 12KB→48KB + retx_ram 16→64KB/连接 (读地址输入寄存器化, 读延迟 1→2 拍,
+环形消费窗口移 1 拍) + echo FIFO 4096→8192 字。对实现 agent 的"全绿"自报做独立复核:
+逐条重跑 8 命令仿真门 + 2 个单元 TB (**只跑测试, 未改任何源文件**)。
+
+**方法 / 溯源**
+- 驱动: `sim/p4sim/p6logs/indep4c/run_matrix4c.sh` (首轮 01-10 门)、`run_matrix4c_rerun.sh`
+  (冻结复跑 11-18 门)、`probe_txdrop.sh` (TXDROP 落点判别 19-20)。每门: 先清注入 memh, 记
+  exit/时长/resp md5/对端 ACK 事件数/RAMB 碰撞条数/GATEPROBE, 逐门归档 resp 与 xsim 日志;
+  汇总 = `summary.txt` / `summary2.txt` / `probe_summary.txt`。
+- 指纹: `00_rev_fingerprint{,2}.txt` = 全部输入 (rtl/*.v、tb/*.v、tools/gen_stim_p4_chain.py、
+  HLS 网表 udp_echo.v) 的 md5+mtime。
+- 独立反查 (结论不依赖 checker/TCBF 自证): `check_wnd.py` 直读 GMII 捕获里的 TCP 窗口字段/plen,
+  `classify.py` 帧分类, `dset.py` (seq,plen) 集合比较, `framediff.py` 按 seq 对齐逐帧逐字节 diff,
+  `burstdump.py`/`maskloc.py` 定位被遮罩帧。
+- **首轮中途源文件被并行 agent 改写 (前提)**: `tb/tb_p4_chain.v` 于 **18:58:43** 被改
+  (md5 `cea2ef98…` → `9b445fb9…`), 唯一语义改动 = `.cfg_suppress_data_ack(1'b1)` → `1'b0`
+  (注释 "P4c: 与板上 wrapper_p4 一致 (数据 ACK 提前)")。逐文件核对: RTL (retx_ram 17:48、
+  tcp_tx_frame 17:49、tcp_rx 15:34、tcb 15:20、tcp_echo 15:21、slow_cfg_adp 15:22、tcp_synp
+  16:32)、HLS 网表、单元 TB、gen_stim 全部未动。⇒ 首轮 01-04 门跑的是**旧 TB**、06-08 门是
+  **新 TB**, 首轮只能作混合 revision 参考; 19:10 起在冻结 revision (新 TB `9b445fb9`) 上整轮
+  复跑 = 表 2, **结论一律以表 2 为准**。交叉核对 `board/wrapper_p4.v:599` = `1'b0` ⇒ 新 TB 才与
+  板上一致 (旧 TB 的 1'b1 是历史仿真专用配置)。副作用: 每个数据段多一个独立纯 ACK 上线
+  (base 门 STATS_TX 406 帧 = 203 数据 + 203 ACK; 旧 TB 同场景只有 203 帧)。
+
+**表 1 首轮 (混合 revision, 仅参考, 不作结论依据)**
+
+| # | 门 | 命令 | rc | 关键数 | 判 |
+|---|---|---|---|---|---|
+| 01 | base run1 | `run_tb_p4_burst.bat 200` | 0 | echo 202 / RETX 0 / ECOMAX 182 / MAC(208,0,0) / md5 f46b0c91 | OK |
+| 02 | base run2 | 同上 | 0 | md5 与 01 全等 (同命令确定性) | OK |
+| 03 | TRUNC | `TRUNC=100 TRUNCM=8 … 200` | 0 | echo 203 / 33 dup-ACK 全 =00022D34 / TRUNCS(100,1) / MAC(242,0,0) | OK |
+| 04 | HALFDROP | `HALFDROP=100 HALFDROPK=990 … 200` | 0 | fired=1 / TXSTUCK 0 / MAC(240,0,0) | OK |
+| 05 | chain | `run_tb_p4_chain.bat` | 1 | 13s 无任何仿真产物 (resp md5 仍是 04 的 58500eef, 未重写) | FAIL (环境) |
+| 06 | TXDROP=50 | `… 200 -1 0 4000 0 0 50` | 1 | `RETX 0 != 期望 1`, 且捕获与 base **md5 全等** = 注入完全未生效 | FAIL (环境) |
+| 07 | 门控 PCWND1K | `… 200 0 0 10` | 0 | TCBF snd_wnd 4096 / MAC(411,0,0) / md5 26df22a1 | OK |
+| 08 | dupstorm | `… 200 0 0 4000 608 dup` | 0 | echo 202 / 247 ACK / MAC(455,0,0) | OK |
+| 09 | retx_ram 单元 | `sim/retxsim/run_retx_tb.bat` | 0 | ALL 7 GROUPS PASS | OK |
+| 10 | frame_fifo 单元 | `sim/retxsim2/run_tb_frame_fifo.bat <rtl/frame_fifo.v>` | 0 | PASS_ALL (D=8192 f1/f2/f3) | OK |
+
+**表 2 冻结复跑 (tb 9b445fb9 = 当前工作区; 19-20 为 TXDROP 落点判别实验)**
+
+| # | 门 | 命令 | rc | 关键数 | 判 |
+|---|---|---|---|---|---|
+| 11 | base | `… 200` | 0 | md5 6c614777; echo 202 无洞; STATS7(407,0,0,0,0,203,292036); STATS_TX(406,292036,203,0); MAC(411,0,0); TCBF rcv_wnd 49152 / snd_wnd 65535 | OK |
+| 12 | base 复跑 | 同上 | 0 | md5 与 11 **全等** (确定性) | OK |
+| 13 | TRUNC | `TRUNC=100 TRUNCM=8 … 200` | 1 | TRUNCS(100,1)✓ 载荷 203 帧全等✓ 无洞✓, 但 checker "纯 ACK 必全 =00022D34" 断言被逐段数据 ACK 打中 | FAIL (判据失配) |
+| 14 | HALFDROP | `HALFDROP=100 HALFDROPK=990 … 200` | 0 | fired=1 / TXSTUCK 0 / 半帧段整段重传补位 (seq=12367FBD plen=1460) / MAC(443,0,0) / md5 942cf605 | OK |
+| 15 | chain | `run_tb_p4_chain.bat` | 1 | 36s 正常仿真; 4 条 MISMATCH (fast count 6≠3 / ACK events 3≠0 / STATS7 ack 3≠0 / STATS_TX(6,36,3,0)) = suppress=0 新基线; DUT 段数/字节/abort 与期望一致 | FAIL (判据失配) |
+| 16 | TXDROP=50 | `… 200 -1 0 4000 0 0 50` | 1 | RETX 0≠1; 数据帧 203/203 **逐字节全等**无洞, 但纯 ACK 203→202 = 遮罩落在**纯 ACK 帧** (burst[102] 1 字节前导碎片); STATS_TX bytes 292036 (无回放) | FAIL (注入失效) |
+| 17 | 门控 PCWND1K | `… 200 0 0 10` | 0 | TCBF snd_wnd 4096; md5 26df22a1 与首轮 07 全等 | OK |
+| 18 | dupstorm | `… 200 0 0 4000 608 dup` | 0 | echo 202 / 247 ACK / MAC(455,0,0); md5 6fdc198c 与首轮 08 全等 | OK |
+| 19 | TXDROP=51 判别 | `… 200 -1 0 4000 0 0 51` | 1 | 同 16: 纯 ACK 203→202, 碎片 burst[104], RETX 0 | FAIL (注入失效) |
+| 20 | TXDROP=2 判别 | `… 200 -1 0 4000 0 0 2` | 1 | 同 16: 纯 ACK 203→202, 碎片 burst[6], RETX 0 | FAIL (注入失效) |
+
+(09/10 单元 TB 冻结复跑未再跑: RTL/单元 TB 指纹与首轮逐字节相同 = 同一份被测源, 结果沿用。)
+
+**P4c 判据逐条核对**
+
+1. **48K 窗口真上线 — ✓ (独立证据, 不经 checker)**: `check_wnd.py` 直读线上字段: SYN|ACK
+   window = 49152; conn0 数据帧 202 帧全部 49152 (唯一例外 6144 = conn1 那帧, 即 TCBF 里 conn1
+   的 rcv_wnd, P4c 未改 conn1); 纯 ACK 同 (202 conn0 @49152 + 1 conn1 @6144)。TCBF rcv_wnd =
+   49152 (0xC000) 全门一致。与 pre-P4c 基线 (`indep/12_base_resp.memh`, 14:40) 按 seq 对齐逐帧
+   逐字节 diff (203 帧, 长度全等): **载荷区 (eth[54:]) 差异 0 字节**, 差异仅 = TCP 窗口高字节
+   (eth[48] 0x30→0xC0, 202 帧) + TCP 校验和 (eth[50]/[51]) —— 纯代码变更的线上足迹与宣称一致。
+   附精确化: 线上实测 pre-P4c = 数据窗口 12288 (0x3000) / SYN|ACK 65535, P4c 后 = 49152/49152
+   (SYN-ACK 与数据窗口自洽); 上文 "HLS SYN-ACK 0x3000→0xC000" 的 0x3000 实为数据窗口值。
+2. **snd_wnd 门语义 — ✓**: 对端通告 4096 的门 (17) TCBF snd_wnd = 4096 (0x1000), 其余门 65535
+   (饱和) ✓。门控定向探针 GATEPROBE (P6 冻结修复的回归哨兵): 全门 wro=0 (**零"误开窗口"** =
+   不会提前启动帧), runmax=1 / oprun=0 / clrun=1 (失配全是单拍瞬态), 64K 跨界探针 strad 6789
+   拍中注册门误关仅 strmm 0-3 拍, blk 27-52 拍只让活帧晚 1 拍启动 ⇒ 48K 窗口下门控与设计一致。
+3. **重传回放在 2 拍读延迟契约下逐字节复现 (TXDROP: union 无洞 + RETX≥1) — ✗ 未验证** (根因 A)。
+4. **ECOMAX/abort/eend/载荷/截断/半帧 — ✓**: 全门 ECOMAX=182 (上限内); STATS_MAC abort=0、
+   tx_stat_eend=0; 载荷逐字节全等 (含 ring 重放帧); TRUNCS(100,1) + "截断验证: echo
+   seq=12367FBD plen=8 ack=00022D34" ✓; HALFDROP fired=1 / TXSTUCK=0 (P6 冻结哨兵在 P4c 下仍
+   0) + 半帧段被整段重传补位; dupstorm 273272 字节无洞。
+5. **单元 TB — ✓**: retx_ram 7 组全 PASS, 含 **GRP E 延迟恰 2 拍** (不断言 <1、不断言 =1、恰 =2
+   + 释放后保持) 与 GRP G 流式 back-to-back 读对齐 2 拍契约; frame_fifo D=8192: f1 (8191 非满 /
+   8192 满 / 排空逐字节), f2 soak 512k-1/512k 拍钉满 (occ=8191, full-cycles=5405, wptr 回卷 66),
+   f3 指针回卷后 snap/rollback ✓。
+
+**FAIL 根因 A — TXDROP 注入在 suppress=0 下系统性遮错帧 (遮纯 ACK, 不丢数据)**
+
+证据链 (gate 16 + 判别 19/20):
+- 数据帧**零损失**: 203 数据帧 (seq,plen) 集合与 base 门完全一致 (对称差 0、重复 seq 0、逐帧
+  逐字节 diff 0 字节), STATS_TX bytes = 292036 = 200×1460+16 = **无任何回放字节**;
+- 但**纯 ACK 少一个**: 203→202, 被遮位置留下 "1/7 字节前导碎片" burst (gate16 burst[102] len=1、
+  gate19 burst[104] len=1、gate20 burst[6] len=7) = 窗口在帧首拍后打开, 整帧 60B ACK 消失;
+  落点随索引**线性平移** (索引 2→burst[6]、50→burst[102]、51→burst[104], 即每个 conn0 数据帧
+  对应 2 个 TX 帧: 数据+纯 ACK), 三条索引**全部**落在 ACK 上;
+- 后果: 对端模型只跟踪 conn0 数据帧 (tb 933-936 行: flags 0x18 + sport 1F90 + dport 3039 +
+  IP len>40), 看不到数据空洞 ⇒ `exp_seq` 不后移 ⇒ 无 OOO ⇒ 无 dup-ACK ⇒ DUT 无 `retx_req`
+  ⇒ RETX=0 ⇒ `MISMATCH: RETX 0 != 期望 1` ⇒ BURST FAIL;
+- 机制: TB 两阶段注入 = "arm 设于第 N 个 conn0 数据帧 `start_data` (data_cnt==N-1), 窗口开在此后
+  **第一个** `u_mactx.state==S_PRE`, 关在其 S_IFG" (tb 966-993 行) —— 它**不跟踪被 arm 的那一帧**,
+  遮的是"当时排到 mac 队首的帧"。旧 TB (suppress=1) TX 流里只有数据帧 ⇒ P6 时代该门能丢中数据帧
+  (`indep/09_extra_txdrop50.txt`: RETX=1, STATS_TX (209,300796,0,0) = 回放 6×1460=8760B, conn0
+  echo 207); 换成 suppress=0 (= 板上配置) 后数据/ACK 在 TX FIFO 里 1:1 交替, 队首固定为 ACK
+  ⇒ 注入**必然**打空, 与索引无关;
+- 结论: **注入标定失效 (测试侧)**, 非数据面回归 (载荷/无洞/ECOMAX/abort 全绿)。但它同时**否掉了
+  上文"审查 P2 处置: P1-2 已由 TXDROP=50 RETX=1 覆盖"的依据** —— 本 revision 下该门根本没造成
+  数据丢包; 而 P4c 恰恰改了重传回放路径 (读延迟 1→2 拍 + 消费窗口移 1 拍), 所以**"重传回放在新
+  契约下逐字节复现"这条判据目前空白 (未验证)**, 不能计入绿;
+- 修复建议: 注入改为**按帧头内容匹配** (mac 侧按 flags=0x18/seq 计数第 N 个 conn0 数据帧, 或 arm
+  时记下该帧 seq 并在 S_PRE 比 seq), 不再数 `start_data` + 取"第一个 S_PRE"; 修好后同命令复跑,
+  期望: 数据帧少 1 / RETX=1 / STATS_TX bytes > 292036 / union 靠回放补齐无洞。
+
+**FAIL 根因 B — TRUNC / chain 两门 checker 期望值未随 suppress=0 同步 (判据失配, 非 DUT)**
+
+- gate 13: `MISMATCH: 板上纯 ACK ack 号 ['000003EF','000003F8','000009AC','00000F60'] 含非
+  00022D34`。该断言写作于 suppress=1 时代 —— 那时线上纯 ACK 只有 OOO dup-ACK 那 33 个 (首轮
+  gate 03 证据: "dup-ACK 证据: 33 帧纯 ACK 全部 ack=00022D34"); suppress=0 后线上纯 ACK = 237
+  = **33 dup-ACK + ~204 逐段累计 ACK** (与 base 门 203 逐段 ACK 同源) ⇒ 断言必失败。该门其余
+  判据全绿 (见判据 4 行): 载荷 203 帧逐字节全等 / merge 干净 / 截断验证 ✓ / MAC(446,0,0)。
+- gate 15 (chain): 4 条 MISMATCH 同一根因 (帧数与 ACK 数翻倍): fast count 6≠3 (= 3 数据 + 3 纯
+  ACK), ACK events 3≠0, STATS7 ack 3≠0, STATS_TX(6,36,3,0); DUT 段数/字节与期望一致,
+  MAC abort/eend=0 ⇒ 期望值没跟上配置。
+- 修复建议: checker 按 `cfg_suppress_data_ack` 分支区分"逐段累计 ACK"与"OOO dup-ACK"两类期望
+  (gen_stim 里硬编码的 fast count / ACK events / STATS7.ack / STATS_TX 同样要按配置分支)。
+- 首轮两处异常再定性: gate 05 (13s、无任何仿真产物) 与 gate 06 (注入完全未生效、捕获与 base
+  md5 全等) = **与并行 agent 共用 sim/p4sim 目录的竞争** (对方 bat 收尾会 `del txdrop.memh`, 并
+  用同名 stim_*.memh / resp_p4_chain.memh / xsim.dir 快照) —— 冻结复跑独占目录后 gate 15/16 给出
+  真实结果。**教训: 验证矩阵期间 sim 目录必须独占、被测源文件必须冻结。**
+
+**结论**
+
+- **P4c 主项 (48K 窗口 + 2 拍读延迟 + 8192 echo FIFO) 通过独立复核**: 窗口字段 49152 真上线且与
+  pre-P4c 逐帧 diff 只差窗口/校验和字节 (载荷 0 字节差异); snd_wnd 门语义正确; 门控零"误开";
+  ECOMAX / abort / eend / 载荷 / 截断 / 半帧中止 (含 P6 冻结哨兵) 全部保持; 两个单元 TB (含
+  GRP E 延迟恰 2 拍、D=8192 soak) 全过; 同命令复跑 md5 全等 (确定性)。
+- **8 门里 3 门 FAIL, 全部落在测试侧, 未见数据面回归**: 2 门 = checker 期望未随 suppress=0 同步;
+  1 门 = TXDROP 注入标定在 suppress=0 下系统性遮错帧。**但 P4c 明确要求的"重传回放逐字节复现"
+  判据目前无法验证**, 且它正对 P4c 最敏感的路径 (retx 读延迟 + 消费窗口), 不能计入绿 ⇒
+  实现 agent 的"全绿"自报**不成立**, 需按根因 A/B 修复后重跑本矩阵 (约 30 min: 8 门 + 2 单元 TB)。
+- 板测提示: suppress=0 (= wrapper 现状) 下每个数据段带一个独立纯 ACK, 线上 TX 帧数翻倍 (base 门
+  MAC 411 帧 = 203 数据 + 203 ACK + 5 慢路径; STATS_TX 406), 即 P6 记过的 "ACK 洪水挤 TCB 写
+  仲裁" 形态; 若板测吞吐不达预期, 优先回看该配置与 ACK 节奏。
+
+### P4c 板级首轮 + ACK-early 实验 (2026-09-12 傍晚)
+
+**P4c 首轮板测**: 窗口 48KB 用满 (PC 在飞 45-48KB 实锤, SYN-ACK 49152 字节级验证)
+但吞吐 124Mbps 不变 — **echo 架构铁律**: 吞吐 = 1460B/12us ≈ 125Mbps 与窗口无关
+(窗口×4 时 echo 帧级判定排队延迟也×4, 精确抵消)。
+
+**PC 侧调优全堵死**: TcpAckFrequency=1 (-59%, ACK 洪水挤 TCB 仲裁) /
+InterruptModeration 关 (-40%, 中断洪水) / TcpDelAckTicks=0 (连接 reset) /
+AckFrequency=2+DelAckTicks=0 (无变化)。PC ack 推进时间线显示 40ms 级 delayed
+ACK 死区, 但消除后仍无收益 → 瓶颈在板侧帧级判定排队。
+
+**ACK-early 实验** (cfg_suppress_data_ack=0, 设计预留开关): TB 绿; 板级:
+①SYN 无应答 (重烧后恢复 — 跑坏残留态, 非天生) ②吞吐 17.6Mbps 暴跌 (TX 线速
+发 ACK/echo 1:1 交替, PC 发帧却慢到 890 帧/s — PC 窗口推不动) ③两轮测试均
+ConnectionResetError ④LED latched=1 (RTO 回卷发生过)。板级行为复杂, 回 sim
+钉语义: TB checker 按 suppress 分支 + TXDROP 注入按帧头匹配 (测试 agent 发现
+旧注入在 suppress=0 下遮的是 ACK 帧, 重传回放路径验证空白 — P4c 核心风险)
++ UART 静默 (P2-3 板级回归嫌疑)。待 agent 三项报告。
+
+### P4c ACK-early 破案 + 全矩阵收官 (2026-09-12 晚)
+
+**三任务完成 (TL 接手)**:
+
+1. **TRUNC/chain checker 同步**: chain 期望随 suppress=0 同步 — GMII 实测帧序
+   每段 [纯 ACK(seq=snd_nxt, ack=rcv_nxt推进), echo] 交替, exp_fast 加 ACK 条目
+   (顺带复活 "echo before its ACK" 时序检查), ACK 事件/STATS7/STATS_TX 期望
+   同步; TRUNC 判据③改**位置合法性**: 正常段推进 / 截断段+窗口内 OOO 停
+   s_tr+trunc_len / 补缺口段 s_tr+1460 / 重放段推进无回退。窗口内 OOO 段数 =
+   (rcv_wnd-1452)//1460+1 = 33 (48K 窗) — **窗口外 OOO 静默是 tcp_rx 设计行为**
+   (TRUNC=100/200 实测 33 帧 dup-ACK, 判据 v1 误报 FAIL)。
+
+2. **UART 静默**: uart_dbg 单元 TB ALL_OK (P2-3 12→13 位修复 sim 侧干净);
+   板级静默 = 旧 bitstream (P2-3 未修) + ACK-early 残留态叠加, uart_run 上电
+   1.2s 即触发 — 新 bitstream 板测应自然复活。
+
+3. **ACK-early 帧序破案 (P4c 核心)**: 板级 ack_slow.pcapng frame 2436 —
+   PC 满窗 (48KB 耗尽) 停发后发纯 ACK, seq = PC snd_nxt = FPGA rcv_nxt+49152
+   **恰在窗口右沿**; 旧 tcp_rx 对 seq 非边界纯 ACK (win_ok 严格 < wnd) 无
+   fend/S_DROP → **ACK 信息静默丢弃 → snd_una 停滞 → RTO 回卷风暴**
+   (抓包 2446/2449/2452 三连 100ms 重发 + PC 重传, 与板级 17.6Mbps 暴跌同构)。
+   suppress=1 时代 PC 窗口从不耗尽 (echo piggyback 推进慢) → 纯 ACK 罕见 →
+   机制潜伏。**修复**: w6a_ok = base_ok && plen==0 && (seq_diff <= rcv_wnd ||
+   seq_lt) (RFC 零长段含右沿); w6 拍 tlast 走 fend_w6a, 60B 带填充帧走 S_PAD
+   (fend_pad), ACK/窗口字段照常 pend_una/pend_wnd。**复现**: TB +PCACKOOB
+   (注入 ACK seq=窗口右沿) — HEAD 版 FAIL (RETX=1, snd_una 停滞 305419897,
+   echo 63≠32, 63 帧 ACK 全 nonmatch) / 修复版 OK (全推进无洞)。闭环成立。
+
+**全矩阵绿 (tcp_rx 修复后复跑)**: chain / burst200 base / TRUNC=50,100 /
+HALFDROP=50k6,100k990 / TXDROP=50 (55,200) / gate4096 / dupstorm /
+PCACKOOB / uart_dbg / retx_ram (7 GRP, 含 latency=2cyc) / frame_fifo (D=8192)。
+待办: 板级重建烧录 + ACK-early 吞吐重测 (修复后 suppress=0 预期 ~900Mbps
+破 echo 铁律) + UART 复活确认。

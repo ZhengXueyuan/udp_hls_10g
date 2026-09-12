@@ -159,6 +159,7 @@ module tcp_rx (
     reg  [3:0]  conn_id_l;
     // w5 拍判读锁存 (w5->w6 沿)
     reg         acc_l, ackresp_l, ack_adv_l;
+    reg         w6a_ok_l;               // P4c: 窗口内非边界纯 ACK (w5 锁存)
     reg  [31:0] ack32_l, seq32_l, rcv_nxt_l;
     reg  [15:0] plen_l;                  // 载荷字节数 = IP total_len - 40
     reg  [15:0] wnd_l;                   // w6 拍锁存对端窗口
@@ -253,6 +254,15 @@ module tcp_rx (
     wire        frag_ok  = (w2_r[29:16] == 14'h0);   // MF=0 且片偏移=0 (分片段丢给 P4)
     wire        base_ok  = cam_hit_l && state_ok && flags_ok && doff_ok && len_ok &&
                            frag_ok;
+    // P4c ACK-early 修复: 纯 ACK 帧 (plen=0) 的 seq 无需在 rcv_nxt 边界 —
+    // RFC 零长段可落在窗口右沿 (seq == rcv_nxt+rcv_wnd, 不占字节); 窗口内/
+    // 右沿/旧段都接受, 其 ACK/窗口字段是 snd_una 推进的唯一途径 (PC 满窗
+    // 停发后只发纯 ACK, 且该 ACK 的 seq = PC snd_nxt ≈ FPGA 窗口右沿)。
+    // 旧行为: seq 非边界 -> 无 fend/S_DROP -> ACK 丢弃 -> snd_una 停滞 ->
+    // RTO 回卷风暴 (板级 ACK-early 实验 17.6Mbps 暴跌 + reset 根因;
+    // 抓包 frame 2436: PC ACK seq = rcv_nxt+49152 恰在右沿被丢)
+    wire        w6a_ok   = base_ok && (plen_w == 16'd0) &&
+                           ((seq_diff <= {16'b0, ra_rcv_wnd}) || seq_lt);
     // P3: dup-ACK 判据 — 无载荷纯 ACK 且 ack 不推进 (ack==snd_una) 且还有在飞
     // 未确认数据 (snd_nxt != snd_una: 排除空闲连接的窗口探测 ACK 被误计)
     wire        dup_ack  = base_ok && (plen_w == 16'd0) && ack_ok && !ack_adv &&
@@ -286,7 +296,11 @@ module tcp_rx (
     // ferr=1 -> echo 坏帧回卷 (合成尾拍 judged 拍) — 防半帧残留合并
     wire fend_trunc = (state == S_PAY) && (!emit_v || m_axis_tready) && accept &&
                       s_axis_tuser;
-    assign fend   = fend_w6 || fend_w6t || fend_pay || fend_pad || fend_trunc;
+    // P4c ACK-early 修复: 窗口内非边界纯 ACK 在 w6 拍结束 (TB 短帧注入可达;
+    // 真实 60B 帧 tlast 在 w7 走 S_PAD 路径 — 两路都判 fend 处理 ACK 字段)
+    wire fend_w6a = (state == S_HDR) && accept && (wcnt == 3'd6) && s_axis_tlast &&
+                    !s_axis_tuser && w6a_ok_l && !syn_l;
+    assign fend   = fend_w6 || fend_w6t || fend_w6a || fend_pay || fend_pad || fend_trunc;
     assign ferr   = fend_trunc || !s_axis_tcrs || s_axis_terr;
     // 帧真实载荷字节 (截断帧 = 实际到达字节; w6 截断 = 0; 正常帧 = plen_l)
     wire [15:0] adv_cnt = trunc_pay ? (pcount + {12'b0, pop8w}) :
@@ -362,7 +376,7 @@ module tcp_rx (
 
     wire [15:0] wnd_f = fend_w6 ? s_axis_tdata[63:48] : wnd_l;
     // snd_wnd drain 按握手 wscale 缩放 (P4b-6 窗口门控的真实量纲; 钳 16 位 —
-    // echo 在飞上限 = 我方通告 rcv_wnd 0x3000 << 64K, 钳位不影响门控语义)。
+    // P4c: 我方通告 rcv_wnd 0xC000 = 48K 为 PC 在飞上限, 钳位不影响门控语义)。
     // 32 位扩展再钳: wscale>7 (HLS 侧钳 ws<=7 是软契约, 此处自防守)
     wire [31:0] wnd_scaled = {16'b0, wnd_f} << ra_wscale;
     wire [15:0] wnd_ws    = |wnd_scaled[31:16] ? 16'hFFFF : wnd_scaled[15:0];
@@ -384,6 +398,7 @@ module tcp_rx (
             syn_l <= 0; drop_syn_r <= 0; syn_wnd_r <= 0; syn_v <= 0;
             cam_hit_l <= 0; conn_id_l <= 0;
             acc_l <= 0; ackresp_l <= 0; ack_adv_l <= 0; dup_l <= 0;
+            w6a_ok_l <= 0;
             ack32_l <= 0; seq32_l <= 0; rcv_nxt_l <= 0; plen_l <= 0; wnd_l <= 0;
             drop_ack <= 0; hold16 <= 0; pcount <= 0;
             emit_v <= 0; emit_d <= 0; emit_k <= 0; emit_l <= 0; emit_u <= 0;
@@ -557,6 +572,7 @@ module tcp_rx (
                                         ackresp_l <= ackresp;
                                         ack_adv_l <= ack_adv;
                                         dup_l <= dup_ack;
+                                        w6a_ok_l <= w6a_ok;   // P4c: 窗口内非边界纯 ACK
                                         ack32_l <= ack32;
                                         seq32_l <= seq32;
                                         plen_l <= plen_w;
@@ -573,8 +589,9 @@ module tcp_rx (
                                     wnd_l <= s_axis_tdata[63:48];
                                     if (s_axis_tlast) begin
                                         state <= S_HDR; wcnt <= 3'd0;
-                                        if (w6_tlast_ok) begin
-                                            // 纯 ACK (plen=0) 或短载荷 (plen=1..2, 无填充)
+                                        if (w6_tlast_ok || fend_w6a) begin
+                                            // 纯 ACK (plen=0) 或短载荷 (plen=1..2, 无填充);
+                                            // P4c: 含窗口内非边界纯 ACK (w6a)
                                             if (s_axis_tcrs) begin
                                                 stat_pass <= stat_pass + 1;
                                                 stat_bytes <= stat_bytes + plen_l;
@@ -610,6 +627,12 @@ module tcp_rx (
                                             pcount <= (plen_l >= 16'd2) ? 16'd2 : 16'd1;
                                         end
                                         wnd_l <= s_axis_tdata[63:48];
+                                        wcnt <= 3'd7;
+                                    end else if (w6a_ok_l) begin
+                                        // P4c: 窗口内非边界纯 ACK (带填充, 真实 60B
+                                        // 帧 tlast 在 w7) — 吞到帧尾, fend_pad 处理
+                                        // 其 ACK/窗口字段 (snd_una 推进的唯一途径)
+                                        state <= S_PAD;
                                         wcnt <= 3'd7;
                                     end else if (ackresp_l) begin
                                         state <= S_DROP; drop_ack <= 1'b1; drop_syn_r <= 1'b0;

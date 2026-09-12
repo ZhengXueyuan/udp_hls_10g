@@ -37,6 +37,7 @@ set XTRA=
 if not "%5"=="" set XTRA=%5 %6
 set XPA=-testplusarg PCACK
 if "%4"=="10" set XPA=-testplusarg PCACK -testplusarg PCWND1K
+if "%PCACKOOB%"=="1" set XPA=-testplusarg PCACK -testplusarg PCACKOOB
 REM TXDROP/TXDROP2 reach the TB via txdrop.memh (%7/%8 written here):
 REM xsim.bat's loader splits any arg containing '=' ("Expected a switch
 REM but found 5"), so -testplusarg TXDROP=N never arrives. File channel
