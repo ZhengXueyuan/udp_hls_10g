@@ -5,10 +5,15 @@
   纯 ACK (裸/带填充) / 短载荷 1..3 / 8..10 (尾字边界) / 42/100/1500 /
   重复段 / 乱序段 (窗口内) / 窗口外 / SYN / FIN / RST / 带选项 (doff=6) /
   CAM 未命中 / conn1 / IP 校验和错 / 坏 CRC / 背靠背 4 帧 / conn1 重复 / 无效 ACK 号。
+  P4b-7-P6 定向段 (见 build_directed): 推进帧 fend 后 3 个重复纯 ACK 突发全部落在
+  upd_gnt 抢占窗内 (drain 挂起中) — sticky pend 修复的判别用例。
 FCS = zlib.crc32 小端 (铁律); TCP 校验和按伪头+段反码和正确生成 (RTL 不校验)。
 TCB 初值: e0 (rcv_nxt=1000 snd_nxt=6000 snd_una=5000 wnd=0x2000/0x2000 st=1),
           e1 (全 0, wnd=0x2000/0x2000 st=1); 见 cfg_tcb.memh (TB 与模型同源)。
-模型 = mac_rx_64 + tcp_rx + tcb 逐周期 co-sim, 与 RTL 非阻塞语义 1:1;
+模型 = mac_rx_64 + tcp_rx + tcb 逐周期 co-sim, 与 RTL 非阻塞语义 1:1
+(P4b-7-P6: drain 同步为 sticky pend + gnt 写清除语义; 定向段 gnt 抢占窗
+[DIR_HOLD0, DIR_HOLD1) 与 TB gnt_hold 同字节窗; TB 于 [DIR_CFG2, DIR_CFG2+6)
+重配 conn0 = TCB0 基线, 模型同点注入);
 TB 配置阶段 40 拍: 字节 j 在周期 j+67 进入 mac; CAM 条目 0/1/2 于周期 29/30/31 起
 可见; TCB 条目 e 字段 f 于周期 33+6e+f 起可见。
 三模式: nostall / stall (3高1低) / hard (字节窗 [hw0,hw1) 硬停)。
@@ -36,6 +41,15 @@ TCB0 = dict(rcv_nxt=1000, snd_nxt=6000, snd_una=5000,
             rcv_wnd=0x2000, snd_wnd=0x2000, state=1)
 TCB1 = dict(rcv_nxt=0, snd_nxt=0, snd_una=0,
             rcv_wnd=0x2000, snd_wnd=0x2000, state=1)
+
+# ---- P4b-7-P6 定向段字节窗 (TB tb_tcp_rx.v 内嵌同源常量, 改此表须同步两处) ----
+# 基流末 (含尾 IFG) = 4225 字节; 定向帧 1 首字节 = DIR_GAP_BASE (基流末 + 空闲
+# 间隔, 与基流最后帧的 drain 拉开 >100 拍, 避免 cfg 重配与残余 drain 交叠)。
+DIR_GAP_BASE = 4325             # 定向帧 1 首字节
+DIR_CFG2     = DIR_GAP_BASE - 6  # [DIR_CFG2, DIR_CFG2+6): TB 重配 conn0 = TCB0
+DIR_HOLD0    = DIR_GAP_BASE + 100  # upd_gnt 抢占窗 [DIR_HOLD0, DIR_HOLD1)
+DIR_HOLD1    = DIR_GAP_BASE + 480  #   模拟 TX 优先仲裁 (帧 1..4 fend 全落窗内)
+DIR_TAIL     = 120                # 定向段后空闲字节 (抢占窗在字节流内释放)
 
 # CAM 配置 (与 TB 配置阶段一致): 条目 0/1/2
 CAM_CFG = [
@@ -157,20 +171,54 @@ def build_frames():
     return F
 
 
+def build_directed():
+    """P4b-7-P6 定向段: TB 先把 conn0 重配到 TCB0 基线 (rcv_nxt=1000 snd_nxt=6000
+    snd_una=5000), 然后:
+      帧1 dir_data: seq=1000 数据 100B, ack=6000 (推进 snd_una 5000->6000)
+      帧2 dir_dup6000: 纯 ACK ack=6000 (帧1 的重复)
+      帧3/4 dir_old5000: 纯 ACK ack=5000 (== snd_una, RTO/重传风暴的旧号重复)
+    全部帧落在 upd_gnt 抢占窗内 fend → drain 在拍1 挂起; 每帧 fend 重启 drain。
+    旧实现 (每 fend 重锁存): 帧2 清掉 pend_rcv, 帧3/4 清掉 pend_una → 推进永久
+    丢失 (rcv_nxt 停 1000 / snd_una 停 5000)。新实现 (sticky): 推进穿过突发,
+    释放 gnt 后 drain 写 rcv_nxt=1100 / snd_una=6000。
+    期望终态 (check TCBF + TB 自检): rcv_nxt=0x44C snd_una=0x1770 snd_wnd=0x4000。
+    """
+    F = []
+    fb, fcs = mk_tcp_frame(SPORT0, DPORT0, 1000, 6000, 0x10, 100, wnd=0x4000)
+    F.append(('dir_data_adv', fb, fcs))
+    for nm, ack in (('dir_dup6000', 6000),
+                    ('dir_old5000', 5000),
+                    ('dir_old5000b', 5000)):
+        fb, fcs = mk_tcp_frame(SPORT0, DPORT0, 1000, ack, 0x10, 0, wnd=0x4000)
+        F.append((nm, fb, fcs))
+    return F
+
+
 def generate(simdir):
-    frames = build_frames()
+    base = build_frames()
+    directed = build_directed()
     segs = []
-    for nm, fb, fcs in frames:
+    for nm, fb, fcs in base:
         segs += [(0, b, 1) for b in (PRE + fb + fcs)]
         segs += [(0, b, 0) for b in IFG]
+    base_n = len(segs)
+    gap = DIR_GAP_BASE - base_n
+    assert gap > 60, ('base stream too close to directed phase', gap)
+    segs += [(0, b, 0) for b in IFG] * (gap // 12)
+    segs += [(0, b, 0) for b in IFG[:gap % 12]]
+    for nm, fb, fcs in directed:
+        segs += [(0, b, 1) for b in (PRE + fb + fcs)]
+        segs += [(0, b, 0) for b in IFG]
+    segs += [(0, 0x07, 0)] * DIR_TAIL
+    frames = base + directed
     nstim = len(segs)
     data = [s[1] for s in segs]
     dv = [s[2] for s in segs]
     er = [0] * nstim
-    # 硬停窗口: 落在 data1500 帧体中部
+    # 硬停窗口: 落在 data1500 帧体中部 (只按基流定位)
     acc = 0
     hw0 = None
-    for nm, fb, fcs in frames:
+    for nm, fb, fcs in base:
         if nm == 'data1500':
             hw0 = acc + 8 + 60
         acc += 8 + len(fb) + 4 + 12
@@ -282,13 +330,18 @@ def model(simdir, mode):
             return 0 if (hw0 <= i < hw1) else 1
         return 1
 
+    # ---- P4b-7-P6: upd_gnt 模型 (TB gnt_hold 同字节窗; cfg 期间 TB 另置 0,
+    #      但 cfg 窗内无任何帧/drain, 无需建模) ----
+    def gnt_ok(j):
+        return not (DIR_HOLD0 <= j < DIR_HOLD1)
+
     def cam_lookup(sip, dip, sport, dport):
         for i in range(16):
             if cam[i] is not None and cam[i] == (sip, dip, sport, dport):
                 return True, i
         return False, 0
 
-    def tcp_cycle(w, m_tready):
+    def tcp_cycle(w, m_tready, gnt):
         nonlocal st, wcnt, w1_lo, w2r, w3r, ipc_s9
         nonlocal src_ip_r, src_port_r, seq_hi_r, cam_hit_l, conn_id_l
         nonlocal acc_l, ackresp_l, ack_adv_l, ack32_l, seq32_l, rcv_nxt_l, plen_l, wnd_l
@@ -540,35 +593,47 @@ def model(simdir, mode):
             (st == 'HDR' and accept and wcnt == 6 and w[3] and ackresp_l and w[4]) or \
             (st == 'DROP' and accept and w[3] and drop_ack and w[4])
 
-        # ---- fend pend / drain (RTL 改组合 upd + gnt: drn 拍当拍写 TCB;
-        #      本 TB gnt = !cfg_upd_wr, 激励期间恒 1) ----
+        # ---- fend pend / drain (P4b-7-P6 镜像 RTL: sticky pend + 值随条件更新 +
+        #      drain 写被 gnt 当拍清除; fend 拍与 drain 拍互斥; 定向段 gnt 抢占) ----
         drn_n = drn
         pend_rcv_n, pend_una_n, pend_wnd_n = pend_rcv, pend_una, pend_wnd
         pend_id_n = pend_id
         pend_rcv_val_n, pend_una_val_n, pend_wnd_val_n = \
             pend_rcv_val, pend_una_val, pend_wnd_val
         if fend:
-            pend_rcv_n = acc_l and plen_l != 0 and w[4]
-            pend_una_n = ack_adv_l and w[4]
-            pend_wnd_n = w[4]
-            pend_id_n = conn_id_l
-            pend_rcv_val_n = rcv_nxt_l + plen_l
-            pend_una_val_n = ack32_l
-            pend_wnd_val_n = ((w[0] >> 48) & 0xFFFF) if fend_w6 else wnd_l
+            crs = bool(w[4])
+            pend_rcv_n = (acc_l and plen_l != 0 and crs) or pend_rcv
+            pend_una_n = (ack_adv_l and crs) or pend_una
+            pend_wnd_n = crs or pend_wnd
+            if acc_l and plen_l != 0 and crs:
+                pend_rcv_val_n = (rcv_nxt_l + plen_l) & 0xFFFFFFFF
+                pend_id_n = conn_id_l
+            if ack_adv_l and crs:
+                pend_una_val_n = ack32_l
+                pend_id_n = conn_id_l
+            if crs:
+                pend_wnd_val_n = ((w[0] >> 48) & 0xFFFF) if fend_w6 else wnd_l
+                pend_id_n = conn_id_l
             drn_n = 1
         else:
             if drn == 1:
-                if pend_rcv:
-                    tcb[pend_id]['rcv_nxt'] = pend_rcv_val & 0xFFFFFFFF
-                drn_n = 2
+                if (not pend_rcv) or gnt:
+                    if gnt and pend_rcv:
+                        tcb[pend_id]['rcv_nxt'] = pend_rcv_val & 0xFFFFFFFF
+                        pend_rcv_n = False
+                    drn_n = 2
             elif drn == 2:
-                if pend_una:
-                    tcb[pend_id]['snd_una'] = pend_una_val & 0xFFFFFFFF
-                drn_n = 3
+                if (not pend_una) or gnt:
+                    if gnt and pend_una:
+                        tcb[pend_id]['snd_una'] = pend_una_val & 0xFFFFFFFF
+                        pend_una_n = False
+                    drn_n = 3
             elif drn == 3:
-                if pend_wnd:
-                    tcb[pend_id]['snd_wnd'] = pend_wnd_val & 0xFFFF
-                drn_n = 0
+                if (not pend_wnd) or gnt:
+                    if gnt and pend_wnd:
+                        tcb[pend_id]['snd_wnd'] = pend_wnd_val & 0xFFFF
+                        pend_wnd_n = False
+                    drn_n = 0
         if ack_req:
             stats['ack'] += 1
 
@@ -629,10 +694,11 @@ def model(simdir, mode):
                 av = (rcv_nxt_l + plen_l) if (fend_w6 or fend_pay) else rcv_nxt_l
                 lines.append('ACK %d %08X' % (conn_id_l, av))
         # ---- tcp_rx 每周期 ----
-        accept = tcp_cycle(w, m_tready)
+        j = k - 67
+        accept = tcp_cycle(w, m_tready, gnt_ok(j))
         rd_ok = accept and s_valid
         rptr_n = rptr + (1 if rd_ok else 0)
-        # ---- 配置注入 (TB 配置阶段) ----
+        # ---- 配置注入 (TB 配置阶段: 周期 28..43) ----
         if 28 <= k <= 30:
             cam[k - 28] = CAM_CFG[k - 28]
         if 32 <= k <= 43:
@@ -640,6 +706,9 @@ def model(simdir, mode):
             t = TCB0 if e == 0 else (TCB1 if e == 1 else None)
             if t is not None:
                 tcb[e][FIELDS[f]] = t[FIELDS[f]]
+        # ---- 定向段基线重配 (TB 于字节 [DIR_CFG2, DIR_CFG2+6) 重写 conn0 = TCB0) ----
+        if DIR_CFG2 <= j < DIR_CFG2 + 6:
+            tcb[0][FIELDS[j - DIR_CFG2]] = TCB0[FIELDS[j - DIR_CFG2]]
         # ---- mac_rx_64 每周期 (字节 j 于周期 j+67 进入) ----
         wr = False
         din = None
@@ -792,6 +861,13 @@ def check(simdir, mode):
 if __name__ == '__main__':
     import sys
     simdir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'sim', 'p3sim')
+    if len(sys.argv) > 2 and sys.argv[2] == 'check':
+        # P4b-7-P6: 补上 check 分发 (此前 bat 已传 'check' 但 __main__ 未分发,
+        #        跑完即退 0 = 假绿 — 与 gen_stim_tcp_echo.py 等一致)
+        ok = True
+        for mode in ('nostall', 'stall', 'hard'):
+            ok = check(simdir, mode) and ok
+        sys.exit(0 if ok else 1)
     frames, hw0, hw1 = generate(simdir)
     print('%d frames, hardwin=[%d,%d)' % (len(frames), hw0, hw1))
     for mode in ('nostall', 'stall', 'hard'):

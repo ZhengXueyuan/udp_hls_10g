@@ -14,6 +14,8 @@ module tb_tcp_tx_dbg;
         .ack_req(1'b0), .ack_id(4'd0), .ack_val(32'd0),
         .rb_id(), .rb_snd_nxt(32'd6000), .rb_rcv_nxt(32'd1000), .rb_rcv_wnd(16'h2000),
         .rb_snd_una(32'd6000), .rb_snd_wnd(16'hFFFF),
+        // 无 TCB: 门控恒开 (对应常量 rb: 在飞 0, 窗 0xFFFF, 32 位差 < 帽)
+        .win_open(1'b1), .win_inflight(16'd0), .win_wnd_eff(16'hFFFF),
         .upd_wr(), .upd_id(), .upd_sel(), .upd_val(),
         .cam_rd_id(), .cam_rd_dmac(48'h112233445566), .cam_rd_dip(32'hC0A86402),
         .cam_rd_sport(16'h3039), .cam_rd_dport(16'h1F90),

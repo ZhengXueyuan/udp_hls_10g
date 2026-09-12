@@ -123,8 +123,24 @@ def read_trunc(simdir):
         return (0, 8)
 
 
+def read_halfdrop(simdir):
+    """P4b-7-P6 半帧中止注入参数: halfdrop.memh 由 run_tb_p4_burst.bat 写入
+    ("N K", bat 环境变量 HALFDROP/HALFDROPK); 文件缺失 = (0, 0) 关。与
+    trunc.memh/txdrop.memh 同通道 (xsim loader 拆含 '=' 的 -testplusarg)。
+    N = 第 N 个 conn0 数据段 (编号同 TRUNC/TXDROP: data7a=1, data7b=2,
+    burst_k=k+3); K = 停线前已发出的载荷字节数 (线上帧 = 54B 头 + K 字节载荷,
+    无 FCS/tlast — 板上 PC/NIC 驱动重启时 TX DMA 半途中断的帧形)。"""
+    try:
+        with open(os.path.join(simdir, 'halfdrop.memh')) as fh:
+            v = [int(x) for x in fh.read().split()]
+        return (v[0], v[1] if len(v) > 1 else 0)
+    except (OSError, ValueError, IndexError):
+        return (0, 0)
+
+
 def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000,
-                    tail608=False, dupstorm=False, trunc_at=0, trunc_len=8):
+                    tail608=False, dupstorm=False, trunc_at=0, trunc_len=8,
+                    half_at=0, half_k=0):
     """返回 (F, pmap)。pmap: conn0 每数据段的 echo seq (hex str) -> 该段载荷
     (hex str, 全 plen 字节)。echo seq = conn0 snd_nxt 链 (握手后 = HS_ACKVAL,
     每段累加实际 plen)。burstcheck 用它逐字节验证 echo 与 ring 重放帧 (P4b-7-P5):
@@ -136,7 +152,25 @@ def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000,
     FCS 按截断后内容重算 — 复现板级 PC/NIC 截断帧 (线上 54+trunc_len+4 字节,
     FCS 有效)。后续段 seq/载荷不变 (PC 无感, 板上全判 OOO)。截断缺口只能由
     PC 侧重传补回 (板上 ring 只有真实的 trunc_len 字节): 尾部追加 PC RTO
-    重传 — 自 seq+trunc_len 重发本段剩余, 其后被丢各段按原样重放。"""
+    重传 — 自 seq+trunc_len 重发本段剩余, 其后被丢各段按原样重放。
+
+    P4b-7-P6 半帧中止注入 (half_at > 0, 与 trunc_at 互斥): half_at = 第 N 个
+    conn0 数据段 (编号同上)。该段线上只发帧头 54B (seq / IP total_len=1500 /
+    TCP 头 / csum 全保原样) + 前 half_k 字节载荷, 随即停线 — 无 FCS, 无 tlast,
+    帧后为普通 IFG 空闲 (下一帧前导正常)。复现板级 PC/NIC 驱动重启时 TX DMA
+    半途中断打出的半帧。链 TB 的 mac_rx_64 对线上中止走 S_DATA 帧尾支: 残段
+    仍交付一拍 push_last=1/push_crs=0 (≠ 板上"半帧词不入流"), 故 TB 在
+    mac_rx->classify 边界抹掉该残段拍的 tlast (tb_p4_chain.v HALFDROP 掩码,
+    halfdrop.memh 与生成器同源) — 与板级中止行为对齐。半帧无 tlast → tcp_rx
+    的 pend_rcv 需 s_axis_tcrs → rcv_nxt 不推进 → 其后原发段全 OOO 被丢;
+    echo 侧残留 (has_data 无 fend) 与后续帧合并 (P6 冻结根因)。缺口只能由 PC
+    重传补回: 尾部追加 seq=S 整段重传 + 其后各段原样重放。
+
+    合法性 (half_k): (a) K >= 6: 帧头 54B 走完 TCP 头, mac_rx 剔掉末 4 字节
+    前瞻后仍含 w6 (meta_valid 需 wcnt==6); (b) (50+K) % 8 == 0 (K ≡ 6 mod 8):
+    残段尾字在 tcp_rx 侧整字落地 — 尾拍 tkeep != 0xFF 且 (抹后) 无 tlast 会把
+    tcp_rx 打进 S_DROP (S_DROP 只在真 tlast 退出) → 变成"吞掉后续整帧", 注入
+    语义不再是"SOP 截断防御"; (c) K < 该段 plen (否则不是半帧)。"""
     F = []
     pmap = {}
 
@@ -184,6 +218,19 @@ def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000,
         print('TRUNC 参数非法: at=%d len=%d (需 at 3..%d, len 6..10)'
               % (trunc_at, trunc_len, burst + 2))
         sys.exit(2)
+    # P4b-7-P6 半帧中止注入合法性 (见 docstring): 段号范围 + K 的取整/幅度
+    if half_at:
+        if not (3 <= half_at <= burst + 2):
+            print('HALFDROP 参数非法: at=%d (需 3..%d = data7a..burst 末段)'
+                  % (half_at, burst + 2))
+            sys.exit(2)
+        if half_k < 6 or (50 + half_k) % 8 != 0:
+            print('HALFDROP 参数非法: k=%d (需 >=6 且 (50+k)%%8==0 -> k ≡ 6 mod 8)'
+                  % half_k)
+            sys.exit(2)
+        if trunc_at:
+            print('HALFDROP 与 TRUNC 不能同时注入 (同一帧两种篡改)')
+            sys.exit(2)
     seq = 1016
     seq_hist = []
     segs = []          # burst 各段 (seq, plen) — 截断自愈重传重放用
@@ -201,9 +248,21 @@ def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000,
         if dfi == trunc_at:
             # 截断帧: 头 (:total_len=40+plen=1500 / seq / 端口 / 原 csum) 原样,
             # 载荷只留前 trunc_len 字节, FCS 按截断后内容重算 (finish 补足 60B)
-            hdr = 14 + (fb[14] & 0xF) * 4 + 20      # eth + IP + TCP = 54
+            hdr = 14 + (fb[14] & 0xF) * 4 + 20      # eth + TCP + IP = 54
             fb, fcs = finish(fb[:hdr] + C.payload(plen)[:trunc_len])
-        add('burst%d' % b, fb, fcs, 12)
+            add('burst%d' % b, fb, fcs, 12)         # 截断帧照常上线 (载短+重算 FCS)
+        elif dfi == half_at:
+            # 半帧中止: 帧头 54B 原样 (total_len/csum 仍按满载荷 1460 承诺),
+            # 只发前 half_k 字节载荷, 线上就此停住 — 无 FCS (fcs=b'' 使
+            # gen_memh 不追加 FCS 字节, 帧后直接进 IFG 空闲; 布局仍为其留位)
+            if half_k >= plen:
+                print('HALFDROP 参数非法: k=%d >= 该段 plen=%d (不是半帧)'
+                      % (half_k, plen))
+                sys.exit(2)
+            hdr = 14 + (fb[14] & 0xF) * 4 + 20      # eth + TCP + IP = 54
+            add('half%d' % b, fb[:hdr] + C.payload(plen)[:half_k], b'', 12)
+        else:
+            add('burst%d' % b, fb, fcs, 12)
         seq_hist.append(seq)
         seq += plen
         pmap['%X' % eseq] = C.payload(plen).hex()
@@ -244,6 +303,20 @@ def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000,
             s1, p1 = segs[j]
             fb, fcs = C.mk_tcp_frame(0, s1, HS_ACKVAL, 0x18, p1, burst_wnd, True)
             add('heal%d' % j, fb, fcs, 12)
+    # ---- P4b-7-P6 半帧中止自愈 (仅 half_at): 半帧无 tlast → 板上 rcv_nxt 不动
+    #      (pend_rcv 需 s_axis_tcrs), snd_una 不平 → 其后原发段全判 OOO 丢载荷。
+    #      PC 从 snd_una=S 整段重传 (真实 tcp_retransmit_skb 自 snd_una 起),
+    #      其后各段按原样重放。修复后 (RX SOP 防御合成坏尾拍) 半帧载荷被
+    #      echo 回卷丢弃, 重传段补位 → echo 恢复 nburst+2 段连续流。----
+    if half_at:
+        hi = half_at - 3
+        s0, p0 = segs[hi]
+        fb, fcs = C.mk_tcp_frame(0, s0, HS_ACKVAL, 0x18, p0, burst_wnd, True)
+        add('halfrem', fb, fcs, 24)
+        for j in range(hi + 1, burst):
+            s1, p1 = segs[j]
+            fb, fcs = C.mk_tcp_frame(0, s1, HS_ACKVAL, 0x18, p1, burst_wnd, True)
+            add('halfheal%d' % j, fb, fcs, 12)
     fb, fcs = mk_arp_req()
     add('arp2', fb, fcs, GAP_SLOW)
     fb, fcs = C.mk_tcp_frame(1, 77, 900, 0x18, 20, 0x1A00, True)
@@ -297,7 +370,7 @@ def parse_gmii(fn):
     byte_lines = []
     ev = dict(fend=[], ack=[], synp=[], stats7=None, stx=None, seco=None,
               camf=None, tcbf=None, srx=None, stx2=None, smac=None, retx=None,
-              truncs=None, ecomax=None)
+              truncs=None, ecomax=None, halfd=None)
     with open(fn) as fh:
         for line in fh:
             p = line.split()
@@ -331,6 +404,8 @@ def parse_gmii(fn):
                 ev['truncs'] = tuple(int(x) for x in p[1:])
             elif p[0] == 'ECOMAX':
                 ev['ecomax'] = int(p[1])
+            elif p[0] == 'HALFD':
+                ev['halfd'] = tuple(int(x) for x in p[1:])
             else:
                 byte_lines.append((int(p[0], 16), int(p[1])))
     frames = []
@@ -637,7 +712,8 @@ def check(simdir):
     return True
 
 
-def check_burst(simdir, nburst, txdrop1=0, txdrop2=0, trunc_at=0, trunc_len=8):
+def check_burst(simdir, nburst, txdrop1=0, txdrop2=0, trunc_at=0, trunc_len=8,
+                half_at=0, half_k=0):
     """burst 诊断: conn0 echo 字节覆盖 + RETX/计数/统计终态。
 
     无 TXDROP (txdrop1==0): 严格 — echo 数 = nburst+2 (data7a/data7b+burst) 且
@@ -860,6 +936,46 @@ def check_burst(simdir, nburst, txdrop1=0, txdrop2=0, trunc_at=0, trunc_len=8):
     if ev['ecomax'] is None or ev['ecomax'] > 182:
         print('MISMATCH: echo 出口 ECOMAX %s > 182 词 (无尽帧)' % (ev['ecomax'],))
         ok = False
+    # ---- P4b-7-P6 半帧中止注入复现证据 (half_at 来自 halfdrop.memh; burst 专用) ----
+    if half_at > 0:
+        hd_n, hd_k, hd_fired, hd_stuck = (list(ev['halfd']) + [0, 0, 0, 0])[:4] \
+            if ev['halfd'] else (0, 0, 0, 0)
+        hi = half_at - 3
+        s_hd = 1016 + hi * 1460
+        e_hd = (HS_ACKVAL + 16 + hi * 1460) & 0xFFFFFFFF
+        print('HALFDROP 注入: 第 %d 段 (PC seq=%d) 线上半帧: 头 54B + %d 字节载荷'
+              ' 后停线, 无 FCS/tlast; TB HALFD n=%d k=%d fired=%d'
+              % (half_at, s_hd, half_k, hd_n, hd_k, hd_fired))
+        if hd_n != half_at or hd_k != half_k:
+            print('MISMATCH: TB HALFD %d/%d != 期望 %d/%d (halfdrop.memh 未同步)'
+                  % (hd_n, hd_k, half_at, half_k))
+            ok = False
+        if not hd_fired:
+            print('MISMATCH: TB HALFD 掩码未触发 (半帧残段拍未在 mac_rx 出口落地)')
+            ok = False
+        # 复现判据①: 残留半帧 (has_data 无 fend) 与下一顺序帧合并 → echo 出口
+        #            无 tlast 长跑 > 182 词 (单帧上限 1460B = 182 词)。
+        if (ev['ecomax'] or 0) > 182:
+            print('HALFDROP 复现①: echo 出口合并巨帧 ECOMAX=%d 词 > 182 (残留半帧'
+                  ' 永不判尾, 与随后重传帧合并)' % ev['ecomax'])
+        # 复现判据②: 合并帧 > 2048B (256 字) → tcp_tx_frame S_RECV 吞到 pay FIFO
+        #            满 (256) 即停, tlast 永不到 = 板级冻结签名 (PLN=0x800, PF=1)。
+        if hd_stuck >= 1000:
+            print('HALFDROP 复现②: tcp_tx_frame 卡 S_RECV + pay FIFO 满 共 %d 拍'
+                  ' (帧超 2048B 无 tlast — 板级冻结同构)' % hd_stuck)
+        if (ev['ecomax'] or 0) > 182 or hd_stuck >= 1000:
+            print('HALFDROP REPRODUCED: 合并/冻结成立 — 本注入下现存 RTL 必 FAIL'
+                  ' (修复方向 = RX SOP 防御合成坏尾拍, 让残段判尾回卷丢弃)')
+        else:
+            print('HALFDROP 未复现合并/冻结 (残留已判尾丢弃 — 修复已生效?)')
+        # 修复后语义 (不算 ok, 仅供对照): 半帧段 echo 应由 seq=S 重传补位
+        hit = [e for e in echoes if e[0] == e_hd]
+        if hit:
+            print('半帧段 echo: seq=%X plen=%d (seq=S 整段重传补位)'
+                  % (hit[0][0], hit[0][1]))
+        else:
+            print('半帧段 echo: 无 (seq=%X — 合并/冻结时预期; 修复后应由重传补位)'
+                  % e_hd)
     retx = ev['retx'] if ev['retx'] is not None else 0
     # ---- P4b-7-P6-fix: RETX 按连接语义 (全局计数器 = conn0 会话 + conn1 会话) ----
     # conn1 独立自愈: c1data 的 20B echo 发在 GMII 上, c1ack (seq=97, ack=920)
@@ -1050,16 +1166,23 @@ if __name__ == '__main__':
     trunc_at, trunc_len = read_trunc(simdir)
     if trunc_at:
         print('TRUNC 注入: 第 %d 个 conn0 数据段裁到 %d 字节' % (trunc_at, trunc_len))
+    # P4b-7-P6: 半帧中止注入参数与 TB 同源 (halfdrop.memh, 同 trunc.memh 通道;
+    # 仅 burst 用例 — chain 门由 run_tb_p4_chain.bat 删该文件防残留)
+    half_at, half_k = read_halfdrop(simdir)
+    if half_at:
+        print('HALFDROP 注入: 第 %d 个 conn0 数据段线上半帧中止 (K=%d 字节载荷)'
+              % (half_at, half_k))
     frames, pmap = build_rx_frames(burst=nburst, pause_at=pause_at,
                                    pause_len=pause_len, burst_wnd=burst_wnd,
                                    tail608=tail608, dupstorm=dupstorm,
-                                   trunc_at=trunc_at, trunc_len=trunc_len)
+                                   trunc_at=trunc_at, trunc_len=trunc_len,
+                                   half_at=half_at, half_k=half_k)
     print('%d RX frames' % len(frames))
     if mode == 'check':
         sys.exit(0 if check(simdir) else 1)
     if mode == 'burstcheck':
         sys.exit(0 if check_burst(simdir, nburst, txdrop1, txdrop2,
-                                  trunc_at, trunc_len) else 1)
+                                  trunc_at, trunc_len, half_at, half_k) else 1)
     gen_memh(simdir, frames)
     # P4b-7-P5: echo 载荷地图 sidecar (burstcheck 逐字节验证用)
     if pmap:

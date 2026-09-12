@@ -6,6 +6,8 @@ if exist txdrop.memh del /q txdrop.memh
 REM P4b-7-P6: chain gate never truncates -- make sure no trunc.memh leaks in
 REM from a previous run_tb_p4_burst.bat TRUNC run (TB/gen both read it).
 if exist trunc.memh del /q trunc.memh
+REM P4b-7-P6: same for the HALFDROP half-frame abort injection (halfdrop.memh).
+if exist halfdrop.memh del /q halfdrop.memh
 set PY=C:\Users\zhxue\anaconda3\python.exe
 set XV=C:\AMDDesignTools\2025.2\Vivado\bin
 set HLS=D:\repo\ECO\udp_hls_10g\hls\slowstack_prj\solution1\syn\verilog

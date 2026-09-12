@@ -49,6 +49,16 @@ REM reason); always rewritten so a stale file never leaks into a plain run.
 if "%TRUNC%"=="" set TRUNC=0
 if "%TRUNCM%"=="" set TRUNCM=8
 > trunc.memh echo %TRUNC% %TRUNCM%
+REM P4b-7-P6 HALFDROP/HALFDROPK = half-frame abort injection (env vars, same
+REM file channel as TRUNC): at conn0 data frame #HALFDROP the line carries the
+REM 54B header + only HALFDROPK payload bytes, then stops (no FCS, no tlast) --
+REM the on-board PC/NIC TX-DMA half frame that froze the stack. The TB masks
+REM that frame's tlast beat at the mac_rx output (halfdrop.memh "N K", also
+REM read by gen_stim/burstcheck). K needs 6..plen-1 and (50+K)%8==0 (K=6 mod 8).
+REM HALFDROP=0 = off. Always rewritten (stale file never leaks into a run).
+if "%HALFDROP%"=="" set HALFDROP=0
+if "%HALFDROPK%"=="" set HALFDROPK=0
+> halfdrop.memh echo %HALFDROP% %HALFDROPK%
 
 copy /y %HLS%\*.dat . >nul
 (if exist %HLS%\ (dir /b /s %HLS%\*.v) else (echo HLS dir missing & exit /b 1)) > hls_files.f

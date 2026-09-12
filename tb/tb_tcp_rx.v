@@ -4,6 +4,9 @@
 // 配置阶段 (前 40 拍): CAM 3 条 + TCB 2 条 × 6 字段 (cfg_tcb.memh 拍序写入, 慢路径口)。
 // 捕获: m_axis 接受词 + META + FEND + ACK 请求 + 末尾 STATS/STATM/TCBF (TCB 终态)。
 // 背压 (plusarg): 无 / STALL (3 高 1 低) / HARD (字节窗 [hw[0], hw[1]) 硬停)。
+// P4b-7-P6 定向段: 基流末插 conn0 基线重配 + 4 帧 [推进 + 重复纯 ACK 突发], 帧
+// 间 fend 落 upd_gnt 抢占窗 [D_HOLD0, D_HOLD1) 内 (真实 TX 优先仲裁的 gnt-hold);
+// 收尾自检: rcv_nxt=0x44C / snd_una=0x1770 / snd_wnd=0x4000 (旧 drain 实现丢推进)。
 module tb_tcp_rx;
 
     reg        clk, rst_n;
@@ -30,6 +33,7 @@ module tb_tcp_rx;
     reg [3:0]  cfg_upd_id;
     reg [2:0]  cfg_upd_sel;
     reg [31:0] cfg_upd_val;
+    reg        gnt_hold;   // P4b-7-P6 定向段: 模拟真实仲裁 TX 占写口 (upd_gnt 长挂起)
 
     wire [63:0] s_tdata;
     wire [7:0]  s_tkeep;
@@ -64,13 +68,25 @@ module tb_tcp_rx;
     wire [15:0] cam_q_sport, cam_q_dport;
     wire        cam_q_hit;
     wire [3:0]  cam_q_id;
-    // TCB 更新 mux: 慢路径配置优先
+    // TCB 更新 mux: 慢路径配置优先; RX 更新受 upd_gnt 门控 (P4b-7-P6: 模拟真实
+    // 仲裁器 — TX 占写口时 RX 的 gnt 挂起, 其 upd_wr 组合脉冲也不落到 TCB)
+    wire        rx_gnt = !cfg_upd_wr && !gnt_hold;
     wire [2:0]  tcb_sel = cfg_upd_wr ? cfg_upd_sel : u_rx_upd_sel;
     wire [3:0]  tcb_id  = cfg_upd_wr ? cfg_upd_id  : u_rx_upd_id;
     wire [31:0] tcb_val = cfg_upd_wr ? cfg_upd_val : u_rx_upd_val;
-    wire        tcb_wr  = cfg_upd_wr || u_rx_upd_wr;
+    wire        tcb_wr  = cfg_upd_wr || (u_rx_upd_wr && rx_gnt);
 
     integer     fd;
+
+    // ---- P4b-7-P6 定向段常量 (与 tools/gen_stim_tcp_rx.py 同源; 改动帧表须同步) ----
+    // 定向段: 基流末(4225)+空闲 94 字节后连发 4 帧 [推进数据 + 3 重复纯 ACK],
+    // 全部 fend 落在 upd_gnt 抢占窗 [D_HOLD0, D_HOLD1) 内 → drain 在拍1挂起,
+    // 每帧 fend 重启 drain — 旧实现(每 fend 重锁存)丢推进, sticky 修复保留。
+    localparam [31:0] D_CFG2  = 32'd4319;   // 重配 conn0 = TCB0 基线 (6 拍)
+    localparam [31:0] D_HOLD0 = 32'd4425;   // gnt 抢占窗 (模拟 TX 优先仲裁)
+    localparam [31:0] D_HOLD1 = 32'd4805;
+    localparam [31:0] D_RCVX  = 32'h44C;    // 期望终态: rcv_nxt=1100
+    localparam [31:0] D_UNAX  = 32'h1770;   //            snd_una=6000
 
     mac_rx_64 u_mac (
         .clk(clk), .rst_n(rst_n),
@@ -97,7 +113,7 @@ module tb_tcp_rx;
         .ra_rcv_nxt(ra_rcv_nxt), .ra_snd_nxt(ra_snd_nxt), .ra_snd_una(ra_snd_una),
         .ra_rcv_wnd(ra_rcv_wnd), .ra_state(ra_state), .ra_wscale(ra_wscale),
         .upd_wr(u_rx_upd_wr), .upd_id(u_rx_upd_id), .upd_sel(u_rx_upd_sel), .upd_val(u_rx_upd_val),
-        .upd_gnt(!cfg_upd_wr),
+        .upd_gnt(rx_gnt),
         .ack_req(ack_req), .ack_id(ack_id), .ack_val(ack_val),
         .cam_q_sip(cam_q_sip), .cam_q_dip(cam_q_dip),
         .cam_q_sport(cam_q_sport), .cam_q_dport(cam_q_dport),
@@ -125,6 +141,7 @@ module tb_tcp_rx;
         .ra_state(ra_state), .ra_wscale(ra_wscale),
         .rb_id(4'd0), .rb_rcv_nxt(), .rb_snd_nxt(), .rb_snd_una(),
         .rb_rcv_wnd(), .rb_snd_wnd(), .rb_state(),
+        .win_id(4'b0), .win_open(), .win_inflight(), .win_wnd_eff(),   // 无消费方
         .upd_wr(tcb_wr), .upd_id(tcb_id), .upd_sel(tcb_sel), .upd_val(tcb_val)
     );
 
@@ -139,6 +156,7 @@ module tb_tcp_rx;
             cfg_sport <= 0; cfg_dport <= 0;
             cfg_dmac <= 48'h112233445566;
             cfg_upd_wr <= 0; cfg_upd_id <= 0; cfg_upd_sel <= 0; cfg_upd_val <= 0;
+            gnt_hold <= 0;
         end else begin
             if (cphase < 40) begin
                 rx_dv <= 0; rx_er <= 0;
@@ -167,13 +185,29 @@ module tb_tcp_rx;
                 cfg_upd_val <= tcbc[cphase - 6];
                 cphase <= cphase + 1;
             end else begin
-                cfg_wr <= 0; cfg_upd_wr <= 0;
+                cfg_wr <= 0;
                 if (i < nstim) begin
                     rx_d  <= stim_d[i];
                     rx_dv <= stim_v[i][0];
                     rx_er <= stim_e[i][0];
                     i <= i + 1;
+                    // P4b-7-P6 定向段: 字节 [D_CFG2, D_CFG2+6) 经慢路径重写 conn0
+                    // = TCB0 基线 6 字段 (基流尾帧 ack_badwin 已把它改坏;
+                    // 常量与 gen_stim_tcp_rx.py 同源)
+                    if (i >= D_CFG2 && i < D_CFG2 + 6) begin
+                        cfg_upd_wr <= 1;
+                        cfg_upd_id  <= 4'd0;
+                        cfg_upd_sel <= (i - D_CFG2) % 6;
+                        cfg_upd_val <= tcbc[i - D_CFG2];
+                    end else begin
+                        cfg_upd_wr <= 0;
+                    end
+                    // upd_gnt 抢占窗 [D_HOLD0, D_HOLD1): 4 个定向帧的 fend
+                    // 全部落窗内 → drain 挂起, 重复纯 ACK 的 fend 打到未完成的
+                    // 推进 (板上 TX 优先仲裁的 gnt-hold 复现)
+                    gnt_hold <= (i >= D_HOLD0 && i < D_HOLD1);
                 end else begin
+                    cfg_upd_wr <= 0; gnt_hold <= 0;
                     rx_dv <= 0; rx_er <= 0; done <= 1;
                 end
             end
@@ -214,6 +248,15 @@ module tb_tcp_rx;
                 u_tcb.rcv_nxt_r[1], u_tcb.snd_nxt_r[1], u_tcb.snd_una_r[1],
                 u_tcb.rcv_wnd_r[1], u_tcb.snd_wnd_r[1], u_tcb.state_r[1]);
         $fclose(fd);
+        // ---- P4b-7-P6 定向段自检: 3 重复纯 ACK fend 落在 gnt 抢占窗内时,
+        //      推进 (rcv_nxt/snd_una) 与窗口 (snd_wnd) 都必须最终落盘 ----
+        if (u_tcb.rcv_nxt_r[0]  == D_RCVX && u_tcb.snd_una_r[0] == D_UNAX &&
+            u_tcb.snd_wnd_r[0] == 16'h4000)
+            $display("P4b7 DIRECTED PASS rcv_nxt=%08h snd_una=%08h snd_wnd=%04h",
+                     u_tcb.rcv_nxt_r[0], u_tcb.snd_una_r[0], u_tcb.snd_wnd_r[0]);
+        else
+            $display("P4b7 DIRECTED FAIL rcv_nxt=%08h (exp 0000044c) snd_una=%08h (exp 00001770) snd_wnd=%04h (exp 4000)",
+                     u_tcb.rcv_nxt_r[0], u_tcb.snd_una_r[0], u_tcb.snd_wnd_r[0]);
         $display("DONE pass=%0d nonmatch=%0d ipcsum=%0d crc=%0d seq=%0d ack=%0d bytes=%0d | mac fr=%0d crc=%0d drop=%0d",
                  stat_pass, stat_nonmatch, stat_ipcsum, stat_crc, stat_seq, stat_ack, stat_bytes,
                  m_frames, m_crc_err, m_drop);

@@ -282,8 +282,12 @@ module tcp_rx (
     wire fend_pay = (state == S_PAY) && (!emit_v || m_axis_tready) && accept &&
                     s_axis_tlast && (({12'b0, pop8w} >= pay_r) || trunc_pay);
     wire fend_pad = (state == S_PAD) && accept && s_axis_tlast;
-    assign fend   = fend_w6 || fend_w6t || fend_pay || fend_pad;
-    assign ferr   = !s_axis_tcrs || s_axis_terr;
+    // P4b-7-P6 半帧中止防御: S_PAY 见 SOP (前帧无 tlast 中断) 拍 = 半帧 fend,
+    // ferr=1 -> echo 坏帧回卷 (合成尾拍 judged 拍) — 防半帧残留合并
+    wire fend_trunc = (state == S_PAY) && (!emit_v || m_axis_tready) && accept &&
+                      s_axis_tuser;
+    assign fend   = fend_w6 || fend_w6t || fend_pay || fend_pad || fend_trunc;
+    assign ferr   = fend_trunc || !s_axis_tcrs || s_axis_terr;
     // 帧真实载荷字节 (截断帧 = 实际到达字节; w6 截断 = 0; 正常帧 = plen_l)
     wire [15:0] adv_cnt = trunc_pay ? (pcount + {12'b0, pop8w}) :
                           (fend_w6t ? 16'd0 : plen_l);
@@ -401,10 +405,13 @@ module tcp_rx (
             //      拍1 (fend 拍 drain 分支互斥, 重启保证新置 pend 不会被越过) ----
             if (fend) begin
                 // P4b-7-P6 trunc: adv_cnt = 真实字节 (截断帧按到达量, w6 截断 0)
-                pend_rcv <= (acc_l && (adv_cnt != 16'd0) && s_axis_tcrs) || pend_rcv;
+                // 半帧防御拍 (fend_trunc) 屏蔽 pend_rcv: 陈旧 acc_l/plen_l 不得
+                // 误推 rcv_nxt (半帧未完成, 数据将由 PC 重传补回)
+                pend_rcv <= (acc_l && (adv_cnt != 16'd0) && s_axis_tcrs &&
+                             !fend_trunc) || pend_rcv;
                 pend_una <= (ack_adv_l && s_axis_tcrs) || pend_una;
                 pend_wnd <= s_axis_tcrs || pend_wnd;
-                if (acc_l && (adv_cnt != 16'd0) && s_axis_tcrs) begin
+                if (acc_l && (adv_cnt != 16'd0) && s_axis_tcrs && !fend_trunc) begin
                     pend_rcv_val <= rcv_nxt_l + {16'b0, adv_cnt};
                     pend_id <= conn_id_l;
                 end
@@ -438,7 +445,8 @@ module tcp_rx (
             end
             // ---- P3 dup-ACK 快速重传检测: fend 拍 (纯 ACK 完整到达, FCS 好)
             //      且本帧是 dup (dup_l), 按 conn_id_l 计数 ----
-            if (fend && s_axis_tcrs && dup_l) begin
+            //      P4b-7-P6: fend_trunc (半帧防御) 拍 dup_l 陈旧, 不计数
+            if (fend && s_axis_tcrs && dup_l && !fend_trunc) begin
                 if (!in_retx[conn_id_l]) begin
                     if (dup_cnt[conn_id_l] == 2'd2) begin
                         // 第 3 个 dup: 发重传请求。retx_req 未服务前保持 dup_cnt=2
@@ -459,7 +467,7 @@ module tcp_rx (
                 retx_req <= 1'b0;
                 in_retx[retx_id] <= 1'b0;
                 dup_cnt[retx_id] <= 2'd0;
-            end else if (fend && s_axis_tcrs && ack_adv_l) begin
+            end else if (fend && s_axis_tcrs && ack_adv_l && !fend_trunc) begin
                 in_retx[conn_id_l] <= 1'b0;
                 dup_cnt[conn_id_l] <= 2'd0;
                 // SEV2-3: 真推进 ACK 已在 svc 前解决空洞 — 取消挂起重传请求,
@@ -619,19 +627,19 @@ module tcp_rx (
                 S_PAY: begin
                     if ((!emit_v || m_axis_tready) && accept) begin
                         if (s_axis_tuser) begin
-                            // 截断防御: 丢弃当前帧残余, 本字即新帧 w0
-                            if (!emit_l) emit_v <= 1'b0;
-                            if (s_axis_tlast) begin
-                                state <= S_HDR; wcnt <= 3'd0;
-                                stat_drop_nonmatch <= stat_drop_nonmatch + 1;
-                            end else if (s_axis_tkeep != 8'hFF) begin
-                                state <= S_DROP; drop_ack <= 1'b0; drop_syn_r <= 1'b0;
-                                stat_drop_nonmatch <= stat_drop_nonmatch + 1;
-                            end else begin
-                                mac_lo <= s_axis_tdata[15:0];   // 本字即新帧 w0
-                                drop_syn_r <= 1'b0;
-                                state <= S_HDR; wcnt <= 3'd1;
-                            end
+                            // P4b-7-P6 冻结第三机制修复 (半帧中止防御): 上游帧流
+                            // 无 tlast 中断 (mac_rx 中止) 时丢弃当前帧残余, 合成
+                            // ferr 尾拍 (fend_trunc) 让 echo 以坏帧回卷半帧 (不再
+                            // 合并巨帧), 回 S_HDR 重收。本拍即新帧 w0 已牺牲 (与
+                            // slow_rx_adp trunc_evt 同策略: 后续错头字被 S_HDR
+                            // 判据丢入 S_DROP 吞到帧尾, PC 重传补回)。旧行为只救
+                            // RX 自己, echo 半帧残留 -> 合并巨帧 -> TX 卡死
+                            // (板级+TB 复现实锤)。
+                            emit_v <= 1'b1;                    // 合成尾拍
+                            emit_d <= 64'h0; emit_k <= 8'h00;
+                            emit_l <= 1'b1; emit_u <= 2'b00;
+                            state <= S_HDR; wcnt <= 3'd0;
+                            stat_drop_trunc <= stat_drop_trunc + 1;
                         end else if (s_axis_tlast) begin
                             state <= S_HDR; wcnt <= 3'd0;
                             if ({12'b0, pop8w} < pay_r) begin

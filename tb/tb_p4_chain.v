@@ -47,6 +47,10 @@ module tb_p4_chain;
     wire [63:0] s_tdata;
     wire [7:0]  s_tkeep;
     wire        s_tvalid, s_tready, s_tlast, s_tuser, s_tcrs, s_terr;
+    // P4b-7-P6 半帧中止注入 (HALFDROP): mac_rx 原始出口 -> tlast 掩码 -> classify
+    wire [63:0] raw_tdata;
+    wire [7:0]  raw_tkeep;
+    wire        raw_tvalid, raw_tready, raw_tlast, raw_tuser, raw_tcrs, raw_terr;
     // classify -> fast (tcp_rx)
     wire [63:0] f_tdata;
     wire [7:0]  f_tkeep;
@@ -237,6 +241,9 @@ module tb_p4_chain;
     integer    fdi;
     integer    txdrop_n1, txdrop_n2;   // 丢帧索引, 来自 txdrop.memh (0 = 关)
     integer    trunc_n, trunc_m;       // P4b-7-P6 截断注入 (trunc.memh, 0 = 关)
+    integer    hd_n, hd_k;             // P4b-7-P6 半帧中止注入 (halfdrop.memh, 0 = 关)
+    reg        hd_fired;               // 掩码已触发 (半帧残段 tlast 已抹)
+    reg [31:0] tdstk_run, tdstk_max;   // tcp_tx_frame S_RECV + pay_full 连拍哨兵
     integer    eco_run, eco_max;       // echo 出口最长无 tlast 词串 (合并哨兵)
     reg [7:0]  data_cnt;         // conn0 数据帧计数 (0 基, 仅活数据帧)
     reg        drop_armed_a, drop_armed_b;
@@ -308,11 +315,36 @@ module tb_p4_chain;
     mac_rx_64 u_mac (
         .clk(clk), .rst_n(rst_n),
         .gmii_rxd(rx_d), .gmii_rx_dv(rx_dv), .gmii_rx_er(rx_er),
-        .m_axis_tdata(s_tdata), .m_axis_tkeep(s_tkeep), .m_axis_tvalid(s_tvalid),
-        .m_axis_tready(s_tready), .m_axis_tlast(s_tlast), .m_axis_tuser(s_tuser),
-        .m_axis_terr(s_terr), .m_axis_tcrs(s_tcrs),
+        .m_axis_tdata(raw_tdata), .m_axis_tkeep(raw_tkeep),
+        .m_axis_tvalid(raw_tvalid),
+        .m_axis_tready(raw_tready), .m_axis_tlast(raw_tlast),
+        .m_axis_tuser(raw_tuser),
+        .m_axis_terr(raw_terr), .m_axis_tcrs(raw_tcrs),
         .stat_frames(), .stat_crc_err(), .stat_drop(), .stat_bytes()
     );
+
+    // ---- P4b-7-P6 HALFDROP: mac_rx 出口 tlast 掩码 (半帧中止仿真) ----
+    // 板级中止 = 半帧词不入流: 消费者只看到"SOP 无 TLAST"的残段 (rx_classify
+    // 与 tcp_rx 的 SOP 截断防御据此丢弃残段并接着解析下一帧)。链 TB 的 mac_rx_64
+    // 对线上中止 (帧内 dv 掉) 走 S_DATA 帧尾支: 残段仍交付一拍 push_last=1 /
+    // push_crs=0 — 与板级行为不同, 故在此抹掉该拍的 tlast 以对齐板级。
+    // 触发 = 唯一 tcrs=0 的 tlast 拍 (注入半帧是激励里唯一坏 FCS 帧),
+    // 一次触发后置 done; hd_n==0 (无注入) 时恒不触发。
+    wire raw_badtail = raw_tvalid && raw_tlast && !raw_tcrs &&
+                       (hd_n > 0) && !hd_fired;
+    assign s_tdata    = raw_tdata;
+    assign s_tkeep    = raw_tkeep;
+    assign s_tvalid   = raw_tvalid;
+    assign s_tlast    = raw_tlast && !raw_badtail;
+    assign s_tuser    = raw_tuser;
+    assign s_tcrs     = raw_tcrs;
+    assign s_terr     = raw_terr;
+    assign raw_tready = s_tready;
+
+    always @(posedge clk) begin
+        if (!rst_n) hd_fired <= 1'b0;
+        else if (raw_badtail) hd_fired <= 1'b1;
+    end
 
     rx_classify u_classify (
         .clk(clk), .rst_n(rst_n),
@@ -716,6 +748,16 @@ module tb_p4_chain;
             $fscanf(fdi, "%d", trunc_m);
             $fclose(fdi);
         end
+        // P4b-7-P6 HALFDROP: 半帧中止注入 (halfdrop.memh "N K": 第 N 个 conn0
+        // 数据段线上只发头 54B + K 字节载荷后停线; 0 = 关)。K 语义见
+        // tools/gen_stim_p4_chain.py build_rx_frames (需 K>=6 且 (50+K)%8==0)
+        hd_n = 0; hd_k = 0;
+        fdi = $fopen("halfdrop.memh", "r");
+        if (fdi != 0) begin
+            $fscanf(fdi, "%d", hd_n);
+            $fscanf(fdi, "%d", hd_k);
+            $fclose(fdi);
+        end
         $readmemh("stim_data.memh", stim_d);
         $readmemh("stim_dv.memh",   stim_v);
         $readmemh("stim_er.memh",   stim_e);
@@ -748,9 +790,14 @@ module tb_p4_chain;
         // P4b-7-P6: 截断注入参数 + 截断支计数 + echo 出口最长词串
         $fwrite(fd, "TRUNCS %0d %0d\n", trunc_n, rx_stat_trunc);
         $fwrite(fd, "ECOMAX %0d\n", eco_max);
+        // P4b-7-P6: 半帧中止注入参数 + 掩码触发 + TX 卡 S_RECV 连拍
+        $fwrite(fd, "HALFD %0d %0d %0d %0d\n", hd_n, hd_k, hd_fired, tdstk_max);
         $fclose(fd);
         if (trunc_n > 0 && rx_stat_trunc == 0)
             $display("TRUNC_MISS n=%0d stat_drop_trunc=0 (截断支未走过)", trunc_n);
+        if (hd_n > 0)
+            $display("HALFDROP n=%0d k=%0d fired=%0d ECOMAX=%0d TXSTUCK=%0d (冻结哨兵 >1000 拍)",
+                     hd_n, hd_k, hd_fired, eco_max, tdstk_max);
         $display("DONE rx(pass=%0d nm=%0d ack=%0d) tx(fr=%0d ack=%0d) eco(echo=%0d) slow(cmt=%0d drp=%0d tx=%0d pg=%0d)",
                  rx_stat_pass, rx_stat_nonmatch, rx_stat_ack,
                  tx_stat_frames, tx_stat_ack, eco_stat_echo,
@@ -790,6 +837,21 @@ module tb_p4_chain;
                 if (eco_run + 1 > eco_max) eco_max <= eco_run + 1;
                 eco_run <= eco_run + 1;
             end
+        end
+    end
+
+    // ---- P4b-7-P6 HALFDROP 冻结哨兵: tcp_tx_frame 卡 S_RECV + pay FIFO 满 ----
+    // 合并巨帧 (>2048B = 256 字) 下, S_RECV 吞到 pay FIFO 满即停 (tready=0,
+    // tlast 永不到) — 板级冻结签名 (PLN=0x800=256 字, PF=1) 的拍级同构。
+    // 正常单帧 <= 1460B (183 字) 永不满 pay FIFO: 无注入时恒 0。
+    always @(posedge clk) begin
+        if (!rst_n) begin
+            tdstk_run <= 0; tdstk_max <= 0;
+        end else if (u_tx.state == 3'd1 && u_tx.pay_full) begin
+            tdstk_run <= tdstk_run + 32'd1;
+            if (tdstk_run + 32'd1 > tdstk_max) tdstk_max <= tdstk_run + 32'd1;
+        end else begin
+            tdstk_run <= 32'd0;
         end
     end
 

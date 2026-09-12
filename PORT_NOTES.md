@@ -1776,3 +1776,191 @@ RETX: 无注入门恒 0、TXDROP 门 ≥1 ✅ (唯一例外 = #15/#17 的精确�
 - **复跑 (修正后)**: `...bat 200 -1 0 4000 0 0 200` → **BURST OK** (RETX=2 = conn0 1 + conn1 1, conn1 echo 2 帧载荷全等);
   `... 200 -1 0 4000 0 0 50` → BURST OK (RETX=1, conn1 echo 1); `200` → BURST OK (RETX=0); `TRUNC=100 TRUNCM=8 200` → BURST OK;
   chain → P4 CHAIN OK。上表 #15/#17 由 FAIL 转 PASS, 其余用例逐数不变。
+
+### 怪帧研究结论 (2026-09-12 下午): 怪帧证伪, 真凶 = 驱动重启 + 半帧中止
+
+**复现实验链**:
+- 强杀 tshark (npcap) → 下一轮 100MB 冻结; 优雅停止 → 成功。复现率 ~75% (4/5)。
+- Killer E5000B pktmon 组件 ID 102→239: **强杀导致网卡驱动重启** (npcap 挂
+  Killer 驱动)。
+- 冻结轮抓包 (PktMon, ETW 层与 npcap 独立) 2728 帧: **零怪帧** (声称 1500
+  实发<100 的帧不存在), PC 发送全规范 (1514/54/662)。"怪帧"假设证伪 —
+  diag18 时代 RXT 环的"62 字节怪帧"解读系把测试最初几拍的正常帧 + RXTR
+  触发器纯 ACK 误触发混读所致。
+- 冻结轮帧序: 板 echo 到 seq 307325317 正常 → PC dup-ACK 回跳 (ack 326777↔
+  323857 — PC 丢 echo 帧 seq 307323857, 驱动重启 RX 盲区) → PC 同段重传 5 次
+  → 板 DHCP DISCOVER×3 (HLS 被看门狗复位过) → PC RST (协议违例)。
+- **drop_seq 恒 13** (PASS=1796/2723/7161/86727/1328 各轮皆 13): 13 个重复段
+  是冻结的确定性前奏 — 驱动重启后 PC 重传风暴, 板对重复段回 ACK。
+
+**冻结第三机制 (本轮新发现)**: mac_rx 对"无 tlast 半帧"的中止丢弃 → RX 的
+SOP 截断防御 (S_PAY 见 tuser 丢残余转新帧) 救了 RX 自己 → 但 **echo 已收的
+半帧永不判尾** → 与后续帧合并成巨帧 → TX S_RECV 吃巨帧 (pay 满 256 无
+tlast) → 冻结。TRU=0 与 RXT 环 RX 空闲均为佐证 (RX 没走截断支)。形态与
+diag18 冻结同构 (echo 帧合并), 来源不同 (上游中止 vs 截断帧)。
+
+**修复方向 (待实现)**: RX 的 SOP 截断防御拍**合成一个 ferr 尾拍** (emit_l=1,
+emit_u.terr=1, 挡新帧首字 1 拍) → echo 以坏帧判定回卷 (现有机制全复用) →
+半帧不残留 → 巨帧消除。需 TB 注入 "半帧无 tlast + 紧接新帧 SOP" 复现。
+
+**修复设计 (TL, 待 TB 复现确认后实施)**:
+- tcp_rx S_PAY 的 SOP 防御拍 (line ~588): 清残余 emit → 合成尾拍 (emit_v=1,
+  emit_d=0, emit_k=0, emit_l=1, emit_u=2'b00) → state<=S_HDR wcnt<=0 →
+  sop_def<=1 (新 reg, 挡新帧 w0 一拍; tready 加 !sop_def 门控)。
+- fend 加 fend_trunc (= SOP 防御拍组合条件); ferr = fend_trunc || !tcrs || terr
+  → echo pend 置位 p_err=1 → 合成尾拍接受拍 judged → 回卷半帧 (现有机制全复用)。
+- 屏蔽防御拍的陈旧 acc_l/dup_l: pend_rcv/dup 检测/ack_adv 清 in_retx 均加
+  !fend_trunc (前帧 plen_l 不得误推 rcv_nxt)。
+- S_HDR/S_PAD 防御不动 (头字/填充不 emit, echo 无半帧残留)。
+- 新帧 w0 不再内联处理 (防御拍回 S_HDR, 下拍挡 w0, 再下拍走正常 w0 case)。
+- stat_drop_trunc 兼计半帧中止 (与截断帧同语义)。
+
+### P4b-7-P6 半帧中止注入复现 (实现 agent, 2026-09-12): 冻结第三机制 TB 复现成立
+
+**目的**: 先复现后修 — TB 注入"半帧中止"场景, 证明**现有 RTL 确实会冻结** (本轮不改 RTL)。
+**注入机制 (新通道 `halfdrop.memh`, 仿 TRUNC/TXDROP)**:
+- **参数**: env `HALFDROP=N` / `HALFDROPK=K` → `sim/p4sim/halfdrop.memh` ("N K"; bat 每次重写, 缺省 0/0 = 关)。
+  与 trunc.memh 同通道 (xsim loader 拆含 '=' 的 -testplusarg, 文件绕开); TB 与 gen_stim/burstcheck 读同一文件。
+- **线上帧形**: 第 N 个 conn0 数据段 (编号同 TRUNC/TXDROP: data7a=1, data7b=2, burst_k=k+3) 只发帧头 54B
+  (seq / IP total_len=1500 / TCP 头 / csum 全保原样) + 前 K 字节载荷, 随即停线 — **无 FCS, 无 tlast**,
+  帧后是普通 IFG 空闲 (下一帧前导正常) = 板级 PC/NIC 驱动重启时 TX DMA 半途中断的帧形。
+- **TB 必须在 mac_rx 出口模拟板级中止** (`tb/tb_p4_chain.v:333` `raw_badtail`): 链 TB 的 `mac_rx_64` 对线上
+  中止 (帧内 dv 掉) 走 S_DATA 帧尾支 — 残段**仍交付一拍** `push_last=1/push_crs=0` (≠ 板上"半帧词不入流")。
+  若只做线上截断, tcp_rx 走既有 trunc 修复路径 (fend+ferr → echo 回卷), **复现不出冻结**。
+  故 TB 只抹掉该残段拍的 tlast (`s_tlast = raw_tlast && !raw_badtail`), tkeep/tuser/tcrs 原样。
+  触发 = 激励里**唯一 tcrs=0 的 tlast 拍** (其余帧 FCS 全好), 一次性 (`hd_fired`); `hd_n==0` 时恒不触发。
+- **自愈激励** (缺口只能由 PC 重传补): 尾部追加 seq=S 整段重传 (`halfrem`) + 其后各段原样重放 (`halfheal*`),
+  与 trunc heal 模型同构。半帧在板上 = "零接收": 无 tlast → tcp_rx 的 `pend_rcv` 需 `s_axis_tcrs`
+  (tcp_rx.v:404) → **rcv_nxt 不推进** → 其后原发段全 OOO 被丢。
+- **参数校验 (gen_stim, exit(2))**: `3 <= N <= burst+2`; `K >= 6`; **(50+K) % 8 == 0 (K ≡ 6 mod 8)** —
+  残段尾字在 tcp_rx 侧整字落地 (尾拍 tkeep!=0xFF 且无 tlast 会把 tcp_rx 打进 S_DROP, 而 S_DROP 只在真 tlast
+  退出 → 变成"吞掉后续整帧", 注入语义不再是 SOP 截断防御); `K < 该段 plen`; 与 TRUNC 互斥。
+
+**改动**: `tools/gen_stim_p4_chain.py` (`read_halfdrop` :126 / `build_rx_frames(half_at,half_k)` :143, 半帧发射
+:253, 自愈重传 :314 / `parse_gmii` 的 `HALFD` 行 :406 / `check_burst` 复现判据块 :966 / `__main__` :1170);
+`tb/tb_p4_chain.v` (halfdrop.memh 读入 :751 / raw_* 线 + 出口 tlast 掩码 :333-346 / TX 冻结哨兵 :849 /
+resp 新行 `HALFD <n> <k> <fired> <tdstk_max>` :794 + `$display` :800);
+`sim/p4sim/run_tb_p4_burst.bat` :52-61 (HALFDROP/HALFDROPK → memh); `run_tb_p4_chain.bat` :9-10 (chain 门删 memh)。
+
+**注入命令 (Git Bash)**:
+```
+HALFDROP=100 HALFDROPK=990 cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p4sim\run_tb_p4_burst.bat 200'
+```
+
+**复现证据 (burst 200, N=100, K=990; 复跑逐数一致)**: 存档 `sim/p4sim/p6logs/{22_*_resp.memh, 22_*_xsim.log, 22_*_check.log}`
+| 项 | 值 | 说明 |
+|---|---|---|
+| TB `HALFD` 行 | `100 990 1 241113` | 掩码触发 ✓; TX 卡 `S_RECV && pay_full` **241113 拍** |
+| ECOMAX (echo 出口最长无 tlast 词串) | **257 > 182** | 残留半帧 + 首段重传合并成巨帧 |
+| conn0 echo 数 | 99 (期望 202) | 冻结在注入段 — 其后全不再 echo |
+| STATS_TX 字节 | 141636 = 16 + 97×1460 | TX 恰停在注入段之前 (一段不多) |
+| TCBF conn0 snd_nxt | 305561533 = `0x12367FBD` = e_hd | TX 序号卡在注入段的 echo seq |
+| STATS_MAC abort/eend | 0 / 0 | 非 mac 丢帧 — 纯 TX pay FIFO 停摆 |
+| 判据 | **BURST FAIL (exit 1)** | 当前 RTL 必 FAIL = 缺陷存在性证明 |
+
+- 注入段 PC seq = 1016 + 97×1460 = **142636** ✓ (与 `half_at=100` 一一对应)。
+- 板级签名同构: 板测 = TX 停在 S_RECV 且 PLN=0x800 (=256 字 pay FIFO 满) + PF=1 + TL 位图只 1 个 tlast;
+  本复现 = `u_tx.state==S_RECV && u_tx.pay_full` 连拍 241113 (哨兵阈值 1000 拍), 合并点后无任何 tlast 交付。
+- 长度数学: 残段线上 54+K 字节 → mac_rx 推 (50+K)/8 词 (K=990 → 130 词, 末拍被掩码后成"帧内词");
+  echo 侧残留 = K−4 字节级 (beats 按 8B 重排); 与整段重传 (1460B → 183 词) 合并 **> 256 词** → pay FIFO (256 深)
+  满 → `s_axis_tready=0` → tcp_echo 与整条上游停摆 (帧内无整帧丢弃点 = 无自愈出口, 与板级一致)。
+
+**对照 (K=22 与 K=14: 合并不冻结)**:
+- `HALFDROP=10 HALFDROPK=22 ... 20`: `HALFD 10 22 1 0` (哨兵 0 = 无冻结); **ECOMAX=184 > 182**;
+  conn0 echo = 22 段 (满) 但 echo plen = **1476 = 1460+16** → 载荷流整体位移 16 字节, 并集 292032B = 计划+16B
+  → 载荷逐字节验证 FAIL。**小 K 不冻结但静默错位** (残余 16B 被重传重复计一次)。
+- `HALFDROP=10 HALFDROPK=14 ... 20`: 残段仅 1 拍, ECOMAX = **183 > 182** (边界, 经 TB 实测) → 合并阈值 = **K ≥ 14**。
+- **冻结阈值** = 残段字节 + 1460 > 2048 → K > 592 → K ≡ 6 (mod 8) 下 **最小冻结 K = 598** (K=990 为稳健主用例)。
+
+**回归 (无注入, 全绿)**:
+- `run_tb_p4_burst.bat 200` → **BURST OK** (exit 0): echo 202; ECOMAX **182** (上限内); RETX=0; STATS_MAC 208/0/0;
+  TB `HALFD 0 0 0 0` = 掩码未触发 / 哨兵恒 0 → **新哨兵对正常跑零影响**; 存档 `p6logs/24_*`。
+- `run_tb_p4_chain.bat` → **P4 CHAIN OK** (exit 0) (chain 门删 halfdrop.memh + hd_n=0 恒不触发)。
+
+**后修判据 (TL 修完后复用本注入当验收门)**: 同上命令, 期望 **BURST OK**, 且:
+`HALFD 100 990 1 0` (哨兵归零, 不再冻结); ECOMAX ≤ 182; conn0 echo = 202 段连续 (严格分支);
+**半帧段 echo 由 seq=S 整段重传补位** (seq=`0x12367FBD`, plen=1460, 载荷逐字节 == payload_map);
+checker 打印 `HALFDROP 未复现合并/冻结` + `半帧段 echo: seq=12367FBD plen=1460 (seq=S 整段重传补位)`。
+→ 若修复把残段字节计进 rcv_nxt, 重传段会变 OOO → echo 数 < 202 → 该门 FAIL (设计稿 `fend_trunc` 屏蔽
+`pend_rcv` 已覆盖此点, 修时勿漏)。
+
+**注意**: `halfdrop.memh` 常驻 sim/p4sim (与 trunc.memh 同), burstcheck 与 TB 读同一文件; chain 门/其他向量
+由 bat 负责删除/重写。手工跑 gen_stim 时残留 halfdrop.memh 会带注入 (调试可用, 勿误判为回归)。
+
+#### 热修 (同日): 第一版改动打破了 TRUNC 门 — 根因 = 刺激重构丢帧 (教训)
+
+- **症状**: `TRUNC=100 TRUNCM=8 ...bat 200` FAIL: conn0 echo 99、`TRUNCS (100, 0)` (stat_drop_trunc 未走)、
+  STATS_MAC 仅 122 帧 (测试流在注入点附近停摆)。RTL/TB/掩码/memh 残留均无关 (与协调者排除结论一致)。
+- **根因 (单点)**: `build_rx_frames` 段循环原为 `if dfi == trunc_at: 改 fb/fcs` + **if 之后无条件 `add(...)`**;
+  我加 half 分支时改写成 if/elif/else, `add('burst%d')` 被挂到 `else` 上 → **trunc 分支只重算载荷不再 add** →
+  截断帧整个从刺激里消失 (PC 直接跳过该段), 其后 `healrem` 自 seq+8 起跳 → 板上判 OOO/空洞 → 停摆。
+- **修复**: trunc 分支补回 `add('burst%d' % b, fb, fcs, 12)` (`tools/gen_stim_p4_chain.py:253`)。
+- **教训**: 注入类改动必须跑**全门矩阵** — 本轮首验只跑了"注入门 + 无注入 + chain", 漏了 TRUNC 门 → 裸奔一轮。
+  P4b-7-P6 四门 = ① `...bat 200` (无注入) ② `TRUNC=100 TRUNCM=8 ...bat 200`
+  ③ `HALFDROP=100 HALFDROPK=990 ...bat 200` ④ `run_tb_p4_chain.bat`。
+
+#### 修复后复跑 (TL 的 tcp_rx 半帧修复已在位: `rtl/tcp_rx.v` 含 `fend_trunc`) — 四门全绿
+
+| 门 | 命令 | 结果 |
+|---|---|---|
+| 无注入 | `...bat 200` | **BURST OK**; echo 202; ECOMAX 182; RETX 0 |
+| 截断 | `TRUNC=100 TRUNCM=8 ...bat 200` | **BURST OK**; `TRUNCS (100, 1)`; **echo 203**; ECOMAX 182 — 与历史基线 `p6logs/02_trunc100_m8.log` 逐数一致 (203/1/RETX 0) |
+| 半帧中止 | `HALFDROP=100 HALFDROPK=990 ...bat 200` | **BURST OK**; `HALFD 100 990 1 0`; `TRUNCS (0, 1)` (半帧中止计入 stat_drop_trunc, 与设计稿一致); ECOMAX 182; echo 202; **半帧段 echo: seq=12367FBD plen=1460 (seq=S 整段重传补位)**; checker 打印 `HALFDROP 未复现合并/冻结` |
+| chain | `run_tb_p4_chain.bat` | **P4 CHAIN OK** |
+
+- 冻结彻底消除: 修复前 `HALFD ... 241113` + ECOMAX 257 → 修复后 `HALFD 100 990 1 0` (哨兵 0),
+  xsim `HALFDROP n=100 k=990 fired=1 ECOMAX=182 TXSTUCK=0`。
+- 注: 截断门 echo = **203** 而非 202 — 截断段按真实字节拆成 8B + 续传 1452B 两帧 echo (历史基线即 203);
+  202 是无注入基线的数, 勿混。
+- 存档: `p6logs/{27_halffix_k990_*, 28_trunc100_m8_afterfix.log, 29_base200_afterfix*}`。
+- 截断其它变体亦复跑通过 (确认整条 trunc 路径恢复): `TRUNC=100 TRUNCM=10 ... 200` 与 `TRUNC=50 TRUNCM=6 ... 200`
+  → BURST OK, `TRUNCS (100,1)` / `(50,1)`, 203 echo / RETX 0 — 与历史基线 `03_trunc100_m10.log` / `04_trunc50_m6.log`
+  逐数一致 (存档 `p6logs/{30_trunc100_m10_afterfix.log, 31_trunc50_m6_afterfix.log}`)。
+
+#### 四门矩阵**独立复跑** (测试 agent, 2026-09-12): 10/10 PASS, 与实现 agent 存档逐位一致
+
+**方法**: 驱动脚本 `sim/p4sim/p6logs/indep/run_matrix.sh` — 每门开跑前删 `trunc.memh / halfdrop.memh / txdrop.memh`
+(防残留), 每门记录 exit / 时长 / memh 落盘状态; **全程不改任何源文件**。日志与 resp 转储存档 `sim/p4sim/p6logs/indep/`。
+跑的 RTL 即 TL 修复版 (`rtl/tcp_rx.v` 含 `fend_trunc`)。
+
+| # | 门 | 命令 (Git Bash) | exit | conn0 echo | RETX | TRUNCS (n,stat) | HALFD (n,k,fired,stuck) | ECOMAX | STATS_MAC (fr,abort,eend) | 判据 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1–3 | 无注入 ×3 | `run_tb_p4_burst.bat 200` | 0 | 202 | 0 | (0,0) | 0 0 0 0 | 182 | 208,0,0 | **PASS** |
+| 4 | 截断 | `TRUNC=100 TRUNCM=8 ...bat 200` | 0 | 203 | 0 | (100,1) | 0 0 0 0 | 182 | 217,0,0 | **PASS** |
+| 5 | 截断 | `TRUNC=100 TRUNCM=10 ...bat 200` | 0 | 203 | 0 | (100,1) | 0 0 0 0 | 182 | 217,0,0 | **PASS** |
+| 6 | 截断 | `TRUNC=50 TRUNCM=6 ...bat 200` | 0 | 203 | 0 | (50,1) | 0 0 0 0 | 182 | 217,0,0 | **PASS** |
+| 7 | 半帧中止 | `HALFDROP=100 HALFDROPK=990 ...bat 200` | 0 | 202 | 0 | (0,1) | **100 990 1 0** | 182 | 215,0,0 | **PASS** |
+| 8 | 半帧中止 | `HALFDROP=100 HALFDROPK=22 ...bat 200` | 0 | 202 | 0 | (0,1) | **100 22 1 0** | 182 | 215,0,0 | **PASS** |
+| 9 | chain | `run_tb_p4_chain.bat` | 0 | — (9RX/8TX frames) | — | (0,0) | — | — | — | **PASS** (`P4 CHAIN OK`) |
+| 10 | TXDROP 回归 | `...bat 200 -1 0 4000 0 0 50` | 0 | 207 | **1** | (0,0) | 0 0 0 0 | 182 | 214,0,0 | **PASS** |
+| 11 | 门控 | `...bat 200 0 0 10` (PCACK+PCWND1K) | 0 | 202 | 0 | (0,0) | 0 0 0 0 | 182 | 208,0,0 | **PASS** (TCBF snd_wnd=4096 生效) |
+
+- 门 4/5/6 的截断支证据: `截断验证 echo plen=8/10/6 ack=00022D34/00022D36/0001100A (只确认真实字节)` +
+  `dup-ACK 证据 8 帧纯 ACK` + `自愈覆盖并集完整 292016B`; 门 7/8 的 TB 行
+  `HALFDROP n=100 k=990/22 fired=1 ECOMAX=182 TXSTUCK=0` (逐字读自存档 xsim log),
+  checker 打印 `HALFDROP 未复现合并/冻结` + `半帧段 echo: seq=12367FBD plen=1460 (seq=S 整段重传补位)`。
+- **门 8 (K=22) 修复前是 FAIL** (`ECOMAX 184` + 载荷整体位移 16B, 见 `23_half100_k22_*`): 修复后与 K=990 逐数一致
+  — 残留半帧对 echo 侧零残留 (载荷逐字节 202 帧全等, echo 链连续无洞), 说明 `fend_trunc` 的丢弃与 K 无关。
+- memh 落盘核对 (bat 每次重写是否可信): 门1 `0 8 / 0 0`; 门4–6 `100 8 / 100 10 / 50 6`; 门7–8 `100 990 / 100 22`;
+  chain 门跑后 `trunc.memh/halfdrop.memh` 不存在 (删文件证据见下加严项 1, 该处为投毒后实测)。
+
+**加严项 (超出规约, 均为发现型验证)**
+
+1. **chain 防残留投毒实测**: 预先写 `trunc.memh=100 8 / halfdrop.memh=100 990 / txdrop.memh=50` 再跑
+   `run_tb_p4_chain.bat` → 仍 `P4 CHAIN OK` (exit 0), 跑后三文件全空 = 泄露防护真的生效 (非"恰好没文件")。
+   存档 `p6logs/indep/11_chain_leakcheck.txt`。
+2. **逐位对照 (最强独立证据)**: `resp_p4_chain.memh` md5 —
+   无注入 `56c2c81c…` 与**修复前**存档 `24/26_regress200_resp` 及**修复后** `29_base200_afterfix_resp`
+   **三者完全相同** (fend_trunc 对无注入路径零影响, 逐位不变); 半帧 K=990 `7c206c41…`
+   与实现 agent `27_halffix_k990_resp` **逐位相同**。检查器输出与 `27/28/30/31` 逐行一致
+   (唯一差异 = 实现 agent 日志尾部多一行人工 `exit=0` 标签)。
+3. **RAMB SDP "Memory Collision" 警告计数** (xsim 模型噪声, 非功能错): 基线 113 拍 = 修复前基线 `24` 的 113;
+   注入跑 115 (修复前注入跑亦 115) → 计数只随刺激规模变, 修复未引入新警告。
+4. 无注入基线跑了 **4 次** (规约 ×2; 第 4 次 `12_base_*` 为留档 xsim log 做警告计数对照), 四次 output 逐数一致
+   (echo 202 / RETX 0 / ECOMAX 182 / MAC 208,0,0) — 无随机性。
+
+**结论**: 半帧中止修复 (`fend_trunc` 合成 ferr 尾拍 + `pend_rcv/dup/ack_adv` 屏蔽) 在四门矩阵 + TXDROP/门控
+回归下 **全绿**; 冻结签名 `TXSTUCK 241113 → 0`, ECOMAX 182 (上限内), 无注入行为逐位不变。
+四门 + TXDROP/门控 5 命令组成的靶场可直接作为 P6 类改动的固定回归门 (总耗时约 13 min)。
+**遗留 (未验, 供板测)**: 本矩阵只覆盖"半帧中止 + 后续重传自愈"的仿真形; 板上 PC/NIC 重启的真实半帧
+是否每次都能在 `fend_trunc` 拍被捕获 (即 mac_rx 交付的残段拍 `tcrs=0 && 无 tlast` 的形态) 仍需 bitstream 实测。
