@@ -218,10 +218,13 @@ def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000,
     #      M >= 55 会变成满载荷多字 (不再截断);
     #  (b) M >= 6: finish() 只补到 60B 最小帧 — M<=5 的帧 (54+M<60) 被填零到
     #      60B, 板上把填充当载荷收 (echo plen=6+), 注入语义不再等长;
-    #  (c) M=1..2 落到 w6-截断支 (fend_w6t, 另一条路径), 不在本注入范围。
+    #  (c) M=0..2: w6-截断支 (fend_w6t) — 帧体 54+M <= 56 无 pad, tlast 落 w6
+    #      拍 (finish 的 60B 补零会把 tlast 推到 w7 走 S_PAY); 0 字节交付,
+    #      rcv_nxt 不推进, ACK 停 s_tr, PC RTO 重传补缺口。
     #      RTL 侧真实字节 = pop8w+2 (M<=8) / 8+尾字 (M=9,10) = M 恒等。
-    if trunc_at and not (3 <= trunc_at <= burst + 2 and 6 <= trunc_len <= 10):
-        print('TRUNC 参数非法: at=%d len=%d (需 at 3..%d, len 6..10)'
+    if trunc_at and not (3 <= trunc_at <= burst + 2 and
+                         (0 <= trunc_len <= 2 or 6 <= trunc_len <= 10)):
+        print('TRUNC 参数非法: at=%d len=%d (需 at 3..%d, len 0..2 或 6..10)'
               % (trunc_at, trunc_len, burst + 2))
         sys.exit(2)
     # P4b-7-P6 半帧中止注入合法性 (见 docstring): 段号范围 + K 的取整/幅度
@@ -253,9 +256,15 @@ def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000,
         fb, fcs = C.mk_tcp_frame(0, seq, HS_ACKVAL, 0x18, plen, burst_wnd, True)
         if dfi == trunc_at:
             # 截断帧: 头 (:total_len=40+plen=1500 / seq / 端口 / 原 csum) 原样,
-            # 载荷只留前 trunc_len 字节, FCS 按截断后内容重算 (finish 补足 60B)
+            # 载荷只留前 trunc_len 字节, FCS 按截断后内容重算
             hdr = 14 + (fb[14] & 0xF) * 4 + 20      # eth + TCP + IP = 54
-            fb, fcs = finish(fb[:hdr] + C.payload(plen)[:trunc_len])
+            if trunc_len <= 2:
+                # w6 截断支: 无 pad (finish 的 60B 补零会把 tlast 推到 w7 走
+                # S_PAY) — 帧体 54+M <= 56B, tlast 落 w6 拍 → fend_w6t 路径
+                fb = fb[:hdr] + C.payload(plen)[:trunc_len]
+                fcs = struct.pack('<I', zlib.crc32(fb) & 0xFFFFFFFF)
+            else:
+                fb, fcs = finish(fb[:hdr] + C.payload(plen)[:trunc_len])
             add('burst%d' % b, fb, fcs, 12)         # 截断帧照常上线 (载短+重算 FCS)
         elif dfi == half_at:
             # 半帧中止: 帧头 54B 原样 (total_len/csum 仍按满载荷 1460 承诺),
@@ -294,16 +303,19 @@ def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000,
     if trunc_at:
         hi = trunc_at - 3
         s0, p0 = segs[hi]
-        # 重传段恰为缺口长度 (snd_nxt - snd_una = p0 - trunc_len, < MSS):
-        # 不能补满 1460 — 多发的 8 字节会越过下一段起点, 板上把下一段判 dup
+        # 重传段恰为缺口长度 (snd_nxt - snd_una = p0 - adv, < MSS):
+        # 不能补满 1460 — 多发的字节会越过下一段起点, 板上把下一段判 dup
         # 丢掉 → 覆盖反而破洞 (真实 TCP tcp_retransmit_skb 同样按 snd_nxt
-        # 截断到 MSS 或更短)。载荷必须按流偏移切 payload(p0)[trunc_len:]
-        # (payload(n) 是序号索引函数: payload(p0-trunc_len) 会从段头重来,
-        #  板级实测 = echo 载荷整体回退 trunc_len 字节)
-        fb, fcs = C.mk_tcp_frame(0, s0 + trunc_len, HS_ACKVAL, 0x18,
-                                 p0 - trunc_len, burst_wnd, True)
+        # 截断到 MSS 或更短)。载荷必须按流偏移切 payload(p0)[adv:]
+        # (payload(n) 是序号索引函数: payload(p0-adv) 会从段头重来,
+        #  板级实测 = echo 载荷整体回退 adv 字节)。
+        # adv = 板上真实收下的字节: S_PAY 截断 = trunc_len; w6 截断 = 0
+        # (fend_w6t 不推进 rcv_nxt — PC ACK 只确认 s_tr, RTO 从 s_tr 整段重发)
+        adv = trunc_len if trunc_len >= 6 else 0
+        fb, fcs = C.mk_tcp_frame(0, s0 + adv, HS_ACKVAL, 0x18,
+                                 p0 - adv, burst_wnd, True)
         hdr = 14 + (fb[14] & 0xF) * 4 + 20
-        fb, fcs = finish(fb[:hdr] + C.payload(p0)[trunc_len:])
+        fb, fcs = finish(fb[:hdr] + C.payload(p0)[adv:])
         add('healrem', fb, fcs, 24)
         for j in range(hi + 1, burst):
             s1, p1 = segs[j]
@@ -890,6 +902,9 @@ def check_burst(simdir, nburst, txdrop1=0, txdrop2=0, trunc_at=0, trunc_len=8,
         hi = trunc_at - 3
         s_tr = 1016 + hi * 1460                             # 截断段 PC seq
         e_tr = (HS_ACKVAL + 16 + hi * 1460) & 0xFFFFFFFF    # 截断段 echo seq
+        # adv = 板上真实收下的字节 (S_PAY 截断 = trunc_len; w6 截断 = 0,
+        # fend_w6t 不推进 rcv_nxt, ACK/dup-ACK 停 s_tr)
+        adv = trunc_len if trunc_len >= 6 else 0
         # ① 截断支被走过 (RTL 按真实字节收下, 而非旧行为静默吞尾不发 fend)
         if tr_n != trunc_at:
             print('MISMATCH: TB TRUNCS n=%d != 期望 %d (trunc.memh 未同步)'
@@ -901,8 +916,22 @@ def check_burst(simdir, nburst, txdrop1=0, txdrop2=0, trunc_at=0, trunc_len=8,
             ok = False
         # ② 截断段 echo 恰 trunc_len 字节, 且该帧 ACK 号只推进真实字节
         #    (板上 rcv_nxt 不按承诺的 plen=1460 走 — dup-ACK 语义根源)
+        #    w6 截断支 (trunc_len <= 2): 0 字节交付 — 无 meta 无 echo,
+        #    fend_w6t 闭合边界, rcv_nxt 不推进 (ACK 停 s_tr)。注意 healrem
+        #    段 (PC 整段重传, seq=s_tr) 的 echo 也落在 seq=e_tr 且 plen=1460
+        #    — 与截断段短 echo 按 plen 区分 (截断段 echo 只可能 <= 2 字节)
         hit = [e for e in echoes if e[0] == e_tr]
-        if not hit:
+        if trunc_len <= 2:
+            w6h = [e for e in hit if e[1] <= 2]
+            if w6h:
+                print('MISMATCH: w6 截断段不该有短 echo (seq=%X plen=%d — 0 字节交付)'
+                      % (w6h[0][0], w6h[0][1]))
+                ok = False
+            else:
+                print('w6 截断验证: 截断段无短 echo (fend_w6t 闭合边界, rcv_nxt 停 '
+                      '%08X; seq=e_tr 的 1460B echo = healrem 整段重传回显)'
+                      % (s_tr & 0xFFFFFFFF))
+        elif not hit:
             print('MISMATCH: 截断段无 echo (seq=%X)' % e_tr)
             ok = False
         elif hit[0][1] != trunc_len:
@@ -930,12 +959,12 @@ def check_burst(simdir, nburst, txdrop1=0, txdrop2=0, trunc_at=0, trunc_len=8,
         #    -> 前 33 个 OOO 段回 dup-ACK, 其后超窗静默 (TRUNC=100/200 实测 33 帧;
         #    TRUNC=50/55 全部 OOO 段在窗口内不受此限)。旧判据 (全 = s_tr+trunc_len)
         #    是 suppress=1 时代语义; suppress=0 下正常段 ACK 也推进, 必须按位置分流
-        a_tr = (s_tr + trunc_len) & 0xFFFFFFFF
+        a_tr = (s_tr + adv) & 0xFFFFFFFF
         # 窗口内 OOO 段数: 第 k 段 (k>trunc_at) 的 seq diff =
-        # (1460-trunc_len) + (k-trunc_at-1)*1460, k-trunc_at-1 = 0..n-1 共 n 段
-        # 窗口内 ⇔ 偏移 n-1 <= (rcv_wnd-1452)//1460 = 32 (48K 窗) -> n = 33
+        # (1460-adv) + (k-trunc_at-1)*1460, k-trunc_at-1 = 0..n-1 共 n 段
+        # 窗口内 ⇔ 偏移 n-1 <= (rcv_wnd-(1460-adv))//1460 = 32 (48K 窗) -> n = 33
         n_ooo_w = min(nburst + 2 - trunc_at,
-                      (C.CONN[0]['rcv_wnd'] - (1460 - trunc_len)) // 1460 + 1)
+                      (C.CONN[0]['rcv_wnd'] - (1460 - adv)) // 1460 + 1)
         ack_ok3 = True
         if len(ackf) < trunc_at + n_ooo_w + 1:
             print('MISMATCH: 板上纯 ACK %d 帧 < %d (截断段+窗口内 OOO+补缺口段)'
@@ -981,8 +1010,9 @@ def check_burst(simdir, nburst, txdrop1=0, txdrop2=0, trunc_at=0, trunc_len=8,
                      (s_tr + 1460) & 0xFFFFFFFF, ackf[-1]))
         # ⑤ 好 FCS 截断帧必须按真实字节计入 pass/bytes (RTL 审查 P2-3: 截断支
         #    按 tcrs 分流 — 好 FCS -> stat_pass/stat_bytes, 坏 -> drop_crc)。
-        #    RX 载荷总字节 = 原计划 + conn1 20B: 截断段 8B + 续传 1452B 恰补满
-        #    该段 1460B (若按承诺字节记账会多计入 1452)
+        #    RX 载荷总字节 = 原计划 + conn1 20B: S_PAY 截断段 adv 字节 + 续传
+        #    1460-adv 恰补满该段; w6 截断段 0 字节 + 整段重传 1460 也恰补满
+        #    (两种情形总账均为 exp_total; 若按承诺字节记账会多计入 1460-adv)
         if ev['stats7'] and ev['stats7'][6] != exp_total + 20:
             print('MISMATCH: STATS7 bytes %d != 期望 %d (截断帧记账异常 — 按承诺字节?)'
                   % (ev['stats7'][6], exp_total + 20))

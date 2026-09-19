@@ -2218,3 +2218,15 @@ bug); 板级 cfg_suppress_data_ack 回 1 (124Mbps 稳定基线); TB 保持 suppr
   稳态 (10-90%) 105.9 Mbps, exit 0。PC 重传 1614 帧偏多 (本次线级丢帧
   波动) 但自愈完整。P4c 里程碑收尾: 窗口 48KB + retx_ram 64KB + w6a 纯 ACK
   修复 + 全矩阵绿, 板级基线稳定 (~106-124Mbps 区间 = 线级波动带)。
+
+### P4d 修补包 小项1: w6 截断支 TB 用例 (2026-09-19)
+
+TRUNC 注入放宽 M=0..2: 帧体 54+M ≤ 56B 无 pad (finish 的 60B 补零会把
+tlast 推到 w7 走 S_PAY) → tlast 落 w6 拍走 fend_w6t。验证:
+- RTL 行为 ✓: 截断段无短 echo (0 字节交付), fend_w6t 闭合边界, rcv_nxt
+  不推进 (ACK/dup-ACK 停 s_tr), stat_drop_trunc 计数, healrem 整段重传
+  (PC RTO 从 s_tr 起 1460B — 修正 gen_stim 模型旧假设"从 s_tr+M 起补缺口",
+  那是 S_PAY 截断语义) 回显 1460B
+- 三边界门绿: M=0 (54B) / M=1 (55B) / M=2 (56B); TRUNC=8/chain 回归绿
+- 判据② M≤2 分支: 断言无 plen≤2 的 e_tr echo (healrem echo 也在 seq=e_tr
+  但 plen=1460, 按 plen 区分)
