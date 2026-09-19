@@ -2387,3 +2387,17 @@ ra_e_r_reg -> retx_ram ADDRBWRADDR` (P4c 起既有族, 96.99% 走线, 0 逻辑�
    在飞回绕成巨数 → 窗口门永关 (另一种死锁)。数据面单连接假设下无害 (板级
    conn1 空闲无会话), 一行加固: tx_frame 再暴露 `o_retx_id` (= retx_id_r),
    tcp_rx 用 `ra_retx_active && (ra_retx_id == conn_id_l)` 选 ack_hi。
+
+### P4d-fix 板级验证: 死锁修复确认 (2026-09-19)
+
+烧修复版 (112ad78, WNS +0.110, ack_ok mux 不在关键路径):
+- **32MB 通过** (exit 0, echo 33,554,432 B 完整, 105.3 Mbps 稳态, 897 次自愈事件)
+- **64MB 通过** (exit 0, 46,846 × 1514B 帧)
+- UART 终态健康: NX==UA (全确认), FFE=01 (echo fifo 已排空), TXST/RXST=0 (idle),
+  TRU=8 (8 次截断全消化), latch I=C1E8=49,640=34×1460 (> cap 49,150 — **满窗 RTO
+  回卷确实发生过且这次成功自愈** = 修复生效的直接证据)。
+- 结论: 48KB 满窗 + RTO 回放期高水位 ACK 的拒收死锁已修复; 之前的 32MB 必死
+  (t=0.486s 起 17 轮重放无进展) → 现在 32+64MB 全通。
+- 遗留 (P5 多连接前置): ack_hi 的 retx_hi/retx_active 是**全局会话信号**, 现按
+  per-ACK 连接使用; 单连接数据面下无害, 多连接时需加 retx_id 归属比对
+  (tx_frame 暴露 o_retx_id + tcp_rx 比对 conn_id_l) — 见 112ad78 注。
