@@ -78,6 +78,15 @@ struct pcap_if {
 typedef struct pcap_if pcap_if_t;
 typedef struct pcap_addr pcap_addr_t;
 
+/* WinPcap 4.1+ bulk-send queue: one transmit call for many frames.  Per-frame
+ * pcap_sendpacket costs ~80 us on this host, which alone caps throughput near
+ * 9 MB/s -- batching is what makes the peer stop being the bottleneck. */
+struct pcap_send_queue {
+    unsigned int maxlen;
+    unsigned int len;
+    char        *buffer;
+};
+
 extern "C" {
 int         pcap_findalldevs(pcap_if_t **alldevsp, char *errbuf);
 void        pcap_freealldevs(pcap_if_t *alldevs);
@@ -88,6 +97,30 @@ int         pcap_sendpacket(pcap_t *p, const unsigned char *buf, int size);
 int         pcap_next_ex(pcap_t *p, struct pcap_pkthdr **pkt_header,
                          const unsigned char **pkt_data);
 char       *pcap_geterr(pcap_t *p);
+struct pcap_send_queue *pcap_sendqueue_alloc(unsigned int memsize);
+unsigned int pcap_sendqueue_queue(struct pcap_send_queue *queue,
+                                  const struct pcap_pkthdr *pkt_header,
+                                  const unsigned char *pkt_data);
+unsigned int pcap_sendqueue_transmit(pcap_t *p, struct pcap_send_queue *queue,
+                                     int sync);
+void        pcap_sendqueue_destroy(struct pcap_send_queue *queue);
+int         pcap_setmintocopy(pcap_t *p, int size);
+int         pcap_setbuff(pcap_t *p, int dim);
+
+struct bpf_insn {
+    unsigned short code;
+    unsigned char  jt;
+    unsigned char  jf;
+    unsigned int   k;
+};
+struct bpf_program {
+    unsigned int     bf_len;
+    struct bpf_insn *bf_insns;
+};
+int         pcap_compile(pcap_t *p, struct bpf_program *fp, const char *str,
+                         int optimize, unsigned int netmask);
+int         pcap_setfilter(pcap_t *p, struct bpf_program *fp);
+void        pcap_freecode(struct bpf_program *fp);
 }
 
 /* =====================================================================
@@ -248,6 +281,14 @@ struct Config {
     int         stats_interval_ms = 1000;  /* 0 = quiet */
     int         fast_retx_dupacks = 3;     /* dup-ACKs before fast retransmit */
     bool        rate_test   = false;    /* keep the 10-90% steady-state summary */
+    bool        tx_batch    = true;     /* use pcap_sendqueue_transmit */
+    int         tx_sync     = 1;        /* 1 = wait for completion per flush */
+    int         tx_queue_kb = 4096;     /* sendqueue size */
+    int         setbuff_kb  = 8192;     /* driver receive buffer (0 = leave) */
+    bool        mintocopy0  = true;     /* pcap_setmintocopy(0): lowest latency */
+    int         flush_frames = 40;      /* flush the sendqueue every N frames */
+    bool        use_filter  = true;     /* server-side BPF filter on our 4-tuple */
+    uint32_t    tx_bench    = 0;        /* --tx-bench N: raw send self-test */
     uint32_t    seed        = 0;        /* 0 = derive from clock */
     int         syn_retries = 6;
 };
@@ -284,6 +325,12 @@ struct Stats {
     uint64_t board_fin      = 0;
     uint64_t fast_retx      = 0;
     uint64_t rto_events     = 0;
+    /* I/O cost accounting -- this is what tells us whether the peer or the
+     * board sets the throughput ceiling */
+    uint64_t tx_calls       = 0;
+    uint64_t rx_calls       = 0;
+    double   tx_time_us     = 0;
+    double   rx_time_us     = 0;
 };
 
 /* One detected TX-side gap (our data the board did not acknowledge in time):
@@ -366,6 +413,7 @@ public:
     std::string abort_reason;
 
     pcap_t  *pcap = 0;
+    struct pcap_send_queue *txq = 0;
     uint8_t  our_mac[6], peer_mac[6];
     uint32_t our_ip, peer_ip;
     uint16_t our_port, peer_port;
@@ -401,6 +449,15 @@ public:
 
         rx_evt = CreateEventA(0, FALSE, FALSE, 0);
         t_start = t_last_progress = now_ticks();
+
+        if (cfg.tx_batch) {
+            txq = pcap_sendqueue_alloc((unsigned int)cfg.tx_queue_kb * 1024);
+            if (!txq) {
+                printf("[!!] pcap_sendqueue_alloc(%d KB) failed; falling back to "
+                       "per-frame pcap_sendpacket\n", cfg.tx_queue_kb);
+                cfg.tx_batch = false;
+            }
+        }
     }
 
     void start_rx(void) {
@@ -417,7 +474,10 @@ public:
         while (!stop_rx.load()) {
             struct pcap_pkthdr *hdr = 0;
             const unsigned char *data = 0;
+            uint64_t t0 = now_ticks();
             int r = pcap_next_ex(pcap, &hdr, &data);
+            st.rx_time_us += ticks_to_us(now_ticks() - t0);
+            st.rx_calls++;
             if (r == 1) {
                 if (!hdr || hdr->caplen < (unsigned)ETH_HDR_LEN) continue;
                 RxItem it;
@@ -497,11 +557,35 @@ public:
         }
 
         int send_len = frame_len < ETH_MIN_FRAME ? ETH_MIN_FRAME : frame_len;
-        if (pcap_sendpacket(pcap, buf, send_len) != 0) {
-            fprintf(stderr, "pcap_sendpacket failed: %s\n", pcap_geterr(pcap));
+
+        if (cfg.tx_batch && txq) {
+            struct pcap_pkthdr h;
+            h.ts.tv_sec = 0; h.ts.tv_usec = 0;
+            h.caplen = h.len = (unsigned int)send_len;
+            if (pcap_sendqueue_queue(txq, &h, buf) != 0) {
+                flush_tx();                                  /* queue full */
+                if (pcap_sendqueue_queue(txq, &h, buf) != 0)
+                    fprintf(stderr, "pcap_sendqueue_queue failed (frame > queue?)\n");
+            }
+        } else {
+            uint64_t t0 = now_ticks();
+            if (pcap_sendpacket(pcap, buf, send_len) != 0)
+                fprintf(stderr, "pcap_sendpacket failed: %s\n", pcap_geterr(pcap));
+            st.tx_time_us += ticks_to_us(now_ticks() - t0);
+            st.tx_calls++;
         }
         st.tx_frames++;
         st.tx_words += (uint64_t)((send_len + 7) / 8);
+    }
+
+    /* Push everything queued this iteration to the wire in one driver call. */
+    void flush_tx(void) {
+        if (!txq || txq->len == 0) return;
+        uint64_t t0 = now_ticks();
+        pcap_sendqueue_transmit(pcap, txq, cfg.tx_sync);
+        st.tx_time_us += ticks_to_us(now_ticks() - t0);
+        st.tx_calls++;
+        txq->len = 0;    /* WinPcap resets this on success; be explicit */
     }
 
     void send_data(uint32_t seq, int plen, bool retransmit) {
@@ -516,6 +600,9 @@ public:
         emit(snd_nxt, rcv_nxt, TH_ACK, 0, 0);
         ack_pending = false;
         segs_since_ack = 0;
+        ack_since = 0;   /* MUST clear: otherwise the 2 ms safety fallback in
+                          * maybe_ack() stays permanently true and everyN/delayed
+                          * silently degenerate into immediate ACKs. */
     }
 
     /* ---------------- RX parsing ---------------- */
@@ -806,6 +893,7 @@ public:
         uint32_t syn_seq = iss;
         for (int tryn = 0; tryn < cfg.syn_retries && !handshake_done; tryn++) {
             emit(syn_seq, 0, TH_SYN, 0, 0, synopts, synopts_len);
+            flush_tx();
             uint64_t t0 = now_ticks();
             while (!handshake_done && ticks_to_us(now_ticks() - t0) < 1000000.0) {
                 WaitForSingleObject(rx_evt, 2);
@@ -824,6 +912,7 @@ public:
         snd_una = snd_nxt = iss + 1;
         rcv_nxt = irs + 1;
         emit(snd_nxt, rcv_nxt, TH_ACK, 0, 0);
+        flush_tx();
         printf("[ok] ACK sent; connection established\n");
         return true;
     }
@@ -948,7 +1037,10 @@ public:
         rate_samples.push_back(std::make_pair(0.0, (uint64_t)0));
 
         for (;;) {
-            WaitForSingleObject(rx_evt, 1);
+            /* NOTE: no blocking wait here -- the sleep lives at the loop tail so
+             * frames keep accumulating into the sendqueue while receive work is
+             * pending.  A flush is a driver round trip (~120 us), so batch size
+             * is what sets the peer's ceiling. */
             process_rx();
             if (aborted) { t_end = now_ticks(); return 1; }
 
@@ -1003,6 +1095,16 @@ public:
                 send_ack();
                 t_last_ack = now_ticks();
             }
+            /* Keep batching while more receive work is queued; flush early if
+             * the queue is filling up (flush_frames default 40 keeps unacked
+             * echo bytes safely under the peer's advertised window). */
+            bool qfull = txq &&
+                txq->len > (unsigned int)((size_t)cfg.flush_frames * 1540);
+            bool more = (WaitForSingleObject(rx_evt, 0) == WAIT_OBJECT_0);
+            if (more && !qfull) continue;
+
+            flush_tx();                       /* one driver call for N frames */
+            if (!more) WaitForSingleObject(rx_evt, 1);   /* sleep: rx or 1 ms */
         }
         t_end = now_ticks();
         return 0;
@@ -1012,6 +1114,7 @@ public:
         if (!cfg.do_fin) return;
         printf("[..] FIN\n");
         emit(snd_nxt, rcv_nxt, TH_FIN | TH_ACK, 0, 0);
+        flush_tx();
         uint64_t t0 = now_ticks();
         bool got_fin = false;
         while (ticks_to_us(now_ticks() - t0) < 2000000.0) {
@@ -1020,6 +1123,7 @@ public:
             if (st.board_fin) { got_fin = true; break; }
         }
         emit(snd_nxt + 1, (got_fin ? rcv_nxt + 1 : rcv_nxt), TH_ACK, 0, 0);
+        flush_tx();
         printf("[ok] %s\n", got_fin ? "FIN+ACK received, closing ACK sent"
                                     : "no FIN back; closing ACK sent anyway");
     }
@@ -1093,6 +1197,22 @@ public:
                 printf("steady state : %.2f MB/s %.2f Mbps  (10%%..90%% window %.2f..%.2f s, %.0f bytes)\n",
                        db / dt / 1e6, db * 8.0 / dt / 1e6, t0, t1, db);
             }
+        }
+
+        /* Where did the wall-clock go?  If TX/RX busy time is a large share of
+         * elapsed, the PEER is the ceiling, not the board. */
+        if (el > 0) {
+            printf("I/O cost     : TX %llu calls, %.2f us/call, busy %.1f%% of elapsed\n",
+                   (unsigned long long)st.tx_calls,
+                   st.tx_calls ? st.tx_time_us / (double)st.tx_calls : 0.0,
+                   100.0 * st.tx_time_us / (el * 1e6));
+            printf("               RX %llu calls, %.2f us/call, busy %.1f%% of elapsed\n",
+                   (unsigned long long)st.rx_calls,
+                   st.rx_calls ? st.rx_time_us / (double)st.rx_calls : 0.0,
+                   100.0 * st.rx_time_us / (el * 1e6));
+            if (el > 0)
+                printf("               TX frame rate %.0f fps, RX frame rate %.0f fps\n",
+                       st.tx_frames / el, st.rx_calls / el);
         }
 
         printf("loss recovery: fast_retx=%llu rto=%llu holes=%llu\n",
@@ -1179,6 +1299,52 @@ static void usage(void) {
     );
 }
 
+/* Raw send-capability self-test: blast frame_len-byte frames back to back with
+ * no TCP logic at all.  This is the number that says whether the PEER can keep
+ * up -- the payload uses ethertype 0x88B5 (Local Experimental) so the board's
+ * IP/TCP path never engages. */
+static int tx_bench(pcap_t *p, uint32_t frames, int frame_len) {
+    struct pcap_send_queue *q = pcap_sendqueue_alloc(4u * 1024u * 1024u);
+    if (!q) { fprintf(stderr, "tx-bench: pcap_sendqueue_alloc failed\n"); return 1; }
+
+    std::vector<uint8_t> f((size_t)frame_len, 0xA5);
+    memcpy(f.data(), cfg.dst_mac, 6);
+    memcpy(f.data() + 6, cfg.src_mac, 6);
+    f[12] = 0x88; f[13] = 0xB5;
+
+    struct pcap_pkthdr h;
+    h.ts.tv_sec = 0; h.ts.tv_usec = 0;
+    h.caplen = h.len = (unsigned int)frame_len;
+
+    printf("=== TX capability self-test: %u frames of %d bytes ===\n", frames, frame_len);
+    uint64_t t0 = now_ticks();
+    uint32_t sent = 0;
+    uint64_t calls = 0;
+    while (sent < frames) {
+        if (pcap_sendqueue_queue(q, &h, f.data()) != 0) {
+            pcap_sendqueue_transmit(p, q, cfg.tx_sync);
+            q->len = 0; calls++;
+            continue;
+        }
+        sent++;
+    }
+    pcap_sendqueue_transmit(p, q, cfg.tx_sync);
+    q->len = 0; calls++;
+    double us = ticks_to_us(now_ticks() - t0);
+    pcap_sendqueue_destroy(q);
+
+    double sec = us / 1e6;
+    double bytes = (double)sent * (double)frame_len * 8.0;
+    printf("frames      : %u in %.3f s\n", sent, sec);
+    printf("rate        : %.0f fps\n", sent / sec);
+    printf("bandwidth   : %.1f Mbps (%.1f MB/s) at %d B/frame\n",
+           bytes / sec / 1e6, (double)sent * frame_len / sec / 1e6, frame_len);
+    printf("transmit    : %llu calls, %.2f us/call, %.1f frames/call\n",
+           (unsigned long long)calls, us / (double)calls,
+           (double)sent / (double)calls);
+    return 0;
+}
+
 static void list_devices(void) {
     pcap_if_t *devs = 0;
     char err[256] = {0};
@@ -1254,6 +1420,15 @@ int main(int argc, char **argv) {
             cfg.stats_interval_ms = atoi(need_arg(argc, argv, i));
         else if (a == "--quiet") cfg.stats_interval_ms = 0;
         else if (a == "--rate-test") cfg.rate_test = true;
+        else if (a == "--tx-batch") cfg.tx_batch = atoi(need_arg(argc, argv, i)) != 0;
+        else if (a == "--tx-sync") cfg.tx_sync = atoi(need_arg(argc, argv, i));
+        else if (a == "--tx-queue-kb") cfg.tx_queue_kb = atoi(need_arg(argc, argv, i));
+        else if (a == "--setbuff-kb") cfg.setbuff_kb = atoi(need_arg(argc, argv, i));
+        else if (a == "--no-mintocopy") cfg.mintocopy0 = false;
+        else if (a == "--no-filter") cfg.use_filter = false;
+        else if (a == "--flush-frames") cfg.flush_frames = atoi(need_arg(argc, argv, i));
+        else if (a == "--tx-bench")
+            cfg.tx_bench = (uint32_t)strtoul(need_arg(argc, argv, i), 0, 0);
         else if (a == "--no-fast-retx") cfg.fast_retx_dupacks = 0;
         else if (a == "--rto-ms") cfg.rto_ms = atoi(need_arg(argc, argv, i));
         else if (a == "--stall-ms") cfg.stall_ms = atoi(need_arg(argc, argv, i));
@@ -1293,6 +1468,43 @@ int main(int argc, char **argv) {
     pcap_t *p = pcap_open_live(cfg.iface.c_str(), 65536, 1 /*promisc*/, 100 /*ms*/, errbuf);
     if (!p) { fprintf(stderr, "pcap_open_live(%s): %s\n", cfg.iface.c_str(), errbuf); return 1; }
 
+    /* driver-side tuning: a big receive buffer avoids drops while the reader
+     * thread is scheduled out; mintocopy 0 keeps latency low. */
+    if (cfg.setbuff_kb > 0 && pcap_setbuff(p, cfg.setbuff_kb * 1024) != 0)
+        fprintf(stderr, "note: pcap_setbuff(%d KB) failed: %s\n",
+                cfg.setbuff_kb, pcap_geterr(p));
+    if (cfg.mintocopy0 && pcap_setmintocopy(p, 0) != 0)
+        fprintf(stderr, "note: pcap_setmintocopy(0) failed: %s\n", pcap_geterr(p));
+
+    if (cfg.tx_bench) {
+        int rc = tx_bench(p, cfg.tx_bench, cfg.mss + 54);
+        pcap_close(p);
+        return rc;
+    }
+
+    /* Push the 4-tuple match down into the driver: frames we do not care about
+     * (including our own looped-back transmits) are never copied to user space. */
+    if (cfg.use_filter) {
+        char flt[192];
+        snprintf(flt, sizeof(flt),
+                 "tcp and src host %u.%u.%u.%u and src port %u "
+                 "and dst host %u.%u.%u.%u and dst port %u",
+                 (cfg.dst_ip >> 24) & 255, (cfg.dst_ip >> 16) & 255,
+                 (cfg.dst_ip >> 8) & 255, cfg.dst_ip & 255, cfg.dport,
+                 (cfg.src_ip >> 24) & 255, (cfg.src_ip >> 16) & 255,
+                 (cfg.src_ip >> 8) & 255, cfg.src_ip & 255, cfg.sport);
+        struct bpf_program fp;
+        if (pcap_compile(p, &fp, flt, 1, 0) == 0) {
+            if (pcap_setfilter(p, &fp) != 0)
+                fprintf(stderr, "note: pcap_setfilter failed: %s\n", pcap_geterr(p));
+            else
+                printf("capture filter: %s\n", flt);
+            pcap_freecode(&fp);
+        } else {
+            fprintf(stderr, "note: pcap_compile(%s) failed: %s\n", flt, pcap_geterr(p));
+        }
+    }
+
     Peer peer;
     peer.init(p);
     peer.start_rx();
@@ -1303,6 +1515,9 @@ int main(int argc, char **argv) {
     printf("mss=%d bytes=%u (%.3f MB) rx-window=%u cwnd=%s\n",
            cfg.mss, cfg.bytes, cfg.bytes / 1048576.0, cfg.rx_window,
            cfg.cwnd ? "fixed" : "slow-start");
+    printf("tx=%s (queue %d KB, sync=%d) setbuff=%d KB mintocopy0=%d\n",
+           cfg.tx_batch ? "sendqueue-batch" : "per-frame-sendpacket",
+           cfg.tx_queue_kb, cfg.tx_sync, cfg.setbuff_kb, (int)cfg.mintocopy0);
     printf("ack-mode=%s", ackmode_name[(int)cfg.ack_mode]);
     if (cfg.ack_mode == ACK_COALESCE) printf(" n=%d", cfg.ack_every);
     if (cfg.ack_mode == ACK_DELAYED)  printf(" delay=%d us", cfg.ack_delay_us);
@@ -1320,6 +1535,7 @@ int main(int argc, char **argv) {
     if (rc != 0) peer.t_end = now_ticks();
     peer.halt_rx();
     peer.report();
+    if (peer.txq) pcap_sendqueue_destroy(peer.txq);
     pcap_close(p);
     return rc;
 }
