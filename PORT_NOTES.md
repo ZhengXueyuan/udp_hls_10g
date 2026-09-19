@@ -2704,3 +2704,54 @@ bash /d/repo/ECO/udp_hls_10g/sim/p4sim/run_matrix_p4dfix.sh            # P4 15 �
 | P4 回归 | `run_matrix_p4dfix.sh` | **16/16 EXIT=0** | chain/burst200/trunc50/trunc100/halfdrop/txdrop50/gate4096/dupstorm/pcackoob/vlanchain/vlanburst/stallgate/unit_retx/unit_fifo/unit_vlan/unit_uart 全绿 (ECOMAX 恒 182, 无注入门 RETX=0) |
 | 默认 wrapper | xelab 全量 (含 HLS 网表, 无 APP_MODE) | **snapshot built** | 默认构建路径编译/elab 干净 |
 | APP_MODE wrapper | xelab 全量 (-d APP_MODE) | **snapshot built** | app 分支端口连接全部一致 |
+
+### P5a 复核轮 (审查 + 测试 agent) 发现与修复 (2026-09-19 晚)
+
+**流程**: 实现 agent 交付 Step 1-7 → 审查 agent (只读全 diff) + 测试 agent (独立复跑 + 对抗用例)
+并行 → TL 门核查 → 修复 → 复验 → 板级。
+
+**首轮全量构建失败 (TL 门核查抓到)**: `board/run_build_p5.bat` DRC `LUTLP-1` 组合环
+`u_app_pipe/m_data_r[76]_i_2` ⇒ bitgen 不跑。根因 = **W1**: `board/wrapper_p4.v` 里
+`assign app_tx_tready = app2_tready;` 与 `u_app_pipe.s_ready(app_tx_tready)` 同时驱动同一根线,
+且 APP_MODE 分支**没人驱动 `app2_tready`** (默认分支才有 `eco2_tready = txin_tready`) ⇒
+①自环 ②语义错: `axis_pipe` 正确背压 `s_ready = m_ready || !m_valid`, 退化成 `= m_ready` ⇒
+流水寄存器压着字时 app 还能再推 ⇒ **丢字**。修: `assign app2_tready = txin_tready;`。
+
+**教训 (本里程碑最值钱的一条)**: **模块级 TB 绿 ≠ wrapper 分支正确**。原 P5 门只测模块,
+APP_MODE 接线错在 xsim 里完全隐身, 直到 Vivado DRC 才炸。→ 新增
+`sim/p5sim/run_tb_p5_wrapper.bat` + `tb/tb_p5_wrapper.v` (带 `-d APP_MODE` 例化真
+`wrapper_p4`, 跑 app_pattern → axis_pipe → tcp_tx_frame → tx_arb 全链, 逐字节判据)。
+
+**审查 agent 抓到的其它项**: H1 peer 图案相位差 1 字节 (peer 先推进后取字节 / RTL 先取
+后推进 ⇒ `peer[k]==RTL[k+1]`; 板级逐字节判据会 100% 失配) — 已修并加 `--pat-selftest`
+免板自检; H2 5 个旧文件 (`tb_tcp_tx/tb_tcp_chain/tb_tcp_echo/tb_tcp_tx_dbg` + `wrapper_tcp.v`)
+未接 tcp_tx_frame 新输入 ⇒ xsim 悬空 Z 进 ackq ⇒ 纯 ACK 帧 flags/ack 半 X (P4 矩阵覆盖不到)
+— 已补齐; M1 `fin_repush` 与 `ack_req` 抢 ackq 条目 ⇒ FIN 重推**永久丢失** (关闭永不完成)
+— 清除条件加 `&& !ack_req_ok`; M3 `app_pattern` 在 `ev_down` 直接撤 `pw_valid` (无 tlast)
+⇒ AXIS 违约 + 帧器卡 S_RECV — 改为走收尾路径。
+
+**测试 agent 抓到 D1 (阻断, 可复现)**: **同槽背靠背 DEL→ADD 后 `fin_sent_r[slot]` 残留
+⇒ 连接永久不可用**。复现: `cfg_del(slot0)` 紧接 `cfg_add(slot0, 新 seq 空间)` (间隔 ~70 拍)
+→ 推 2 帧 + `CMD close` → 新会话一帧不发、第 2 个 FIN 永不到来、`app_tx_ready=0000`、
+app 已被吞 2052B 而 DUT 停在 `S_IDLE` + `pay_full=1` ⇒ **静默吞数据 + 数据面死锁**。
+边界对照: gap≈70 拍 ❌ / gap=4000 拍 ✅ (4000 拍 ≈15 次扫描, 够采到 state=0)。
+**修法**: 不依赖扫描时序 — 新增 `cfg_up/cfg_up_id` 输入 (接 `slow_cfg_adp` 的
+`ev_up/ev_slot`), cfg ADD 收尾脉冲显式清该槽 `fin_sent_r/rst_sent_r/fin_retx_pend`。
+**D2 (同源)**: `s_axis_tready` 的 S_IDLE 分支只挡 `start_data` 不挡 accept ⇒ 帧起不来却照样
+把 app 的字收进载荷 FIFO (FIFO 满 + 无人排空 = 死锁, D1 的入口) — 补
+`!fin_req[start_id] && !fin_sent_r[start_id]` 与启动门同门。
+
+**修复后复验 (TL 亲自跑)**: 对抗集 **10/10 OK** (含修前 FAIL 的 `reconn_fast`;
+顺带新发现 D1 的一个连带效应: 数据面自愈后 `reconn_fast` 用例的 `fin_sent=1` 属新会话正常态);
+P4 矩阵 **16/16 EXIT=0**; P5 四门 OK; 重构建 **WNS +0.264 / TNS 0 / WHS +0.019**;
+重烧板子复验: app TX 1MB 逐字节零失配 + app RX 32KB `MM=0000` + 计数器自洽。
+
+**僵尸进程坑**: 首轮矩阵门失败 (`chain/burst200` EXIT=1) 与测试 agent 的 4 门失败
+**都不是判据不符**, 而是残留 `xsim/xsimk/xelab` 进程占住 `xsim.dir` (链接期
+`Unable to remove previous simulation file`)。教训: **并行跑仿真必须用独立目录**,
+且失败先 `tasklist | grep xsim` 排查是不是文件锁。
+
+### P5a 提交
+- `6121050` cpp_peer: dup-ACK 标准语义 + 图案相位修正 + `--rx-only/--expect-pattern`
+- `8daa6bd` P5a: app interface 数据面 + 板级双向验证 (35 文件 +5867 行)
+- `706ee8c` README: P5a 收官 + P5b-P5e 分解

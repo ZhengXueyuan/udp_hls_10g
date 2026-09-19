@@ -147,20 +147,33 @@ BYTES/DELAY 经 pcstall.memh 同源传入 TB 与 checker)。
 - `capture_rate_test.ps1 [MB]` — tshark 抓包 + 怪帧/重传统计
 - `board_diag18_test.py [秒]` — COM8 UART 快照 + 并行抓包
 
-**构建/烧录** (`board/`):
+**构建/烧录** (`board/`) — 两套独立工程, 位流互不覆盖:
 ```bash
-cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_build_p4.bat'      # Vivado 合成+实现+bitstream
+cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_build_p4.bat'      # 默认构建 (echo 数据面) → p4_prj
 cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_program_p4.bat'    # JTAG 烧录 (1MHz)
+cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_build_p5.bat'      # APP_MODE (app 接口) → p5_prj
+cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_program_p5.bat'
 ```
+**P5 app 门** (`sim/p5sim/`, 独立目录): `run_tb_p5_app.bat` (1MB 图案逐字节) /
+`run_tb_p5_wrapper.bat` (**wrapper APP_MODE 全链 — 接线错误只有它能抓**) /
+`run_tb_p5_status.bat` / `run_tb_p5_adv.bat <case>` (对抗集 10 例)。
 
 ## 遗留
 
-- P5 app interface / P6 10G 未开工; DDR 留给 10G 大窗口 (BRAM ring 64KB/连接已用 69% BRAM)
+- P5b-P5e 未开工 (窗口闭环 / 关闭语义完善 / 多连接加固 / UDP app 接口);
+  P6 10G 未开工; DDR 留给 10G 大窗口 (BRAM ring 64KB/连接已用 69% BRAM)
+- **app 模式窗口仍是静态 48KB**: app 不消费时靠既有 frame_fifo 硬扛 (P5b 做占用→窗口闭环)
+- 板侧既有病理 (P4 起就有, 非 P5 引入): 偶发突发丢帧 + TX 静默 ~200ms
+  (因果链推断 = 乱序 dup-ACK 请求 → `ackq` 8 深溢出 → 对端只能等 200ms RTO);
+  P5b 对症 = ackq 加深 + `stat_ack/drop` 接进 UART 快照 + 窗口闭环
 - SACK、拥塞控制未实现 (echo 场景决策); TCP 主动连接/VLAN fast path 已补 (P4d),
   板级实测待做 (主动连接默认宏关, VLAN 无真实带 tag 对端)
 - 10G 风险预记: VLAN 剥离的 tag 字气泡 + 尾拍停靠 (1G 由 mac 8 深 FIFO + IFG 吸收)
   在 10G 线速会吃掉 IFG 的 2/3 — P6 需复核 (与 rx_classify 已知 min-frame 丢帧叠加)
+- **测试工具余量 (P6 前哨)**: C++ 合成对端的 flush 路径上限 ~191k 帧/s (≈1.1 Gbps 载荷),
+  实测峰值 147.9k fps = 上限 78% (双向双帧/段需 155k fps)。**1G 够用但只剩 ~20% 余量,
+  10G 必须换工具** (`pcap_sendqueue_transmit(sync=1)` + 逐帧 `pcap_next_ex` 的结构撑不住)
 - PC 侧网卡 (Killer E5000B) 驱动重启的怪帧/半帧由 RTL 三层防御兜底, 对端根因未深究;
   PC 网卡线级截断/线级丢帧是 1G 线速不可达的最终瓶颈 (FPGA 侧可做项已尽)
-- wrapper_tcp.v (P3 目标) 端口过时
+- wrapper_tcp.v (P3 目标) 端口过时 (仅历史参考; 新接口已接线但 tb 无覆盖)
 - 诊断脚手架 (UART/trace/LED) 保留为长期板级诊断接口
