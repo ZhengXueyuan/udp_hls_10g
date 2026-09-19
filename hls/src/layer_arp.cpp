@@ -59,6 +59,19 @@ static bool l1_lookup(ap_uint<32> ip, mac_addr_t &mac) {
 }
 
 //=============================================================================
+// P5: L1-only lookup (8-entry unrolled compare, ~1 cycle) — for callers that
+// run EVERY top-level pass. arp_lookup()'s L2 stage is a sequential 256-entry
+// BRAM scan (~800 cycles): calling it per pass inflates the whole HLS pass
+// 30x and throttles the slow path to 1 byte/pass (xsim PROBE measurement:
+// passive handshake 3.7k -> 55k cycles). Learned entries land in L1 via
+// arp_update(), so the L1 check alone is enough for a prompt hit; the full
+// arp_lookup() is done on the periodic retry tick.
+//=============================================================================
+bool arp_lookup_l1(ap_uint<32> ip, mac_addr_t &mac) {
+    return l1_lookup(ip, mac);
+}
+
+//=============================================================================
 // L1 insert: write new entry. If full, evict LRU (max age) to L2.
 //=============================================================================
 static void l1_insert(ap_uint<32> ip, mac_addr_t mac) {

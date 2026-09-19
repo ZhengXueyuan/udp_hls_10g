@@ -234,6 +234,48 @@ module tb_p4_chain;
     // 停滞 -> RTO 风暴 (板级 17.6Mbps 暴跌复现); 修复后应正常推进。
     reg        pcack_oob;
 
+    // ================= P5 PCACTIVE 主动连接反应式模型 (+PCACTIVE) =================
+    // HLS 侧 ACTIVE_CONNECT=1 时复位后自发 SYN (sport 1F90 / dport 2382 /
+    // flags 02, seq = ACTIVE_ISS 0x89ABCDEF) — 拍级不可预期, 静态刺激不可行。
+    // 本模型在 GMII TX 捕获板侧主动连接帧并按需注入:
+    //   (1) 板上 ARP who-has (ARP 未命中) -> 注入 ARP reply (spa=192.168.100.1,
+    //       sha=PC_MAC) 教 MAC;
+    //   (2) 板上 SYN -> 记 seq, 注入 SYN+ACK (seq=PCA_PEER_ISS, ack=SYN.seq+1,
+    //       doff=6 带 MSS=1460; FCS 用 crc32b 算);
+    //   (3) 板上纯 ACK (seq=SYN.seq+1, ack=PCA_PEER_ISS+1) -> 注入 100B 数据段
+    //       (seq=PCA_PEER_ISS+1, ack=ACTIVE_ISS+1, 载荷 = payload(100)) ->
+    //       板侧 fast path CAM/TCB (HLS cfg 记录写) echo (seq=ACTIVE_ISS+1)。
+    // 判据: 全链完成后 done; resp 落 PCA/PCACAM 行供 check_active 核验。
+    // 与 PCACK 互斥 (各自独立注入缓冲, 不要同开)。
+    localparam [31:0] PCA_PEER_ISS = 32'h77000000;   // 对端 ISS (TB 固定值)
+    localparam [31:0] PCA_MY_ISS   = 32'h89ABCDEF;   // HLS ACTIVE_ISS
+    localparam [31:0] PCA_ACT_IP   = 32'hC0A86463;   // 192.168.100.99 -- MUST
+    //   equal the netlist's ACTIVE_IP (hls/run_hls_active.tcl passes
+    //   -DACTIVE_IP=0xC0A86463; the layer_tcp.cpp default 192.168.100.1 is
+    //   pre-learned by the stimulus' ARP request, which would skip the
+    //   who-has path this gate is meant to exercise).
+    localparam [15:0] PCA_ACT_PORT = 16'h2382;       // 9090 = HLS ACTIVE_PORT
+    localparam [15:0] PCA_MY_PORT  = 16'h1F90;       // 8080 = HLS TCP_PORT_ECHO
+    reg        pca_en;
+    reg        pca_arp_req, pca_arp_inj;    // who-has 捕获 / reply 已注入
+    reg        pca_syn_seen, pca_synack_inj;
+    reg        pca_ack_seen, pca_data_inj;
+    reg        pca_echo_seen, pca_echo_ok;
+    reg        pca_to;                      // 超时 (SYN 未出现, 防挂)
+    reg [31:0] pca_iss;                     // 捕获的板上 SYN seq
+    reg [31:0] pca_k_syn;                   // SYN 捕获拍 (报告用)
+    reg        pca_play;                    // 正在播放注入帧
+    reg [8:0]  pca_idx, pca_len, pca_tot;   // 播放索引 / 帧体字节 / 总拍数
+    reg [7:0]  pca_buf [0:255];             // 8 前导 + 帧体 + FCS
+    reg [31:0] pca_crc;
+    integer    pca_i, pca_j;
+    reg [31:0] pca_wait;                    // 尾窗超时计数 (拍)
+    // 待注入请求 (单一来源: 捕获块置位 / 驱动块置注入位) 与主动链完成判据
+    wire       pca_pend = pca_en && ((pca_arp_req && !pca_arp_inj) ||
+                                     (pca_syn_seen && !pca_synack_inj) ||
+                                     (pca_ack_seen && !pca_data_inj));
+    wire       pca_done = pca_echo_seen || pca_to;
+
     // ---- P4b-7 P3: PCACK 空洞语义 (exp_seq/hole) + TXDROP 故障注入 ----
     // P4b-7-P5: exp_seq 静态建于复位 — 真实对端从握手起就知其期望 seq =
     // 我方首数据帧 seq = HLS ISS+1 (gen_stim_p4_chain.py HLS_ISS=0x12345678,
@@ -335,6 +377,160 @@ module tb_p4_chain;
             crc32b = cc;
         end
     endfunction
+
+    // ---- P5 PCACTIVE 注入帧组帧 (kind: 0=ARP reply, 1=SYN+ACK, 2=data) ----
+    // SIM active-connect target IP = 192.168.100.99 (PCA_ACT_IP): an address the
+    // static stimulus never advertises, which forces the HLS ARP who-has query
+    // path (the default macro ACTIVE_IP=192.168.100.1 would be pre-learned from
+    // the stimulus' first ARP request, leaving the query branch unexercised).
+    // The sim netlist must be built with the same value
+    // (-DACTIVE_IP=0xC0A86463, see hls/run_hls_active.tcl) -- the SYN capture
+    // checks dst IP == PCA_ACT_IP, so a mismatch fails loudly.
+    function [7:0] pca_dbyte;      // data payload byte i = (i*7+3)&0xFF
+        input [7:0] i;             // (same generator as gen_stim payload(n))
+        pca_dbyte = (i * 8'd7 + 8'd3);
+    endfunction
+
+    function [15:0] pca_ipcs;      // IP header csum (192.168.100.99 -> .2)
+        input [15:0] tot;          // IP total_len
+        reg [31:0] s;
+        begin
+            s = 32'h4500 + {16'b0, tot} + 32'h7777 + 32'h0000 + 32'h4006 +
+                32'hC0A8 + 32'h6463 + 32'hC0A8 + 32'h6402;
+            s = (s & 32'hFFFF) + (s >> 16);
+            s = (s & 32'hFFFF) + (s >> 16);
+            pca_ipcs = ~s[15:0];
+        end
+    endfunction
+
+    function [7:0] pca_byte;
+        input [1:0]  kind;
+        input [8:0]  idx;
+        input [15:0] ipcs;
+        input [15:0] tot;
+        input [31:0] ackf;
+        input [31:0] seqf;
+        reg [8:0] b;
+        begin
+            b = idx;
+            pca_byte = 8'h00;
+            case (b)      // ethernet header (all kinds): dst=DUT_MAC, src=PC_MAC
+                9'd0:  pca_byte = 8'h00;  9'd1:  pca_byte = 8'h0A;
+                9'd2:  pca_byte = 8'h35;  9'd3:  pca_byte = 8'h01;
+                9'd4:  pca_byte = 8'hFE;  9'd5:  pca_byte = 8'hC0;
+                9'd6:  pca_byte = 8'h11;  9'd7:  pca_byte = 8'h22;
+                9'd8:  pca_byte = 8'h33;  9'd9:  pca_byte = 8'h44;
+                9'd10: pca_byte = 8'h55;  9'd11: pca_byte = 8'h66;
+                default: ;
+            endcase
+            if (b >= 9'd12) begin
+            if (kind == 2'd0) begin            // ARP reply: spa = PCA_ACT_IP
+                case (b)
+                    9'd12: pca_byte = 8'h08; 9'd13: pca_byte = 8'h06;
+                    9'd14: pca_byte = 8'h00; 9'd15: pca_byte = 8'h01;
+                    9'd16: pca_byte = 8'h08; 9'd17: pca_byte = 8'h00;
+                    9'd18: pca_byte = 8'h06; 9'd19: pca_byte = 8'h04;
+                    9'd20: pca_byte = 8'h00; 9'd21: pca_byte = 8'h02;
+                    9'd22: pca_byte = 8'h11; 9'd23: pca_byte = 8'h22;
+                    9'd24: pca_byte = 8'h33; 9'd25: pca_byte = 8'h44;
+                    9'd26: pca_byte = 8'h55; 9'd27: pca_byte = 8'h66;
+                    9'd28: pca_byte = PCA_ACT_IP[31:24];
+                    9'd29: pca_byte = PCA_ACT_IP[23:16];
+                    9'd30: pca_byte = PCA_ACT_IP[15:8];
+                    9'd31: pca_byte = PCA_ACT_IP[7:0];
+                    9'd32: pca_byte = 8'h00; 9'd33: pca_byte = 8'h0A;
+                    9'd34: pca_byte = 8'h35; 9'd35: pca_byte = 8'h01;
+                    9'd36: pca_byte = 8'hFE; 9'd37: pca_byte = 8'hC0;
+                    9'd38: pca_byte = 8'hC0; 9'd39: pca_byte = 8'hA8;
+                    9'd40: pca_byte = 8'h64; 9'd41: pca_byte = 8'h02;
+                    default: pca_byte = 8'h00;     // 42..59 pad
+                endcase
+            end else begin
+                case (b)       // IP header (kinds 1/2) + first 20B of TCP header
+                    9'd12: pca_byte = 8'h08; 9'd13: pca_byte = 8'h00;
+                    9'd14: pca_byte = 8'h45; 9'd15: pca_byte = 8'h00;
+                    9'd16: pca_byte = tot[15:8]; 9'd17: pca_byte = tot[7:0];
+                    9'd18: pca_byte = 8'h77; 9'd19: pca_byte = 8'h77;
+                    9'd20: pca_byte = 8'h00; 9'd21: pca_byte = 8'h00;
+                    9'd22: pca_byte = 8'h40; 9'd23: pca_byte = 8'h06;
+                    9'd24: pca_byte = ipcs[15:8]; 9'd25: pca_byte = ipcs[7:0];
+                    9'd26: pca_byte = 8'hC0; 9'd27: pca_byte = 8'hA8;
+                    9'd28: pca_byte = 8'h64; 9'd29: pca_byte = 8'h63;
+                    9'd30: pca_byte = 8'hC0; 9'd31: pca_byte = 8'hA8;
+                    9'd32: pca_byte = 8'h64; 9'd33: pca_byte = 8'h02;
+                    9'd34: pca_byte = 8'h23; 9'd35: pca_byte = 8'h82;  // sport 9090
+                    9'd36: pca_byte = 8'h1F; 9'd37: pca_byte = 8'h90;  // dport 8080
+                    9'd38: pca_byte = (kind == 2'd1) ? PCA_PEER_ISS[31:24] : seqf[31:24];
+                    9'd39: pca_byte = (kind == 2'd1) ? PCA_PEER_ISS[23:16] : seqf[23:16];
+                    9'd40: pca_byte = (kind == 2'd1) ? PCA_PEER_ISS[15:8]  : seqf[15:8];
+                    9'd41: pca_byte = (kind == 2'd1) ? PCA_PEER_ISS[7:0]   : seqf[7:0];
+                    9'd42: pca_byte = ackf[31:24]; 9'd43: pca_byte = ackf[23:16];
+                    9'd44: pca_byte = ackf[15:8];  9'd45: pca_byte = ackf[7:0];
+                    9'd46: pca_byte = (kind == 2'd1) ? 8'h60 : 8'h50;  // doff
+                    9'd47: pca_byte = (kind == 2'd1) ? 8'h12 : 8'h18;  // SYN|ACK / PSH|ACK
+                    9'd48: pca_byte = 8'h40; 9'd49: pca_byte = 8'h00;  // wnd 0x4000
+                    9'd50: pca_byte = 8'h00; 9'd51: pca_byte = 8'h00;  // tcp csum (0)
+                    9'd52: pca_byte = 8'h00; 9'd53: pca_byte = 8'h00;  // urg
+                    9'd54: pca_byte = (kind == 2'd1) ? 8'h02 : pca_dbyte(b[7:0] - 8'd54);
+                    9'd55: pca_byte = (kind == 2'd1) ? 8'h04 : pca_dbyte(b[7:0] - 8'd54);
+                    9'd56: pca_byte = (kind == 2'd1) ? 8'h05 : pca_dbyte(b[7:0] - 8'd54);
+                    9'd57: pca_byte = (kind == 2'd1) ? 8'hB4 : pca_dbyte(b[7:0] - 8'd54);
+                    default: pca_byte = (kind == 2'd1) ? 8'h00 : pca_dbyte(b[7:0] - 8'd54);
+                endcase
+            end
+            end
+        end
+    endfunction
+
+    task pca_fill;   // append FCS over the frame body (on-wire LSB-first)
+        begin
+            pca_crc = 32'hFFFFFFFF;
+            for (pca_i = 0; pca_i < pca_len; pca_i = pca_i + 1)
+                pca_crc = crc32b(pca_crc, pca_buf[8 + pca_i]);
+            pca_crc = ~pca_crc;
+            pca_buf[8 + pca_len]     = pca_crc[7:0];
+            pca_buf[8 + pca_len + 1] = pca_crc[15:8];
+            pca_buf[8 + pca_len + 2] = pca_crc[23:16];
+            pca_buf[8 + pca_len + 3] = pca_crc[31:24];
+        end
+    endtask
+
+    task pca_arm;    // build one frame into pca_buf and start playing it
+        input [1:0]  kind;
+        input [7:0]  dlen;    // data payload bytes (kind 2)
+        input [15:0] tot;     // IP total_len (kinds 1/2)
+        input [31:0] ackf;
+        input [31:0] seqf;
+        begin
+            for (pca_i = 0; pca_i < 8; pca_i = pca_i + 1)
+                pca_buf[pca_i] = (pca_i == 7) ? 8'hD5 : 8'h55;
+            pca_len = (kind == 2'd2) ? (9'd54 + dlen) : 9'd60;
+            for (pca_i = 0; pca_i < pca_len; pca_i = pca_i + 1)
+                pca_buf[8 + pca_i] = pca_byte(kind, pca_i[8:0], pca_ipcs(tot),
+                                              tot, ackf, seqf);
+            pca_fill;
+            // 12 IFG + (8 前导 + pca_len 帧体 + 4 FCS) + 12 IFG
+            pca_tot  = pca_len + 9'd36;
+            pca_idx  = 9'd0;
+            pca_play = 1'b1;
+        end
+    endtask
+
+    task pca_do_inject;   // serve the oldest pending request, one frame per call
+        begin
+            if (pca_arp_req && !pca_arp_inj) begin
+                pca_arm(2'd0, 8'd0, 16'd0, 32'h0, 32'h0);
+                pca_arp_inj = 1'b1;
+            end else if (pca_syn_seen && !pca_synack_inj) begin
+                pca_arm(2'd1, 8'd0, 16'd44, pca_iss + 32'd1, 32'h0);
+                pca_synack_inj = 1'b1;
+            end else if (pca_ack_seen && !pca_data_inj) begin
+                pca_arm(2'd2, 8'd100, 16'd140, pca_iss + 32'd1,
+                        PCA_PEER_ISS + 32'd1);
+                pca_data_inj = 1'b1;
+            end
+        end
+    endtask
 
     mac_rx_64 u_mac (
         .clk(clk), .rst_n(rst_n),
@@ -639,6 +835,8 @@ module tb_p4_chain;
             i <= 0; k <= 32'hFFFFFFFF; rx_d <= 8'h07; rx_dv <= 0; rx_er <= 0; done <= 0;
             cphase <= 0;
             inj_play <= 0; inj_idx <= 0; inj_done <= 0; gap_cnt <= 0;
+            pca_play <= 0; pca_idx <= 0; pca_len <= 0; pca_tot <= 0;
+            pca_arp_inj <= 0; pca_synack_inj <= 0; pca_data_inj <= 0;
             cfg_wr <= 0; cfg_addr <= 0; cfg_sip <= 0; cfg_dip <= 0;
             cfg_sport <= 0; cfg_dport <= 0; cfg_dmac <= 0;
             cfg_upd_wr <= 0; cfg_upd_id <= 0; cfg_upd_sel <= 0; cfg_upd_val <= 0;
@@ -684,6 +882,24 @@ module tb_p4_chain;
                     rx_er <= 1'b0;
                     if (inj_idx == 7'd95) inj_play <= 1'b0;
                     inj_idx <= inj_idx + 7'd1;
+                end else if (pca_play) begin
+                    // P5: 注入帧播放 (12 拍 IFG + 帧体/FCS + 12 拍 IFG, i 冻结)。
+                    // 与 PCACK 注入同构: 前后各 12 拍 IFG 防帧融合 (前向融进
+                    // 上一刺激帧 / 反向融进下一刺激帧都整帧双丢)。
+                    if (pca_idx < 9'd12) begin
+                        rx_d  <= 8'h07;
+                        rx_dv <= 1'b0;
+                    end else if (pca_idx < (pca_len + 9'd24)) begin
+                        // 12 IFG + 8 前导 + pca_len 帧体 + 4 FCS
+                        rx_d  <= pca_buf[pca_idx - 9'd12];
+                        rx_dv <= 1'b1;
+                    end else begin
+                        rx_d  <= 8'h07;
+                        rx_dv <= 1'b0;
+                    end
+                    rx_er <= 1'b0;
+                    if (pca_idx == (pca_tot - 9'd1)) pca_play <= 1'b0;
+                    pca_idx <= pca_idx + 9'd1;
                 end else if (i < nstim) begin
                     if (pcack_en && inj_pend && !stim_v[i][0] &&
                         gap_cnt >= 4'd11) begin
@@ -711,6 +927,15 @@ module tb_p4_chain;
                         inj_play <= 1'b1;
                         inj_idx  <= 7'd0;
                         rx_d  <= stim_d[i];      // 本拍照旧播间隙字节并消耗之
+                        rx_dv <= stim_v[i][0];
+                        rx_er <= stim_e[i][0];
+                        i <= i + 1;
+                    end else if (pca_en && pca_pend && !stim_v[i][0] &&
+                                 gap_cnt >= 4'd11) begin
+                        // P5: 帧间隙注入主动连接应答帧 (ARP reply / SYN+ACK /
+                        // 数据段)。本拍仍播间隙字节并消耗, 下拍起 12 拍 IFG。
+                        pca_do_inject;
+                        rx_d  <= stim_d[i];
                         rx_dv <= stim_v[i][0];
                         rx_er <= stim_e[i][0];
                         i <= i + 1;
@@ -747,11 +972,20 @@ module tb_p4_chain;
                     inj_idx  <= 7'd0;
                     rx_dv <= 1'b0;   // 本拍即入 IFG
                     rx_er <= 1'b0;
+                end else if (pca_en && pca_pend && gap_cnt >= 4'd11) begin
+                    // P5: 静态流已尽, 尾窗注入 (线上已空闲 → gap_cnt 满)
+                    pca_do_inject;
+                    rx_dv <= 1'b0;
+                    rx_er <= 1'b0;
+                    if (gap_cnt != 4'hF) gap_cnt <= gap_cnt + 4'd1;
                 end else begin
                     rx_dv <= 0; rx_er <= 0;
                     if (gap_cnt != 4'hF) gap_cnt <= gap_cnt + 4'd1;
                 end
-                if (i >= nstim && !inj_pend && !inj_play) done <= 1;
+                // P5: 主动链未完成 (或注入帧在播) 时不收尾 — done 后 initial 块
+                // 才写 resp (PCA/PCACAM 行), 必须等回显落地
+                if (i >= nstim && !inj_pend && !inj_play && !pca_play &&
+                    !(pca_en && !pca_done)) done <= 1;
             end
         end
     end
@@ -760,6 +994,7 @@ module tb_p4_chain;
         clk = 0; rst_n = 0;
         pcack_en = $test$plusargs("PCACK");
         pcack_oob = $test$plusargs("PCACKOOB");
+        pca_en = $test$plusargs("PCACTIVE");
         inj_wnd = $test$plusargs("PCWND1K") ? 16'h0010 : 16'h4000;
         txdrop_n1 = 0; txdrop_n2 = 0;
         // TXDROP 索引经 txdrop.memh 传入 (run_tb_p4_burst.bat 由 %7/%8 生成):
@@ -817,6 +1052,21 @@ module tb_p4_chain;
                 u_tcb.rcv_wnd_r[1], u_tcb.snd_wnd_r[1], u_tcb.state_r[1]);
         $fwrite(fd, "SLOWRX %0d %0d\n", srx_commit, srx_drop);
         $fwrite(fd, "SLOWTX %0d %0d\n", stx_frames, stx_purge);
+        // P5 PCACTIVE: 主动链事件 (arp_req/arp_inj/syn/synack/ack/data/echo/ok/
+        // iss/k_syn/to) + 每槽 CAM 4 元组与 TCB 终态 (槽位由 HLS 选 — 主动连接
+        // 与被动 conn0 共存, 判据按槽定位)
+        if (pca_en) begin
+            $fwrite(fd, "PCA %0d %0d %0d %0d %0d %0d %0d %0d %0d %08h %0d\n",
+                    pca_arp_req, pca_arp_inj, pca_syn_seen, pca_synack_inj,
+                    pca_ack_seen, pca_data_inj, pca_echo_seen, pca_echo_ok,
+                    pca_to, pca_iss, pca_k_syn);
+            for (pca_j = 0; pca_j < 3; pca_j = pca_j + 1)
+                $fwrite(fd, "PCACAM %0d %08h %08h %04h %04h %012h %0d %08h %08h\n",
+                        pca_j, u_cam.sip_r[pca_j], u_cam.dip_r[pca_j],
+                        u_cam.sport_r[pca_j], u_cam.dport_r[pca_j],
+                        u_cam.dmac_r[pca_j], u_tcb.state_r[pca_j],
+                        u_tcb.rcv_nxt_r[pca_j], u_tcb.snd_nxt_r[pca_j]);
+        end
         $fwrite(fd, "STATS_MAC %0d %0d %0d\n", mac_stat_frames, mac_stat_abort,
                 tx_stat_eend);
         // P4b-7-P6: 截断注入参数 + 截断支计数 + echo 出口最长词串
@@ -830,6 +1080,11 @@ module tb_p4_chain;
         if (hd_n > 0)
             $display("HALFDROP n=%0d k=%0d fired=%0d ECOMAX=%0d TXSTUCK=%0d (冻结哨兵 >1000 拍)",
                      hd_n, hd_k, hd_fired, eco_max, tdstk_max);
+        if (pca_en)
+            $display("PCACTIVE arp_req=%0d arp_inj=%0d syn=%0d synack=%0d ack=%0d data=%0d echo=%0d ok=%0d iss=%08h k_syn=%0d to=%0d",
+                     pca_arp_req, pca_arp_inj, pca_syn_seen, pca_synack_inj,
+                     pca_ack_seen, pca_data_inj, pca_echo_seen, pca_echo_ok,
+                     pca_iss, pca_k_syn, pca_to);
         $display("DONE rx(pass=%0d nm=%0d ack=%0d) tx(fr=%0d ack=%0d) eco(echo=%0d) slow(cmt=%0d drp=%0d tx=%0d pg=%0d)",
                  rx_stat_pass, rx_stat_nonmatch, rx_stat_ack,
                  tx_stat_frames, tx_stat_ack, eco_stat_echo,
@@ -965,6 +1220,8 @@ module tb_p4_chain;
             echo_seen <= 0; inj_ack_val <= 0;
             exp_seq <= 32'h12345678 + 32'd1;   // HLS_ISS+1 = 首数据帧 seq
             hole <= 0;
+            pca_arp_req <= 0; pca_syn_seen <= 0; pca_iss <= 0; pca_k_syn <= 0;
+            pca_ack_seen <= 0; pca_echo_seen <= 0; pca_echo_ok <= 0;
         end else begin
             tx_en_d <= gmii_tx_en;
             if (gmii_tx_en) begin
@@ -998,7 +1255,59 @@ module tb_p4_chain;
                         inj_ack_val <= exp_seq;
                     end
                 end
+                // ---- P5 PCACTIVE: 板侧主动连接帧捕获 (帧尾拍 cap[0..47] 稳定) ----
+                if (pca_en) begin
+                    // (a) ARP who-has: 0806 / op=1 / target ip = PCA_ACT_IP
+                    //     (HLS 查 ARP 表未命中 → 先问 MAC, 再发 SYN)
+                    if (txbc >= 6'd48 && cap[12] == 8'h08 && cap[13] == 8'h06 &&
+                        cap[20] == 8'h00 && cap[21] == 8'h01 &&
+                        {cap[38], cap[39], cap[40], cap[41]} == PCA_ACT_IP)
+                        pca_arp_req <= 1'b1;
+                    // (b) 主动 SYN: 0800 / proto6 / sport 1F90 / dport 2382 /
+                    //     dst ip = ACTIVE_IP / flags 02 — 记 seq (SYN+ACK 的 ack)
+                    if (txbc >= 6'd48 && cap[12] == 8'h08 && cap[13] == 8'h00 &&
+                        cap[23] == 8'h06 && cap[34] == 8'h1F && cap[35] == 8'h90 &&
+                        cap[36] == 8'h23 && cap[37] == 8'h82 &&
+                        {cap[30], cap[31], cap[32], cap[33]} == PCA_ACT_IP &&
+                        cap[47] == 8'h02) begin
+                        pca_syn_seen <= 1'b1;
+                        pca_iss      <= {cap[38], cap[39], cap[40], cap[41]};
+                        pca_k_syn    <= k;
+                    end
+                    // (c) 握手后纯 ACK: seq = ISS+1, ack = PEER_ISS+1, flags 10
+                    if (txbc >= 6'd48 && cap[12] == 8'h08 && cap[13] == 8'h00 &&
+                        cap[23] == 8'h06 && cap[34] == 8'h1F && cap[35] == 8'h90 &&
+                        cap[36] == 8'h23 && cap[37] == 8'h82 &&
+                        cap[47] == 8'h10 && pca_synack_inj &&
+                        {cap[38], cap[39], cap[40], cap[41]} == (pca_iss + 32'd1) &&
+                        {cap[42], cap[43], cap[44], cap[45]} ==
+                            (PCA_PEER_ISS + 32'd1))
+                        pca_ack_seen <= 1'b1;
+                    // (d) 数据段 echo (fast path 数据面): seq = ISS+1,
+                    //     ack = PEER_ISS+101, ip total = 140 (100B 载荷)
+                    if (txbc >= 6'd48 && cap[12] == 8'h08 && cap[13] == 8'h00 &&
+                        cap[23] == 8'h06 && cap[34] == 8'h1F && cap[35] == 8'h90 &&
+                        cap[36] == 8'h23 && cap[37] == 8'h82 && cap[47] == 8'h18 &&
+                        pca_data_inj &&
+                        {cap[38], cap[39], cap[40], cap[41]} == (pca_iss + 32'd1)) begin
+                        pca_echo_seen <= 1'b1;
+                        if ({cap[42], cap[43], cap[44], cap[45]} ==
+                                (PCA_PEER_ISS + 32'd101) &&
+                            {cap[16], cap[17]} == 16'd140)
+                            pca_echo_ok <= 1'b1;
+                    end
+                end
             end
+        end
+    end
+
+    // ---- P5 PCACTIVE 尾窗超时 (SYN 从未出现 / 序列卡住 — 防永久挂起) ----
+    always @(posedge clk) begin
+        if (!rst_n) begin
+            pca_wait <= 0; pca_to <= 0;
+        end else if (pca_en && !pca_echo_seen && i >= nstim) begin
+            pca_wait <= pca_wait + 32'd1;
+            if (pca_wait > 32'd250000) pca_to <= 1'b1;
         end
     end
 
@@ -1082,15 +1391,18 @@ module tb_p4_chain;
         end
     end
 
-    // ---- P4b-6 排障: HLS 内部 mac_rx 状态机窥探 (SYN 处理卡死定位) ----
-    reg [2:0] mrx_prev = 3'b111;
+    // ---- P4b-6 排障: HLS 顶层 FSM 状态窥探 (SYN 处理卡死定位) ----
+    // 顶层 ap_CS_fsm 在任意网表里都存在, 不绑定子模块实例号 (子模块
+    // fu_xxxx 的编号随 HLS 输入变化: 默认网表 fu_1620 -> fu_1641,
+    // ACTIVE 网表 fu_1657 — 用宏区分的老做法一改源码就 elaboration 失败)。
+    wire [15:0] HLS_FSM_ST = u_hls.ap_CS_fsm;
+    reg [15:0] mrx_prev = 16'hFFFF;
     always @(posedge clk) begin
         if (rst_n && $test$plusargs("PROBE")) begin
-            if (u_hls.grp_mac_rx_process_fu_1620.state_1 != mrx_prev) begin
-                $display("MACRXST k=%0d st=%0d -> %0d (rdy=%b)",
-                         k, mrx_prev, u_hls.grp_mac_rx_process_fu_1620.state_1,
-                         hls_rx_tready);
-                mrx_prev <= u_hls.grp_mac_rx_process_fu_1620.state_1;
+            if (HLS_FSM_ST != mrx_prev) begin
+                $display("HLSTOPST k=%0d st=%04h -> %04h (rdy=%b)",
+                         k, mrx_prev, HLS_FSM_ST, hls_rx_tready);
+                mrx_prev <= HLS_FSM_ST;
             end
         end
     end

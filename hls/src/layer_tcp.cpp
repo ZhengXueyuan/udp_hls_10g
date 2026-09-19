@@ -45,13 +45,47 @@ bool arp_lookup(arp_entry_t *table, ap_uint<32> ip, mac_addr_t &mac);
 #define TCP_ALPHA_SHIFT  3   // srtt weight = 1/8
 #define TCP_BETA_SHIFT   2   // rttvar weight = 1/4
 
+//=============================================================================
+// P5: TCP 主动连接 (客户端) — 编译期开关 (默认 0 = 关; 慢路径行为与 P4 一致)
+//=============================================================================
+// 复位后等 ACTIVE_DELAY 拍 (与 dhcp_delay 同量纲 = 主循环 pass 数, 板级约 2s)
+// 等 ARP/PHY 就绪, 自动向 ACTIVE_IP:ACTIVE_PORT 发起主动连接:
+//   ARP 前置 (无条目先发 who-has, 限次) -> 占空闲槽 (与被动监听共存) ->
+//   发 SYN (seq = ACTIVE_ISS, 带 MSS 选项) -> T_SYN_SENT 收 SYN+ACK ->
+//   cfg_write(ADD) 推 fast path -> 纯 ACK -> 建连后数据面交给 fast path。
+// 失败 (ARP 限次 / SYN 重传超限 / RST) 释放槽位回等待, 之后可再试。
+// 编译期宏须与 TB (+PCACTIVE 模型) / 板级对端保持一致。
+#ifndef ACTIVE_CONNECT
+#define ACTIVE_CONNECT  0
+#endif
+#ifndef ACTIVE_IP
+#define ACTIVE_IP       0xC0A86401   // 192.168.100.1
+#endif
+#ifndef ACTIVE_PORT
+#define ACTIVE_PORT     9090         // 0x2382
+#endif
+#ifndef ACTIVE_ISS
+#define ACTIVE_ISS      0x89ABCDEF   // 我方 ISS (固定值; TB PCACTIVE 模型按此判 ACK)
+#endif
+#ifndef ACTIVE_DELAY
+#define ACTIVE_DELAY    250000000    // 上电等待 (pass 数; 板级 ~2s @125MHz)
+#endif
+#ifndef ACTIVE_ARP_INTERVAL
+#define ACTIVE_ARP_INTERVAL 5000000  // ARP who-has 重发间隔 (pass 数; 板级 ~40ms)
+#endif
+#ifndef ACTIVE_ARP_RETRY
+#define ACTIVE_ARP_RETRY 3           // ARP who-has 限次 (对齐 TCP_MAX_RETRY)
+#endif
+
 #define TCP_FIN 0x01
 #define TCP_SYN 0x02
 #define TCP_RST 0x04
 #define TCP_PSH 0x08
 #define TCP_ACK 0x10
 
-enum TCP_ST { T_FREE=0, T_LISTEN=1, T_SYN_RCVD=2, T_ESTABLISHED=3, T_LAST_ACK=4 };
+// P5: T_SYN_SENT = 主动连接已发 SYN 等 SYN+ACK (被动路径不经过此状态)
+enum TCP_ST { T_FREE=0, T_LISTEN=1, T_SYN_RCVD=2, T_ESTABLISHED=3, T_LAST_ACK=4,
+              T_SYN_SENT=5 };
 
 struct tcp_conn_t {
     // Connection identity
@@ -313,6 +347,9 @@ static void tcp_maintenance(uint32_t *buf, mac_tx_req_t &tx_req){
         int8_t i=tcp_retrans_cid;
         tcp_conn_t &c=tcp_conn[i];
         if(c.state==T_SYN_RCVD)tcp_send(buf,tx_req,i,TCP_SYN|TCP_ACK,NULL,0);
+        // P5: 主动 SYN 重传 (seq 退一拍: tcp_send 对 SYN 会再 +1, 同 T_SYN_RCVD
+        // 的 re-SYN 分支)。限次由 RTO 扫描处控制。
+        else if(c.state==T_SYN_SENT){c.seq--;tcp_send(buf,tx_req,i,TCP_SYN,NULL,0);}
         else if(c.state==T_ESTABLISHED&&c.retrans_len>0)tcp_send(buf,tx_req,i,TCP_ACK,tcp_retrans_buf[i],c.retrans_len);
         else if(c.state==T_LAST_ACK)tcp_send(buf,tx_req,i,TCP_FIN|TCP_ACK,NULL,0);
         tcp_retrans_due=false;
@@ -325,6 +362,112 @@ static void tcp_maintenance(uint32_t *buf, mac_tx_req_t &tx_req){
         tcp_q_off+=chunk;
         if(tcp_q_off>=tcp_q_len){tcp_q_len=0;tcp_q_off=0;}
     }
+}
+
+//=============================================================================
+// SYN 选项解析 (MSS / Window Scale) — 被动 SYN 与主动 SYN+ACK 共用
+//=============================================================================
+// 从暂存帧 (frame_buf, 0 基) 读选项字节: TCP 头 20B 起, 帧内偏移 tb*4+20。
+// FIX 2026-08-18: 不可从 th[] 读 (只装了 20B, 越界读 → MSS/wscale 垃圾)。
+// 钳 0..14 (RFC 7323 上限; cfg w0[19:16] 4 bit 装得下)。P4b-6 板测实锤:
+// 旧钳 7 把 Windows 的 ws=8 变 0 → fast 门控用原始窗口 → 7 帧后永久死锁。
+static void tcp_parse_opts(uint8_t doff, tcp_conn_t &c){
+    int tb=5;
+    if(doff>5){uint8_t opt_end=(doff-5)*4;for(int o=0;o+1<opt_end;){
+        int obw=(tb*4+20+o)>>2;uint8_t obi=(tb*4+20+o)&3;
+        uint8_t k=(frame_buf[obw]>>((3-obi)*8))&0xFF;if(k==0)break;if(k==1){o++;continue;}
+        if(o+1>=opt_end)break;
+        int lbw=(tb*4+20+o+1)>>2;uint8_t lbi=(tb*4+20+o+1)&3;
+        uint8_t ln=(frame_buf[lbw]>>((3-lbi)*8))&0xFF;if(ln<2)break;
+        if(k==2&&ln>=4){int mw=(tb*4+20+o+2)>>2;uint8_t mi=(tb*4+20+o+2)&3;
+            c.peer_mss=(((uint16_t)((frame_buf[mw]>>((3-mi)*8))&0xFF)<<8)|((frame_buf[(tb*4+20+o+3)>>2]>>((3-((tb*4+20+o+3)&3))*8))&0xFF));}
+        else if(k==3&&ln>=3){int ww=(tb*4+20+o+2)>>2;uint8_t wi=(tb*4+20+o+2)&3;
+            uint8_t ws=(frame_buf[ww]>>((3-wi)*8))&0xFF;c.peer_wscale=(ws<=14)?ws:0;}
+        o+=ln;
+    }}
+}
+
+//=============================================================================
+// P5: TCP 主动连接 (客户端) 推进 — 必须在 MAC 空闲拍调用 (tcp_send /
+// arp_send_request 直写共享 TX 区; 与 tcp_maintenance 同门控)
+//=============================================================================
+#define ACT_WAIT   0   // 等上电延时 (到期 → ACT_PROBE)
+#define ACT_PROBE  1   // ARP who-has (限次) → 命中转 connect
+#define ACT_UP     2   // 槽位已建 (T_SYN_SENT/ESTABLISHED), 交给 tcp_rx_process
+#if ACTIVE_CONNECT
+static uint8_t  act_state   = ACT_WAIT;
+static uint32_t act_timer   = 0;
+static uint8_t  act_arp_try = 0;
+static int8_t   act_cid     = 0;
+
+// P5: 从空闲槽发起主动 SYN (seq=ACTIVE_ISS, 带 MSS 选项; 目的 MAC 由 tcp_send
+// 内部查 ARP — 调用前必须已学到 MAC)。返回 false = 无空闲槽 (稍后重试)。
+static bool act_send_syn(uint32_t *buf, mac_tx_req_t &tx_req){
+    // 取**最高**空闲槽 (最后一个 T_FREE 胜出): 低槽留给 tcp_find 的被动分配
+    // 顺序 (被动建连从 0 号槽起, 见 tcp_find), 主动连接不抢占既有/被动连接
+    // 已占用的槽位。只看 T_FREE — 不碰 T_LISTEN/T_SYN_RCVD (共存)。
+    int8_t cid=-1;
+    for(int i=0;i<MAX_TCP_CONN;i++){
+        #pragma HLS UNROLL
+        if(tcp_conn[i].state==T_FREE)cid=i;
+    }
+    if(cid<0)return false;
+    tcp_conn_t &c=tcp_conn[cid];
+    c.state=T_SYN_SENT;
+    c.peer_ip=ACTIVE_IP;c.peer_port=ACTIVE_PORT;
+    c.peer_window=0;c.peer_mss=TCP_MSS;c.peer_wscale=0;c.our_wscale=0;
+    c.seq=ACTIVE_ISS;c.peer_seq=0;c.last_ack_recv=0;c.dup_ack_cnt=0;
+    c.cwnd=TCP_MSS;c.ssthresh=65535;c.flight_size=0;
+    c.srtt=0;c.rttvar=0;c.rto=TCP_RTO_MIN;c.rto_timer=0;c.rtt_seq=0;c.rtt_start=0;
+    c.retrans_len=0;c.retrans_flags=0;c.retrans_pending=false;c.retry_cnt=0;
+    // SYN 占 1 个序号 (tcp_send 内部 c.seq+1)
+    tcp_send(buf,tx_req,cid,TCP_SYN,NULL,0);
+    act_cid=cid;act_state=ACT_UP;
+    return true;
+}
+#endif
+
+static void tcp_active_tick(uint32_t *buf, mac_tx_req_t &tx_req){
+#if ACTIVE_CONNECT
+    if(act_state==ACT_WAIT){
+        act_timer++;
+        if(act_timer<ACTIVE_DELAY)return;
+        act_timer=0;act_arp_try=0;act_state=ACT_PROBE;
+    }
+    if(act_state==ACT_PROBE){
+        // 每拍只查 L1 (8 项 UNROLL 比较, ~1 拍): 完整 arp_lookup 的 L2 顺序
+        // 扫描 (256 项 BRAM, ~800 拍) 若每拍调用会把顶层 FSM 的 pass 拉长
+        // 30 倍, 慢路径吞吐塌成 1 字节/pass (xsim PROBE 实测: 被动握手
+        // 3.7k→55k 拍, 数据段因 CAM 未编程被 fast path 丢弃)。学到 MAC 走
+        // arp_update→L1, 故每拍 L1 命中即可当拍发 SYN; 完整查找+L2 提升
+        // 只在定时点付一次代价。
+        bool hit=false;
+        mac_addr_t dmac=0;
+        if(act_timer>=ACTIVE_ARP_INTERVAL){          // 定时点: 完整查找 + who-has
+            act_timer=0;
+            hit=arp_lookup(NULL,ACTIVE_IP,dmac);
+            if(!hit){
+                if(tx_req.request)return;            // TX 忙 — 下拍再试
+                if(act_arp_try>=ACTIVE_ARP_RETRY){act_state=ACT_WAIT;return;}
+                arp_send_request(buf,tx_req,ACTIVE_IP);
+                act_arp_try++;
+                return;
+            }
+        } else {
+            hit=arp_lookup_l1(ACTIVE_IP,dmac);       // 每拍: 廉价 L1 探测
+        }
+        if(hit){
+            if(act_send_syn(buf,tx_req))return;
+            act_state=ACT_WAIT;act_timer=0;return;   // 槽满: 回等待重试
+        }
+        act_timer++;
+        return;
+    }
+    // ACT_UP: 槽位活着 = 由 tcp_rx_process 推进 (SYN+ACK→ESTABLISHED / RST→FREE);
+    // 槽位消失 (RST 或 SYN 重传超限释放) → 回等待, 重新走一遍 (后续可重试)
+    if(act_cid>=0&&act_cid<MAX_TCP_CONN&&tcp_conn[act_cid].state!=T_FREE)return;
+    act_state=ACT_WAIT;act_timer=0;
+#endif
 }
 
 //=============================================================================
@@ -367,6 +510,17 @@ static void tcp_rx_process(bool rst, ip_rx_t &ip_rx, uint32_t *buf, mac_tx_req_t
                         c.state=T_FREE;
                         c.retrans_pending=false;
                         continue;
+                    }
+                    // P5: 主动 SYN 超时 — 限次重传 (半开连接不无限重传, P4b-5
+                    // 教训: 无限重传会向对端发垃圾 SYN 招 RST), 超限释放槽位
+                    // (tcp_active_tick 见槽位消失即回等待, 后续重试)。
+                    if(c.state==T_SYN_SENT){
+                        c.retry_cnt++;
+                        if(c.retry_cnt>TCP_MAX_RETRY){
+                            c.state=T_FREE;
+                            c.retrans_pending=false;
+                            continue;
+                        }
                     }
                     if(c.state==T_LAST_ACK){
                         c.retry_cnt++;
@@ -412,24 +566,9 @@ static void tcp_rx_process(bool rst, ip_rx_t &ip_rx, uint32_t *buf, mac_tx_req_t
         c.srtt=0;c.rttvar=0;c.rto=TCP_RTO_MIN;c.dup_ack_cnt=0;c.seq=0x12345678|(cid<<20);c.peer_seq=0;c.last_ack_recv=0;c.flight_size=0;
         c.retry_cnt=0;   // P4b
         c.peer_mss=TCP_MSS;c.peer_wscale=0;c.our_wscale=0;
-        // Parse MSS/WS options from SYN (bytes 20+ of TCP header).
-        // FIX 2026-08-18: read the option bytes from the RX buffer, not from
-        // th[] (only 20 bytes were loaded -> out-of-bounds reads gave garbage
-        // MSS/window-scale). Clamp to 0..14 (RFC 7323 max; cfg w0[19:16]
-        // 4 bits 装得下)。P4b-6 板测实锤: 旧钳 7 把 Windows 的 ws=8 变 0 →
-        // fast 门控用原始窗口 4096 → 7 帧后永久死锁 (~19s RST)。
-        if(doff>5){uint8_t opt_end=(doff-5)*4;for(int o=0;o+1<opt_end;){
-            int obw=(tb*4+20+o)>>2;uint8_t obi=(tb*4+20+o)&3;
-            uint8_t k=(frame_buf[obw]>>((3-obi)*8))&0xFF;if(k==0)break;if(k==1){o++;continue;}
-            if(o+1>=opt_end)break;
-            int lbw=(tb*4+20+o+1)>>2;uint8_t lbi=(tb*4+20+o+1)&3;
-            uint8_t ln=(frame_buf[lbw]>>((3-lbi)*8))&0xFF;if(ln<2)break;
-            if(k==2&&ln>=4){int mw=(tb*4+20+o+2)>>2;uint8_t mi=(tb*4+20+o+2)&3;
-                c.peer_mss=(((uint16_t)((frame_buf[mw]>>((3-mi)*8))&0xFF)<<8)|((frame_buf[(tb*4+20+o+3)>>2]>>((3-((tb*4+20+o+3)&3))*8))&0xFF));}
-            else if(k==3&&ln>=3){int ww=(tb*4+20+o+2)>>2;uint8_t wi=(tb*4+20+o+2)&3;
-                uint8_t ws=(frame_buf[ww]>>((3-wi)*8))&0xFF;c.peer_wscale=(ws<=14)?ws:0;}
-            o+=ln;
-        }}
+        // Parse MSS/WS options from SYN (bytes 20+ of TCP header) — P5: 提取为
+        // tcp_parse_opts (主动 SYN+ACK 路径共用同一解析, 语义不变)。
+        tcp_parse_opts(doff,c);
         // Adjust cwnd to peer's MSS if smaller
         if(c.peer_mss<TCP_MSS&&c.peer_mss>0){c.cwnd=c.peer_mss;}}
     // P4b: RST 处理前移 — 4 元组命中任一槽 (含重传超限已释放槽, 其
@@ -454,6 +593,25 @@ static void tcp_rx_process(bool rst, ip_rx_t &ip_rx, uint32_t *buf, mac_tx_req_t
     // Process ACK for congestion control
     if(flags&TCP_ACK){tcp_reno_on_ack(c,ack,false);/*ack!=c.last_ack_recv*/}
     switch(c.state){
+        // P5: 主动连接 — 已发 SYN (T_SYN_SENT), 等对端 SYN+ACK。
+        // 纯 ACK/数据/乱序段忽略; RST 已在上方统一处理 (回 T_FREE)。
+        case T_SYN_SENT:
+            if((flags&TCP_SYN)&&(flags&TCP_ACK)&&ack==c.seq){
+                c.peer_seq=seq+1;
+                tcp_parse_opts(doff,c);            // 对端 MSS/WS (复用被动路径)
+                c.retrans_pending=false;c.rto_timer=0;c.retry_cnt=0;
+                c.state=T_ESTABLISHED;
+                // P5/cfg 记录: 逐字段对齐 T_LISTEN 分支 (fast path CAM/TCB 的
+                // 唯一状态源)。w7 = 我方 snd_nxt = ISS+1 (SYN 已占一个序号,
+                // tcp_send 已推进 c.seq — 与被动路径的 c.seq+1 等价)。
+                // cfg 必须先于 tcp_send (P4b-6 死锁教训: 延迟处理路径的 cfg
+                // 接受谓词 = tx_req.request==0, SYN+ACK 先置 request 则 cfg
+                // 写入永不被接受)。
+                cfg_write(cfg_stream,CFG_CMD_ADD,cid,c.peer_ip,c.peer_port,
+                          rx_smac,wnd,c.peer_wscale,c.peer_seq,c.seq);
+                tcp_send(buf,tx_req,cid,TCP_ACK,NULL,0);   // 纯 ACK: seq=ISS+1
+            }
+            break;
         case T_LISTEN:if(flags&TCP_SYN){c.peer_seq=seq+1;c.peer_ip=ip_rx.src_ip;c.peer_port=sp;c.state=T_SYN_RCVD;c.retry_cnt=0;
                 // P4b: 乐观建连 — 把连接配置推给 fast path (CAM/TCB),
                 // 数据面直接可用。snd_nxt = ISS+1 (SYN 占一个序号,

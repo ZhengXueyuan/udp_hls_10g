@@ -235,6 +235,14 @@ void udp_echo(
         tcp_maintenance(buffer, tx_req);
     }
 
+#if ACTIVE_CONNECT
+    // P5: TCP 主动连接 (客户端) 推进 — 与 tcp_maintenance 同门控 (MAC 空闲
+    // 才动共享 TX 区): 上电延时 → ARP who-has → SYN → T_SYN_SENT。
+    if (!tx_req.request && !mac_tx_busy) {
+        tcp_active_tick(buffer, tx_req);
+    }
+#endif
+
     // TCP 控制帧延迟处理: 帧完成拍 MAC 在飞时挂起的 TCP 处理 (SYN/FIN/RST)
     // 在 MAC 空闲拍补做 — tcp_send 写共享 TX 区, 必须等 MAC 不读该区。
     if (tcp_proc_pending && !mac_tx_busy && !tx_req.request) {

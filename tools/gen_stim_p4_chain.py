@@ -388,7 +388,8 @@ def parse_gmii(fn):
     byte_lines = []
     ev = dict(fend=[], ack=[], synp=[], stats7=None, stx=None, seco=None,
               camf=None, tcbf=None, srx=None, stx2=None, smac=None, retx=None,
-              truncs=None, ecomax=None, halfd=None)
+              truncs=None, ecomax=None, halfd=None,
+              pca=None, pcacam=[])
     with open(fn) as fh:
         for line in fh:
             p = line.split()
@@ -424,6 +425,14 @@ def parse_gmii(fn):
                 ev['ecomax'] = int(p[1])
             elif p[0] == 'HALFD':
                 ev['halfd'] = tuple(int(x) for x in p[1:])
+            elif p[0] == 'PCA':        # P5 PCACTIVE 事件 (倒数第二字段 hex = ISS)
+                ev['pca'] = tuple(int(x) for x in p[1:10]) + \
+                            (int(p[10], 16), int(p[11]))
+            elif p[0] == 'PCACAM':     # P5 每槽 CAM 4 元组 + TCB 终态
+                ev['pcacam'].append((int(p[1]),) +
+                                    tuple(int(x, 16) for x in p[2:6]) +
+                                    (int(p[6], 16), int(p[7]), int(p[8], 16),
+                                     int(p[9], 16)))
             else:
                 byte_lines.append((int(p[0], 16), int(p[1])))
     frames = []
@@ -734,6 +743,133 @@ def check(simdir):
         print('P4 CHAIN FAIL (%d errs)' % len(errs))
         return False
     print('P4 CHAIN OK')
+    return True
+
+
+# ---- P5 PCACTIVE: 主动连接 (客户端) 门常量 — 必须与 sim 网表一致 ----
+# hls/run_hls_active.tcl: -DACTIVE_CONNECT=1 -DACTIVE_IP=0xC0A86463
+# (192.168.100.99: 静态刺激从不使用的地址, 强制 HLS 走 ARP who-has 查询路径);
+# tb_p4_chain.v: PCA_ACT_IP / PCA_MY_ISS / PCA_PEER_ISS 同名常量
+PCA_ACT_IP = 0xC0A86463      # SIM ACTIVE_IP (192.168.100.99)
+PCA_ACT_PORT = 9090          # HLS ACTIVE_PORT
+PCA_MY_PORT = 8080           # HLS TCP_PORT_ECHO (本地端口)
+PCA_ISS = 0x89ABCDEF         # HLS ACTIVE_ISS
+PCA_ACKVAL = PCA_ISS + 1     # 主动 SYN 后的我方 snd_nxt
+PCA_PEER_ISS = 0x77000000    # TB 注入 SYN+ACK 的 seq
+PCA_PEER_NXT = PCA_PEER_ISS + 1
+PCA_NPAY = 100               # TB 注入数据段载荷字节数
+
+
+def check_active(simdir):
+    """P5 PCACTIVE 主动连接门: 核验 resp 里的 PCA/PCACAM 行 + echo 帧字节。
+
+    TB 反应式模型 (tb/tb_p4_chain.v +PCACTIVE): 捕获板侧主动帧 → 按需注入
+    ARP reply / SYN+ACK / 100B 数据段。判据:
+      1) 板侧自发 SYN (0800/proto6/sport 8080/dport 9090/dst=ACTIVE_IP/flags 02)
+         被捕获且 seq == ACTIVE_ISS;
+      2) ARP 查询路径 (who-has target=ACTIVE_IP → reply → 再 SYN): 捕获到 who-has
+         则必须见到 reply 注入; 未见 who-has = ARP 缓存命中 (首帧 ARP 请求已教),
+         不判负;
+      3) 序列完整: synack→ack(T_SYN_SENT→ESTABLISHED)→data→echo 全落地, 无超时;
+      4) 槽位终态: 主动槽 CAM(sip=ACTIVE_IP/sport=9090/dport=8080/dmac=PC_MAC) +
+         TCB state=1 (ESTABLISHED) / rcv_nxt=PEER_NXT+100 / snd_nxt=ISS+1+100
+         (报告点在 echo 之后, 两端各推进 100);
+         被动 conn0 槽 (sip=PC_IP) 同时在 = 共存;
+      5) echo 帧 (fast path 数据面): seq=ISS+1 / ack=PEER_NXT+100 / ip total=140 /
+         载荷 payload(100) 逐字节 / FCS。
+    """
+    got, ev = parse_gmii(os.path.join(simdir, 'resp_p4_chain.memh'))
+    errs = []
+    if ev['pca'] is None:
+        print('PCACTIVE FAIL: resp 无 PCA 行 (TB 未跑 +PCACTIVE, 或网表非 ACTIVE 版)')
+        return False
+    (arp_req, arp_inj, syn_seen, synack_inj, ack_seen, data_inj,
+     echo_seen, echo_ok, to, iss, k_syn) = ev['pca']
+    print('PCA arp_req=%d arp_inj=%d syn=%d synack=%d ack=%d data=%d echo=%d ok=%d '
+          'to=%d iss=%08X k_syn=%d'
+          % (arp_req, arp_inj, syn_seen, synack_inj, ack_seen, data_inj,
+             echo_seen, echo_ok, to, iss, k_syn))
+
+    # 1) 板侧自发 SYN
+    if not syn_seen:
+        errs.append('未捕获板侧主动 SYN (sport 1F90/dport 2382/dst=%08X/flags 02)'
+                    % PCA_ACT_IP)
+    elif iss != PCA_ISS:
+        errs.append('SYN seq %08X != ACTIVE_ISS %08X' % (iss, PCA_ISS))
+    # 2) ARP 查询路径
+    if arp_req and not arp_inj:
+        errs.append('捕获 who-has 但 TB 未注入 ARP reply (模型/激励错)')
+    print('  ARP query path: %s' % ('exercised (who-has -> reply -> SYN)'
+                                    if arp_req else 'cache hit (no who-has)'))
+    # 3) 序列完整
+    for name, v in (('synack_inj', synack_inj), ('ack_seen', ack_seen),
+                    ('data_inj', data_inj), ('echo_seen', echo_seen)):
+        if not v:
+            errs.append('主动链中断: %s=0' % name)
+    if to:
+        errs.append('TB 尾窗超时 (250k 拍) — 主动链未完成')
+    if echo_seen and not echo_ok:
+        errs.append('echo 帧字段不符 (seq/ack/ip total)')
+    # 4) 槽位终态
+    act = [c for c in ev['pcacam'] if c[1] == PCA_ACT_IP]
+    pas = [c for c in ev['pcacam'] if c[1] == PC_IP]
+    if len(act) != 1:
+        errs.append('CAM 主动槽数 %d != 1 (全部槽: %s)' % (len(act), ev['pcacam']))
+    else:
+        _s, sip, dip, sport, dport, dmac, st, rn, sn = act[0]
+        if (sip, dip, sport, dport, dmac) != (PCA_ACT_IP, DUT_IP, PCA_ACT_PORT,
+                                              PCA_MY_PORT,
+                                              int.from_bytes(PC_MAC, 'big')):
+            errs.append('主动 CAM 记录 %s' % (act[0],))
+        if st != 1:
+            errs.append('主动槽 state=%d != 1 (ESTABLISHED)' % st)
+        # 报告点在 echo 落地之后 (done 才写 resp): 100B 数据段已被数据面消费 +
+        # 回显, TCB 终态 = rcv_nxt(PEER_ISS+1+100) / snd_nxt(ISS+1+100) —
+        # 与 chain 门 conn1 语义一致 (rcv 97 = 77+20, snd 920 = 900+20)。
+        if rn != PCA_PEER_NXT + PCA_NPAY:
+            errs.append('主动槽 rcv_nxt=%08X != %08X (PEER_ISS+1+%d)'
+                        % (rn, PCA_PEER_NXT + PCA_NPAY, PCA_NPAY))
+        if sn != PCA_ACKVAL + PCA_NPAY:
+            errs.append('主动槽 snd_nxt=%08X != %08X (ISS+1+%d)'
+                        % (sn, PCA_ACKVAL + PCA_NPAY, PCA_NPAY))
+    if len(pas) != 1:
+        errs.append('CAM 被动 conn0 槽数 %d != 1 (共存判据; 槽: %s)'
+                    % (len(pas), ev['pcacam']))
+    elif pas[0][6] != 1:
+        errs.append('被动 conn0 槽 state=%d != 1 (被主动连接破坏?)' % pas[0][6])
+    # 5) echo 帧 (fast path 数据面)
+    echos = []
+    for fb in got:
+        body = fb[8:-4]
+        if len(body) < 54 or body[12:14] != b'\x08\x00' or body[23] != 6:
+            continue
+        sport, dport = struct.unpack('!HH', body[34:38])
+        if sport == PCA_MY_PORT and dport == PCA_ACT_PORT and body[47] == 0x18:
+            echos.append(fb)
+    if len(echos) != 1:
+        errs.append('主动 echo 帧数 %d != 1 (sport %d/dport %d/flags 18)'
+                    % (len(echos), PCA_MY_PORT, PCA_ACT_PORT))
+    else:
+        body = echos[0][8:-4]
+        seq, ack = struct.unpack('!II', body[38:46])
+        tot = struct.unpack('!H', body[16:18])[0]
+        if body[6:12] != DUT_MAC:
+            errs.append('echo 帧源 MAC %s' % body[6:12].hex())
+        if (seq, ack, tot) != (PCA_ACKVAL, PCA_PEER_NXT + PCA_NPAY, 40 + PCA_NPAY):
+            errs.append('echo 帧 seq=%08X ack=%08X total=%d' % (seq, ack, tot))
+        if body[54:54 + PCA_NPAY] != payload(PCA_NPAY):
+            errs.append('echo 载荷 != payload(%d)' % PCA_NPAY)
+        if struct.pack('<I', zlib.crc32(body) & 0xFFFFFFFF) != echos[0][-4:]:
+            errs.append('echo 帧 FCS 错')
+    nslow = sum(1 for fb in got if fb[8:-4][12:14] == b'\x08\x06')
+    print('  frames TX=%d (arp=%d) slow_rx=%s slow_tx=%s'
+          % (len(got), nslow, ev['srx'], ev['stx2']))
+    if errs:
+        for e in errs[:12]:
+            print('MISMATCH:', e)
+        print('PCACTIVE FAIL (%d errs)' % len(errs))
+        return False
+    print('PCACTIVE OK')
     return True
 
 
@@ -1248,6 +1384,8 @@ if __name__ == '__main__':
             txdrop1 = int(sys.argv[4]) if len(sys.argv) > 4 else 0
             txdrop2 = int(sys.argv[5]) if len(sys.argv) > 5 else 0
             mode = 'burstcheck'
+        elif sys.argv[2] == 'activecheck':
+            mode = 'activecheck'
         elif sys.argv[2] == 'replay':
             cap = sys.argv[3] if len(sys.argv) > 3 else 'rate4.pcapng.json'
             w0 = float(sys.argv[4]) if len(sys.argv) > 4 else 0.440
@@ -1278,6 +1416,8 @@ if __name__ == '__main__':
     if mode == 'burstcheck':
         sys.exit(0 if check_burst(simdir, nburst, txdrop1, txdrop2,
                                   trunc_at, trunc_len, half_at, half_k) else 1)
+    if mode == 'activecheck':
+        sys.exit(0 if check_active(simdir) else 1)
     gen_memh(simdir, frames)
     # P4b-7-P5: echo 载荷地图 sidecar (burstcheck 逐字节验证用)
     if pmap:
