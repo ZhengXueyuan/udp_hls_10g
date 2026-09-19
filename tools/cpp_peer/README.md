@@ -72,6 +72,11 @@ peer.exe --iface <NPF路径> [options]
 
 流量:
   --bytes <n>              发送并回环校验的字节数 (默认 1048576)
+  --rx-only                只收不发：校验板侧主动发的图案流 (APP_MODE 板级验收)
+  --expect-pattern <n>     = --rx-only + 目标字节数 (0/缺省 = 收到对端 FIN 为止；
+                           别名 --rx-bytes)
+  --pat-selftest           打印并自检图案约定 (不需要板子)
+  --selftest-rx            rx 校验器单元自检 (合成流，不需要板子)
   --mss <n>                分段大小              (默认 1460)
   --rcv-wnd <n>            本端通告窗口          (默认 65535；别名 --rx-window)
   --cwnd <bytes>           固定拥塞窗口；0 = 慢启动 (默认 0)
@@ -114,7 +119,25 @@ ACK 策略:
 # 1GB 满速档（每秒一行速率日志）
 ./peer.exe --iface '\Device\NPF_{528A3E8C-...}' --src-mac FC:9D:05:7D:88:6B \
            --rate-test --ack-mode immediate --rcv-wnd 65535 --bytes 1073741824
+
+# APP_MODE 板级验收（板子连上后主动发 1MB 图案然后 close；peer 只收不发）
+./peer.exe --iface '\Device\NPF_{528A3E8C-...}' --src-mac FC:9D:05:7D:88:6B \
+           --rx-only --expect-pattern 1048576
+#   ... 或跑满到对端 FIN 为止: --rx-only  (等价 --expect-pattern 0)
 ```
+
+### APP_MODE 图案约定（板级验收判据的基础）
+
+`--rx-only` 校验的图案 = `rtl/app_pattern.v` 的 xorshift64：每步
+`s ^= s<<13; s ^= s>>7; s ^= s<<17`，**先取 `s[31:24]` 再推进**，
+种子 `0x9E3779B97F4A7C15`，偏移 0 = 该方向首个数据字节（板侧 seq = irs+1）。
+首 8 字节：`7F 0B 02 E5 36 A1 4E D6`。
+
+> 2026-09-19 修复：`pat_init()` 原先"先推进后取字节"，整表比 RTL 超前 1 步
+> （peer[k] == RTL[k+1]）。回环测试自产自校所以从未暴露，但校验板侧主动流会
+> 100% 失配。现在 `g_pat` 与 RTL 逐字节一致，`--pat-selftest` 可随时自检。
+> `--rx-only` 的校验器不走 64 KiB 周期表（那样看不出 64 KiB 整数倍移位），
+> 而是逐字节推进 LFSR，GB 级流也相位精确。
 
 ---
 

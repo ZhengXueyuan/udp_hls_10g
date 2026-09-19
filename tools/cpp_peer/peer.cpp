@@ -217,10 +217,16 @@ static uint16_t csum_fold(uint32_t sum) {
 static uint8_t g_pat[PAY_PAT_LEN];
 
 static void pat_init(void) {
+    /* RTL convention (rtl/app_pattern.v:169/271): byte = s[31:24] THEN advance
+     * (s ^= s<<13; s ^= s>>7; s ^= s<<17).  2026-09-19: this used to advance
+     * first, which made the whole table one LFSR step ahead of the hardware
+     * (peer[k] == RTL[k+1]).  The echo path never noticed (it generates and
+     * verifies with the same table), but any verification of a BOARD-generated
+     * stream would have failed 100%.  Fixed to take-then-advance. */
     uint64_t s = 0x9E3779B97F4A7C15ull;
     for (int i = 0; i < PAY_PAT_LEN; i++) {
-        s ^= s << 13; s ^= s >> 7; s ^= s << 17;
         g_pat[i] = (uint8_t)(s >> 24);
+        s ^= s << 13; s ^= s >> 7; s ^= s << 17;
     }
 }
 static inline uint8_t pay_byte(uint32_t off) { return g_pat[off & (PAY_PAT_LEN - 1)]; }
@@ -229,6 +235,57 @@ static inline uint8_t pay_byte(uint32_t off) { return g_pat[off & (PAY_PAT_LEN -
 static void pay_fill(uint8_t *dst, uint32_t off, int n) {
     for (int i = 0; i < n; i++) dst[i] = pay_byte(off + (uint32_t)i);
 }
+
+/* ---------- RTL-pattern stream verifier (--rx-only) ----------
+ * The board's demo app (rtl/app_pattern.v) runs ONE xorshift64 LFSR for its TX
+ * direction: stream byte k is s_k[31:24] with s_0 = SEED = 0x9E3779B97F4A7C15
+ * and s_{k+1} = xs(s_k), where xs(s) = s^(s<<13); s^(s>>7); s^(s<<17)
+ * (app_pattern.v:169 gen_byte, :271 tx_lfsr <= xs_next).  Offset 0 = the first
+ * data byte of the connection = board seq (irs+1) (D6).
+ *
+ * A table indexed by (off & 0xFFFF) cannot see a shift by a multiple of the
+ * 64 KiB period, so this verifier WALKS the LFSR instead: O(1) per byte and
+ * phase-exact for gigabyte streams. */
+#define RPAT_SEED 0x9E3779B97F4A7C15ull
+static inline uint64_t xs_next64(uint64_t s) {
+    s ^= s << 13; s ^= s >> 7; s ^= s << 17;
+    return s;
+}
+struct RxPatChecker {
+    uint64_t s   = RPAT_SEED;   /* LFSR at the next expected byte */
+    uint64_t pos = 0;           /* pattern offset of the next expected byte */
+    uint64_t verified = 0;      /* bytes compared OK */
+    uint64_t mismatch = 0;      /* bytes that differed */
+    uint64_t hole_bytes = 0;    /* bytes skipped to resync around a gap */
+    uint64_t holes = 0;         /* gap events */
+    uint64_t first_bad_off = 0; /* offset of the first mismatch */
+    uint8_t  first_bad_got = 0, first_bad_exp = 0;
+    bool     have_bad = false;
+
+    void reset() { *this = RxPatChecker(); }
+    void skip(uint64_t n) {
+        for (uint64_t i = 0; i < n; i++) s = xs_next64(s);
+        pos += n;
+    }
+    /* verify n bytes that are contiguous with the previous window */
+    void check(const uint8_t *p, int n) {
+        for (int i = 0; i < n; i++) {
+            uint8_t exp = (uint8_t)(s >> 24);
+            if (p[i] != exp) {
+                if (!have_bad) {
+                    have_bad = true; first_bad_off = pos; first_bad_got = p[i];
+                    first_bad_exp = exp;
+                }
+                mismatch++;
+            } else {
+                verified++;
+            }
+            s = xs_next64(s);
+            pos++;
+        }
+    }
+    void gap(uint64_t n) { holes++; hole_bytes += n; skip(n); }
+};
 
 /* ---------- high resolution clock ---------- */
 
@@ -288,6 +345,16 @@ struct Config {
     bool        mintocopy0  = true;     /* pcap_setmintocopy(0): lowest latency */
     int         flush_frames = 40;      /* flush the sendqueue every N frames */
     bool        use_filter  = true;     /* server-side BPF filter on our 4-tuple */
+    bool        dbg_stream  = false;    /* --dbg-stream: dump the first echoed frames */
+    bool        legacy_dupack = false;  /* --legacy-dupack: pre-fix dup-ACK semantics
+                                         * (count data-bearing stale ACKs as dup-ACKs);
+                                         * diagnostic only, reproduces the 462 Mbps
+                                         * suppress=0 baseline */
+    bool        rx_only     = false;    /* --rx-only: send no app data */
+    uint32_t    expect_bytes= 0;        /* --expect-pattern N: bytes to verify
+                                         * from the board (0 = until its FIN) */
+    bool        pat_selftest= false;    /* --pat-selftest: print+check pattern */
+    bool        selftest_rx = false;    /* --selftest-rx: rx verifier unit test */
     uint32_t    tx_bench    = 0;        /* --tx-bench N: raw send self-test */
     uint32_t    seed        = 0;        /* 0 = derive from clock */
     int         syn_retries = 6;
@@ -298,6 +365,34 @@ static Config cfg;
 /* =====================================================================
  * 4. Statistics
  * ===================================================================== */
+
+/* Bucket edges in microseconds, shared by every histogram in this file:
+ * <1 <2 <5 <10 <20 <50 <100 <1000 >=1000 */
+static const double HIST_EDGE[8] = {1, 2, 5, 10, 20, 50, 100, 1000};
+
+struct Hist {
+    uint64_t b[9] = {0};
+    uint64_t n    = 0;
+    double   sum  = 0;
+    double   mx   = 0;
+    void add(double v) {
+        if (!(v >= 0)) v = 0;                 /* also eats NaN */
+        int i = 0;
+        while (i < 8 && v >= HIST_EDGE[i]) i++;
+        b[i]++; n++; sum += v;
+        if (v > mx) mx = v;
+    }
+    void reset() { for (int i = 0; i < 9; i++) b[i] = 0; n = 0; sum = 0; mx = 0; }
+    void print(const char *name) const {
+        if (!n) { printf("%-22s (no samples)\n", name); return; }
+        printf("%-22s n=%-8llu avg %8.2f  max %9.2f us | ", name,
+               (unsigned long long)n, sum / (double)n, mx);
+        static const char *lbl[9] = {"<1","<2","<5","<10","<20","<50","<100","<1k",">=1k"};
+        for (int i = 0; i < 9; i++)
+            if (b[i]) printf("%s:%.0f%% ", lbl[i], 100.0 * (double)b[i] / (double)n);
+        printf("\n");
+    }
+};
 
 struct Stats {
     uint64_t tx_frames      = 0;   /* all frames we put on the wire */
@@ -317,6 +412,7 @@ struct Stats {
     uint64_t rx_ack_only    = 0;
     uint64_t retransmits    = 0;
     uint64_t dup_acks       = 0;
+    uint64_t dup_acks_recovery = 0;  /* dup-ACKs absorbed by Reno fast recovery */
     uint64_t zero_window_probes = 0;
     uint64_t mismatch_segs  = 0;
     uint64_t mismatch_bytes = 0;
@@ -331,6 +427,54 @@ struct Stats {
     uint64_t rx_calls       = 0;
     double   tx_time_us     = 0;
     double   rx_time_us     = 0;
+
+    /* ---- instrumentation v2 (2026-09-19 throughput-halving hunt) ----
+     * RX-thread-only fields (single writer, no lock needed) */
+    uint64_t rx_timeouts    = 0;   /* pcap_next_ex returned 0 */
+    uint64_t rx_errors      = 0;
+    uint64_t rx_pickup_max_us = 0;
+    Hist     h_rxcall;            /* pcap_next_ex wall time per call */
+    Hist     h_rxframes;          /* frames returned per pcap_next_ex call */
+    Hist     h_ia;                /* RX frame inter-arrival (board TX pacing) */
+    /* main-thread-only fields */
+    uint64_t iters          = 0;
+    double   t_loop_us      = 0;   /* time inside the run() loop, sleeps excluded */
+    double   t_wait_us      = 0;   /* time blocked in WaitForSingleObject */
+    double   t_procrx_us    = 0;   /* process_rx() total */
+    double   t_handle_us    = 0;   /* handle_frame() total */
+    double   t_send_us      = 0;   /* send_new_data()+check_rto() total */
+    double   t_flush_us     = 0;   /* flush_tx() total */
+    uint64_t flushes        = 0;
+    uint64_t flush_frames   = 0;   /* frames pushed per flush */
+    Hist     h_flushframes;        /* frames per flush */
+    Hist     h_flush_us;           /* flush call duration */
+    Hist     h_handle;             /* handle_frame per frame */
+    Hist     h_loopiter;           /* one run() iteration */
+    uint64_t burst_flushes  = 0;   /* flushes with < 2 frames (pipeline bubble) */
+    uint64_t win_block_iters= 0;   /* loop iterations where send was window-blocked */
+    uint64_t win_block_us   = 0;   /* accumulated time window-blocked */
+    /* ACK classification (main thread) */
+    uint64_t rx_pure_ack    = 0;   /* frames with ACK and no payload */
+    uint64_t rx_ack_data    = 0;   /* frames with ACK and payload */
+    uint64_t rx_pure_ack_adv= 0;   /* pure ACK that advanced snd_una */
+    uint64_t rx_pure_ack_dup= 0;   /* pure ACK that did not advance */
+    uint64_t rx_win_change  = 0;   /* ACKs that changed the advertised window */
+    uint64_t dup_ack_data_ignored = 0;  /* acks riding data, not counted as dup-ACK */
+    /* per-segment latency split: pure-ACK path vs echo(piggyback) path */
+    Hist     h_lat_pureack;        /* t_recv(frame) - t_sent(seg) for pure ACK */
+    Hist     h_lat_echo;           /* t_recv(frame) - t_sent(seg) for echo frame */
+    Hist     h_lat_echo_data;      /* echo carrying an ACK that advanced snd_una */
+    Hist     h_lat_pureack_data;   /* pure ACK that advanced snd_una */
+    /* stall forensics: silence vs stale-ack discriminator */
+    uint64_t t_last_rx       = 0;  /* wall clock of the last received frame */
+    uint64_t t_last_ack_rx   = 0;  /* ... of the last frame that moved snd_una */
+    uint32_t ack_hi          = 0;  /* highest ack value the board ever sent */
+    bool     ack_hi_valid    = false;
+
+    /* process CPU (both threads): the "is the peer the ceiling" number */
+    double   cpu_user_s     = 0;
+    double   cpu_sys_s      = 0;
+    double   cpu_cores_avg  = 0;
 };
 
 /* One detected TX-side gap (our data the board did not acknowledge in time):
@@ -381,9 +525,11 @@ public:
 
     /* dup-ACK / hole bookkeeping */
     int      dup_ack_cnt = 0;
-    uint32_t fast_retx_seq = 0;      /* snd_una of the last fast retransmit */
-    bool     fast_retx_done = false; /* one fast retransmit per hole */
     std::vector<Hole> holes;
+    /* Reno fast recovery */
+    bool     in_recovery = false;
+    uint32_t recover     = 0;        /* high_seq: snd_nxt when recovery started */
+    bool     win_unchanged = true;   /* last ACK did not change the advertised window */
 
     /* per-second rate sampling */
     uint64_t t_log_next = 0;
@@ -405,6 +551,13 @@ public:
     double rtt_min = 1e18, rtt_max = 0, rtt_sum = 0;
     uint64_t rtt_samples = 0;
 
+    /* --rx-only: RTL-pattern verification of the board's stream */
+    RxPatChecker vchk;
+    uint64_t rx_gap_pending = 0;      /* 已检出但尚未跳过的缺口字节 */
+    uint64_t rx_hole_events = 0;
+    uint64_t rx_first_t = 0, rx_last_t = 0;   /* first/last verified data byte */
+    uint64_t rx_last_seq = 0;
+
     uint64_t t_start = 0, t_end = 0, t_last_progress = 0;
     uint32_t snd_una_last = 0, rcv_nxt_last = 0;
 
@@ -418,6 +571,8 @@ public:
     uint32_t our_ip, peer_ip;
     uint16_t our_port, peer_port;
     uint16_t ip_id = 0;
+    uint64_t queued_frames = 0;      /* frames sitting in the sendqueue */
+    bool     win_blocked_iter = false;
 
     std::mutex             rx_mtx;
     std::deque<RxItem>     rx_q;
@@ -471,25 +626,35 @@ public:
     }
 
     void rx_loop(void) {
+        uint64_t t_prev = 0;
         while (!stop_rx.load()) {
             struct pcap_pkthdr *hdr = 0;
             const unsigned char *data = 0;
             uint64_t t0 = now_ticks();
             int r = pcap_next_ex(pcap, &hdr, &data);
-            st.rx_time_us += ticks_to_us(now_ticks() - t0);
+            uint64_t t1 = now_ticks();
+            st.rx_time_us += ticks_to_us(t1 - t0);
+            st.h_rxcall.add(ticks_to_us(t1 - t0));
             st.rx_calls++;
             if (r == 1) {
+                st.h_rxframes.add(1.0);
                 if (!hdr || hdr->caplen < (unsigned)ETH_HDR_LEN) continue;
                 RxItem it;
                 it.data.assign(data, data + hdr->caplen);
-                it.t_recv = now_ticks();
+                it.t_recv = t1;
                 st.rx_raw++;
+                if (t_prev) st.h_ia.add(ticks_to_us(t1 - t_prev));
+                t_prev = t1;
                 {
                     std::lock_guard<std::mutex> g(rx_mtx);
                     if (rx_q.size() < 200000) rx_q.push_back(std::move(it));
                 }
                 if (rx_evt) SetEvent(rx_evt);
-            } else if (r < 0) {
+            } else if (r == 0) {
+                st.h_rxframes.add(0.0);
+                st.rx_timeouts++;
+            } else {
+                st.rx_errors++;
                 break;   /* device error / closed */
             }
         }
@@ -567,6 +732,7 @@ public:
                 if (pcap_sendqueue_queue(txq, &h, buf) != 0)
                     fprintf(stderr, "pcap_sendqueue_queue failed (frame > queue?)\n");
             }
+            queued_frames++;
         } else {
             uint64_t t0 = now_ticks();
             if (pcap_sendpacket(pcap, buf, send_len) != 0)
@@ -583,8 +749,16 @@ public:
         if (!txq || txq->len == 0) return;
         uint64_t t0 = now_ticks();
         pcap_sendqueue_transmit(pcap, txq, cfg.tx_sync);
-        st.tx_time_us += ticks_to_us(now_ticks() - t0);
+        double d = ticks_to_us(now_ticks() - t0);
+        st.tx_time_us += d;
         st.tx_calls++;
+        st.flushes++;
+        st.t_flush_us += d;
+        st.h_flush_us.add(d);
+        st.flush_frames += queued_frames;
+        st.h_flushframes.add((double)queued_frames);
+        if (queued_frames < 2) st.burst_flushes++;
+        queued_frames = 0;
         txq->len = 0;    /* WinPcap resets this on success; be explicit */
     }
 
@@ -594,6 +768,13 @@ public:
         st.tx_data_segs++;
         st.tx_data_bytes += (uint64_t)plen;
         if (!retransmit) st.tx_unique_bytes += (uint64_t)plen;
+        /* latency attribution ring (see lat_probe): send order, first TX only */
+        if (!retransmit) {
+            seg_ring[seg_head & SEGMASK].seq    = seq;
+            seg_ring[seg_head & SEGMASK].len    = (uint32_t)plen;
+            seg_ring[seg_head & SEGMASK].t_sent = now_ticks();
+            seg_head++;
+        }
     }
 
     void send_ack(void) {
@@ -609,12 +790,20 @@ public:
 
     void process_rx(void) {
         std::deque<RxItem> batch;
+        uint64_t t_ent = now_ticks();
         {
             std::lock_guard<std::mutex> g(rx_mtx);
-            if (rx_q.empty()) return;
+            if (rx_q.empty()) { st.t_procrx_us += ticks_to_us(now_ticks() - t_ent); return; }
             batch.swap(rx_q);
         }
-        for (auto &it : batch) handle_frame(it.data.data(), (int)it.data.size(), it.t_recv);
+        for (auto &it : batch) {
+            uint64_t tf = now_ticks();
+            handle_frame(it.data.data(), (int)it.data.size(), it.t_recv);
+            double d = ticks_to_us(now_ticks() - tf);
+            st.h_handle.add(d);
+            st.t_handle_us += d;
+        }
+        st.t_procrx_us += ticks_to_us(now_ticks() - t_ent);
     }
 
     void handle_frame(const uint8_t *f, int flen, uint64_t t_recv) {
@@ -672,7 +861,26 @@ public:
             return;
         }
 
-        if (t->flags & TH_ACK) process_ack(ack, t_recv);
+        if (t->flags & TH_ACK) {
+            if (plen > 0) st.rx_ack_data++; else st.rx_pure_ack++;
+            st.t_last_rx = t_recv;
+            if (!st.ack_hi_valid || (int32_t)(ack - st.ack_hi) > 0) {
+                st.ack_hi = ack;
+                st.ack_hi_valid = true;
+            }
+            uint32_t before = snd_una;
+            uint32_t win_before = last_ack_win;
+            process_ack(ack, t_recv, plen > 0);
+            if (plen == 0) {
+                if (snd_una != before) st.rx_pure_ack_adv++;
+                else st.rx_pure_ack_dup++;
+            }
+            if (snd_una != before) st.t_last_ack_rx = t_recv;
+            if (win != win_before) { st.rx_win_change++; last_ack_win = win; }
+            win_unchanged = (win == win_before);
+            /* latency attribution: which segment does this ACK/echo complete? */
+            lat_probe(seq, plen, ack, plen > 0 && snd_una != before, t_recv);
+        }
 
         if (plen > 0) {
             st.rx_data_segs++;
@@ -682,6 +890,64 @@ public:
             rx_data(seq, pay, plen);
             if (ack_pending) maybe_ack();
         }
+    }
+
+    /* ---- per-segment latency attribution ----------------------------------
+     * Every data segment we send is answered twice in the suppress=0 (app-mode)
+     * configuration: once by the board's pure ACK, once by the echo segment
+     * (which piggybacks the same ACK).  Timing both answers against the send
+     * time of the segment they acknowledge isolates the board's pure-ACK path
+     * cost from its echo path cost -- the number that says whether the extra
+     * frame costs wire time, board scheduling time, or nothing at all.
+     *
+     * Segments are tracked in SEND ORDER (a ring plus a tail cursor), NOT by
+     * offset arithmetic: the peer emits a short segment whenever the remaining
+     * window room is < MSS (the board advertises 49152 = 33*1460 + 972), so
+     * segment starts are only MSS-aligned until the first window refill. */
+    struct SegTrack { uint32_t seq; uint32_t len; uint64_t t_sent; };
+    enum { SEGRING = 512, SEGMASK = SEGRING - 1 };
+    SegTrack seg_ring[SEGRING];
+    uint64_t seg_head = 0;           /* send counter: next slot to write */
+    uint64_t seg_tail = 0;           /* oldest entry not yet accounted for */
+    uint32_t last_ack_win = 0;
+
+    uint64_t lat_hits = 0, lat_no_match = 0;
+
+    /* board stream position -> our stream position (independent ISS per
+     * direction: the mapping is one constant shift) */
+    inline uint32_t board2our(uint32_t bseq) const {
+        return bseq + ((iss + 1) - (irs + 1));
+    }
+
+    void lat_probe(uint32_t seq, int plen, uint32_t ack, bool advanced, uint64_t t_recv) {
+        uint32_t target = (plen > 0) ? board2our(seq) : board2our(ack);
+        /* drop entries the tail has fully passed */
+        while (seg_tail < seg_head) {
+            SegTrack &e = seg_ring[seg_tail & SEGMASK];
+            if ((int32_t)((e.seq + e.len) - target) < 0) seg_tail++;
+            else break;
+        }
+        /* match within a bounded window so one lost/reordered segment cannot
+         * wedge the cursor and blind the rest of the run */
+        uint64_t lim = std::min<uint64_t>(seg_head, seg_tail + 64);
+        for (uint64_t k = seg_tail; k < lim; k++) {
+            SegTrack &e = seg_ring[k & SEGMASK];
+            uint32_t end = e.seq + e.len;
+            bool m = (plen > 0) ? (e.seq == target) : (end == target);
+            if (!m) continue;
+            double d = ticks_to_us(t_recv - e.t_sent);
+            if (plen > 0) {
+                st.h_lat_echo.add(d);
+                if (advanced) st.h_lat_echo_data.add(d);
+            } else {
+                st.h_lat_pureack.add(d);
+                st.h_lat_pureack_data.add(d);
+            }
+            lat_hits++;
+            if (k == seg_tail) seg_tail++;
+            return;
+        }
+        lat_no_match++;
     }
 
     /* ---------------- hole (loss) diagnostics ---------------- */
@@ -706,20 +972,32 @@ public:
         }
     }
 
-    /* TCP Reno fast retransmit: resend from snd_una, halve cwnd, keep snd_nxt. */
+    /* RFC 5681 fast retransmit + Reno fast recovery, with go-back-N repair.
+     *
+     * Two independent fixes are needed here and they are NOT the same fix:
+     *  - dup-ACK semantics (see process_ack): a data-carrying segment is never
+     *    a duplicate ACK;
+     *  - recovery state (this function + in_recovery): the board ACKs duplicate
+     *    data (drop_ack, "drop_ack=丢数据仍回 ACK"), so ANY retransmission it
+     *    generates comes back as non-advancing ACKs.  Counting those as fresh
+     *    dup-ACKs re-arms the retransmit and the result is a self-sustaining
+     *    storm (measured 1457 fast retx in a 16 MB transfer).  While in
+     *    recovery, extra dup-ACKs only inflate cwnd (standard Reno).
+     *
+     * Repair itself stays go-back-N from snd_una: this board's RX drops whole
+     * consecutive bursts (measured 33 frames = one full window, see the RTO
+     * diagnostics), so a single-segment retransmit leaves the board waiting for
+     * the rest of the hole -- measured 174 Mbps vs 800+ Mbps for the burst. */
     void fast_retransmit(void) {
         if (inflight.empty()) return;
-        /* Fire once per hole: without this, the peer's continued duplicate ACKs
-         * for the same snd_una would retrigger forever. */
-        if (fast_retx_done && snd_una == fast_retx_seq) { dup_ack_cnt = 0; return; }
-        fast_retx_seq = snd_una;
-        fast_retx_done = true;
         uint32_t gap = snd_nxt - snd_una;
         st.fast_retx++;
-        record_hole(snd_una, gap, "fast-retx(3dup)");
-        printf("[!!] %d dup-ACKs -> fast retransmit from snd_una=%u (gap %u B)\n",
-               cfg.fast_retx_dupacks, snd_una, gap);
-        ssthresh = std::max(cwnd / 2, (uint32_t)mss);
+        recover = snd_nxt;
+        in_recovery = true;
+        record_hole(snd_una, gap, "fast-retx(dupacks)");
+        printf("[!!] %d dup-ACKs -> fast retransmit snd_una=%u (gap %u B, cwnd %u)\n",
+               cfg.fast_retx_dupacks, snd_una, gap, cwnd);
+        ssthresh = std::max(cwnd / 2, (uint32_t)(2 * mss));
         cwnd = ssthresh + 3u * (uint32_t)mss;
         std::deque<Seg> nf;
         for (uint32_t seq = snd_una; (int32_t)(seq - snd_nxt) < 0; ) {
@@ -733,9 +1011,24 @@ public:
         dup_ack_cnt = 0;
     }
 
-    void process_ack(uint32_t ack, uint64_t t_recv) {
+    void process_ack(uint32_t ack, uint64_t t_recv, bool carries_data) {
         if ((int32_t)(ack - snd_una) <= 0) {          /* stale / duplicate */
-            if (ack == snd_una && !inflight.empty()) {
+            /* RFC 5681 / Linux tcp_check_dupack: a segment that CARRIES DATA is
+             * never a duplicate ACK, no matter what its ack field says.  In the
+             * suppress=0 (app-mode) configuration every data segment is answered
+             * twice with the same ack number -- once by the board's pure ACK
+             * (which advances snd_una) and once by the echo segment carrying the
+             * same ack -- so without this rule every single segment manufactured
+             * a phantom dup-ACK and 3 of them tripped a spurious fast retransmit. */
+            if (carries_data && !cfg.legacy_dupack) { st.dup_ack_data_ignored++; return; }
+            if (ack == snd_una && !inflight.empty() && win_unchanged) {
+                /* Reno: during recovery extra dup-ACKs inflate cwnd instead of
+                 * arming another retransmit */
+                if (in_recovery && (int32_t)(snd_una - recover) < 0) {
+                    st.dup_acks_recovery++;
+                    cwnd += (uint32_t)mss;
+                    return;
+                }
                 st.dup_acks++;
                 dup_ack_cnt++;
                 if (cfg.fast_retx_dupacks > 0 && dup_ack_cnt == cfg.fast_retx_dupacks)
@@ -781,6 +1074,10 @@ public:
         uint32_t advanced = ack - snd_una;
         snd_una = ack;
         mark_holes_recovered();
+        if (in_recovery && (int32_t)(ack - recover) >= 0) {
+            in_recovery = false;                    /* Reno: exit at the recovery point */
+            cwnd = ssthresh;
+        }
         if (cwnd < ssthresh) {
             cwnd += advanced;                       /* slow start */
             if (cwnd > ssthresh) cwnd = ssthresh;
@@ -815,7 +1112,22 @@ public:
     }
 
     void rx_data(uint32_t seq, const uint8_t *p, int n) {
+        if (cfg.dbg_stream && st.rx_data_segs <= 12)
+            printf("  [dbg] rx_data seq=%u plen=%d rcv_nxt=%u (off=%u)\n",
+                   seq, n, rcv_nxt, rcv_nxt - (irs + 1));
         if (seq == rcv_nxt) {
+            if (cfg.rx_only) {
+                if (rx_gap_pending) {          /* 缺口补齐: 跳过后再对齐校验 */
+                    vchk.gap(rx_gap_pending);
+                    rx_hole_events++;
+                    rx_gap_pending = 0;
+                }
+                uint64_t t = now_ticks();
+                if (!rx_first_t) rx_first_t = t;
+                rx_last_t = t;
+                rx_last_seq = seq + (uint32_t)n;
+                vchk.check(p, n);
+            }
             verify(seq, p, n);
             rcv_nxt += (uint32_t)n;
             ack_pending = true;
@@ -835,6 +1147,10 @@ public:
             }
         } else if ((int32_t)(seq - rcv_nxt) > 0) {
             st.rx_out_of_order++;
+            if (cfg.rx_only) {
+                uint64_t gap = (uint64_t)(seq - rcv_nxt);
+                if (gap > rx_gap_pending) rx_gap_pending = gap;
+            }
             if (ooo.size() < 4096 && ooo.find(seq) == ooo.end())
                 ooo[seq] = std::vector<uint8_t>(p, p + n);
             ack_pending = true;
@@ -943,14 +1259,26 @@ public:
         if (t - inflight.front().t_sent < rto_ticks) return;
 
         /* go-back-N from snd_una */
+        double silent_us   = st.t_last_rx ? ticks_to_us(t - st.t_last_rx) : -1;
+        double stuck_us    = ticks_to_us(t - inflight.front().t_sent);
+        double ack_age_us  = st.t_last_ack_rx ? ticks_to_us(t - st.t_last_ack_rx) : -1;
         printf("[!!] RTO: retransmitting from snd_una=%u (cwnd %u -> 1 MSS)\n",
                snd_una, cwnd);
+        printf("     diag: stuck_front.seq=%u len=%d stuck_for=%.1f us | board silent for "
+               "%.1f us (last frame) %.1f us (last ACK) | ack_hi=%u snd_una=%u snd_nxt=%u "
+               "delta_hi=%d | rx_frames=%llu rx_ack_data=%llu rx_pure_ack=%llu\n",
+               inflight.front().seq, inflight.front().len, stuck_us,
+               silent_us, ack_age_us,
+               st.ack_hi, snd_una, snd_nxt, (int)(st.ack_hi - snd_una),
+               (unsigned long long)st.rx_frames, (unsigned long long)st.rx_ack_data,
+               (unsigned long long)st.rx_pure_ack);
         st.retransmits++;
         st.rto_events++;
         record_hole(snd_una, snd_nxt - snd_una, "rto");
         ssthresh = std::max(cwnd / 2, (uint32_t)mss);
         cwnd = mss;
         snd_nxt = snd_una;
+        in_recovery = false;             /* RTO leaves fast recovery */
         for (auto &s : inflight) s.retransmitted = true;
         inflight.clear();
 
@@ -1017,6 +1345,102 @@ public:
         t_log_prev = t;
     }
 
+    /* ------------- rx-only 模式 (板侧主动发图案) ------------- */
+    uint64_t rx_start_t = 0;
+
+    int run_rx_only(void) {
+        rx_start_t = now_ticks();
+        t_last_progress = rx_start_t;
+        snd_una_last = snd_una;
+        rcv_nxt_last = rcv_nxt;
+        t_log_prev = t_start;
+        t_log_next = t_start + (uint64_t)(cfg.stats_interval_ms * 1000.0 / g_us_per_tick);
+        rate_samples.push_back(std::make_pair(0.0, (uint64_t)0));
+        uint32_t rcv_base = rcv_nxt;
+        uint64_t t_last_data = 0;
+        for (;;) {
+            st.iters++;
+            process_rx();
+            if (aborted) { t_end = now_ticks(); return 1; }
+            if (cfg.stats_interval_ms > 0 && now_ticks() >= t_log_next) {
+                log_tick();
+                t_log_next = now_ticks() +
+                             (uint64_t)(cfg.stats_interval_ms * 1000.0 / g_us_per_tick);
+            }
+            uint64_t got = (uint64_t)(rcv_nxt - rcv_base);
+            if (got != 0) { t_last_progress = now_ticks(); t_last_data = now_ticks(); }
+            if (cfg.expect_bytes && got >= cfg.expect_bytes) {
+                printf("[ok] 收到 %llu 字节 (目标 %u)\n",
+                       (unsigned long long)got, cfg.expect_bytes);
+                break;
+            }
+            if (!cfg.expect_bytes && st.board_fin && got != 0 &&
+                !ack_pending) {
+                printf("[ok] 对端 FIN 且数据已收完 (%llu 字节)\n",
+                       (unsigned long long)got);
+                break;
+            }
+            if (ticks_to_us(now_ticks() - t_last_progress) >
+                (double)cfg.stall_ms * 1000.0) {
+                printf("[!!] stall: %d ms 无新数据 (收 %llu 字节, 期望 %u, FIN=%llu)\n",
+                       cfg.stall_ms, (unsigned long long)got, cfg.expect_bytes,
+                       (unsigned long long)st.board_fin);
+                t_end = now_ticks();
+                report_rx_only(0, got);
+                return 2;
+            }
+            maybe_ack();
+            /* 活着的连接: 定期补 ACK, 防止板侧窗口耗尽后静默 */
+            if (ack_pending) send_ack();
+            WaitForSingleObject(rx_evt, 1);
+        }
+        t_end = now_ticks();
+        maybe_ack();
+        report_rx_only(1, (uint64_t)(rcv_nxt - rcv_base));
+        return 0;
+    }
+
+    void report_rx_only(int ok, uint64_t got) {
+        double el = ticks_to_us(t_end - t_start) / 1e6;
+        double dsp = (rx_first_t && rx_last_t && rx_last_t > rx_first_t)
+                     ? ticks_to_us(rx_last_t - rx_first_t) / 1e6 : 0.0;
+        double mbps = dsp > 0 ? (double)got * 8.0 / dsp / 1e6 : 0.0;
+        printf("\n=========== RX-ONLY REPORT ===========\n");
+        printf("iface        : %s\n", cfg.iface.c_str());
+        printf("pattern      : RTL app_pattern xorshift64, take-then-advance, "
+               "seed 0x%016llX\n", (unsigned long long)RPAT_SEED);
+        printf("expect       : %u bytes%s\n", cfg.expect_bytes,
+               cfg.expect_bytes ? "" : " (0 = until peer FIN)");
+        printf("received     : %llu bytes  (rcv_nxt 0x%08X -> 0x%08X)\n",
+               (unsigned long long)got, irs + 1, rcv_nxt);
+        printf("verified     : %llu bytes\n", (unsigned long long)vchk.verified);
+        printf("mismatch     : %llu bytes", (unsigned long long)vchk.mismatch);
+        if (vchk.have_bad)
+            printf("  (first at offset %llu: got %02X want %02X)",
+                   (unsigned long long)vchk.first_bad_off,
+                   vchk.first_bad_got, vchk.first_bad_exp);
+        printf("\n");
+        printf("holes        : %llu events / %llu bytes",
+               (unsigned long long)rx_hole_events,
+               (unsigned long long)(vchk.hole_bytes + rx_gap_pending));
+        if (rx_gap_pending)
+            printf("  (unfilled gap %llu)", (unsigned long long)rx_gap_pending);
+        printf("\n");
+        printf("segments     : rx_data_segs=%llu rx_dup=%llu rx_oos=%llu ack_only=%llu\n",
+               (unsigned long long)st.rx_data_segs, (unsigned long long)st.rx_dup_segs,
+               (unsigned long long)st.rx_out_of_order,
+               (unsigned long long)st.rx_ack_only);
+        printf("elapsed      : %.3f s (data window %.3f s)\n", el, dsp);
+        printf("throughput   : %.1f Mbps (%.2f MB/s)  [data window]\n",
+               mbps, mbps / 8.0);
+        printf("board FIN/RST: fin=%llu rst=%llu\n",
+               (unsigned long long)st.board_fin, (unsigned long long)st.board_rst);
+        printf("verdict      : %s\n", (ok && vchk.mismatch == 0 && !aborted)
+               ? "PASS" : "FAIL");
+        printf("======================================\n");
+        fflush(stdout);
+    }
+
     void do_abort(const std::string &why) {
         if (aborted) return;
         aborted = true;
@@ -1041,6 +1465,8 @@ public:
              * frames keep accumulating into the sendqueue while receive work is
              * pending.  A flush is a driver round trip (~120 us), so batch size
              * is what sets the peer's ceiling. */
+            uint64_t t_it = now_ticks();
+            st.iters++;
             process_rx();
             if (aborted) { t_end = now_ticks(); return 1; }
 
@@ -1080,16 +1506,28 @@ public:
                 if (cfg.verbose) printf("  [..] all data ACKed, draining echo\n");
             }
 
+            uint64_t t_tx = now_ticks();
             maybe_ack();
             if (!tx_done) {
+                uint32_t infl0 = snd_nxt - snd_una;
                 send_new_data();
                 check_rto();
+                /* window-blocked: data still to send, but the window would not
+                 * let any of it out this iteration.  This is the signature of a
+                 * board/ACK-path-limited run, as opposed to a peer-CPU-limited
+                 * one (the peer would then always have room to send). */
+                uint32_t allowed0 = std::min(cwnd, (uint32_t)snd_wnd);
+                if (snd_nxt - snd_una == infl0 && infl0 >= allowed0) {
+                    st.win_block_iters++;
+                    win_blocked_iter = true;
+                }
                 uint32_t allowed = std::min(cwnd, (uint32_t)snd_wnd);
                 if (allowed == 0 && ticks_to_us(now_ticks() - t_last_zwin) > 100000.0) {
                     zero_window_probe();
                     t_last_zwin = now_ticks();
                 }
             }
+            st.t_send_us += ticks_to_us(now_ticks() - t_tx);
             /* keep the peer's send window open even when we have nothing to send */
             if (ack_pending && ticks_to_us(now_ticks() - t_last_ack) > 200000.0) {
                 send_ack();
@@ -1101,10 +1539,18 @@ public:
             bool qfull = txq &&
                 txq->len > (unsigned int)((size_t)cfg.flush_frames * 1540);
             bool more = (WaitForSingleObject(rx_evt, 0) == WAIT_OBJECT_0);
+            double it_us = ticks_to_us(now_ticks() - t_it);
+            st.t_loop_us += it_us;
+            st.h_loopiter.add(it_us);
+            if (win_blocked_iter) { st.win_block_us += (uint64_t)it_us; win_blocked_iter = false; }
             if (more && !qfull) continue;
 
             flush_tx();                       /* one driver call for N frames */
-            if (!more) WaitForSingleObject(rx_evt, 1);   /* sleep: rx or 1 ms */
+            if (!more) {
+                uint64_t tw = now_ticks();
+                WaitForSingleObject(rx_evt, 1);   /* sleep: rx or 1 ms */
+                st.t_wait_us += ticks_to_us(now_ticks() - tw);
+            }
         }
         t_end = now_ticks();
         return 0;
@@ -1165,8 +1611,9 @@ public:
                    (unsigned long long)rtt_samples);
         else
             printf("RTT          : (no samples)\n");
-        printf("events       : retransmits=%llu dup_acks=%llu out_of_order=%llu dup_segs=%llu zwin_probes=%llu\n",
+        printf("events       : retransmits=%llu dup_acks=%llu (recovery %llu) out_of_order=%llu dup_segs=%llu zwin_probes=%llu\n",
                (unsigned long long)st.retransmits, (unsigned long long)st.dup_acks,
+               (unsigned long long)st.dup_acks_recovery,
                (unsigned long long)st.rx_out_of_order, (unsigned long long)st.rx_dup_segs,
                (unsigned long long)st.zero_window_probes);
         printf("board ctrl   : RST=%llu FIN=%llu\n",
@@ -1213,6 +1660,74 @@ public:
             if (el > 0)
                 printf("               TX frame rate %.0f fps, RX frame rate %.0f fps\n",
                        st.tx_frames / el, st.rx_calls / el);
+        }
+
+        /* ---- throughput-halving instrumentation (2026-09-19) ----
+         * The question this answers: at 368 Mbps the board's wire is only 40%
+         * busy and the peer's RX frame rate is BELOW what it handled in the
+         * echo-only configuration -- so which side stopped first? */
+        if (el > 0) {
+            FILETIME c, e2, k, u;
+            if (GetProcessTimes(GetCurrentProcess(), &c, &e2, &k, &u)) {
+                auto ft2s = [](const FILETIME &f) {
+                    return ((double)f.dwHighDateTime * 4294967296.0 +
+                            (double)f.dwLowDateTime) / 1e7;
+                };
+                st.cpu_user_s = ft2s(u);
+                st.cpu_sys_s  = ft2s(k);
+                st.cpu_cores_avg = (st.cpu_user_s + st.cpu_sys_s) / el;
+            }
+            printf("CPU          : user %.3f s sys %.3f s over %.3f s => %.2f cores "
+                   "(2.00 = peer CPU-bound)\n",
+                   st.cpu_user_s, st.cpu_sys_s, el, st.cpu_cores_avg);
+            printf("peer busy    : loop %.1f%% (%.2f us/iter over %llu iters) "
+                   "wait %.1f%% loop_overhead %.1f%%\n",
+                   100.0 * st.t_loop_us / (el * 1e6), st.t_loop_us / (double)st.iters,
+                   (unsigned long long)st.iters,
+                   100.0 * st.t_wait_us / (el * 1e6),
+                   100.0 * (st.t_loop_us - st.t_procrx_us - st.t_send_us) / (el * 1e6));
+            printf("  breakdown  : proc_rx %.1f%%  handle %.1f%%  send+rto %.1f%%  "
+                   "flush %.1f%% (%.1f%% of it blocking)\n",
+                   100.0 * st.t_procrx_us / (el * 1e6),
+                   100.0 * st.t_handle_us / (el * 1e6),
+                   100.0 * st.t_send_us / (el * 1e6),
+                   100.0 * st.t_flush_us / (el * 1e6),
+                   el > 0 ? 100.0 * st.t_flush_us / (el * 1e6) : 0.0);
+            printf("window block : %llu iters (%.1f%%), %.1f%% of elapsed with data "
+                   "ready but window closed\n",
+                   (unsigned long long)st.win_block_iters,
+                   100.0 * (double)st.win_block_iters / (double)st.iters,
+                   100.0 * (double)st.win_block_us / (el * 1e6));
+            printf("flush        : %llu calls, %.2f frames/call avg, %llu calls with "
+                   "<2 frames (pipeline bubbles)\n",
+                   (unsigned long long)st.flushes,
+                   st.flushes ? (double)st.flush_frames / (double)st.flushes : 0.0,
+                   (unsigned long long)st.burst_flushes);
+            printf("frame classes: pure_ack=%llu (adv %llu / non-adv %llu), "
+                   "ack+data=%llu, win_chg=%llu, dup_ack_data_ignored=%llu\n",
+                   (unsigned long long)st.rx_pure_ack, (unsigned long long)st.rx_pure_ack_adv,
+                   (unsigned long long)st.rx_pure_ack_dup, (unsigned long long)st.rx_ack_data,
+                   (unsigned long long)st.rx_win_change,
+                   (unsigned long long)st.dup_ack_data_ignored);
+            printf("RX thread    : %llu calls (timeout %llu err %llu), %.2f us/call\n",
+                   (unsigned long long)st.rx_calls, (unsigned long long)st.rx_timeouts,
+                   (unsigned long long)st.rx_errors,
+                   st.rx_calls ? st.rx_time_us / (double)st.rx_calls : 0.0);
+            st.h_rxcall.print("  h: rx_call wall");
+            st.h_rxframes.print("  h: frames/read");
+            st.h_ia.print("  h: rx inter-arrival");
+            st.h_handle.print("  h: handle_frame");
+            st.h_loopiter.print("  h: loop iter");
+            st.h_flush_us.print("  h: flush_tx");
+            st.h_flushframes.print("  h: frames/flush");
+            printf("lat probe    : hits=%llu no_match=%llu segs_sent=%llu outstanding=%llu\n",
+                   (unsigned long long)lat_hits, (unsigned long long)lat_no_match,
+                   (unsigned long long)seg_head,
+                   (unsigned long long)(seg_head - seg_tail));
+            st.h_lat_pureack.print("  h: lat pure-ACK->seg");
+            st.h_lat_echo.print("  h: lat echo->seg");
+            st.h_lat_pureack_data.print("  h: lat pureACK(adv)");
+            st.h_lat_echo_data.print("  h: lat echoACK(adv)");
         }
 
         printf("loss recovery: fast_retx=%llu rto=%llu holes=%llu\n",
@@ -1268,6 +1783,12 @@ static void usage(void) {
 "\n"
 "Traffic:\n"
 "  --bytes <n>          payload bytes to send and echo-verify (default 1048576)\n"
+"  --rx-only            send NO application data; verify the stream the board\n"
+"                       generates (rtl/app_pattern) against the RTL pattern and\n"
+"                       report verified/mismatch/holes/throughput\n"
+"  --expect-pattern <n> = --rx-only with a byte target (0/unset = until FIN)\n"
+"                       (alias --rx-bytes)\n"
+"  --pat-selftest       print+verify the pattern convention (no board needed)\n"
 "  --mss <n>            segment size        (default 1460)\n"
 "  --rcv-wnd <n>        window we advertise in our segments (default 65535)\n"
 "                       (alias --rx-window; headroom: board ring is 64 KiB/conn)\n"
@@ -1343,6 +1864,77 @@ static int tx_bench(pcap_t *p, uint32_t frames, int frame_len) {
            (unsigned long long)calls, us / (double)calls,
            (double)sent / (double)calls);
     return 0;
+}
+
+/* Pattern-convention self-test: no board needed.  Prints the first bytes and
+ * compares them against the values the RTL generator produces (independently
+ * recomputed here from the spec in the header comment). */
+static int pat_selftest(void) {
+    /* Independently derived from the spec (take s[31:24], then xorshift) and
+     * cross-checked against rtl/app_pattern.v behaviour + gen_stim_p5_app.py */
+    static const uint8_t exp[16] = {
+        0x7F, 0x0B, 0x02, 0xE5, 0x36, 0xA1, 0x4E, 0xD6,
+        0x1A, 0xB0, 0x49, 0xB8, 0x56, 0xAD, 0xD6, 0x3F };
+    printf("=== pattern self-test (RTL convention) ===\n");
+    printf("seed        : 0x%016llX\n", (unsigned long long)RPAT_SEED);
+    printf("first 16 RTL: ");
+    uint64_t s = RPAT_SEED;
+    int bad = 0;
+    for (int i = 0; i < 16; i++) {
+        uint8_t b = (uint8_t)(s >> 24);
+        printf("%02X ", b);
+        if (b != exp[i]) bad++;
+        s ^= s << 13; s ^= s >> 7; s ^= s << 17;
+    }
+    printf("\nfirst 16 tbl: ");
+    for (int i = 0; i < 16; i++) printf("%02X ", g_pat[i]);
+    printf("\n");
+    for (int i = 0; i < 16; i++)
+        if (g_pat[i] != exp[i]) bad++;
+    printf("hard truth  : %s\n", bad ? "MISMATCH" : "OK (matches rtl/app_pattern.v)");
+    return bad ? 1 : 0;
+}
+
+/* rx-only verifier self-test (no board): feed the checker a synthetic stream
+ * and prove it (a) accepts the RTL pattern, (b) rejects the old off-by-one
+ * table, (c) accounts a gap as holes without cascading mismatches. */
+static int selftest_rx(void) {
+    const int N = 70000;                 /* > 64 KiB so periodicity cannot hide */
+    std::vector<uint8_t> good((size_t)N);
+    uint64_t s = RPAT_SEED;
+    for (int i = 0; i < N; i++) {
+        good[i] = (uint8_t)(s >> 24);
+        s = xs_next64(s);
+    }
+    int bad = 0;
+    /* (a) RTL stream must verify clean */
+    RxPatChecker a;
+    a.check(good.data(), N);
+    printf("[rx-selftest] RTL stream      : verified=%llu mismatch=%llu -> %s\n",
+           (unsigned long long)a.verified, (unsigned long long)a.mismatch,
+           (a.mismatch == 0 && a.verified == (uint64_t)N) ? "OK" : "FAIL");
+    if (a.mismatch || a.verified != (uint64_t)N) bad++;
+    /* (b) the pre-fix convention (advance-then-take) must be rejected */
+    RxPatChecker b;
+    b.check(good.data() + 1, N - 1);
+    printf("[rx-selftest] off-by-one table: verified=%llu mismatch=%llu -> %s\n",
+           (unsigned long long)b.verified, (unsigned long long)b.mismatch,
+           (b.mismatch > (uint64_t)(N / 2)) ? "OK (rejected)" : "FAIL (not detected)");
+    if (b.mismatch < (uint64_t)(N / 2)) bad++;
+    /* (c) gap accounting: skip 100 bytes and continue */
+    RxPatChecker c;
+    c.check(good.data(), 1000);
+    c.gap(100);
+    c.check(good.data() + 1100, 1000);
+    bool okc = (c.mismatch == 0 && c.verified == 2000 && c.holes == 1 &&
+                c.hole_bytes == 100 && c.pos == 2100);
+    printf("[rx-selftest] gap resync      : verified=%llu mismatch=%llu holes=%llu/%llu -> %s\n",
+           (unsigned long long)c.verified, (unsigned long long)c.mismatch,
+           (unsigned long long)c.holes, (unsigned long long)c.hole_bytes,
+           okc ? "OK" : "FAIL");
+    if (!okc) bad++;
+    printf("[rx-selftest] %s\n", bad ? "FAIL" : "PASS");
+    return bad ? 1 : 0;
 }
 
 static void list_devices(void) {
@@ -1427,15 +2019,25 @@ int main(int argc, char **argv) {
         else if (a == "--no-mintocopy") cfg.mintocopy0 = false;
         else if (a == "--no-filter") cfg.use_filter = false;
         else if (a == "--flush-frames") cfg.flush_frames = atoi(need_arg(argc, argv, i));
+        else if (a == "--rx-only") cfg.rx_only = true;
+        else if (a == "--expect-pattern" || a == "--rx-bytes") {
+            cfg.rx_only = true;
+            cfg.expect_bytes = (uint32_t)strtoul(need_arg(argc, argv, i), 0, 0);
+        }
+        else if (a == "--pat-selftest") cfg.pat_selftest = true;
+        else if (a == "--selftest-rx") cfg.selftest_rx = true;
         else if (a == "--tx-bench")
             cfg.tx_bench = (uint32_t)strtoul(need_arg(argc, argv, i), 0, 0);
         else if (a == "--no-fast-retx") cfg.fast_retx_dupacks = 0;
+        else if (a == "--dupacks") cfg.fast_retx_dupacks = atoi(need_arg(argc, argv, i));
         else if (a == "--rto-ms") cfg.rto_ms = atoi(need_arg(argc, argv, i));
         else if (a == "--stall-ms") cfg.stall_ms = atoi(need_arg(argc, argv, i));
         else if (a == "--seed") cfg.seed = (uint32_t)strtoul(need_arg(argc, argv, i), 0, 0);
         else if (a == "--syn-opts") cfg.syn_opts = need_arg(argc, argv, i);
         else if (a == "--no-fin") cfg.do_fin = false;
         else if (a == "--verbose") cfg.verbose = true;
+        else if (a == "--dbg-stream") cfg.dbg_stream = true;
+        else if (a == "--legacy-dupack") cfg.legacy_dupack = true;
         else { fprintf(stderr, "unknown option: %s (try --help)\n", a.c_str()); return 2; }
     }
 
@@ -1446,6 +2048,9 @@ int main(int argc, char **argv) {
     if (cfg.rate_test && cfg.stats_interval_ms == 0) cfg.stats_interval_ms = 1000;
 
     pat_init();
+
+    if (cfg.pat_selftest) return pat_selftest();
+    if (cfg.selftest_rx) return selftest_rx();
 
     char errbuf[256] = {0};
     if (cfg.iface.empty()) {
@@ -1510,7 +2115,8 @@ int main(int argc, char **argv) {
     peer.start_rx();
 
     static const char *ackmode_name[] = {"immediate", "delayed", "coalesce(everyN)"};
-    printf("=== synthetic TCP peer ===\n");
+    printf("=== synthetic TCP peer ===%s\n",
+           cfg.rx_only ? " [RX-ONLY: 板侧主动发, peer 只收不发]" : "");
     printf("iface %s\n", cfg.iface.c_str());
     printf("mss=%d bytes=%u (%.3f MB) rx-window=%u cwnd=%s\n",
            cfg.mss, cfg.bytes, cfg.bytes / 1048576.0, cfg.rx_window,
@@ -1527,6 +2133,9 @@ int main(int argc, char **argv) {
     int rc = 0;
     if (!peer.connect()) {
         rc = 1;
+    } else if (cfg.rx_only) {
+        rc = peer.run_rx_only();
+        if (rc == 0) peer.teardown();
     } else {
         rc = peer.run();
         if (rc == 0) peer.teardown();
