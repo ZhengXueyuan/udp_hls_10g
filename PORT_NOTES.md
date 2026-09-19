@@ -2401,3 +2401,26 @@ ra_e_r_reg -> retx_ram ADDRBWRADDR` (P4c 起既有族, 96.99% 走线, 0 逻辑�
 - 遗留 (P5 多连接前置): ack_hi 的 retx_hi/retx_active 是**全局会话信号**, 现按
   per-ACK 连接使用; 单连接数据面下无害, 多连接时需加 retx_id 归属比对
   (tx_frame 暴露 o_retx_id + tcp_rx 比对 conn_id_l) — 见 112ad78 注。
+
+### P4d 板级验收: VLAN fast path 全链路实证 (2026-09-19)
+
+**平台障碍**: Killer E5000B 不支持 npcap raw 注入透传 802.1Q tag (关闭 "优先级和
+VLAN" 属性 + 重启网卡后 MW 词计数仍 19/19 = tag 未上线; 读 mac_rx_64 RTL 确认
+计数口径 = 不含 FCS 的帧体, 排除口径误判)。
+
+**破解**: 用网卡自带 **VLAN ID 属性**给*所有*出站帧打 tag (VLAN 100, 注册键
+RegVlanid; 抓包点在 tag 插入之前故抓包看不见 tag, 用板侧 MW 计数判决):
+- 单帧 ping (-l 11, 帧体 53B + 4B tag) → MW delta = **8 词** (无 tag 为 7) ✓
+  = 内核流量也被打 tag, tag 确实上线
+- **32MB 速率测试全通**: 109.2/102.2 Mbps, 33,554,432 B 完整 (全 tag 链路:
+  TCP 握手/数据/ACK 全经 802.1Q, 板侧 shim 剥离后 fast path 正常)
+- **64MB 全通**: 109.1/103.4 Mbps, 67,108,864 B 完整, exit 0
+- 板→PC 回包无 tag 被 PC 正常接收 (网卡不按 VLAN 过滤入向)
+- 测试后已还原: RegVlanid=0, 网卡重启, ping 恢复
+
+**结论**: VLAN fast path 板级验收通过 (端到端 + 内核栈互操作 + 全量数据完整)。
+比 scapy 注入更强: 真实 Windows TCP 栈的全部行为都在带 tag 链路上跑过。
+
+**测试工具结论 (用户议题)**: 噪声/性能问题的根因 = 内核栈参与测试, 解法 =
+合成对端 (不走 socket) + 屏蔽内核反应, 语言 (C++ vs Python) 次要; C++/npcap 的
+增量价值在精确时序/线速生成/故障注入 (P6 10G 仍不够, 需 DPDK 或硬件测试仪)。
