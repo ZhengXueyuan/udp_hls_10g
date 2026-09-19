@@ -241,8 +241,12 @@ module tb_tcp_chain;
         .s_axis_tid(tid),
         .ack_req(tx_ack_req), .ack_id(tx_ack_id), .ack_val(tx_ack_val),
         .ack_syn(tx_ack_syn),
+        // P5: FIN/RST 通道未用 (接地; 悬空会让 ackq 写入 X)
+        .ack_fin(1'b0), .ack_rst(1'b0), .fin_req(16'h0), .rst_req(16'h0), .cfg_up(1'b0), .cfg_up_id(4'd0),
+        .o_fin_sent(), .o_retx_id(),
         .rb_id(rb_id), .rb_snd_nxt(rb_snd_nxt), .rb_rcv_nxt(rb_rcv_nxt),
         .rb_rcv_wnd(rb_rcv_wnd), .rb_snd_una(rb_snd_una), .rb_snd_wnd(rb_snd_wnd),
+        .rb_state(rb_state),
         .win_open(win_open), .win_inflight(win_inflight), .win_wnd_eff(win_wnd_eff),
         .upd_wr(tx_upd_wr), .upd_id(tx_upd_id), .upd_sel(tx_upd_sel), .upd_val(tx_upd_val),
         .cam_rd_id(cam_rd_id), .cam_rd_dmac(cam_rd_dmac), .cam_rd_sip(cam_rd_sip),

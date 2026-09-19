@@ -78,6 +78,9 @@ module tb_tcp_tx;
         .s_axis_tvalid(tvalid), .s_axis_tready(tready), .s_axis_tlast(tlast),
         .s_axis_tid(tid),
         .ack_req(ack_req), .ack_id(ack_id), .ack_val(ack_val), .ack_syn(1'b0),
+        // P5: FIN/RST 通道未用 (接地; 悬空会让 ackq 写入 X)
+        .ack_fin(1'b0), .ack_rst(1'b0), .fin_req(16'h0), .rst_req(16'h0), .cfg_up(1'b0), .cfg_up_id(4'd0),
+        .o_fin_sent(), .o_retx_id(),
         .rb_id(rb_id), .rb_snd_nxt(rb_snd_nxt), .rb_rcv_nxt(rb_rcv_nxt),
         .rb_rcv_wnd(rb_rcv_wnd), .rb_snd_una(rb_snd_una), .rb_snd_wnd(rb_snd_wnd),
         .win_open(win_open), .win_inflight(win_inflight), .win_wnd_eff(win_wnd_eff),
@@ -98,6 +101,9 @@ module tb_tcp_tx;
         .rb_id(rb_id), .rb_rcv_nxt(rb_rcv_nxt), .rb_snd_nxt(rb_snd_nxt),
         .rb_snd_una(rb_snd_una), .rb_rcv_wnd(rb_rcv_wnd), .rb_snd_wnd(rb_snd_wnd),
         .rb_state(rb_state),
+        // P5: 组合读口 C 无消费者 (接 0 防悬空输入)
+        .rc_id(4'd0), .rc_rcv_nxt(), .rc_snd_nxt(), .rc_snd_una(),
+        .rc_rcv_wnd(), .rc_snd_wnd(), .rc_state(),
         .win_id(rb_id), .win_open(win_open),
         .win_inflight(win_inflight), .win_wnd_eff(win_wnd_eff),
         .upd_wr(tcb_wr), .upd_id(tcb_id), .upd_sel(tcb_sel), .upd_val(tcb_val)

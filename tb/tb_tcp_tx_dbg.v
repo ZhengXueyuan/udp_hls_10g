@@ -12,8 +12,11 @@ module tb_tcp_tx_dbg;
         .s_axis_tdata(tdata), .s_axis_tkeep(tkeep), .s_axis_tvalid(tvalid),
         .s_axis_tready(tready), .s_axis_tlast(tlast), .s_axis_tid(tid),
         .ack_req(1'b0), .ack_id(4'd0), .ack_val(32'd0),
+        // P5: FIN/RST 通道未用 (接地); 无 tcb -> rb_state 常量 1 (ESTAB)
+        .ack_fin(1'b0), .ack_rst(1'b0), .fin_req(16'h0), .rst_req(16'h0), .cfg_up(1'b0), .cfg_up_id(4'd0),
+        .o_fin_sent(), .o_retx_id(),
         .rb_id(), .rb_snd_nxt(32'd6000), .rb_rcv_nxt(32'd1000), .rb_rcv_wnd(16'h2000),
-        .rb_snd_una(32'd6000), .rb_snd_wnd(16'hFFFF),
+        .rb_snd_una(32'd6000), .rb_snd_wnd(16'hFFFF), .rb_state(4'd1),
         // 无 TCB: 门控恒开 (对应常量 rb: 在飞 0, 窗 0xFFFF, 32 位差 < 帽)
         .win_open(1'b1), .win_inflight(16'd0), .win_wnd_eff(16'hFFFF),
         .upd_wr(), .upd_id(), .upd_sel(), .upd_val(),

@@ -36,6 +36,30 @@ module tcp_tx_frame (
     input  wire [3:0]  ack_id,
     input  wire [31:0] ack_val,
     input  wire        ack_syn,        // 1 = SYN+ACK 段 (flags=0x12, 发完 snd_nxt+1)
+    // ---- P5: FIN/RST 发送通道 ----
+    // ack_fin/ack_rst 兄弟 ack_syn (ackq 条目标志): FIN = flags 0x11 (发完
+    // snd_nxt+1, 置 fin_sent_r/fin_seq_r), RST = flags 0x14 (发完 snd_nxt+1)。
+    // fin_req/rst_req 是 app 侧每连接电平请求 (app_ctrl 产生; 本模块自扫描
+    // 排队, 不消耗 app 侧 ACK 队列):
+    //   FIN: 只在 snd_nxt == snd_una (无在飞数据) 且 state==ESTAB 时排队 (D4)
+    //         — ring 不覆盖 FIN 的 1 字节 seq, 有在飞时排队会让 svc 回卷把
+    //        FIN 的 seq 当 ring 数据重放 (垃圾载荷)。
+    //   RST: 只要 ESTAB 即排队 (不消费 seq 语义, 中止用)。
+    // 请求在 fin_sent_r/rst_sent_r 置位后不再重复排队 (每连接一次); 连接
+    // 非 ESTAB 时 (扫描采到 state != 1) 清 fin_sent_r/rst_sent_r (重连可再用)。
+    input  wire        ack_fin,
+    input  wire        ack_rst,
+    input  wire [15:0] fin_req,
+    input  wire [15:0] rst_req,
+    // P5a 复核 D1 修复: cfg ADD 收尾脉冲 (slow_cfg_adp 的 ev_up + ev_slot) —
+    // 该槽重新建连时显式清 FIN/RST 已发标志。**不能只靠扫描清** (原来只在
+    // scan_now 看到 rb_state!=1 时清): 背靠背 DEL→ADD (间隔 ~70 拍) 落在两次
+    // 扫描 (~256 拍) 之间时 state=0 从未被采到 -> fin_sent_r 永久残留 ->
+    // start_data 永久挡住该连接 -> app 字被吞进载荷 FIFO 却组不了帧 -> FIFO 满
+    // + FSM 卡 S_IDLE = 数据面死锁 (测试 agent 实测, gap≈70 拍必现 / 4000 拍正常)。
+    input  wire        cfg_up,
+    input  wire [3:0]  cfg_up_id,
+    output wire [15:0] o_fin_sent,     // 每连接 FIN 已发出 (纯线束, app_ctrl 用)
     // TCB 读口 B (顶层实例化 tcb 并连线)
     output wire [3:0]  rb_id,
     input  wire [31:0] rb_snd_nxt,
@@ -47,6 +71,7 @@ module tcp_tx_frame (
     // 永久空洞, 对端等缺失字节 -> 双向死锁 -> RST)
     input  wire [31:0] rb_snd_una,
     input  wire [15:0] rb_snd_wnd,
+    input  wire [3:0]  rb_state,        // P5: FIN/RST 排队门 + 已发标志清理 (ESTAB=1)
     // P4b-7-P6 窗口门控注册读口 (tcb win 读口输出 -> 本模块输入): 门控决策全
     // 出自 tcb 内注册比较 — wnd_open 决策链无任何 TCB 组合读。
     // P4b-7-P6-fix: win_open = 注册的 32 位回绕正确门 (snd_nxt-snd_una 全 32 位
@@ -66,6 +91,7 @@ module tcp_tx_frame (
     // (= 真正发送过的最高字节)。会话期间 ACK 合法上界必须用它 (理由见 tcp_rx)。
     output wire [31:0] o_retx_hi,          // 回卷高水位 (retx_active=1 时有效)
     output wire        o_retx_active,      // 重传会话进行中
+    output wire [3:0]  o_retx_id,          // 会话连接 (P4d-fix 注的多连接加固项)
     // TCB 更新 (数据段末字消费拍组合脉冲: sel=1 snd_nxt <= seq+plen;
     // 与状态回 S_IDLE 同拍写入 — 下一帧最早下拍启动, 读到的是更新后的值)
     output wire        upd_wr,
@@ -93,6 +119,10 @@ module tcp_tx_frame (
     output reg  [31:0] stat_ack,        // 发出的纯 ACK 段数
     output reg  [31:0] stat_ack_drop,   // ACK 队列满丢弃
     output reg  [31:0] stat_eend,       // S_PAY 欠载提前收帧 (结构不可达; 亮灯即缺陷 A)
+    // P5: 超长帧帧内中止丢弃数 (len_bad; app 契约违规兜底) + FIN/RST 段数
+    output reg  [31:0] stat_drop_len,
+    output reg  [31:0] stat_fin,
+    output reg  [31:0] stat_rst,
     // P4b-7-P6 tlast 探针: 帧器吞到 tlast 的次数 (S_IDLE/S_RECV 的 accept && tlast)。
     // 与 tcp_echo stat_tlast_wr/fwd 对账: wr>0 而本计数 0 => tlast 死在 echo→帧器之间
     // (frame_fifo 读出 / axis_pipe / 帧器接受的 tlast 通路)。
@@ -125,6 +155,12 @@ module tcp_tx_frame (
     // 永不溢出。窗帽与在飞差均 32 位计算, 全 4GB 序列空间回绕正确
     // (帽 0xBFFE << 64K, 无 16 位化边角)。
     parameter [15:0]  RING_CAP = 16'hBFFE; // 窗口门控帽 (ring 容量的收紧版, 见上)
+    // P5 长度守卫上界 (app 契约: 一帧 = 一个 TCP 段 ≤1460B; 这里放到 1500 留
+    // 余量)。超过即整帧中止 (不写 FIFO/ring/csum, 不收帧, tlast 拍回 S_IDLE
+    // 并冲洗已写入的字节 + stat_drop_len++)。上界必须 < 载荷 FIFO 容量
+    // (256 字 = 2048B): 超限检出拍最多已写入 (PLEN_MAX+7)/8 = 188 字, 永不满
+    // 也永不触发 pay_full 死锁 (>2048B 的帧在旧代码里会把 256 深 FIFO 顶死)。
+    parameter [11:0] PLEN_MAX = 12'd1500;
 
     localparam [2:0] S_IDLE = 3'd0, S_RECV = 3'd1, S_WAIT = 3'd2, S_HDR = 3'd3,
                      S_PAY  = 3'd4, S_TAIL = 3'd5, S_DONE = 3'd6, S_RING = 3'd7;
@@ -142,6 +178,15 @@ module tcp_tx_frame (
     // 帧首拍锁存
     reg  [3:0]  cur_id;
     reg         is_data_r, is_syn_r;
+    reg         is_fin_r, is_rst_r;       // P5: FIN/RST 帧 (flags 0x11/0x14)
+    // P5 长度守卫: len_bad = 本帧已超 PLEN_MAX (帧内中止); flush_pend = 中止后
+    // 待冲洗 u_fifo 里已写入的字节 (S_IDLE 排空才清)
+    reg         len_bad, flush_pend;
+    // P5 FIN/RST 状态 (每连接)
+    reg  [15:0] fin_sent_r;               // FIN 已发出 (阻止重复排队)
+    reg  [15:0] rst_sent_r;               // RST 已发出
+    reg  [31:0] fin_seq_r [0:15];         // FIN 的 seq (= 发出时 snd_nxt, RTO 用)
+    reg  [15:0] fin_retx_pend;            // FIN 在飞被回卷打断 -> ring 会话排空处重推
     reg  [31:0] seq_r, ack_r;
     reg  [15:0] wnd_r;
     reg  [15:0] doff_flags_r;
@@ -170,9 +215,12 @@ module tcp_tx_frame (
     assign o_retx_hi     = retx_hi;
     assign o_retx_active = retx_active;
 
-    // ---- ACK 请求队列 ([36:33]=id [32]=syn [31:0]=ack_val) ----
+    // ---- ACK 请求队列 ([38:35]=id [34]=syn [33]=fin [32]=rst [31:0]=ack_val) ----
+    // P5: 37 -> 39 位 (加 fin/rst 标志两 bit; 计划文档写 38 是笔误 — 两个标志
+    // 位 + 4 位 id + syn 位 + 32 位 ack_val = 39)
+    localparam ACKQ_W = 39;
     wire        ackq_full, ackq_empty;
-    wire [36:0] ackq_dout;
+    wire [ACKQ_W-1:0] ackq_dout;
     wire        pay_full, pay_empty;
     wire        ack_pend = !ackq_empty;
     // P6 时序: ack_pend 寄存器化 (ack_pend_r) — 否则 ackq wptr -> ackq_empty
@@ -181,7 +229,11 @@ module tcp_tx_frame (
     // 值只把 ACK 优先推迟 1 拍); start_ack 使能另加组合 !ackq_empty 防伪启动
     // (ack_pend_r 滞后 1 拍期间 ackq 已被弹出, 空读会发垃圾 ACK 帧)。
     reg         ack_pend_r;
-    wire [3:0]  start_id = ack_pend_r ? ackq_dout[36:33] : s_axis_tid;
+    wire [3:0]  start_id = ack_pend_r ? ackq_dout[38:35] : s_axis_tid;
+    // 队列条目字段别名 (W=39; 见 ACKQ_W 注释)
+    wire        aq_syn  = ackq_dout[34];
+    wire        aq_fin  = ackq_dout[33];
+    wire        aq_rst  = ackq_dout[32];
 
     // ---- S_IDLE 帧启动仲裁链 (P4b-7): ack > retx svc > ring 帧 > RTO 扫描 > 活数据 ----
     // svc: 回卷一次重传会话 (snd_nxt <= snd_una, 占 TCB 写口 1 拍); svc_id 请求源
@@ -199,10 +251,15 @@ module tcp_tx_frame (
     // 1 拍, 与 svc_id_r 同拍同源 (均自 rto_pend@上拍), 语义一致; retx_req
     // 为寄存器电平无路径。
     reg         rto_pend_any;
+    // P5 长度守卫冲洗门: flush_pend 期间 S_IDLE 只做 u_fifo 排空 — 新帧启动/
+    // svc/ring/scan 全部压住 (否则新帧的字会与待冲洗的旧字节混在同一 FIFO 里,
+    // 排空指针可能吃掉新帧首字)。flush 只在超长帧中止后出现 (P4 流程恒 0)。
+    wire        flush_act = (state == S_IDLE) && flush_pend;
     wire        svc     = (state == S_IDLE) && !ack_pend_r && !retx_active &&
-                          (retx_req || rto_pend_any);
+                          !flush_pend && (retx_req || rto_pend_any);
     // ring_eval: retx 会话期间每个无 ACK 的 S_IDLE 拍评估 (ack 插帧不打断会话)
-    wire        ring_eval = (state == S_IDLE) && !ack_pend_r && retx_active && !svc;
+    wire        ring_eval = (state == S_IDLE) && !ack_pend_r && retx_active && !svc &&
+                            !flush_pend;
     wire [31:0] ring_delta = retx_hi - rb_snd_nxt;   // rb_* 已 mux 到 retx_id_r
     wire        ring_start = ring_eval && (ring_delta != 32'd0);
     // SEV2-2 (P6 重做): 扫描由自由运行 tick 驱动 (每 16 拍 1 次), 不再依赖
@@ -217,8 +274,9 @@ module tcp_tx_frame (
     reg  [3:0]  tick_cnt;                 // 自由运行 16 分频
     wire        scan_tick = (tick_cnt == 4'd15);
     wire        scan_now = (state == S_IDLE) && !ack_pend_r && !svc && !ring_eval &&
-                           scan_tick;
-    wire        start_ack  = (state == S_IDLE) && ack_pend_r && !ackq_empty;
+                           !flush_pend && scan_tick;
+    wire        start_ack  = (state == S_IDLE) && ack_pend_r && !ackq_empty &&
+                             !flush_pend;
     // P4b-7-P6-fix 窗口门控: wnd_open = tcb 注册输出的 win_open — 门 =
     // REGISTERED 32 位回绕正确的在飞 (snd_nxt - snd_una, 全 32 位) vs
     // RING_CAP 帽 (0xBFFE) 钳位后的对端通告窗, 比较在 tcb win 读口内完成
@@ -230,8 +288,11 @@ module tcp_tx_frame (
     // (CAP-1)+4095 = 53244 < 65536 ring 字节) 保持不变 — 本修复只把 16 位
     // 高半相等门换成 32 位回绕正确比较, 无跨 64K 边界误关边角。
     wire        wnd_open  = win_open;
+    // P5 FIN 前置硬规则 (D4): 已排队/已发出 FIN 的连接不再启动 app 数据帧
+    // (无在飞时排队, 帧启动时再查一次 — 保证 FIN 之后不再有新数据)
     wire        start_data = (state == S_IDLE) && !ack_pend_r && !svc && !ring_eval &&
-                             !scan_now && s_axis_tvalid && !pay_full && wnd_open;
+                             !scan_now && !flush_pend && s_axis_tvalid && !pay_full &&
+                             wnd_open && !fin_req[start_id] && !fin_sent_r[start_id];
 
     // rb/cam 读口 mux: svc/ring_eval/scan_now 拍旁路 start_id (TCB/CAM 组合读,
     // 本拍即目标连接值)。scan_now 仅依赖 scan_tick (寄存器) 与 state/ack_pend_r
@@ -247,8 +308,10 @@ module tcp_tx_frame (
     // 始终释放), rto_pend 清/计时器重装亦无条件 (svc 每次照常应答)。
     wire        blocked = (epoch[svc_id] >= 4'd15);
     wire        svc_rewind = svc && (rb_snd_nxt != rb_snd_una) && !blocked;
-    assign upd_wr  = ((state == S_DONE) && (is_data_r || is_syn_r) &&
-                      m_axis_tvalid && m_axis_tready) || svc_rewind;
+    // P5: FIN/RST 段也推进 snd_nxt (+1; upd_val 的 !is_data_r 分支即 32'd1)。
+    // 超长帧走中止支 (S_RECV -> S_IDLE), 永不进 S_DONE ⇒ 其字节不推进 snd_nxt。
+    assign upd_wr  = ((state == S_DONE) && (is_data_r || is_syn_r || is_fin_r ||
+                      is_rst_r) && m_axis_tvalid && m_axis_tready) || svc_rewind;
     assign upd_id  = svc_rewind ? svc_id : cur_id;
     assign upd_sel = 3'd1;
     assign upd_val = svc_rewind ? rb_snd_una :
@@ -256,10 +319,17 @@ module tcp_tx_frame (
     assign retx_gnt = svc && retx_req;
 
     // svc 拍 accept 必须禁 (start_data 被 svc 压制, accept 不再等于帧首拍消费,
-    // 否则会吞一个既不入 FIFO 计数也不入 plen 的字)
+    // 否则会吞一个既不入 FIFO 计数也不入 plen 的字)。P5 同理: flush_pend 期间
+    // S_IDLE 不接受任何活帧字 (start_data 被 !flush_pend 压制, 否则 app 的字会
+    // 被 accept 吞掉却既不进 FIFO 也不进 plen — 2000B 坏帧后实测丢 144B)。
+    // P5a 复核 D2 修复: S_IDLE 的接受门必须与 start_data 的启动门**同门** —
+    // 原来只挡启动不挡接受: fin_req/fin_sent_r 的连接帧起不来却照样把 app 的
+    // 字收进载荷 FIFO (FIFO 满 + 无人排空 = 死锁)。start_id 在 !ack_pend_r 下
+    // = s_axis_tid (本子句已排除 ack_pend_r)。
     assign s_axis_tready = ((state == S_RECV) ||
                             ((state == S_IDLE) && !ack_pend_r && !svc &&
-                             !ring_eval && !scan_now && wnd_open)) &&
+                             !ring_eval && !scan_now && !flush_pend && wnd_open &&
+                             !fin_req[start_id] && !fin_sent_r[start_id])) &&
                            !pay_full;
     wire        accept = s_axis_tvalid && s_axis_tready;
 
@@ -267,7 +337,9 @@ module tcp_tx_frame (
     //      声明 ring_wr/fdin_ring) ----
     wire [72:0] fdout;
     wire        pay_load = (state == S_PAY) && (m_axis_tready || !m_axis_tvalid);
-    wire        rd = pay_load && (plen_r != 12'd0) && !pay_empty;
+    // P5: 超长帧中止后 S_IDLE 排空 u_fifo 里的残留字节 (flush_act; 见 flush_pend)
+    wire        flush_rd = flush_act && !pay_empty;
+    wire        rd = (pay_load && (plen_r != 12'd0) && !pay_empty) || flush_rd;
 
     function [3:0] pop8;
         input [7:0] v;
@@ -327,7 +399,10 @@ module tcp_tx_frame (
 
     // ---- P4b-7 重传 ring: 写拍点 = 活帧每个有效 accept 拍 (ring 源帧 accept=0
     //      天然不重写); 读口数据 rd_en 后 1 拍 ----
-    wire        wr_tap = accept && (s_axis_tkeep != 8'h00);
+    // P5 长度守卫: len_bad 后的字节不入 ring (中止帧的字节永不发送 -> 不入
+    // 重传缓冲; 之前已写入的残字节因 snd_nxt 未推进, 会被下一帧自同一基址
+    // 覆盖 — 且在 retx_hi 之外, ring 读永不触及)
+    wire        wr_tap = accept && (s_axis_tkeep != 8'h00) && !len_bad;
     wire [3:0]  w_tap_conn = (state == S_RECV) ? cur_id : start_id;
     wire [31:0] w_tap_seq  = start_data ? rb_snd_nxt : tap_seq;
 
@@ -366,7 +441,7 @@ module tcp_tx_frame (
     );
 
     // ---- 载荷 FIFO/校验和 写口 mux (活帧与 ring 帧按状态互斥) ----
-    wire        wr  = (accept && (s_axis_tkeep != 8'h00)) || ring_wr;
+    wire        wr  = (accept && (s_axis_tkeep != 8'h00) && !len_bad) || ring_wr;
     wire [72:0] fdin = ring_wr ? fdin_ring :
                        {s_axis_tlast, s_axis_tkeep, s_axis_tdata};
 
@@ -388,13 +463,17 @@ module tcp_tx_frame (
 
     // 帧长 (tlast 拍): start_data 时 plen 还是上一帧残留值, 必须显式归零
     wire [11:0] plen_n = (start_data ? 12'd0 : plen) + {8'b0, pop8(s_axis_tkeep)};
+    // P5 长度守卫: 本拍累计 (含本拍字节) 越过 PLEN_MAX -> 帧内中止。len_bad 是
+    // 寄存器 (检出拍的下拍起屏蔽写口), 检出拍本身已写进 FIFO/ring 的字节由
+    // S_IDLE 的 flush 与 ring 覆盖语义兜掉 (见 flush_pend / wr_tap 注释)。
+    wire        len_over = (plen_n > PLEN_MAX);
     // 校验和伪头初值: dst IP 用组合读回 (dip_r 本拍才锁存)
     wire [31:0] csum_init_val = {4'b0, cfg_src_ip[31:16]} + {4'b0, cfg_src_ip[15:0]} +
                                 {4'b0, cam_rd_sip[31:16]} + {4'b0, cam_rd_sip[15:0]} +
                                 32'h0006;
     wire        csum_init = start_ack || start_data || ring_start;
     wire        csum_den  = ((start_data || (state == S_RECV)) && accept &&
-                             (s_axis_tkeep != 8'h00)) || ring_wr;
+                             (s_axis_tkeep != 8'h00) && !len_bad) || ring_wr;
     wire [63:0] csum_din   = ring_wr ? ring_w : s_axis_tdata;
     wire [7:0]  csum_dkeep = ring_wr ? ring_tkeep : s_axis_tkeep;
     // aen 三拍补足 9 半字 (每组 ≤4 项 < 2^18): 伪头 tcp_len + TCP 头 (csum/urg=0 不参与)
@@ -428,12 +507,36 @@ module tcp_tx_frame (
         .dbg_full(dbg_pay_full2), .dbg_empty(dbg_pay_empty)
     );
 
-    fifo_sync #(.W(37), .D(8), .AW(3)) u_ackq (
+    // ---- P5 FIN/RST 排队 (扫描拍, 请求来自 app_ctrl 的 fin_req/rst_req) ----
+    // FIN: 仅无在飞数据 (snd_nxt == snd_una) 且 ESTAB 且请求未服务 (D4);
+    // RST: ESTAB 即排队 (不消费 seq)。两条都只占 ackq 一个条目, 发完即
+    // fin_sent_r/rst_sent_r 置位 (S_DONE) 不再重复。ack_req 优先 (丢 ACK 比
+    // 丢 FIN 严重; FIN 下轮扫描 (256 拍) 自动重试)。
+    wire        fin_push = scan_now && fin_req[scan_id] && !fin_sent_r[scan_id] &&
+                           !ackq_full && (rb_state == 4'd1) &&
+                           (rb_snd_nxt == rb_snd_una);
+    wire        rst_push = scan_now && rst_req[scan_id] && !rst_sent_r[scan_id] &&
+                           !ackq_full && (rb_state == 4'd1);
+    // FIN 重推 (RTO 回卷把已发出的 FIN 吞掉): ring 会话排空拍组合推同 seq 条目
+    wire        fin_repush = ring_eval && !ring_start && fin_retx_pend[retx_id_r] &&
+                             !ackq_full;
+    wire        ack_req_ok = ack_req && !ackq_full;
+    wire        ackq_wr    = ack_req_ok || fin_push || rst_push || fin_repush;
+    wire [ACKQ_W-1:0] ackq_din = ack_req_ok ? {ack_id, ack_syn, ack_fin, ack_rst, ack_val} :
+                                 fin_push   ? {scan_id, 1'b0, 1'b1, 1'b0, 32'h0} :
+                                 rst_push   ? {scan_id, 1'b0, 1'b0, 1'b1, 32'h0} :
+                                              {retx_id_r, 1'b0, 1'b1, 1'b0, 32'h0};
+
+    fifo_sync #(.W(ACKQ_W), .D(8), .AW(3)) u_ackq (
         .clk(clk), .rst_n(rst_n),
-        .wr(ack_req && !ackq_full), .din({ack_id, ack_syn, ack_val}),
+        .wr(ackq_wr), .din(ackq_din),
         .rd(start_ack), .dout(ackq_dout),
         .empty(ackq_empty), .full(ackq_full)
     );
+
+    // P5: FIN 已发出状态线束 (app_ctrl 的 app_tx_ready 用) + 重传会话连接号
+    assign o_fin_sent = fin_sent_r;
+    assign o_retx_id  = retx_id_r;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -443,11 +546,14 @@ module tcp_tx_frame (
             id_r <= 0; id_cap <= 0;
             wait_cnt <= 0; hcnt <= 0; hold48 <= 0; tail_d <= 0; tail_k <= 0;
             cur_id <= 0; is_data_r <= 0; is_syn_r <= 0;
+            is_fin_r <= 0; is_rst_r <= 0; len_bad <= 0; flush_pend <= 0;
+            fin_sent_r <= 16'h0; rst_sent_r <= 16'h0; fin_retx_pend <= 16'h0;
             seq_r <= 0; ack_r <= 0; wnd_r <= 0; doff_flags_r <= 0;
             dmac_r <= 0; dip_r <= 0; sport_r <= 0; dport_r <= 0;
             m_axis_tdata <= 0; m_axis_tkeep <= 0; m_axis_tvalid <= 0; m_axis_tlast <= 0;
             stat_frames <= 0; stat_bytes <= 0; stat_ack <= 0; stat_ack_drop <= 0;
             stat_eend <= 0; stat_tlast_in <= 0;
+            stat_drop_len <= 0; stat_fin <= 0; stat_rst <= 0;
             retx_active <= 0; retx_id_r <= 0; retx_hi <= 0; scan_id <= 0;
             rto_pend <= 16'h0; ring_seq <= 0; ring_rem <= 0; tap_seq <= 0;
             nbeats <= 8'd0; beat_cnt <= 8'd0; ring_d_r <= 64'h0;
@@ -457,8 +563,17 @@ module tcp_tx_frame (
                 rto_timer[ri] <= 21'd0;
                 snd_una_prev[ri] <= 32'd0;
                 epoch[ri] <= 4'd0;
+                fin_seq_r[ri] <= 32'd0;
             end
         end else begin
+            // P5a 复核 D1 修复: cfg ADD 收尾脉冲 -> 显式清该槽的 FIN/RST 已发标志与
+            // 重推挂起位 (同槽重连的新会话必须能发数据、能再 close)。放在最前面,
+            // 与下面的扫描清 (rb_state!=1) 互补: 脉冲路径覆盖背靠背 DEL→ADD。
+            if (cfg_up) begin
+                fin_sent_r[cfg_up_id]    <= 1'b0;
+                rst_sent_r[cfg_up_id]    <= 1'b0;
+                fin_retx_pend[cfg_up_id] <= 1'b0;
+            end
             if (m_axis_tready && m_axis_tvalid) m_axis_tvalid <= 1'b0;
             if (ack_req && ackq_full) stat_ack_drop <= stat_ack_drop + 1;
             // P4b-7-P6 tlast 探针: 帧首拍 (S_IDLE start_data) 或 S_RECV 吞到末 beat
@@ -475,6 +590,14 @@ module tcp_tx_frame (
             ring_d_r <= ring_d;      // P4b-7-P6: 第 2 级读出 (ring_d = 上拍 rd 数据)
             case (state)
                 S_IDLE: begin
+                    // P5 超长帧冲洗收尾: 残留字节排空 (flush_rd 在上面的 rd 里);
+                    // len_bad 必须在此清 (而不是留到下一帧帧首) — 否则下一帧首拍
+                    // 会被 accept 但 wr 仍被 len_bad 屏蔽: plen 计了 8 字节而 FIFO
+                    // 没写 = 载荷整帧错位 8 字节 (实测)。
+                    if (flush_pend && pay_empty) begin
+                        flush_pend <= 1'b0;
+                        len_bad    <= 1'b0;
+                    end
                     // 重传服务拍: 锁存会话 (上界 = 回卷前 snd_nxt, 连接 = svc_id),
                     // 回卷 snd_nxt -> snd_una (svc_rewind 组合脉冲突发), 清该连接
                     // RTO 未决并重装计时器; 请求应答与回卷同拍
@@ -487,7 +610,13 @@ module tcp_tx_frame (
                         end else
                             epoch[svc_id] <= 4'd0;
                         snd_una_prev[svc_id] <= rb_snd_una;
-                        retx_hi <= rb_snd_nxt;
+                        // P5: FIN 已发出时 (snd_nxt = fin_seq+1, snd_una = fin_seq)
+                        // 会话高水位 = fin_seq_r — 否则 ring_delta = retx_hi -
+                        // snd_nxt 会把 FIN 的 1 字节 seq 当 ring 数据重放
+                        // (回卷后 snd_nxt = fin_seq, delta 应为 0: 无数据可重放,
+                        //  只重推 FIN 条目, seq 不变 = 无漂移)。
+                        retx_hi <= fin_sent_r[svc_id] ? fin_seq_r[svc_id] : rb_snd_nxt;
+                        if (fin_sent_r[svc_id]) fin_retx_pend[svc_id] <= 1'b1;
                         retx_id_r <= svc_id;
                         retx_active <= 1'b1;
                         rto_pend[svc_id] <= 1'b0;
@@ -501,6 +630,9 @@ module tcp_tx_frame (
                             cur_id <= retx_id_r;
                             is_data_r <= 1'b1;
                             is_syn_r <= 1'b0;
+                            is_fin_r <= 1'b0;   // P5 (ring 帧绝不为 FIN/RST)
+                            is_rst_r <= 1'b0;
+                            len_bad  <= 1'b0;   // P5: 帧首清守卫 (ring 路径不看它)
                             seq_r <= rb_snd_nxt;
                             ack_r <= rb_rcv_nxt;
                             wnd_r <= rb_rcv_wnd;
@@ -522,12 +654,31 @@ module tcp_tx_frame (
                             ring_seq <= rb_snd_nxt + 32'd8;
                             state <= S_RING;
                         end else begin
-                            retx_active <= 1'b0;    // 区间发完: 1 拍气泡回活数据
+                            // 区间发完 (ring_delta == 0): 1 拍气泡回活数据。
+                            // P5: FIN 曾在此会话被回卷吞掉 (fin_retx_pend) ⇒ 重推
+                            // FIN 条目 (seq = 重卷后 snd_nxt = fin_seq, 与首发同值)
+                            // W2 (P5a 复核): 清零必须同时要求 "本拍 ackq 没被
+                            // ack_req 抢" — 否则同拍 ack_req_ok 写进 ACK、FIN 条目
+                            // 被吞而标志已清 ⇒ 唯一一次重推机会丢失 (fin_sent_r 仍
+                            // 1 又禁止重排队, snd_nxt==snd_una 后 RTO 装表条件也
+                            // 不成立 ⇒ 关闭永不完成)。ack_req 保持优先, 下一轮
+                            // ring 排空拍 (还需 retx_active 会话) 再重推。
+                            if (fin_retx_pend[retx_id_r] && !ackq_full && !ack_req_ok)
+                                fin_retx_pend[retx_id_r] <= 1'b0;   // fin_repush 组合推条目
+                            retx_active <= 1'b0;
                         end
                     end
                     // RTO 扫描: 每 scan_now 拍访 scan_id 连接 (rb_* mux 到 scan_id;
                     // 该连接在飞且窗开: 计时 0->装 / 1->置未决并重装 / 否则自减)
                     if (scan_now) begin
+                        // P5: 连接非 ESTAB (state=0 已拆/未配) 时清 FIN/RST 已发
+                        // 标志 — 同槽重连可再发 (fin_push/rst_push 的门)。局限:
+                        // 快速 DEL+ADD 落在两次扫描之间时会漏清 (P5c/P5d 若需
+                        // 要再补 TCB 世代号)。
+                        if (rb_state != 4'd1) begin
+                            fin_sent_r[scan_id] <= 1'b0;
+                            rst_sent_r[scan_id] <= 1'b0;
+                        end
                         // SEV3-4: 原 '!(retx_active && (scan_id==retx_id_r))' 排除项
                         // 是死代码 — scan_now 要求 !ring_eval; retx_active 期间
                         // ring_eval 覆盖全部 S_IDLE&&!ack_pend 拍 (ack_pend 也
@@ -548,12 +699,20 @@ module tcp_tx_frame (
                         // 帧首拍: 锁存连接上下文 (rb/cam_rd 组合输出对 start_id 有效)
                         cur_id <= start_id;
                         is_data_r <= start_data;
-                        is_syn_r <= start_ack && ackq_dout[32];
+                        is_syn_r <= start_ack && aq_syn;
+                        // P5: FIN/RST 帧首拍; len_bad 每帧首拍清 (帧内守卫)
+                        is_fin_r <= start_ack && aq_fin;
+                        is_rst_r <= start_ack && aq_rst;
+                        len_bad  <= 1'b0;
                         seq_r <= rb_snd_nxt;
-                        ack_r <= start_data ? rb_rcv_nxt : ackq_dout[31:0];
+                        // FIN/RST 的 ack 号取当前连接 rcv_nxt (队列条目的 val 对
+                        // 这两类是 0, 陈旧; rb_* 在 S_IDLE 已 mux 到 start_id)
+                        ack_r <= (start_data || aq_fin || aq_rst) ? rb_rcv_nxt :
+                                 ackq_dout[31:0];
                         wnd_r <= rb_rcv_wnd;
                         doff_flags_r <= {8'h50, start_data ? 8'h18 :
-                                         (ackq_dout[32] ? 8'h12 : 8'h10)};
+                                         aq_syn ? 8'h12 : aq_fin ? 8'h11 :
+                                         aq_rst ? 8'h14 : 8'h10};
                         dmac_r <= cam_rd_dmac;
                         dip_r <= cam_rd_sip;       // 对端 IP
                         sport_r <= cam_rd_dport;   // 本地端口
@@ -585,11 +744,23 @@ module tcp_tx_frame (
                     if (accept) begin
                         tap_seq <= tap_seq + {20'b0, pop8(s_axis_tkeep)};
                         plen <= plen + {8'b0, pop8(s_axis_tkeep)};
+                        // P5 长度守卫: 越过 PLEN_MAX -> 本帧中止 (len_bad 寄存器,
+                        // 下拍起写口全屏蔽)。tlast 拍走中止收尾: 跳过 S_WAIT/
+                        // S_HDR/S_PAY/S_DONE -> S_IDLE + flush_pend (排空已写入
+                        // u_fifo 的残留字节) + stat_drop_len++。snd_nxt 不推进
+                        // (S_DONE 不经过), ring 残字节被下帧覆盖 (见 wr_tap 注释)。
+                        if (len_over) len_bad <= 1'b1;
                         if (s_axis_tlast) begin
-                            plen_r <= plen_n;
-                            tcp_len_r <= {4'b0, plen_n} + 16'd20;
-                            total_len_r <= {4'b0, plen_n} + 16'd40;
-                            state <= S_WAIT; wait_cnt <= 3'd0;
+                            if (len_over || len_bad) begin
+                                state <= S_IDLE;
+                                flush_pend <= 1'b1;
+                                stat_drop_len <= stat_drop_len + 32'd1;
+                            end else begin
+                                plen_r <= plen_n;
+                                tcp_len_r <= {4'b0, plen_n} + 16'd20;
+                                total_len_r <= {4'b0, plen_n} + 16'd40;
+                                state <= S_WAIT; wait_cnt <= 3'd0;
+                            end
                         end
                     end
                 end
@@ -699,6 +870,18 @@ module tcp_tx_frame (
                         stat_frames <= stat_frames + 1;
                         stat_bytes <= stat_bytes + plen_r;
                         if (!is_data_r) stat_ack <= stat_ack + 1;
+                        // P5: FIN/RST 发出记账 (snd_nxt 已由 upd_wr 组合 +1; FIN
+                        // 记 seq 供 RTO 回卷用, 标志阻止重复排队)
+                        if (is_fin_r) begin
+                            fin_sent_r[cur_id] <= 1'b1;
+                            fin_seq_r[cur_id] <= seq_r;
+                            fin_retx_pend[cur_id] <= 1'b0;
+                            stat_fin <= stat_fin + 32'd1;
+                        end
+                        if (is_rst_r) begin
+                            rst_sent_r[cur_id] <= 1'b1;
+                            stat_rst <= stat_rst + 32'd1;
+                        end
                         state <= S_IDLE;
                     end
                 end

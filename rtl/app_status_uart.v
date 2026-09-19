@@ -1,0 +1,169 @@
+`timescale 1ns/1ps
+//=============================================================================
+// app_status_uart: app 接口独立快照行 (P5a) — 9600-8N1 ASCII, ~2s 一行
+//
+// 与 board/uart_dbg.v 的 P4 诊断行完全独立 (不改 uart_dbg.v — 那 443 字符
+// 行是 P4 板级读出依赖)。本模块只复用其中的 uart_tx_9600 发送器 (8N1 字节
+// 发送, !busy 时 tx_go 取字节), 行内容 = app 视角状态:
+//
+//   P5A1 ST=x NX=xxxxxxxx UA=xxxxxxxx RW=xxxx RN=xxxxxxxx RX=xxxxxxxx
+//        TX=xxxxxxxx TF=xxxx MM=xxxx OC=xxxxx EV=xxxx DP=xxxx RY=xxxx
+//        EC=xx DL=xxxx FI=xxxx RS=xxxx
+//
+//   ST = conn0 TCB state       NX/UA = conn0 snd_nxt / snd_una
+//   RW = conn0 rcv_wnd         RN    = conn0 rcv_nxt
+//   RX/TX = app 收/发字节      TF    = app 已发帧数
+//   MM = app 失配字节数        OC    = RX 缓冲占用字节 (app 可读)
+//   EV = 连接事件计数          DP    = 事件丢弃计数
+//   RY = app_tx_ready[15:0]    EC    = ESTAB 连接数
+//   DL = 超长帧丢弃计数        FI/RS = 已发 FIN/RST 计数
+//
+// 行 = 168 字符 (21 组 x 8; 末尾 CR/LF), 9600 下 ~175ms。字段值在行首
+// (ci==0) 一次性锁存 — 行内自洽; 行间 GAP 后重采。
+//=============================================================================
+module app_status_uart #(
+    parameter [13:0] BIT_LAST  = 14'd13020,        // 每比特拍数-1 @125MHz/9600
+    parameter [27:0] GAP_TICKS = 28'd250_000_000   // 行间 ~2s
+) (
+    input  wire        clk,
+    input  wire        rst_n,
+    // 快照输入 (app 视角)
+    input  wire [3:0]  st0,
+    input  wire [31:0] snd_nxt,
+    input  wire [31:0] snd_una,
+    input  wire [15:0] rcv_wnd,
+    input  wire [31:0] rcv_nxt,
+    input  wire [31:0] stat_rx_bytes,
+    input  wire [31:0] stat_tx_bytes,
+    input  wire [15:0] stat_tx_frames,
+    input  wire [15:0] stat_mismatch,
+    input  wire [16:0] rx_occ,
+    input  wire [15:0] ev_cnt,
+    input  wire [15:0] ev_drop,
+    input  wire [15:0] app_tx_ready,
+    input  wire [15:0] estab_cnt,
+    // W5: 板级可观测的帧器计数 (FIN 是否发出 / 坏帧是否被丢)
+    input  wire [15:0] stat_drop_len,
+    input  wire [15:0] stat_fin,
+    input  wire [15:0] stat_rst,
+    output wire        txd
+);
+    localparam LINE_LEN = 8'd168;
+
+    // 行模板 (固定文本; hex 位以 'x' 占位, 运行时由 lchar 覆盖)
+    // 字节 i = TPL[8*(LINE_LEN-1) - 8*i +: 8] (首字符在最高字节)
+    // W5: 追加 DL (超长帧丢弃) / FI (FIN 已发) / RS (RST 已发) 三段 —
+    // 板级看不到 FIN 是否发出、坏帧是否被丢。
+    wire [8*LINE_LEN-1:0] TPL = {
+        "P5A1 ST=x NX=xxxxxxxx UA=xxxxxxxx RW=xxxx RN=xxxxxxxx ",
+        "RX=xxxxxxxx TX=xxxxxxxx TF=xxxx MM=xxxx OC=xxxxx EV=xxxx ",
+        "DP=xxxx RY=xxxx EC=xx DL=xxxx FI=xxxx RS=xxxx",
+        8'h20, 8'h20, 8'h20, 8'h20, 8'h20, 8'h20, 8'h20, 8'h20, 8'h20, 8'h20,
+        8'h0D, 8'h0A
+    };
+
+    function [7:0] hexc;                 // 4 位 -> ASCII
+        input [3:0] n;
+        begin
+            hexc = (n < 4'd10) ? (8'h30 + {4'b0, n}) :
+                                 (8'h41 + {4'b0, n} - 8'd10);
+        end
+    endfunction
+
+    function [7:0] hexd;                 // 32 位值的第 k 个 nibble (k: 0 = MSB)
+        input [31:0] v;
+        input [2:0]  k;
+        begin
+            case (k)
+                3'd0: hexd = hexc(v[31:28]);
+                3'd1: hexd = hexc(v[27:24]);
+                3'd2: hexd = hexc(v[23:20]);
+                3'd3: hexd = hexc(v[19:16]);
+                3'd4: hexd = hexc(v[15:12]);
+                3'd5: hexd = hexc(v[11:8]);
+                3'd6: hexd = hexc(v[7:4]);
+                default: hexd = hexc(v[3:0]);
+            endcase
+        end
+    endfunction
+
+    // 快照锁存 (行首)
+    reg [3:0]  sn_st;
+    reg [31:0] sn_nx, sn_ua, sn_rn, sn_rx, sn_tx;
+    reg [15:0] sn_rw, sn_tf, sn_mm, sn_ev, sn_dp, sn_ry, sn_ec;
+    reg [15:0] sn_dl, sn_fi, sn_rs;
+    reg [16:0] sn_oc;
+
+    reg [7:0]  ci;                       // 行内字符索引
+    reg [27:0] gap;
+    reg        sending;
+
+    // 当前字符 (组合): 固定模板 + hex 字段覆盖
+    wire [7:0] fixed_c = TPL[ (8*(LINE_LEN-1) - 8*ci) +: 8 ];
+    reg  [7:0] lc;
+    always @(*) begin
+        lc = fixed_c;
+        if      (ci == 8'd8)                        lc = hexc(sn_st);
+        else if (ci >= 8'd13  && ci < 8'd21)        lc = hexd(sn_nx, ci - 8'd13);
+        else if (ci >= 8'd25  && ci < 8'd33)        lc = hexd(sn_ua, ci - 8'd25);
+        else if (ci >= 8'd37  && ci < 8'd41)        lc = hexd({sn_rw, 16'b0}, ci - 8'd37);
+        else if (ci >= 8'd45  && ci < 8'd53)        lc = hexd(sn_rn, ci - 8'd45);
+        else if (ci >= 8'd57  && ci < 8'd65)        lc = hexd(sn_rx, ci - 8'd57);
+        else if (ci >= 8'd69  && ci < 8'd77)        lc = hexd(sn_tx, ci - 8'd69);
+        else if (ci >= 8'd81  && ci < 8'd85)        lc = hexd({sn_tf, 16'b0}, ci - 8'd81);
+        else if (ci >= 8'd89  && ci < 8'd93)        lc = hexd({sn_mm, 16'b0}, ci - 8'd89);
+        else if (ci >= 8'd97  && ci < 8'd102)       lc = hexd({sn_oc, 12'b0}, ci - 8'd97);
+        else if (ci >= 8'd106 && ci < 8'd110)       lc = hexd({sn_ev, 16'b0}, ci - 8'd106);
+        else if (ci >= 8'd114 && ci < 8'd118)       lc = hexd({sn_dp, 16'b0}, ci - 8'd114);
+        else if (ci >= 8'd122 && ci < 8'd126)       lc = hexd({sn_ry, 16'b0}, ci - 8'd122);
+        // EC 只显示低 2 位 hex (16 位字段里的 8 位值): 左对齐低字节
+        else if (ci >= 8'd130 && ci < 8'd132)       lc = hexd({sn_ec[7:0], 24'b0}, ci - 8'd130);
+        else if (ci >= 8'd136 && ci < 8'd140)       lc = hexd({sn_dl, 16'b0}, ci - 8'd136);
+        else if (ci >= 8'd144 && ci < 8'd148)       lc = hexd({sn_fi, 16'b0}, ci - 8'd144);
+        else if (ci >= 8'd152 && ci < 8'd156)       lc = hexd({sn_rs, 16'b0}, ci - 8'd152);
+    end
+
+    wire uart_busy;
+    wire uart_go = sending && !uart_busy;
+    uart_tx_9600 #(.BIT_LAST(BIT_LAST)) u_uart (
+        .clk(clk), .rst_n(rst_n),
+        .byte_in(lc), .tx_go(uart_go), .txd(txd), .busy(uart_busy)
+    );
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            ci <= 8'd0; gap <= 28'd0; sending <= 1'b0;
+            sn_st <= 4'd0; sn_nx <= 32'd0; sn_ua <= 32'd0; sn_rn <= 32'd0;
+            sn_rx <= 32'd0; sn_tx <= 32'd0; sn_rw <= 16'd0; sn_tf <= 16'd0;
+            sn_mm <= 16'd0; sn_oc <= 17'd0; sn_ev <= 16'd0; sn_dp <= 16'd0;
+            sn_ry <= 16'd0; sn_ec <= 16'd0;
+            sn_dl <= 16'd0; sn_fi <= 16'd0; sn_rs <= 16'd0;
+        end else begin
+            if (!sending) begin
+                // 行间间隔到 -> 锁存快照并开新行
+                if (gap == 28'd0) begin
+                    sn_st <= st0;        sn_nx <= snd_nxt;  sn_ua <= snd_una;
+                    sn_rn <= rcv_nxt;    sn_rw <= rcv_wnd;
+                    sn_rx <= stat_rx_bytes; sn_tx <= stat_tx_bytes;
+                    sn_tf <= stat_tx_frames; sn_mm <= stat_mismatch;
+                    sn_oc <= rx_occ;     sn_ev <= ev_cnt;   sn_dp <= ev_drop;
+                    sn_ry <= app_tx_ready; sn_ec <= estab_cnt;
+                    sn_dl <= stat_drop_len; sn_fi <= stat_fin; sn_rs <= stat_rst;
+                    ci       <= 8'd0;
+                    sending  <= 1'b1;
+                end else begin
+                    gap <= gap - 28'd1;
+                end
+            end else if (uart_go) begin
+                // 本拍发送 lc (ci 指向它), 推进索引
+                if (ci == (LINE_LEN - 8'd1)) begin
+                    sending <= 1'b0;
+                    gap     <= GAP_TICKS;
+                    ci      <= 8'd0;
+                end else begin
+                    ci <= ci + 8'd1;
+                end
+            end
+        end
+    end
+endmodule

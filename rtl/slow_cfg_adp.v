@@ -38,7 +38,17 @@ module slow_cfg_adp (
     output reg  [31:0] upd_val,
     input  wire        cfg_gnt,
     output reg  [31:0] stat_add,
-    output reg  [31:0] stat_del
+    output reg  [31:0] stat_del,
+    // ---- P5: 连接事件源 (app_ctrl 消费) ----
+    // ev_up/ev_down = 1 拍脉冲 (ADD 收尾授权拍 / DEL state=0 授权拍);
+    // ev_slot/peer_ip/peer_port/peer_mac 在 S_CAM 锁存 (w1/w3/w4 下条记录即被
+    // 覆盖, 必须在此锁), 保持到记录结束 (下条 S_CAM 再更新)。
+    output reg         ev_up,
+    output reg         ev_down,
+    output reg  [3:0]  ev_slot,
+    output reg  [31:0] ev_peer_ip,
+    output reg  [15:0] ev_peer_port,
+    output reg  [47:0] ev_peer_mac
 );
     // 词流缓冲 (HLS 突发 8 词; 解析慢于写入不丢)
     // FWFT 铁律: f_rd 组合 (与消费同拍) — 寄存器化 rd 会让每词被采两次
@@ -87,8 +97,13 @@ module slow_cfg_adp (
             cam_cfg_sport <= 0; cam_cfg_dport <= 0; cam_cfg_dmac <= 0;
             upd_wr <= 1'b0; upd_id <= 4'd0; upd_sel <= 3'd0; upd_val <= 32'd0;
             stat_add <= 0; stat_del <= 0;
+            ev_up <= 1'b0; ev_down <= 1'b0; ev_slot <= 4'd0;
+            ev_peer_ip <= 32'd0; ev_peer_port <= 16'd0; ev_peer_mac <= 48'd0;
             w0 <= 0; w1 <= 0; w2 <= 0; w3 <= 0; w4 <= 0; w5 <= 0; w6 <= 0; w7 <= 0;
         end else begin
+            // 脉冲型寄存器每拍默认清零 (工程铁律)
+            ev_up   <= 1'b0;
+            ev_down <= 1'b0;
             case (state)
                 S_RECV: begin
                     cam_cfg_wr <= 1'b0;
@@ -115,6 +130,11 @@ module slow_cfg_adp (
                     // CAM 写单拍 (无仲裁, 配置口独占)
                     cam_cfg_wr   <= 1'b1;
                     cam_cfg_addr <= slot;
+                    // P5 事件字段锁存 (w1/w3/w4/w5 本拍仍有效; 下条记录覆盖)
+                    ev_slot      <= slot;
+                    ev_peer_ip   <= w1;
+                    ev_peer_port <= w3[31:16];
+                    ev_peer_mac  <= {w4, w5[31:16]};
                     if (is_add) begin
                         cam_cfg_sip   <= w1;
                         cam_cfg_dip   <= w2;
@@ -143,6 +163,8 @@ module slow_cfg_adp (
                         upd_val <= 32'd0;
                         if (cfg_gnt) begin
                             upd_wr <= 1'b0;
+                            // P5: DEL 的 state=0 授权写落地拍 -> CONN_DOWN 脉冲
+                            ev_down <= 1'b1;
                             state  <= S_RECV;
                         end
                     end else begin
@@ -168,7 +190,10 @@ module slow_cfg_adp (
                     upd_wr  <= 1'b1;
                     if (cfg_gnt) begin
                         upd_wr <= 1'b0;
-                        state  <= S_RECV;
+                        // P5: wscale (最后一个字段) 落地拍 = ADD 序列收尾 ->
+                        // CONN_UP 脉冲 (早于此 TCB 未配全, app 会拿 snd_nxt=0 组帧)
+                        ev_up <= 1'b1;
+                        state <= S_RECV;
                     end
                 end
                 default: state <= S_RECV;

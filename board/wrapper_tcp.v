@@ -409,6 +409,11 @@ module wrapper_tcp (
     );
 
     // ---- TCB: ra 给 rx, rb 给 tx ----
+    // TCB 更新仲裁输出先声明 (u_tcb 实例引用; xvlog 不接受隐式声明)
+    wire        tcb_wr;
+    wire [2:0]  tcb_sel;
+    wire [3:0]  tcb_id;
+    wire [31:0] tcb_val;
     tcb u_tcb (
         .clk            (gmii_clk),
         .rst_n          (reset_n),
@@ -431,6 +436,14 @@ module wrapper_tcp (
         .win_open       (win_open),
         .win_inflight   (win_inflight),
         .win_wnd_eff    (win_wnd_eff),
+        // P5: 组合读口 C 无消费者 (接 0 防悬空输入)
+        .rc_id          (4'd0),
+        .rc_rcv_nxt     (),
+        .rc_snd_nxt     (),
+        .rc_snd_una     (),
+        .rc_rcv_wnd     (),
+        .rc_snd_wnd     (),
+        .rc_state       (),
         .upd_wr         (tcb_wr),
         .upd_id         (tcb_id),
         .upd_sel        (tcb_sel),
@@ -440,10 +453,10 @@ module wrapper_tcp (
     // ---- TCB 更新仲裁 (组合, tx > rx > cfg 级; cfg 级 = synp.upd) ----
     wire        sel_tx = tx_upd_wr;
     wire        sel_rx = !sel_tx && rx_upd_wr;
-    wire        tcb_wr  = sel_tx || sel_rx || synp_upd_wr;
-    wire [2:0]  tcb_sel = sel_tx ? tx_upd_sel : (sel_rx ? rx_upd_sel : synp_upd_sel);
-    wire [3:0]  tcb_id  = sel_tx ? tx_upd_id  : (sel_rx ? rx_upd_id  : synp_upd_id);
-    wire [31:0] tcb_val = sel_tx ? tx_upd_val : (sel_rx ? rx_upd_val : synp_upd_val);
+    assign tcb_wr  = sel_tx || sel_rx || synp_upd_wr;
+    assign tcb_sel = sel_tx ? tx_upd_sel : (sel_rx ? rx_upd_sel : synp_upd_sel);
+    assign tcb_id  = sel_tx ? tx_upd_id  : (sel_rx ? rx_upd_id  : synp_upd_id);
+    assign tcb_val = sel_tx ? tx_upd_val : (sel_rx ? rx_upd_val : synp_upd_val);
     assign rx_upd_gnt = sel_rx;
 
     // ---- SYN 应答器 (P4-lite 握手) ----
@@ -495,12 +508,22 @@ module wrapper_tcp (
         .ack_id         (tx_ack_id),
         .ack_val        (tx_ack_val),
         .ack_syn        (tx_ack_syn),
+        // P5: FIN/RST 通道 (本工程未接; 接地防悬空 X)
+        .ack_fin        (1'b0),
+        .ack_rst        (1'b0),
+        .fin_req        (16'h0),
+        .rst_req        (16'h0),
+        .cfg_up         (1'b0),
+        .cfg_up_id      (4'd0),
+        .o_fin_sent     (),
+        .o_retx_id      (),
         .rb_id          (rb_id),
         .rb_snd_nxt     (rb_snd_nxt),
         .rb_rcv_nxt     (rb_rcv_nxt),
         .rb_rcv_wnd     (rb_rcv_wnd),
         .rb_snd_una     (rb_snd_una),
         .rb_snd_wnd     (rb_snd_wnd),
+        .rb_state       (rb_state),
         .win_open       (win_open),
         .win_inflight   (win_inflight),
         .win_wnd_eff    (win_wnd_eff),
@@ -530,7 +553,7 @@ module wrapper_tcp (
         .retx_gnt       (tx_retx_gnt),
         .stat_retx      (),
         .o_retx_hi      (tx_retx_hi),
-        .o_retx_active  (tx_retx_active),
+        .o_retx_active  (tx_retx_active)
     );
 
     mac_tx_64 u_mac_tx (

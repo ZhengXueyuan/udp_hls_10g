@@ -149,6 +149,22 @@ module wrapper_p4 (
     output          uart_txd
 );
 
+    // --- P5 app 接口构建开关 (默认关 = 现状 echo 数据面, 逐位不变) -------------
+    // APP_MODE 定义时: 数据面接 app (AXIS 收发 + 寄存器控制), 且
+    // cfg_suppress_data_ack 必须为 0 —— app 模式没有 echo 捎带, 逐段纯 ACK 是
+    // 对端确认的唯一途径。默认 (未定义) 时本文件所见行为与 P4 完全一致。
+`ifdef APP_MODE
+    localparam APP_EN = 1'b1;
+`else
+    localparam APP_EN = 1'b0;
+`endif
+
+    // ---- P5: 窗口/ring 帽单一来源 (W5) ----
+    // 三处必须同值: tcp_tx_frame.RING_CAP (ring 门控帽) = tcb.WIN_CAP (注册窗口
+    // 门帽) = app_ctrl.WIN_CAP (app_tx_ready 的窗帽)。原先各自独立字面量,
+    // 改一处漏两处就会分叉 — 现在全部由本 localparam 下发。
+    localparam [15:0] WIN_CAP_5 = 16'hBFFE;
+
     // --- 200MHz IDELAYCTRL 参考钟 (逐字照抄 wrapper_tcp.v) ---
     wire ref200_clk, ref200_clk_raw, ref200_fb, mmcm_ref_locked;
     MMCME2_BASE #(
@@ -384,6 +400,206 @@ module wrapper_p4 (
     wire [76:0] eco2_pack;
     assign {eco2_tkeep, eco2_tlast, eco2_tdata, eco2_tid} = eco2_pack;
 
+    // ---- P5: 新增跨模块线网先声明 (app_ctrl 实例在前引用) ----
+    // echo frame_fifo 指针 (P4c: AW=13 -> 14 位含绕回位; app RX 占用换算用)
+    wire [13:0] eco_dbg_fifo_wptr, eco_dbg_fifo_rptr;
+`ifdef APP_MODE
+    // P5: app RX 缓冲占用 (echo frame_fifo 字节数; 17 位 = 8192 字 x 8)
+    wire [16:0] app_rx_occ = {(eco_dbg_fifo_wptr - eco_dbg_fifo_rptr), 3'b0};
+`endif
+    // tcb 组合读口 C (app_ctrl 轮扫源; 默认模式恒读 0 号条目, 无副作用)
+    wire [3:0]  rc_id;
+    wire [31:0] rc_snd_nxt, rc_snd_una, rc_rcv_nxt;
+    wire [15:0] rc_rcv_wnd, rc_snd_wnd;
+    wire [3:0]  rc_state;
+    // slow_cfg_adp 连接事件源 (ADD 收尾 / DEL state=0 授权拍脉冲 + 保持字段)
+    wire        scfg_ev_up, scfg_ev_down;
+    wire [3:0]  scfg_ev_slot;
+    wire [31:0] scfg_ev_peer_ip;
+    wire [15:0] scfg_ev_peer_port;
+    wire [47:0] scfg_ev_peer_mac;
+
+    // ---- P5: app 接口 (AXIS 数据面) 连线 ----
+    // APP_MODE: echo 输出 (= 零拷贝 app RX) 给 app_pattern 校验器; app TX 经
+    // axis_pipe 进 tcp_tx_frame (下面 txin_* 选择)。默认 (未定义 APP_MODE):
+    // txin_* = eco2_* / eco2_tready = tcp_tx_frame.s_axis_tready — 与 P4 逐位
+    // 相同 (仅是线名重命名)。
+    wire [63:0] txin_tdata;
+    wire [7:0]  txin_tkeep;
+    wire        txin_tvalid, txin_tready, txin_tlast;
+    wire [3:0]  txin_tid;
+`ifdef APP_MODE
+    wire [63:0] app_rx_tdata  = eco2_tdata;
+    wire [7:0]  app_rx_tkeep  = eco2_tkeep;
+    wire        app_rx_tvalid = eco2_tvalid;
+    wire        app_rx_tready;
+    wire        app_rx_tlast  = eco2_tlast;
+    wire [3:0]  app_rx_tid    = eco2_tid;
+    assign eco2_tready = app_rx_tready;
+
+    wire [63:0] app_tx_tdata, app2_tdata;
+    wire [7:0]  app_tx_tkeep, app2_tkeep;
+    wire        app_tx_tvalid, app_tx_tready, app_tx_tlast;
+    wire        app2_tvalid, app2_tready, app2_tlast;
+    wire [3:0]  app_tx_tid, app2_tid;
+    wire [76:0] app2_pack;
+    assign {app2_tkeep, app2_tlast, app2_tdata, app2_tid} = app2_pack;
+    assign txin_tdata  = app2_tdata;
+    assign txin_tkeep  = app2_tkeep;
+    assign txin_tvalid = app2_tvalid;
+    assign txin_tlast  = app2_tlast;
+    assign txin_tid    = app2_tid;
+    // u_app_pipe 的 m_ready = tcp_tx_frame.s_axis_tready (= txin_tready):
+    // 必须由此处驱动 (P5a 复核 W1 — 原先误写成 assign app_tx_tready =
+    // app2_tready, 既与 u_app_pipe.s_ready 抢同一根线 (组合自环 DRC),
+    // 又让 app 侧 tready 退化成 m_ready (丢了 axis_pipe 的 !m_valid 背压 ⇒
+    // 流水寄存器还压着字时 app 再推一个字 = 丢字)。
+    assign app2_tready = txin_tready;
+
+    wire [15:0] app_tx_ready;
+    wire [7:0]  app_reg_addr;
+    wire        app_reg_wr;
+    wire [31:0] app_reg_wdata, app_reg_rdata;
+    wire [15:0] app_fin_req, app_rst_req, app_fin_sent;
+    wire        app_ev_up, app_ev_down;
+    wire [3:0]  app_ev_slot;
+    wire        app_close_req;
+    wire [3:0]  app_close_id;
+    wire [3:0]  app_led;
+    wire [31:0] app_tx_bytes, app_tx_frames, app_rx_bytes, app_mismatch;
+    wire        app_uart_txd;
+    // app_ctrl 状态线束 (免跨模块层次引用; 合成器不支持层次引用)
+    wire [3:0]  app_c0_state;
+    wire [31:0] app_c0_snd_nxt, app_c0_snd_una, app_c0_rcv_nxt;
+    wire [15:0] app_c0_rcv_wnd, app_estab_cnt, app_ev_cnt;
+    wire [31:0] app_ev_drop;
+
+    app_pattern #(.TX_BYTES(32'd1048576), .TX_SEGSZ(12'd1460)) u_app (
+        .clk            (gmii_clk),
+        .rst_n          (reset_n),
+        .ev_up          (app_ev_up),
+        .ev_down        (app_ev_down),
+        .ev_slot        (app_ev_slot),
+        .m_tdata        (app_tx_tdata),
+        .m_tkeep        (app_tx_tkeep),
+        .m_tvalid       (app_tx_tvalid),
+        .m_tready       (app_tx_tready),
+        .m_tlast        (app_tx_tlast),
+        .m_tid          (app_tx_tid),
+        .app_tx_ready   (app_tx_ready),
+        .close_req      (app_close_req),
+        .close_id       (app_close_id),
+        .rx_tdata       (app_rx_tdata),
+        .rx_tkeep       (app_rx_tkeep),
+        .rx_tvalid      (app_rx_tvalid),
+        .rx_tready      (app_rx_tready),
+        .rx_tlast       (app_rx_tlast),
+        .rx_tid         (app_rx_tid),
+        .i_bad_frame    (16'd0),          // 故障注入仅 TB 用 (板级恒关)
+        .stat_tx_bytes  (app_tx_bytes),
+        .stat_tx_frames (app_tx_frames),
+        .stat_rx_bytes  (app_rx_bytes),
+        .stat_mismatch  (app_mismatch),
+        .active         (),
+        .act_id         (),
+        .done           (),
+        .dbg_lfsr       (),
+        .led            (app_led)
+    );
+
+    axis_pipe #(.W(77)) u_app_pipe (
+        .clk            (gmii_clk),
+        .rst_n          (reset_n),
+        .s_data         ({app_tx_tkeep, app_tx_tlast, app_tx_tdata, app_tx_tid}),
+        .s_valid        (app_tx_tvalid),
+        .s_ready        (app_tx_tready),
+        .m_data         (app2_pack),
+        .m_valid        (app2_tvalid),
+        .m_ready        (app2_tready)
+    );
+
+    app_ctrl #(.WIN_CAP(WIN_CAP_5)) u_app_ctrl (
+        .clk            (gmii_clk),
+        .rst_n          (reset_n),
+        .ev_up          (scfg_ev_up),
+        .ev_down        (scfg_ev_down),
+        .ev_slot        (scfg_ev_slot),
+        .ev_peer_ip     (scfg_ev_peer_ip),
+        .ev_peer_port   (scfg_ev_peer_port),
+        .ev_peer_mac    (scfg_ev_peer_mac),
+        .rc_id          (rc_id),
+        .rc_snd_nxt     (rc_snd_nxt),
+        .rc_snd_una     (rc_snd_una),
+        .rc_rcv_nxt     (rc_rcv_nxt),
+        .rc_rcv_wnd     (rc_rcv_wnd),
+        .rc_snd_wnd     (rc_snd_wnd),
+        .rc_state       (rc_state),
+        .rx_occ_bytes   (app_rx_occ),
+        .fin_sent       (app_fin_sent),
+        .o_ev_up        (app_ev_up),
+        .o_ev_down      (app_ev_down),
+        .o_ev_slot      (app_ev_slot),
+        .fin_req        (app_fin_req),
+        .rst_req        (app_rst_req),
+        .close_req      (app_close_req),
+        .close_id       (app_close_id),
+        .reg_addr       (app_reg_addr),
+        .reg_wr         (app_reg_wr),
+        .reg_wdata      (app_reg_wdata),
+        .reg_rdata      (app_reg_rdata),
+        .app_tx_ready   (app_tx_ready),
+        .stat_ev_up     (),
+        .stat_ev_down   (),
+        .stat_ev_drop   (app_ev_drop),
+        .stat_cmd_close (),
+        .stat_cmd_abort (),
+        .dbg_c0_state   (app_c0_state),
+        .dbg_c0_snd_nxt (app_c0_snd_nxt),
+        .dbg_c0_snd_una (app_c0_snd_una),
+        .dbg_c0_rcv_nxt (app_c0_rcv_nxt),
+        .dbg_c0_rcv_wnd (app_c0_rcv_wnd),
+        .dbg_c0_snd_wnd (),
+        .dbg_estab_cnt  (app_estab_cnt),
+        .dbg_ev_cnt     (app_ev_cnt)
+    );
+
+    // P5 寄存器总线默认静止 (板级无 CPU/AXI; 将来接 AXI-Lite 桥)
+    assign app_reg_addr  = 8'h00;
+    assign app_reg_wr    = 1'b0;
+    assign app_reg_wdata = 32'd0;
+
+    app_status_uart u_app_status (
+        .clk            (gmii_clk),
+        .rst_n          (reset_n),
+        .st0            (app_c0_state),
+        .snd_nxt        (app_c0_snd_nxt),
+        .snd_una        (app_c0_snd_una),
+        .rcv_wnd        (app_c0_rcv_wnd),
+        .rcv_nxt        (app_c0_rcv_nxt),
+        .stat_rx_bytes  (app_rx_bytes),
+        .stat_tx_bytes  (app_tx_bytes),
+        .stat_tx_frames (app_tx_frames[15:0]),
+        .stat_mismatch  (app_mismatch[15:0]),
+        .rx_occ         (app_rx_occ),
+        .ev_cnt         (app_ev_cnt),
+        .ev_drop        (app_ev_drop[15:0]),
+        .app_tx_ready   (app_tx_ready),
+        .estab_cnt      (app_estab_cnt),
+        // W5: 板级可观测计数 (FIN 是否发出 / 坏帧是否被丢)
+        .stat_drop_len  (tx_stat_drop_len[15:0]),
+        .stat_fin       (tx_stat_fin[15:0]),
+        .stat_rst       (tx_stat_rst[15:0]),
+        .txd            (app_uart_txd)
+    );
+`else
+    assign txin_tdata  = eco2_tdata;
+    assign txin_tkeep  = eco2_tkeep;
+    assign txin_tvalid = eco2_tvalid;
+    assign txin_tlast  = eco2_tlast;
+    assign txin_tid    = eco2_tid;
+    assign eco2_tready = txin_tready;
+`endif
+
     wire [63:0] tx_tdata;
     wire [7:0]  tx_tkeep;
     wire        tx_tvalid, tx_tready, tx_tlast;
@@ -434,7 +650,6 @@ module wrapper_p4 (
     wire        eco_dbg_fifo_empty;
     // P4c: frame_fifo 8192 字 (AW=13) -> 指针 14 位 (含回卷位), 地址低 13 位;
     // uart_dbg 侧吃 [12:0] (WPT/RPT 4 位 hex 显示字段), 占用差用全宽算。
-    wire [13:0] eco_dbg_fifo_wptr, eco_dbg_fifo_rptr;
     // P4b-7-P6 TL: echo frame_fifo 边存组合读口 (dbg_line_tx 驱动读址, 上游边存
     // LUTRAM 直出该址值; bit8 = tlast)。UART 快照/TR 行之后 8 行 tlast 位图转储。
     // P4c: 读址 13 位 (AW=13, 与 frame_fifo dbg_rd_addr 同宽, 直连不再补位)
@@ -571,6 +786,9 @@ module wrapper_p4 (
     wire        win_open;
     wire [15:0] win_inflight;
     wire [15:0] win_wnd_eff;
+`ifndef APP_MODE
+    assign rc_id = 4'd0;      // 默认模式无消费者 (APP_MODE 下由 u_app_ctrl 驱动)
+`endif
 
     // TCB 更新仲裁输出 (tx > rx > cfg) — 显式先声明再供 u_tcb 使用
     // (wrapper_tcp.v 的先使用后声明靠 Vivado 宽容过关, xvlog 直接报错)
@@ -637,13 +855,15 @@ module wrapper_p4 (
         .s_axis_tuser   (f_tuser),
         .s_axis_tcrs    (f_tcrs),
         .s_axis_terr    (f_terr),
-        .cfg_suppress_data_ack(1'b1),   // P4c ACK-early 实验裁决 (板级回退 1):
+        .cfg_suppress_data_ack(!APP_EN),// P4c ACK-early 实验裁决 (echo 模式板级回退 1):
                                         // suppress=0 板测 28.4Mbps < 124Mbps —
                                         // TX 帧率翻倍使 PC 网卡线级截断帧 (TRU=32)
                                         // 与 FPGA->PC 线丢 (缺陷 A) 触发率翻倍,
                                         // PC RTO 停发 77% 时间吃掉全部理论收益。
                                         // RTL w6a 修复 (纯 ACK 窗口内接受) 保留;
-                                        // TB 保持 suppress=0 验证 ACK 路径全功能
+                                        // TB 保持 suppress=0 验证 ACK 路径全功能。
+                                        // P5: APP_EN=1 (app 模式) 时强制 0 — 无 echo
+                                        // 捎带, 逐段纯 ACK; P5a-0 实验用合成对端复测该配置
         .m_axis_tdata   (pay_tdata),
         .m_axis_tkeep   (pay_tkeep),
         .m_axis_tvalid  (pay_tvalid),
@@ -790,9 +1010,17 @@ module wrapper_p4 (
         .rd_dport       (cam_rd_dport)
     );
 
-    tcb u_tcb (
+    tcb #(.WIN_CAP(WIN_CAP_5)) u_tcb (   // = tcp_tx_frame.RING_CAP (同源 localparam)
         .clk            (gmii_clk),
         .rst_n          (reset_n),
+        // P5: 组合读口 C (app_ctrl 轮扫; 默认模式消费者不存在, 无副作用)
+        .rc_id          (rc_id),
+        .rc_snd_nxt     (rc_snd_nxt),
+        .rc_snd_una     (rc_snd_una),
+        .rc_rcv_nxt     (rc_rcv_nxt),
+        .rc_rcv_wnd     (rc_rcv_wnd),
+        .rc_snd_wnd     (rc_snd_wnd),
+        .rc_state       (rc_state),
         .ra_id          (ra_id),
         .ra_rcv_nxt     (ra_rcv_nxt),
         .ra_snd_nxt     (ra_snd_nxt),
@@ -857,35 +1085,74 @@ module wrapper_p4 (
         .upd_val        (scfg_upd_val),
         .cfg_gnt        (scfg_gnt),
         .stat_add       (scfg_stat_add),
-        .stat_del       (scfg_stat_del)
+        .stat_del       (scfg_stat_del),
+        // P5: 连接事件源 (纯加输出; 默认模式无消费者)
+        .ev_up          (scfg_ev_up),
+        .ev_down        (scfg_ev_down),
+        .ev_slot        (scfg_ev_slot),
+        .ev_peer_ip     (scfg_ev_peer_ip),
+        .ev_peer_port   (scfg_ev_peer_port),
+        .ev_peer_mac    (scfg_ev_peer_mac)
     );
 
     // ---- TX ACK: synp 已拆除, 仅 tcp_rx 的 ACK 请求 (P4b 握手 SYN+ACK 由
     //      HLS 慢路径直接发出, 不走 fast TX) ----
-    wire        tx_ack_req = rx_ack_req;
+    // P5: 合并结构留好 (ACK 优先级 rx > fin/rst push)。本阶段 fin_push/rst_push
+    // 恒 0 (FIN/RST 由 tcp_tx_frame 自己按 fin_req/rst_req 扫描排队, 不需要
+    // app 侧推 ACK 条目); P5c/P5d 若需即时推送再驱动这两根线。
+    wire        fin_push = 1'b0;
+    wire        rst_push = 1'b0;
+    wire        tx_ack_req = rx_ack_req | fin_push | rst_push;
     wire [3:0]  tx_ack_id  = rx_ack_id;
     wire [31:0] tx_ack_val = rx_ack_val;
     wire        tx_ack_syn = 1'b0;
+    wire        tx_ack_fin = 1'b0;
+    wire        tx_ack_rst = 1'b0;
+    // P5: FIN/RST 请求源 (APP_MODE = app_ctrl; 默认 = 恒 0, P4 行为不变)
+    wire [15:0] tx_fin_req, tx_rst_req, tx_fin_sent;
+    wire [31:0] tx_stat_drop_len, tx_stat_fin, tx_stat_rst;
+    wire [3:0]  tx_retx_id_o;
+`ifdef APP_MODE
+    assign tx_fin_req = app_fin_req;
+    assign tx_rst_req = app_rst_req;
+    assign app_fin_sent = tx_fin_sent;
+`else
+    assign tx_fin_req = 16'h0;
+    assign tx_rst_req = 16'h0;
+`endif
 
-    tcp_tx_frame u_tcp_tx (
+    tcp_tx_frame #(.RING_CAP(WIN_CAP_5)) u_tcp_tx (
         .clk            (gmii_clk),
         .rst_n          (reset_n),
-        .s_axis_tdata   (eco2_tdata),
-        .s_axis_tkeep   (eco2_tkeep),
-        .s_axis_tvalid  (eco2_tvalid),
-        .s_axis_tready  (eco2_tready),
-        .s_axis_tlast   (eco2_tlast),
-        .s_axis_tid     (eco2_tid),
+        .s_axis_tdata   (txin_tdata),
+        .s_axis_tkeep   (txin_tkeep),
+        .s_axis_tvalid  (txin_tvalid),
+        .s_axis_tready  (txin_tready),
+        .s_axis_tlast   (txin_tlast),
+        .s_axis_tid     (txin_tid),
         .ack_req        (tx_ack_req),
         .ack_id         (tx_ack_id),
         .ack_val        (tx_ack_val),
         .ack_syn        (tx_ack_syn),
+        // P5: FIN/RST 通道 (APP_MODE 由 app_ctrl 驱动; 默认模式恒 0 =
+        // 与 P4 逐位相同)
+        .ack_fin        (tx_ack_fin),
+        .ack_rst        (tx_ack_rst),
+        .fin_req        (tx_fin_req),
+        .rst_req        (tx_rst_req),
+        // P5a 复核 D1 修复: cfg ADD 收尾脉冲 -> 清该槽 FIN/RST 已发标志
+        // (背靠背 DEL→ADD 同槽重连时, 扫描路径采不到 state=0, 会永久卡死连接)
+        .cfg_up         (scfg_ev_up),
+        .cfg_up_id      (scfg_ev_slot),
+        .o_fin_sent     (tx_fin_sent),
+        .o_retx_id      (tx_retx_id_o),
         .rb_id          (rb_id),
         .rb_snd_nxt     (rb_snd_nxt),
         .rb_rcv_nxt     (rb_rcv_nxt),
         .rb_rcv_wnd     (rb_rcv_wnd),
         .rb_snd_una     (rb_snd_una),
         .rb_snd_wnd     (rb_snd_wnd),
+        .rb_state       (rb_state),
         .win_open       (win_open),
         .win_inflight   (win_inflight),
         .win_wnd_eff    (win_wnd_eff),
@@ -910,6 +1177,9 @@ module wrapper_p4 (
         .stat_ack       (),
         .stat_ack_drop  (),
         .stat_eend      (),
+        .stat_drop_len  (tx_stat_drop_len),
+        .stat_fin       (tx_stat_fin),
+        .stat_rst       (tx_stat_rst),
         .stat_tlast_in  (tx_dbg_tlast_in),
         .retx_req       (tx_retx_req),
         .retx_id        (tx_retx_id),
@@ -1153,11 +1423,20 @@ module wrapper_p4 (
     wire blk_on = latched && !blk_ph && (blk_idx < n_blk);
 
     // ---- LED mux: boot self-test > blink/latch readout > live probes ----
+    // P5 APP_MODE: LED = app 演示指示灯 (app_pattern.led:
+    //   d0 = CONN_UP 曾见 / d1 = 收发活动 / d2 = 失配粘滞 / d3 = 传输完成)
+`ifdef APP_MODE
+    assign led_d0 = boot_act ? boot_on : app_led[0];
+    assign led_d1 = boot_act ? boot_on : app_led[1];
+    assign led_d2 = boot_act ? boot_on : app_led[2];
+    assign led_d3 = boot_act ? boot_on : app_led[3];
+`else
     assign led_d0 = boot_act ? boot_on
                             : (latched ? blk_on : tx_dbg_wnd_open);
     assign led_d1 = boot_act ? boot_on : latched;        // solid ON = latched
     assign led_d2 = boot_act ? boot_on : tx_dbg_sready;  // live, watch in test
     assign led_d3 = boot_act ? boot_on : eco_dbg_fifo_full;
+`endif
 
     // ---- 4) P6 UART 全精度读出 (uart_dbg.v): 锁存后立即发首行, 之后 ~5s
     //        重复一行 148 字符 ASCII (9600-8N1, 154ms/行), 见头注释格式 ----
@@ -1168,6 +1447,21 @@ module wrapper_p4 (
     // 行, 周期重复不再依赖回卷锁存; 冻结锁存后快照字段自然生效, TR/TL/RXT
     // 段仍由各自 frozen 门控。HLS 死/活一望便知 (SC/SF/SV/HR 字段)。
     wire        uart_run = latched || (boot_h == 3'd6);
+    // P5: 顶层只有一根 UART TX — APP_MODE 下前 2^29 拍 (= 4.295s @125MHz) 给
+    // P4 诊断行 (boot/早诊断), 之后常切到 app 状态行 (168 字符/2s); 默认模式
+    // 直连 P4 行 (逐位不变)。**切换点必然截出半行** (两行字符不可能对齐),
+    // PC 侧解析按 LF 或行首前缀 "P5A1 " 重对齐, 丢弃首个不完整行。
+    wire        p4_uart_txd;
+`ifdef APP_MODE
+    reg [29:0]  uart_sel;
+    always @(posedge gmii_clk or negedge reset_n) begin
+        if (!reset_n) uart_sel <= 30'd0;
+        else if (!uart_sel[29]) uart_sel <= uart_sel + 30'd1;
+    end
+    assign uart_txd = uart_sel[29] ? app_uart_txd : p4_uart_txd;
+`else
+    assign uart_txd = p4_uart_txd;
+`endif
     dbg_line_tx u_dbg_line (
         .clk            (gmii_clk),
         .rst_n          (reset_n),
@@ -1250,7 +1544,7 @@ module wrapper_p4 (
         .stx_purge      (stx_stat_purge),
         .starv          (srx_dbg_starv),
         .hls_rst        (hls_rst_n),
-        .txd            (uart_txd)
+        .txd            (p4_uart_txd)
     );
 
     // 旧观测 (P4a, 已换线保留对照):

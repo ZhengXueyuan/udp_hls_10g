@@ -2465,3 +2465,242 @@ RegVlanid; 抓包点在 tag 插入之前故抓包看不见 tag, 用板侧 MW 计
 **遗留**: 内核栈 Python 版吞吐波动大 (历史 105, 本轮 55.4 Mbps) — 取决于内核
 ACK/缓冲时序, 未深究 (已由合成对端取代为主测试工具)。要突破 890 Mbps 需更大
 通告窗 (DDR/WS) — 1G 下已无必要, 10G (P6) 时再上。
+
+### P5 开工 — app interface 计划定案 (2026-09-19)
+
+**用户拍板三项**: ① 接口形态 = **AXIS 流 + 寄存器/mailbox 控制** (本轮不做 AXI-Lite);
+② 板级演示载体 = **RTL 图案发生器+校验器** (不做 UART 桥); ③ 范围 = **TCP 先行, UDP 收尾**。
+
+**计划**: `C:\Users\zhxue\.claude\plans\distributed-herding-gadget.md` (含接口定义/
+安全论证/Step 1-8 逐行改动点/子里程碑 P5a-P5e 与门)。关键设计决定:
+- D1 窗口 = **单调右沿寄存器** `redge[c]`，写 TCB 的 `W = redge - rcv_nxt` —
+  草案"右沿自然不缩"不成立 (TCB 的 W 是采样值、ACK 的 ack 是新鲜 rcv_nxt，不原子 ⇒ 右沿被抬高 δ)
+- D2 多连接配额 = **信用池** (CONN_UP 授、DOWN 归还) — `free/N` 不安全 (窗口授予不可撤销，
+  Σ 历史最大窗可超缓冲)
+- D3 扫描**不得复用 TCB `win_id` 口** (那是 TX 门控的注册读口) → 新增组合读口 C
+- D4 FIN **只在 `snd_nxt == snd_una` 时排队** (ring 不覆盖 FIN 的 1 字节 seq，
+  否则重放会读出发送垃圾字节)
+- D5 超长帧 = 帧内中止 + 冲洗 (不加 FSM 状态；>2048B 否则 `pay_full` 永久死锁)
+- APP_MODE 构建开关默认**关** ⇒ 默认位流与 P4 逐位一致 (回归保护)
+
+### P5a-0 前置实验: suppress=0 板级复测 (2026-09-19) — **吞吐不达标，根因待查**
+
+目的: P4c 记的"suppress=0 板测 28.4Mbps"是 **w6a 修复前**的数据；app 模式必须逐段纯 ACK
+(无 echo 捎带)，需重新确认该配置的板级可行性。
+
+构建: `board/build_p5a0.tcl` (工程名 `p5a0_prj`，**不覆盖已验证的 p4_prj 位流**)，
+`APP_MODE=1` ⇒ wrapper 的 `cfg_suppress_data_ack(!APP_EN)` = 0。WNS +0.126 / TMS 0 / WHS +0.048。
+
+**对照实验** (同一时刻、同一机器、同命令 `peer.exe --bytes 16777216`):
+
+| 位流 | elapsed | peer RX 帧数 | RX 帧率 | dup_acks | fast_retx | 吞吐 |
+|---|---|---|---|---|---|---|
+| p4_prj (suppress=1) | **0.150 s** | 11634 | 77,440 fps | 36 | 1 | **891.94 Mbps** |
+| p5a0_prj (suppress=0) | 0.290 s | 33804 | 116,696 fps | **20609** | **1159** | 462.50 Mbps |
+| suppress=0 + `--no-fast-retx` | 0.366 s | 23218 | 63,598 fps | 11606 | 0 | 368.10 Mbps |
+| suppress=0 + `--no-mintocopy` | 0.415 s | 37078 | 89,432 fps | 23399 | 1516 | 323.15 Mbps |
+
+三个配置**都逐字节零失配** (协议正确)；慢的是吞吐。
+
+**已定位的 peer 缺陷**: `peer.cpp:736 process_ack()` 的 dup-ACK 判据
+`if (ack == snd_una && !inflight.empty())` **不区分报文是否携带数据** — suppress=0 下
+"纯 ACK(推进) + echo(同 ack 值)" 成对出现 ⇒ 每数据段白计 1 次 dup (20609 ≈ 段数) ⇒
+3 连 dup 触发**虚假快速重传** (1159 次 ⇒ 60% 额外流量)。标准 (RFC 5681 / Linux
+`FLAG_NOT_DUP`) 携带数据的段不计入 dup-ACK。**这条无论如何要修。**
+
+**未解**: 即使禁掉快速重传、传输完全干净 (unique 16.8MB 零丢帧)，仍只有 368 vs 891 Mbps；
+此时板子 TX 仅 ~400Mbps 未饱和、peer RX 帧率低于 P4 基线的 77.4k fps。已派专职 agent
+(板子独占) 查根因 + 修 peer 标准语义，产出可信数值。**结论影响 P5 的 ACK 策略**
+(是否需延迟 ACK 批处理)。
+
+### P5a-0 破案: 主因 = 工具 dup-ACK 语义，次因 = 板子既有"突发丢帧 + 静默"病理 (2026-09-19)
+
+**主因 (peer 工具缺陷)**: `process_ack()` 把**携带数据的报文**计入 dup-ACK。suppress=0 下
+板子对每个数据段发"纯 ACK + echo"两帧、**同一 ack 值**，其中 echo 那帧被白计 1 次 dup
+(20609 ≈ 段数) → 每 3 段触发一次**虚假快速重传** (1457 次/趟 → 60% 额外流量 → 板子 TX 打满)。
+
+修复 (peer.cpp，标准语义): ①带数据的段绝不计 dup (RFC 5681 / Linux `FLAG_NOT_DUP`)
+②dup-ACK 还要求通告窗口未变 ③Reno 快速恢复状态机 (恢复期内 dup 只膨胀 cwnd，不武装新重传；
+`ack >= recover` 退出) ④重传保留 go-back-N 修补 (实测单段 Reno 重传只有 174-363 Mbps —
+板子整串丢帧等不到后续) ⑤仪表 (flush/RX/loop 分段计时、CPU 核数、RTO 现场诊断、
+`--legacy-dupack` A/B 开关)。**`--no-mintocopy` 会腰斩吞吐 (496-499)，禁止用于速率测量。**
+
+**修复后实测 (TL 独立复核)**:
+
+| 128MB | 位流 | 吞吐 |
+|---|---|---|
+| P4 (suppress=1) | p4_prj | 875.2 / **898.5** Mbps |
+| **app 模式所需 (suppress=0)** | p5a0_prj | 557.8 (撞一次静默停顿) / **857.3** Mbps |
+
+**判定: app 模式逐段纯 ACK 可行** — 稳态 857 Mbps = echo 基线 (~895) 的 **95.5%**，
+理论线速上限 905 Mbps 的 94.7%。**计划里的"延迟 ACK 批处理"兜底不需要。**
+
+**次因 (板子真实病理，两配置都有，suppress=0 下频率高 5-25 倍)**: 板子偶发**整串丢帧 +
+TX 静默 ~200ms** —— 证据: ①tshark 独立抓包 6s 内两次 202.9/205.6ms 板子零帧
+(`D:\tmp\captures\stall1.pcapng`) ②peer RTO 诊断 `board silent for 212428us`,
+`ack_hi == snd_una` ③板侧三站词计数 MW/CW[0]/RW 一致 ⇒ **帧已进 tcp_rx**，
+同期 `DROPS[0]` (窗口内 seq 不符) +358 ≈ 14 事件 × 25-33 帧 ④重传 `seq=snd_una` 一帧后
+板子 <1ms 复活 (ack +1460)。**链条推断: 突发帧丢失 (mac_rx 8 深 FIFO 满丢整帧) → 后续帧
+判"乱序" → dup-ACK 请求 → `ackq`(8 深) 溢出 → dup-ACK 一个都没上线 → 对端只能等 200ms RTO。**
+待办 (P5a 后续): ①`ackq` 加深 8→32 (让快速重传恢复成立) ②`stat_ack/stat_ack_drop` +
+`tcp_tx_frame` FSM state 接进 UART 快照 (当前无法从外部定案) ③P5b 的窗口闭环正是
+"不让 RX 流水线堵"的对症机制。
+
+**工具余量 (供 P6 参考)**: peer flush 路径 ~191k 帧/s ≈ 1.1 Gbps 载荷上限；实测峰值
+147.9k fps = 上限 78% (双向双帧/段需 155k fps)。**工具不是当前瓶颈但只剩 ~20% 余量，
+10G 必须换工具 (pcap_sendqueue_transmit(sync=1) + 逐帧 pcap_next_ex 的结构撑不住)。**
+
+### P5a 实现+审查+测试轮: 首轮全量构建失败 (DRC 组合环) — 2026-09-19
+
+**实现 agent 交付**: Step 1-7 全部完成 (tcp_tx_frame 长度守卫+FIN/RST 通道; tcb 读口 C +
+WIN_CAP 参数化; slow_cfg_adp 事件源; 新 app_ctrl/app_pattern/app_status_uart;
+wrapper APP_MODE 分支; sim/p5sim 门 + tb_p5_app/tb_p5_status)；
+sim 侧: P5 三门 OK (1MB 图案逐字节/超长帧 drop_len=1/状态行 136 字符) + **P4 矩阵 16/16 绿**；
+实施者额外自查出 3 个真 bug (flush 期间 accept 吞字 / len_bad 跨帧残留致载荷错位 8B / 冲洗未完成即启新帧)。
+
+**审查 agent 独立复核** (只读 + 独立解析 resp_p5_app.memh) 结论:
+- 「默认构建等价性」**成立** (唯一例外: `PLEN_MAX` 守卫未 APP_MODE 门控 —— 有意加固,
+  ≤1500B 输入逐位等价, >1500B 由挂死改为丢弃; 用量指纹: p4 vs p5a0 的 FDRE 完全相等 16362)。
+- 抓到 **H1 (阻断板测)**: peer 图案表**先推进后取字节**, RTL **先取后推进** ⇒ `peer[k]==RTL[k+1]`,
+  板级逐字节判据会全失配 (且 peer 无 `--rx-only`, 计划 §八 的板测命令当时不可执行)。
+- **H2**: 5 个旧文件 (`tb_tcp_tx/tb_tcp_chain/tb_tcp_echo/tb_tcp_tx_dbg` + `board/wrapper_tcp.v`)
+  未接 tcp_tx_frame 新输入 → xsim 悬空 Z 进 ackq → 纯 ACK 帧 flags/ack 半 X (P4 矩阵覆盖不到)。
+- **M1**: `fin_repush` 与 `ack_req` 抢 ackq 条目 → FIN 重推**永久丢失** (关闭永不完成 + 完成检测误报)。
+- **M3**: `app_pattern` 在 `ev_down` 直接撤 `pw_valid` (无 tlast) → AXIS 违约 + 帧器卡 S_RECV。
+- L1/L2/L3/M2/M4 若干 (UART 分时实为 4.295s 且必截半行; 快照缺 drop_len/fin/rst; 三处 0xBFFE 独立; ...)。
+
+**TL 门核查 + 构建**: `board/run_build_p5.bat` **失败** — DRC LUTLP-1 组合环
+`u_app_pipe/m_data_r[76]_i_2`, bitgen 不跑。**根因 (W1, 真 bug)**:
+`board/wrapper_p4.v:446 assign app_tx_tready = app2_tready;` 与 `u_app_pipe.s_ready(app_tx_tready)`
+**同时驱动同一根线**, 且 APP_MODE 分支**没人驱动 `app2_tready`** (默认分支才有
+`eco2_tready = txin_tready`) ⇒ ①自环 ②语义错: `axis_pipe` 正确背压是 `s_ready = m_ready || !m_valid`,
+现在退化成 `= m_ready` ⇒ 流水寄存器压着字时 app 还能再推 ⇒ **丢字**。
+**教训: 模块级 TB 绿 ≠ wrapper 分支正确 —— P5 门必须有一个带 `-d APP_MODE` 例化 `wrapper_p4` 的全链门**。
+
+**处置**: W1 (含 wrapper 级门) / W2 (=M1) / W3 (=M3) / W4 (=H2) / W5 (小项) 已退回实现 agent 修;
+H1 (peer 图案相位, 1 行) + `--rx-only` 扩展已通知测试 agent。修完重跑 `board/run_build_p5.bat`。
+`board/build_p5a0.tcl` 已标注**历史实验脚本勿重跑** (RTL 已演进, 清单不含 app 模块)。
+
+### P5a 板级验收: app 接口双向实测通过 (2026-09-19)
+
+**修复后构建**: `p5_prj` 全量通过, **WNS +0.205 / TNS 0 / WHS +0.053** (P4 基线 +0.219 ⇒ 无退化),
+bitstream `vivado_prj/p5_prj.runs/impl_1/wrapper_p4.bit`。DRC 组合环消失 (W1 修复生效)。
+
+**TL 亲自复跑门**: P4 矩阵 **16/16 EXIT=0** (首轮 chain/burst200 因残留 xsim 进程占目录假失败,
+补跑 `P4 CHAIN OK` / `BURST OK`)。
+
+**板级实测 (内核栈 socket 客户端, 免合成对端)**:
+- **app TX 路径**: 连上 192.168.100.2:8080 → 板侧 cone_up 后主动发 1MB →
+  PC 收 **1,048,576 B 逐字节零失配** (16ms, 511 Mbps 内核栈口径), 收完 EOF ⇒ **close/FIN 走通**
+- 首字节 `7f 0b 02 e5 36 a1 4e d6 1a b0 49 b8 56 ad d6 3f` = RTL 的"先取后推进"序列
+  (**反证审查报告的 H1**: peer 的图案表相位差 1 字节, 必须改成先取后推进)
+- **app RX 路径**: PC 立即发 32KB 图案 → 板侧 app 校验器 **MM=0000 零失配**
+- **板侧计数器 (UART P5A1 行) 与 PC 侧逐项吻合**:
+  `TX=00100000`(=1MB) `TF=02CF`(=719 帧, 与仿真门同值) `DL=0000`(无超长帧) `RS=0000`(无 RST)
+  `FI=0001`(1 FIN) `EV=0002`(CONN_UP+CONN_DOWN) `NX==UA`(数据全确认)；
+  第二轮 `RX=00008000`(32768B) `MM=0000` `EV=0004` `FI=0002` `TF=059E`
+
+**结论: P5a 出口判据全部达成** (仿真门 + 时序 WNS≥0 + 板级 app 双向 + 计数器自洽)。
+遗留 (转 P5b/P5c): 合成对端仍缺 `--rx-only` (线速 app TX 验证需它)；慢消费者/窗口闭环 (P5b)；
+FIN 丢失重传与 RST 的板级用例 (P5c)。
+
+## 2026-09-19 P5a 实现 (Step 1-7, app 接口第一阶段) — xsim 门全绿
+
+**范围**: app AXIS 数据面 + 事件/寄存器控制面 (不含 TCB 窗口写口/信用池 = P5b/P5d)。
+RTL 改动 + 新模块 + 新仿真门; **未碰板子/未跑 Vivado 构建** (TL 独占板跑 P5a-0)。
+
+**Step 1 `rtl/tcp_tx_frame.v` (长度守卫 + FIN/RST 通道)**:
+- `PLEN_MAX=1500` 长度守卫: `len_over` 检出 -> `len_bad` 屏蔽 `wr/wr_tap/csum_den`;
+  `tlast && len_bad` 跳过 S_WAIT 直接 S_IDLE + `flush_pend` + `stat_drop_len++`;
+  S_IDLE 排空 u_fifo 后清 `flush_pend`/`len_bad`; 上界 < FIFO 容量 (256 字) 故
+  永不触发 `pay_full` 死锁 (>2048B 帧的旧死锁路径消失)。**不加 FSM 状态**。
+  帧内中止不经过 S_DONE ⇒ snd_nxt 不推进 ⇒ ring 残字节被下帧覆盖 (无暴露)。
+- FIN/RST: ackq W 37->39 (`{id,syn,fin,rst,val}`; 计划文档写 38 是笔误);
+  `fin_req/rst_req` 输入 + 本模块**扫描自排队** (FIN 仅 `snd_nxt==snd_una` &&
+  ESTAB && !fin_sent, D4); flags 0x11/0x14; FIN 发完记 `fin_seq_r`, RTO 回卷时
+  `retx_hi <= fin_seq_r` (杀 1 字节幻影重放) + `fin_retx_pend` 在 ring 会话排空处
+  **组合重推** FIN 条目 (seq 同值, 无漂移); `o_fin_sent`/`o_retx_id` (Step 8 提前做)。
+  `start_data` 对 `fin_req/fin_sent` 的连接屏蔽; 扫描采到非 ESTAB 清这两个标志。
+- 三个新 bug (xsim 抓到, 全在"中止帧后的下一帧"):
+  ① `flush_pend` 期间 `s_axis_tready` 未压制 -> app 的字被 accept 吞掉却既不进
+     FIFO 也不进 plen (实测丢 144B); 修 = S_IDLE 的 tready 加 `!flush_pend`。
+  ② `len_bad` 留到下一帧帧首才清 -> 下一帧首拍被 accept 但 `wr` 仍被屏蔽
+     (plen 计 8 字节而 FIFO 没写 = 整帧载荷错位 8B); 修 = 冲洗排空拍同拍清。
+  ③ (同族) 计划文档"tlast 拍跳过 S_WAIT"的实现必须让**整个**缓冲区间被冲洗,
+     否则残字节在下帧前混入 — 已由 ①② 覆盖。
+
+**Step 2 `rtl/tcb.v`**: `WIN_CAP` 参数化 (= `tcp_tx_frame.RING_CAP` 0xBFFE,
+wrapper 显式传参) + **组合读口 C** (`rc_id -> rc_*`; 慢速消费者, 不动 ra/rb/win 口, D3)。
+
+**Step 3 `rtl/slow_cfg_adp.v`**: 纯加输出 `ev_up/ev_down` (脉冲) + `ev_slot/peer_ip/
+peer_port/peer_mac` (S_CAM 锁存, 保持到记录结束)。ADD 收尾 = `S_TCB_LAST` 的 wscale
+授权写落地拍; DEL = state=0 授权落地拍。FSM 时序零改动 (P4 TB 无需改端口即编译)。
+
+**Step 4-6 新模块**:
+- `rtl/app_ctrl.v`: 事件 FIFO (fifo_sync 102b x 16 FWFT, 满丢弃+计数) + 16 分频轮扫
+  采 TCB 状态 + 8 位地址寄存器总线 (地址映射按计划, **位宽从 5 位放宽到 8 位** —
+  计划自带映射 0x10+4c/0x90 超出 5 位可寻址) + `app_tx_ready` + FIN/RST 请求输出。
+  P5a 不做 TCB 写口/窗口计算 (P5b/P5d)。
+- `rtl/app_pattern.v`: xorshift64 图案 TX/RX 双实例 (每拍 1 字节 = 8 字节/9 拍呈交一字,
+  ≈0.89 B/cycle ≈ 890Mbps 上限); CONN_UP 启动 `TX_BYTES` (默认 1MB) 发送, 每帧
+  ≤1460B; 发完 `close_req`; RX 逐字节比对 (`stat_mismatch`); 故障注入
+  `i_bad_frame` (第 N 帧用 2000B 常数载荷 + LFSR 冻结 ⇒ 被丢弃后图案流仍连续)。
+  **呈交口必须组合驱动** (寄存器化 valid 会在消费拍后多挂一拍 = 同 beat 双消费)。
+- `rtl/app_status_uart.v`: 独立 136 字符快照行 (复用 `uart_tx_9600`, 不改 uart_dbg.v)。
+
+**Step 7 `board/wrapper_p4.v`**: `ifdef APP_MODE` 分支 (默认分支逐位不变):
+`eco2_*` (echo 输出) -> app RX; app TX -> `axis_pipe` -> `u_tcp_tx.s_axis` (经 `txin_*`
+选择线); app_ctrl/app_pattern/app_status_uart 实例化; LED 走 app 指示灯; UART 前
+~8.6s 给 P4 诊断行、之后给 app 状态行 (一根 txd 的分时复用); ACK 源合并结构
+`rx_ack_req | fin_push | rst_push` 留好 (本阶段 fin/rst push 恒 0 — FIN 由帧器自扫描)。
+新 `board/build_p5.tcl` + `run_build_p5.bat` (p5_prj + `verilog_define APP_MODE=1`,
+不覆盖 P4 的 wrapper_p4.bit; build_p4.tcl 不动)。
+
+**P5a 门 (`sim/p5sim/`, 独立于 p4sim 的 xsim.dir)**: `tb/tb_p5_app.v`
+(APP_MODE 数据面 + 从 tb_p4_chain 移植的 PC ACK 模型 + 一次 100B 图案数据段注入) +
+`tools/gen_stim_p5_app.py` (激励 + 判据) + `run_tb_p5_app.bat` (P5BAD=N 注入超长帧)。
+**结果 (两条门全绿)**:
+- 默认门: 719 帧 / 1048576 B 逐字节 == 图案 (偏移 = seq-(ISS+1)); 覆盖
+  [12345679,12445679) 连续无洞无重叠; FCS/doff=0x50/flags=0x18/win=0xC000 全合法;
+  `stat_eend=0` / mac abort=0 / ECOMAX=182; app RX 收到注入的 100B 图案且失配 0;
+  事件字 ① 全对 (kind=0/slot=0/peer_ip/port/mac) + REG 0x9F=0x50354131。
+- `P5BAD=5` 门: `stat_drop_len=1` 恰 1 次, 其后 719 帧 / 1048576 B 仍连续无洞、
+  逐字节全等 (坏帧不上线, 图案流不被跳过); 无死锁。
+- 附带验证 (P5c 预演): FIN 段 flags=0x11, seq = snd_una (无在飞), ack = 当前 rcv_nxt ✓。
+
+**P4 回归**: Step 1 后 15/15 门绿; Step 2+3+7 后重跑 (见下条)。默认构建路径 (无
+APP_MODE) 的 wrapper 全量 xelab 通过 (APP_MODE 变体亦通过, 含 HLS 网表)。
+
+### P5a 补: app_status_uart 单元门 (Step 6) — 抓到 2 个真 bug
+
+P5 全链 TB 只跑 ~10ms, 9600 下连一行 (142ms) 都发不完 ⇒ 状态行在全链门里没被
+真正驱动。新 `tb/tb_p5_status.v` + `sim/p5sim/run_tb_p5_status.bat` (缩短
+BIT_LAST=13 + 位中点采样 + 逐字符按 start 沿重对齐 + 二进制写文件) 解码 136 字符
+行并与期望串逐字节比对 ⇒ **P5 STATUS OK**。两个 bug 都是这个门抓到的:
+1. **nibble 索引方向反了**: 字段 32 位值左对齐后第 k 位取自 LSB 端 ⇒ 整行每个
+   字段内部**倒序** ("12345679" 打成 "97654321")。修: `hexd(v, ci - start)`。
+2. **EC (2 位 hex) 取错 nibble**: 16 位寄存器左对齐成 4 位 hex 后取前 2 nibble,
+   实际应取低字节 (`{sn_ec[7:0], 24'b0}`) — 否则 EC=02 打成 EC=00。
+3. (测试侧) TB 解码器每字符少算 1 拍 → 累积漂移, 几字符后整体错一位; 修 = 每字符
+   按 start 沿重新对齐 (不靠周期数累加)。另: `$fopen(...,"w")` 文本模式会把 0x0A
+   写成 0x0D0A (多一个 CR), 必须 "wb"。
+
+**P5a 门命令 (Git Bash)**:
+```bash
+cd /d/repo/ECO/udp_hls_10g/sim/p5sim
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_app.bat'          # 默认门 (~2min)
+P5BAD=5 cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_app.bat'  # 2000B 超长帧门
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_status.bat'       # 状态行单元门
+bash /d/repo/ECO/udp_hls_10g/sim/p4sim/run_matrix_p4dfix.sh            # P4 15 门回归
+```
+
+### P5a 收尾: 门结果 + P4 回归 (2026-09-19 18:58)
+
+| 门 | 命令 | 结果 | 关键数 |
+|---|---|---|---|
+| P5 默认 | `run_tb_p5_app.bat` | **P5 APP OK** | 719 帧 / 1048576B 逐字节==图案; 覆盖 [12345679,12445679) 无洞; drop_len=0; fin=1; eend=0; mac abort=0; ECOMAX=182; app RX 100B 失配 0 |
+| P5 超长帧 | `P5BAD=5 ...` | **P5 APP OK** | stat_drop_len=1 (恰 1 次); 其后 719 帧 / 1048576B 仍连续无洞逐字节全等; 无死锁 |
+| P5 状态行 | `run_tb_p5_status.bat` | **P5 STATUS OK** | 136 字符行逐字节 == 期望 (含 EC/字段序) |
+| P4 回归 | `run_matrix_p4dfix.sh` | **16/16 EXIT=0** | chain/burst200/trunc50/trunc100/halfdrop/txdrop50/gate4096/dupstorm/pcackoob/vlanchain/vlanburst/stallgate/unit_retx/unit_fifo/unit_vlan/unit_uart 全绿 (ECOMAX 恒 182, 无注入门 RETX=0) |
+| 默认 wrapper | xelab 全量 (含 HLS 网表, 无 APP_MODE) | **snapshot built** | 默认构建路径编译/elab 干净 |
+| APP_MODE wrapper | xelab 全量 (-d APP_MODE) | **snapshot built** | app 分支端口连接全部一致 |

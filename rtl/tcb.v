@@ -6,7 +6,11 @@
 // wscale = 对端 window scale (握手时 HLS 从 SYN 选项解析, cfg 记录下发); tcp_rx
 // drain snd_wnd 时按它缩放。复位 0 = 不缩放, 旧配置链路 (不写 sel=6) 语义不变。
 module tcb #(
-    parameter N = 16
+    parameter N = 16,
+    // P5: 窗口门控帽提为参数 (原先硬编码 16'hBFFE)。必须与
+    // tcp_tx_frame.RING_CAP 同值 (P4c 起两处同值 0xBFFE; wrapper 显式传参,
+    // 避免日后分叉)。默认值 = 历史硬编码值, 行为不变。
+    parameter [15:0] WIN_CAP = 16'hBFFE
 ) (
     input  wire        clk,
     input  wire        rst_n,
@@ -38,7 +42,19 @@ module tcb #(
     input  wire [3:0]  win_id,
     output reg         win_open,         // 32 位回绕正确门: (snd_nxt-snd_una) < 帽
     output reg  [15:0] win_inflight,     // 32 位差低 16 位 (debug 用)
-    output reg  [15:0] win_wnd_eff,      // min(snd_wnd, 0xBFFE = RING_CAP)
+    output reg  [15:0] win_wnd_eff,      // min(snd_wnd, WIN_CAP = RING_CAP)
+    // ---- P5: 组合读口 C (app_ctrl 轮扫专用) ----
+    // 与 ra/rb 同构的组合读, 第三个地址入口。消费者是慢速寄存器逻辑
+    // (每 256 拍扫一轮), 无时序风险; 不做第二个注册窗口口 (D3: win_id 口
+    // 是 TX 数据门控的注册读口, 外来扫描会污染帧首决策)。ra/rb/win 三口
+    // 语义与实现全部不动。
+    input  wire [3:0]  rc_id,
+    output wire [31:0] rc_rcv_nxt,
+    output wire [31:0] rc_snd_nxt,
+    output wire [31:0] rc_snd_una,
+    output wire [15:0] rc_rcv_wnd,
+    output wire [15:0] rc_snd_wnd,
+    output wire [3:0]  rc_state,
     // ---- P6 冻结诊断: conn0 阵列快照 (纯 assign 组合读 entry[0], 无时序影响) ----
     output wire [31:0] dbg_snd_nxt0,
     output wire [31:0] dbg_snd_una0,
@@ -97,6 +113,14 @@ module tcb #(
     assign rb_snd_wnd = snd_wnd_r[rb_id];
     assign rb_state   = state_r[rb_id];
 
+    // ---- P5 组合读口 C (app_ctrl 轮扫) ----
+    assign rc_rcv_nxt = rcv_nxt_r[rc_id];
+    assign rc_snd_nxt = snd_nxt_r[rc_id];
+    assign rc_snd_una = snd_una_r[rc_id];
+    assign rc_rcv_wnd = rcv_wnd_r[rc_id];
+    assign rc_snd_wnd = snd_wnd_r[rc_id];
+    assign rc_state   = state_r[rc_id];
+
     // ---- P6 冻结诊断: conn0 快照 (恒等 array[0], 与 ra/rb mux 无关) ----
     assign dbg_snd_nxt0 = snd_nxt_r[0];
     assign dbg_snd_una0 = snd_una_r[0];
@@ -116,7 +140,7 @@ module tcb #(
     // 容量 65536 字节/conn (retx_ram 13 位 ring 字 idx), 最坏在飞 =
     // (0xBFFE-1) + plen_max 4095 = 53244 < 65536 — 硬 ring 界仍成立。
     wire [31:0] win_diff = snd_nxt_r[win_id] - snd_una_r[win_id];   // 32-bit wrap-correct
-    wire [15:0] win_cap  = (snd_wnd_r[win_id] < 16'hBFFE) ? snd_wnd_r[win_id] : 16'hBFFE;
+    wire [15:0] win_cap  = (snd_wnd_r[win_id] < WIN_CAP) ? snd_wnd_r[win_id] : WIN_CAP;
     always @(posedge clk) begin
         win_open     <= (win_diff < {16'b0, win_cap});
         win_inflight <= win_diff[15:0];
