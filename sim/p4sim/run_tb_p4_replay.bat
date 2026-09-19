@@ -9,6 +9,9 @@ if exist txdrop.memh del /q txdrop.memh
 REM P4e: delete vlan.memh so this gate never inherits VLAN tagging from a
 REM previous run_tb_p4_*_vlan.bat (gen_stim/apply both read that file).
 if exist vlan.memh del /q vlan.memh
+REM P1-2: the slow-peer gate leaves pcslow.memh behind -- delete it so this
+REM gate runs with the default fast-peer model.
+if exist pcslow.memh del /q pcslow.memh
 set XV=C:\AMDDesignTools\2025.2\Vivado\bin
 set HLS=D:\repo\ECO\udp_hls_10g\hls\slowstack_prj\solution1\syn\verilog
 set XPA=-testplusarg PCACK
@@ -35,6 +38,7 @@ call %XV%\xvlog.bat -work xil_defaultlib -d RTOLIM_FAST ^
   D:\repo\ECO\udp_hls_10g\rtl\tcp_echo.v ^
   D:\repo\ECO\udp_hls_10g\rtl\axis_pipe.v ^
   D:\repo\ECO\udp_hls_10g\rtl\rx_classify.v ^
+  D:\repo\ECO\udp_hls_10g\rtl\vlan_strip.v ^
   D:\repo\ECO\udp_hls_10g\rtl\slow_rx_adp.v ^
   D:\repo\ECO\udp_hls_10g\rtl\slow_cfg_adp.v ^
   D:\repo\ECO\udp_hls_10g\rtl\slow_tx_adp.v ^

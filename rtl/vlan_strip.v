@@ -15,7 +15,10 @@
 // 展开成输出字 (左对齐 64bit 字流):
 //   out_w0        = in_w0                            // SOP 字原样
 //   out_w1        = {in_w1[63:32], in_w2[63:32]}     // 12B 头 + 新 ethertype (边界字)
-//   out_wk (k>=2) = {in_w{k-1}[31:0], in_w{k}[63:32]}  // 半字错位拼接 (4B 左移)
+//   out_wk (k>=2) = {in_w{k}[31:0], in_w{k+1}[63:32]}   // 半字错位拼接 (4B 左移)
+//     等价时序表述: 第 k 个输入字到拍时装输出字 k-1 (k>=2) =
+//     {in_w{k-1}[31:0], in_w{k}[63:32]} — 高半 = 上一输入字低半 (hold),
+//     低半 = 本输入字高半; k=1 为边界字 (高半取 in_w1 高半而非 in_w0 低半)。
 // tkeep: out_keep = {hold_keep, in_keep[k][7:4]}, hold_keep = tag 字 in_keep[7:4]
 //   (k=1) 或 in_keep[k-1][3:0] (k>=2) — 与上式同源, 高半来自 hold, 低半来自当前字。
 //
@@ -172,8 +175,15 @@ module vlan_strip (
                         // 本帧 VLAN: 剥 tag, 进入错位拼接支
                         state    <= S_SHIFT;
                         dbg_vlan <= 1'b1;
+                    end else if (s_axis_tuser && !s_axis_tlast) begin
+                        // 异常 SOP (上游截断残段后紧跟新帧首字): 本字按新帧首字
+                        // 直通 (load_w1 已装载), 而下一字就是新帧 w1 = TPID 判定
+                        // 拍 — 必须回 S_W1 而非 S_PASS, 否则相位滑移: 该 w1 在
+                        // S_PASS 被直通 (S_PASS 只对 tuser 拍去 S_W1), TPID 原样
+                        // 留在 byte 12-13 -> 整帧误走慢路径 (审查 xsim 实测复现)。
+                        state <= S_W1;
                     end else begin
-                        // 非 VLAN / 残缺 / 异常 SOP: 直通, 回常态等下一帧首字
+                        // 非 VLAN / 残缺 (tlast 同拍) : 直通, 回常态等下一帧首字
                         state <= S_PASS;
                     end
                 end

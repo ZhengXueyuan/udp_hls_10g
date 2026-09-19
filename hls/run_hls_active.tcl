@@ -19,10 +19,28 @@
 #   ACTIVE_DELAY=2000    power-on wait, in top-level passes (~2 s on board =
 #                        250000000); sim needs the SYN inside the TB window
 #   ACTIVE_ARP_INTERVAL=100  who-has retry interval (passes; board 5000000)
+#   TCP_RTO_MIN=2000         P1-2: min RTO in passes (board 10000000 = ~80ms).
+#                            The PCACTIVE slow-peer gate (run_tb_p4_chain_
+#                            active_slow.bat, pcslow.memh=1) withholds the
+#                            SYN+ACK so the board must retransmit the SYN --
+#                            this scales that RTO into the TB tail window so the
+#                            T_SYN_SENT retransmit path is really exercised
+#                            (previously zero coverage).
+#                            Calibration (measured in xsim, NOT 1 pass/cycle):
+#                            TB window = 250k cycles; 1st SYN captured at
+#                            k_syn ~= 70k; with the P1-2 idle tick (udp_echo.cpp,
+#                            ACTIVE-guarded) 3000 passes -> 2nd SYN at k_syn2 =
+#                            225994 (52 cycles/pass) -- only ~10% margin. 2000
+#                            passes -> ~104k -> retransmit ~174k (~30% margin).
+#                            The 2nd RTO (+4000 passes) falls outside the window,
+#                            so exactly ONE retransmit is exercised -- hence
+#                            check_active asserts syn_cnt>=2 (retransmit >= 1);
+#                            the TCP_MAX_RETRY release path (4 timeouts) is left
+#                            to board-level test.
 #=============================================================================
 
 open_project -reset slowstack_prj
-add_files src/udp_echo.cpp -cflags "-DACTIVE_CONNECT=1 -DACTIVE_IP=0xC0A86463 -DACTIVE_DELAY=2000 -DACTIVE_ARP_INTERVAL=100"
+add_files src/udp_echo.cpp -cflags "-DACTIVE_CONNECT=1 -DACTIVE_IP=0xC0A86463 -DACTIVE_DELAY=2000 -DACTIVE_ARP_INTERVAL=100 -DTCP_RTO_MIN=2000"
 set_top udp_echo
 
 open_solution -reset solution1

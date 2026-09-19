@@ -2253,13 +2253,21 @@ conn2), 数据段全收全回 nm=0; 回归 chain/burst 绿; rtl/ 零改动 (数�
 逐项对齐 T_LISTEN / 槽位选择不碰 T_LISTEN) + PCACTIVE/activecheck 复跑绿 +
 回归复跑绿。提交 a1980fc。
 
+**P2 文档对齐 (2026-09-19 TL 复核)**: k_syn = SYN 捕获拍, 随网表/激励时序
+变化, 不是固定量 — 提交 a1980fc 报文写 70499, 审查侧产物 probe_run.log
+(PROBE 调试运行, 网表时序不同) 记 204483。2026-09-19 P1 修复轮复跑标准
+PCACTIVE 门 (active 网表 ACTIVE_DELAY=2000 + TCP_RTO_MIN=100000) 实测
+`iss=89abcdef k_syn=70499` — 与 a1980fc 报文一致。引用时注明运行配置,
+勿把两者混为一谈 (commit 报文不改)。
+
 ### P4d 修补包 小项3: VLAN fast path (2026-09-19)
 
 **方案**: 新模块 rtl/vlan_strip.v (mac_rx_64 → vlan_strip → rx_classify) —
 单层 802.1Q/1ad tag (TPID+TCI 4B) 从字节流删除, 下游 (classify/tcp_rx)
 零改动回到无 tag 布局。字节映射 (TL 任务书原公式是 2 字节位移笔误,
 agent 按字节映射推导纠正): out_w1={in_w1[63:32],in_w2[63:32]},
-out_wk(k≥2)={in_{k-1}[31:0],in_k[63:32]}。tlast 边界: 末输入字低半无有效
+out_wk(k≥2)={in_w{k}[31:0],in_w{k+1}[63:32]} (等价: 第 k 输入字到拍拼出输出字
+k-1)。tlast 边界: 末输入字低半无有效
 → 同拍; 否则 S_TAIL 尾拍 (上游停 1 拍, mac 8 深 FIFO 吸收)。VLAN 帧 tag
 字处 1 气泡 + 帧尾 ≤1 拍停顿, 1G 帧间隔 ≥1.5 字拍天然吸收 (202 帧零丢实测)。
 QinQ 剥一层后自然退化慢路径; 上游残段 (tuser) 有恢复支不卡死。

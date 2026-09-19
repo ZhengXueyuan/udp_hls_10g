@@ -25,6 +25,9 @@ REM          advance snd_una, otherwise the gate deadlocks the echo)
 cd /d %~dp0
 REM P4e VLAN injection switch (vlan.memh, same file channel as TRUNC).
 > vlan.memh echo 1
+REM P1-2: the slow-peer gate leaves pcslow.memh behind -- delete it so this
+REM gate runs with the default fast-peer model.
+if exist pcslow.memh del /q pcslow.memh
 set PY=C:\Users\zhxue\anaconda3\python.exe
 set XV=C:\AMDDesignTools\2025.2\Vivado\bin
 set HLS=D:\repo\ECO\udp_hls_10g\hls\slowstack_prj\solution1\syn\verilog

@@ -1,4 +1,9 @@
 @echo off
+REM run_tb_p4_chain_active_slow.bat -- P1-2 PCACTIVE slow-peer gate: same active
+REM   netlist (+PCACTIVE) but the TB withholds the SYN+ACK after the 1st board SYN
+REM   (pcslow.memh=1) until the RTO-retransmitted SYN appears (scaled
+REM   TCP_RTO_MIN=100000 via hls/run_hls_active.tcl). check_active asserts
+REM   syn_cnt >= 2 (T_SYN_SENT retransmit path really executed) + full connect.
 REM run_tb_p4_chain_active.bat -- P5 PCACTIVE: TCP active-connect (client) gate
 REM   Board-side HLS netlist must be the ACTIVE_CONNECT=1 build
 REM   (hls\run_hls_active.tcl -> slowstack_prj\solution1\syn\verilog), with
@@ -20,9 +25,9 @@ if exist halfdrop.memh del /q halfdrop.memh
 REM P4e: delete vlan.memh so this gate never inherits VLAN tagging from a
 REM previous run_tb_p4_*_vlan.bat (gen_stim/apply both read that file).
 if exist vlan.memh del /q vlan.memh
-REM P1-2: the slow-peer gate leaves pcslow.memh behind -- delete it so this
-REM gate runs with the default fast-peer model.
-if exist pcslow.memh del /q pcslow.memh
+REM P1-2 slow-peer switch for the TB and check_active (same file channel as
+REM TRUNC: the xsim loader splits -testplusarg args containing '=').
+> pcslow.memh echo 1
 set PY=C:\Users\zhxue\anaconda3\python.exe
 set XV=C:\AMDDesignTools\2025.2\Vivado\bin
 set HLS=D:\repo\ECO\udp_hls_10g\hls\slowstack_prj\solution1\syn\verilog

@@ -238,8 +238,8 @@ module tb_p4_chain;
     // HLS 侧 ACTIVE_CONNECT=1 时复位后自发 SYN (sport 1F90 / dport 2382 /
     // flags 02, seq = ACTIVE_ISS 0x89ABCDEF) — 拍级不可预期, 静态刺激不可行。
     // 本模型在 GMII TX 捕获板侧主动连接帧并按需注入:
-    //   (1) 板上 ARP who-has (ARP 未命中) -> 注入 ARP reply (spa=192.168.100.1,
-    //       sha=PC_MAC) 教 MAC;
+    //   (1) 板上 ARP who-has (ARP 未命中) -> 注入 ARP reply (spa=192.168.100.99
+    //       = PCA_ACT_IP, sha=PC_MAC) 教 MAC;   (P2 注释对齐: 原写 .1 有误)
     //   (2) 板上 SYN -> 记 seq, 注入 SYN+ACK (seq=PCA_PEER_ISS, ack=SYN.seq+1,
     //       doff=6 带 MSS=1460; FCS 用 crc32b 算);
     //   (3) 板上纯 ACK (seq=SYN.seq+1, ack=PCA_PEER_ISS+1) -> 注入 100B 数据段
@@ -247,6 +247,10 @@ module tb_p4_chain;
     //       板侧 fast path CAM/TCB (HLS cfg 记录写) echo (seq=ACTIVE_ISS+1)。
     // 判据: 全链完成后 done; resp 落 PCA/PCACAM 行供 check_active 核验。
     // 与 PCACK 互斥 (各自独立注入缓冲, 不要同开)。
+    // P1-2: pcslow.memh=1 (慢对端模式) 时第 1 个 SYN 不注入 SYN+ACK, 等板侧
+    //   RTO 重传的 SYN (缩比 TCP_RTO_MIN=100000, active 网表) 再现才注入 —
+    //   覆盖 T_SYN_SENT 限次重传路径 (TCP_MAX_RETRY 超限释放需 4 次超时 =
+    //   ~1.5M 拍, 超出 250k 拍尾窗, 本门只断言重传 >=1 次)。
     localparam [31:0] PCA_PEER_ISS = 32'h77000000;   // 对端 ISS (TB 固定值)
     localparam [31:0] PCA_MY_ISS   = 32'h89ABCDEF;   // HLS ACTIVE_ISS
     localparam [31:0] PCA_ACT_IP   = 32'hC0A86463;   // 192.168.100.99 -- MUST
@@ -259,6 +263,13 @@ module tb_p4_chain;
     reg        pca_en;
     reg        pca_arp_req, pca_arp_inj;    // who-has 捕获 / reply 已注入
     reg        pca_syn_seen, pca_synack_inj;
+    // P1-2 (TL 复核): 慢对端模式 (+PCSLOW / pcslow.memh=1) — 捕获第 1 个 SYN 后
+    // **不**注入 SYN+ACK (模拟对端慢/丢), 等板侧 RTO 重传的 SYN (seq 相同) 再现
+    // 才注入。这样 T_SYN_SENT 的限次重传路径 (缩比 TCP_RTO_MIN=100000) 真被执行,
+    // 判据 pca_syn_cnt >= 2 (重传 >= 1 次)。
+    reg        pca_slow;
+    reg [7:0]  pca_syn_cnt;    // 捕获的板侧 SYN 数 (含重传)
+    reg [31:0] pca_k_syn2;     // 第 2 个 SYN (重传) 捕获拍 — 重传 RTO 实测
     reg        pca_ack_seen, pca_data_inj;
     reg        pca_echo_seen, pca_echo_ok;
     reg        pca_to;                      // 超时 (SYN 未出现, 防挂)
@@ -297,6 +308,7 @@ module tb_p4_chain;
     reg [7:0]  fcb [0:2047];     // 帧字节缓冲 (整帧收齐, 帧尾判据决定写/丢)
     reg [11:0] fcl;              // 缓冲内字节数 (饱和 4095, 真帧 <= 1538)
     integer    fbi;              // 落盘循环变量
+    integer    hd_tmp;           // P1-2 pcslow.memh 暂存
     // P4c TXDROP 帧头匹配: 帧尾 (tx_en_dr && !gmii_tx_en) 拍为判据建立拍。
     // suppress=0 下板上每段先发纯 ACK 再发 echo, 旧"arm 后首个 S_PRE"遮的是
     // ACK 帧 (数据帧全在 + 残片) -> 必须按帧头 (conn0 echo 数据帧) 匹配。
@@ -521,7 +533,12 @@ module tb_p4_chain;
             if (pca_arp_req && !pca_arp_inj) begin
                 pca_arm(2'd0, 8'd0, 16'd0, 32'h0, 32'h0);
                 pca_arp_inj = 1'b1;
-            end else if (pca_syn_seen && !pca_synack_inj) begin
+            end else if (pca_syn_seen && !pca_synack_inj &&
+                         (pca_syn_cnt >= (pca_slow ? 8'd2 : 8'd0))) begin
+                // P1-2: 常规模式第 1 个 SYN 即注入 (阈值 0, 该拍 cnt 仍为 0);
+                // 慢对端模式必须等**第 2 个** SYN (阈值 2 — 第 1 个 SYN 捕获拍
+                // cnt 刚变 1, 阈值 1 会在第 1 个 SYN 就放行, 实测踩过)。
+                // 板侧 RTO 重传 seq 不变, 注入的 SYN+ACK ack 仍 = iss+1。
                 pca_arm(2'd1, 8'd0, 16'd44, pca_iss + 32'd1, 32'h0);
                 pca_synack_inj = 1'b1;
             end else if (pca_ack_seen && !pca_data_inj) begin
@@ -1036,6 +1053,15 @@ module tb_p4_chain;
         // P4b-7-P6 HALFDROP: 半帧中止注入 (halfdrop.memh "N K": 第 N 个 conn0
         // 数据段线上只发头 54B + K 字节载荷后停线; 0 = 关)。K 语义见
         // tools/gen_stim_p4_chain.py build_rx_frames (需 K>=6 且 (50+K)%8==0)
+        // P1-2 慢对端模式 (pcslow.memh: 非零 = 等 SYN 重传再注入 SYN+ACK;
+        // 与 trunc/halfdrop 同文件通道; checker (check_active) 也读该文件判据)
+        pca_slow = 1'b0;
+        fdi = $fopen("pcslow.memh", "r");
+        if (fdi != 0) begin
+            $fscanf(fdi, "%d", hd_tmp);
+            $fclose(fdi);
+            if (hd_tmp != 0) pca_slow = 1'b1;
+        end
         hd_n = 0; hd_k = 0;
         fdi = $fopen("halfdrop.memh", "r");
         if (fdi != 0) begin
@@ -1074,10 +1100,11 @@ module tb_p4_chain;
         // iss/k_syn/to) + 每槽 CAM 4 元组与 TCB 终态 (槽位由 HLS 选 — 主动连接
         // 与被动 conn0 共存, 判据按槽定位)
         if (pca_en) begin
-            $fwrite(fd, "PCA %0d %0d %0d %0d %0d %0d %0d %0d %0d %08h %0d\n",
+            // P1-2: 末尾两字段 = 慢对端模式 + 捕获 SYN 数 (含重传)
+            $fwrite(fd, "PCA %0d %0d %0d %0d %0d %0d %0d %0d %0d %08h %0d %0d %0d %0d\n",
                     pca_arp_req, pca_arp_inj, pca_syn_seen, pca_synack_inj,
                     pca_ack_seen, pca_data_inj, pca_echo_seen, pca_echo_ok,
-                    pca_to, pca_iss, pca_k_syn);
+                    pca_to, pca_iss, pca_k_syn, pca_slow, pca_syn_cnt, pca_k_syn2);
             for (pca_j = 0; pca_j < 3; pca_j = pca_j + 1)
                 $fwrite(fd, "PCACAM %0d %08h %08h %04h %04h %012h %0d %08h %08h\n",
                         pca_j, u_cam.sip_r[pca_j], u_cam.dip_r[pca_j],
@@ -1242,6 +1269,7 @@ module tb_p4_chain;
             exp_seq <= 32'h12345678 + 32'd1;   // HLS_ISS+1 = 首数据帧 seq
             hole <= 0;
             pca_arp_req <= 0; pca_syn_seen <= 0; pca_iss <= 0; pca_k_syn <= 0;
+            pca_syn_cnt <= 0; pca_k_syn2 <= 0;
             pca_ack_seen <= 0; pca_echo_seen <= 0; pca_echo_ok <= 0;
         end else begin
             tx_en_d <= gmii_tx_en;
@@ -1292,6 +1320,8 @@ module tb_p4_chain;
                         {cap[30], cap[31], cap[32], cap[33]} == PCA_ACT_IP &&
                         cap[47] == 8'h02) begin
                         pca_syn_seen <= 1'b1;
+                        pca_syn_cnt  <= pca_syn_cnt + 8'd1;   // P1-2: 重传也计
+                        if (pca_syn_cnt == 8'd1) pca_k_syn2 <= k;  // 第 2 个 SYN 拍
                         pca_iss      <= {cap[38], cap[39], cap[40], cap[41]};
                         pca_k_syn    <= k;
                     end

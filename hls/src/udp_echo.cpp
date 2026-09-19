@@ -251,6 +251,22 @@ void udp_echo(
         tcp_proc_pending = false;
     }
 
+#if ACTIVE_CONNECT
+    // P1-2 (TL 复核): 空闲拍推进 TCP 定时器。现网表只在 TCP 帧到达时调用
+    // tcp_rx_process (两条调用点 ip_rx.valid 都为真) — 而 RTO 计时/重传支在
+    // 函数开头的 `if(!ip_rx.valid||protocol!=6)` 里, 于是**空闲尾窗 RTO 永不
+    // 推进**: T_SYN_SENT 的限次重传 (与 TCP_MAX_RETRY 超限释放) 结构上死代码
+    // (xsim 实测: 缩比 RTO=3000 pass 跑满 250k 拍尾窗仍无重传)。此处空闲拍补
+    // 一次 ip_rx.valid=false 的调用, 只走计时/重传支 (不碰帧解析)。
+    // 门控在 ACTIVE_CONNECT 下: 默认 (板级/被动) 网表字节不变, 零板级风险。
+    if (!do_process && !tcp_proc_pending && !mac_tx_busy && !tx_req.request) {
+        ip_rx_t idle_ip;
+        idle_ip.valid = false;
+        tcp_rx_process(reset_n, idle_ip, buffer, tx_req, mac_tx_busy,
+                       cfg_stream, 0);
+    }
+#endif
+
     // Statistics tracking + periodic report
     static bool dhcp_reported = false;
     static uint32_t last_tx = 0;

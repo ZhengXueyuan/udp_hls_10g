@@ -16,14 +16,17 @@ REM   TRUNC/TRUNCM = P4b-7-P6 truncated-frame injection (env vars, since %1..%8
 REM           are taken): at conn0 data frame #TRUNC replace the frame with the
 REM           same header (seq / IP total_len=1500 / TCP hdr / sport) but only
 REM           TRUNCM payload bytes and a recomputed FCS -- the on-board PC/NIC
-REM           truncation that froze the stack. TRUNC=0 = off, TRUNCM needs
-REM           6..10 (60B min-frame padding below 6), default 8.
+REM           truncation that froze the stack. TRUNC=0 = off, TRUNCM takes
+REM           0..2 (w6 truncation) or 6..10 (S_PAY truncation; default 8).
 REM   P4b-6: always runs with +PCACK (window gating needs ACK injection to
 REM          advance snd_una, otherwise the gate deadlocks the echo)
 cd /d %~dp0
 REM P4e: the VLAN gate leaves vlan.memh behind -- delete it so this default
 REM gate runs without VLAN tagging (gen_stim/check both read that file).
 if exist vlan.memh del /q vlan.memh
+REM P1-2: the slow-peer gate leaves pcslow.memh behind -- delete it so this
+REM gate runs with the default fast-peer model.
+if exist pcslow.memh del /q pcslow.memh
 set PY=C:\Users\zhxue\anaconda3\python.exe
 set XV=C:\AMDDesignTools\2025.2\Vivado\bin
 set HLS=D:\repo\ECO\udp_hls_10g\hls\slowstack_prj\solution1\syn\verilog
@@ -85,6 +88,7 @@ call %XV%\xvlog.bat -work xil_defaultlib -d RTOLIM_FAST ^
   D:\repo\ECO\udp_hls_10g\rtl\tcp_echo.v ^
   D:\repo\ECO\udp_hls_10g\rtl\axis_pipe.v ^
   D:\repo\ECO\udp_hls_10g\rtl\rx_classify.v ^
+  D:\repo\ECO\udp_hls_10g\rtl\vlan_strip.v ^
   D:\repo\ECO\udp_hls_10g\rtl\slow_rx_adp.v ^
   D:\repo\ECO\udp_hls_10g\rtl\slow_cfg_adp.v ^
   D:\repo\ECO\udp_hls_10g\rtl\slow_tx_adp.v ^

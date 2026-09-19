@@ -124,6 +124,7 @@ def mk_syn_ws(wnd=0x2000, wscale=SYN_WSCALE):
 # conn1 数据段不加 tag (只测 fast path); echo (TX) 恒无 tag -> 判据全部照旧,
 # 仅多一条 stat_stripped > 0 断言。
 VLAN_ON = False
+VLAN_TAGGED_N = 0   # 本次 build_rx_frames 打 tag 的 conn0 数据帧数 (判据等值用)
 
 
 def vlan_tag(fb):
@@ -137,6 +138,17 @@ def read_vlan(simdir):
     会拆含 '=' 的 -testplusarg)。"""
     try:
         with open(os.path.join(simdir, 'vlan.memh')) as fh:
+            return int(fh.read().split()[0]) != 0
+    except (OSError, ValueError, IndexError):
+        return False
+
+
+def read_pcslow(simdir):
+    """P1-2 慢对端模式开关: pcslow.memh ("1" = 开; 缺失/0 = 常规快对端)。由
+    run_tb_p4_chain_active_slow.bat 写, run_tb_p4_chain_active.bat 删。TB 读同一
+    文件决定何时注入 SYN+ACK (第 1 还是第 2 个 SYN), 本 checker 据此判重传次数。"""
+    try:
+        with open(os.path.join(simdir, 'pcslow.memh')) as fh:
             return int(fh.read().split()[0]) != 0
     except (OSError, ValueError, IndexError):
         return False
@@ -167,6 +179,18 @@ def read_halfdrop(simdir):
         return (v[0], v[1] if len(v) > 1 else 0)
     except (OSError, ValueError, IndexError):
         return (0, 0)
+
+
+def trunc_adv(trunc_len):
+    """P1-4 (TL 复核): 截断注入的**单一** adv 谓词 (板上真实交付字节数)。
+
+    adv = trunc_len if trunc_len >= 6 else 0
+      - trunc_len >= 6: S_PAY 截断支按真实字节交付 (rcv_nxt 推进 trunc_len)
+      - trunc_len <= 2: w6 截断支 (fend_w6t) 0 字节交付 (rcv_nxt 不动)
+    此前三处谓词不对称 (注入分支用 <= 2, build/check 的 adv 用 >= 6 else 0),
+    只靠合法性集合 {0,1,2} ∪ {6..10} 互补 — 集合一放宽 (如允许 M=3) 两处立即
+    分歧 -> 假红。统一到本函数, 所有站点引用同一谓词。"""
+    return trunc_len if trunc_len >= 6 else 0
 
 
 def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000,
@@ -208,12 +232,17 @@ def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000,
     def add(name, fb, fcs, gap):
         F.append(dict(name=name, fb=fb, fcs=fcs, gap=gap))
 
+    global VLAN_TAGGED_N
+    VLAN_TAGGED_N = 0
+
     def mk_data(seq, plen, wnd, flags=0x18):
         """conn0 TCP 数据段 (VLAN_ON 时插单层 tag 并重算 FCS)。段内字段 (seq/ack/
         plen/total_len/csum) 与无 tag 版逐字节相同 — 板上剥 tag 后 tcp_rx 视图
         完全一致, 故 echo/ACK/统计期望值不变。"""
         fb, fcs = C.mk_tcp_frame(0, seq, HS_ACKVAL, flags, plen, wnd, True)
         if VLAN_ON:
+            global VLAN_TAGGED_N
+            VLAN_TAGGED_N += 1
             fb = vlan_tag(fb)
             fcs = struct.pack('<I', zlib.crc32(fb) & 0xFFFFFFFF)
         return fb, fcs
@@ -293,7 +322,7 @@ def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000,
             # 截断帧: 头 (:total_len=40+plen=1500 / seq / 端口 / 原 csum) 原样,
             # 载荷只留前 trunc_len 字节, FCS 按截断后内容重算
             hdr = 14 + (fb[14] & 0xF) * 4 + 20      # eth + TCP + IP = 54
-            if trunc_len <= 2:
+            if trunc_adv(trunc_len) == 0:   # P1-4: 同一谓词 (w6 支)
                 # w6 截断支: 无 pad (finish 的 60B 补零会把 tlast 推到 w7 走
                 # S_PAY) — 帧体 54+M <= 56B, tlast 落 w6 拍 → fend_w6t 路径
                 fb = fb[:hdr] + C.payload(plen)[:trunc_len]
@@ -345,7 +374,7 @@ def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000,
         #  板级实测 = echo 载荷整体回退 adv 字节)。
         # adv = 板上真实收下的字节: S_PAY 截断 = trunc_len; w6 截断 = 0
         # (fend_w6t 不推进 rcv_nxt — PC ACK 只确认 s_tr, RTO 从 s_tr 整段重发)
-        adv = trunc_len if trunc_len >= 6 else 0
+        adv = trunc_adv(trunc_len)   # P1-4: 单一谓词
         fb, fcs = C.mk_tcp_frame(0, s0 + adv, HS_ACKVAL, 0x18,
                                  p0 - adv, burst_wnd, True)
         hdr = 14 + (fb[14] & 0xF) * 4 + 20
@@ -461,9 +490,13 @@ def parse_gmii(fn):
                 ev['halfd'] = tuple(int(x) for x in p[1:])
             elif p[0] == 'STRIPPED':   # P4e VLAN 剥离计数
                 ev['stripped'] = int(p[1])
-            elif p[0] == 'PCA':        # P5 PCACTIVE 事件 (倒数第二字段 hex = ISS)
+            elif p[0] == 'PCA':        # P5 PCACTIVE 事件 (第 11 字段 hex = ISS)
+                # p[12]/p[13] = P1-2 慢对端模式 + 捕获 SYN 数 (含重传); 旧 resp
+                # (无这两字段) 兼容 = 快对端 + 1 个 SYN
                 ev['pca'] = tuple(int(x) for x in p[1:10]) + \
-                            (int(p[10], 16), int(p[11]))
+                            (int(p[10], 16), int(p[11])) + \
+                            ((int(p[12]), int(p[13])) if len(p) > 13 else (0, 1)) + \
+                            ((int(p[14]),) if len(p) > 14 else (0,))
             elif p[0] == 'PCACAM':     # P5 每槽 CAM 4 元组 + TCB 终态
                 ev['pcacam'].append((int(p[1]),) +
                                     tuple(int(x, 16) for x in p[2:6]) +
@@ -614,17 +647,17 @@ def tcp_fields(body):
 
 
 def _check_stripped(ev, tag):
-    """P4e VLAN 剥离计数断言 (chain/burst 共用): VLAN 注入模式 (vlan.memh=1) 下
-    conn0 数据帧全部带单层 tag -> stat_stripped 必须 > 0; 默认模式必须恰为 0
-    (fast path 两端都不带 tag, 计数非零即误剥)。"""
+    """P4e VLAN 剥离计数断言 (chain/burst 共用) — **等值**断言 (非 > 0):
+    注入帧数已知 (VLAN_TAGGED_N = build_rx_frames 实际打 tag 的 conn0 数据帧数),
+    stat_stripped 必须与之逐帧相等 — 少 1 即剥离失效/相位滑移, 多 1 即误剥。
+    默认模式 (vlan.memh 缺省) 期望恒 0 (fast path 两端都不带 tag)。"""
+    exp = VLAN_TAGGED_N if VLAN_ON else 0
     errs = []
     if ev['stripped'] is None:
         errs.append('%s: resp 缺 STRIPPED 行 (TB 未接 u_vlan.stat_stripped)' % tag)
-    elif VLAN_ON and ev['stripped'] == 0:
-        errs.append('%s: STRIPPED=0 (VLAN 注入模式应 > 0 — 剥离未生效)' % tag)
-    elif (not VLAN_ON) and ev['stripped'] != 0:
-        errs.append('%s: STRIPPED=%d (默认模式应 0 — 误剥非 tag 帧)'
-                    % (tag, ev['stripped']))
+    elif ev['stripped'] != exp:
+        errs.append('%s: STRIPPED=%d != 期望 %d (注入打 tag 帧数; 少=剥离失效/'
+                    '相位滑移, 多=误剥非 tag 帧)' % (tag, ev['stripped'], exp))
     return errs
 
 
@@ -788,9 +821,10 @@ def check(simdir):
     # P4e VLAN 剥离: 注入模式必须真剥到 (stat_stripped > 0); 默认模式必须 0
     errs += _check_stripped(ev, 'chain')
 
-    print('frames RX=%d TX=%d (fast=%d slow=%d)  STRIPPED=%s (VLAN %s)'
+    print('frames RX=%d TX=%d (fast=%d slow=%d)  STRIPPED=%s (期望 %d, VLAN %s)'
           % (len(frames), len(got), len(fast_got), len(slow_got),
-             ev['stripped'], 'ON' if VLAN_ON else 'OFF'))
+             ev['stripped'], VLAN_TAGGED_N if VLAN_ON else 0,
+             'ON' if VLAN_ON else 'OFF'))
     if errs:
         for e in errs[:12]:
             print('MISMATCH:', e)
@@ -815,6 +849,7 @@ PCA_NPAY = 100               # TB 注入数据段载荷字节数
 
 
 def check_active(simdir):
+    slow = read_pcslow(simdir)
     """P5 PCACTIVE 主动连接门: 核验 resp 里的 PCA/PCACAM 行 + echo 帧字节。
 
     TB 反应式模型 (tb/tb_p4_chain.v +PCACTIVE): 捕获板侧主动帧 → 按需注入
@@ -838,11 +873,23 @@ def check_active(simdir):
         print('PCACTIVE FAIL: resp 无 PCA 行 (TB 未跑 +PCACTIVE, 或网表非 ACTIVE 版)')
         return False
     (arp_req, arp_inj, syn_seen, synack_inj, ack_seen, data_inj,
-     echo_seen, echo_ok, to, iss, k_syn) = ev['pca']
+     echo_seen, echo_ok, to, iss, k_syn, tb_slow, syn_cnt, k_syn2) = ev['pca']
     print('PCA arp_req=%d arp_inj=%d syn=%d synack=%d ack=%d data=%d echo=%d ok=%d '
-          'to=%d iss=%08X k_syn=%d'
+          'to=%d iss=%08X k_syn=%d slow=%d syn_cnt=%d k_syn2=%d'
           % (arp_req, arp_inj, syn_seen, synack_inj, ack_seen, data_inj,
-             echo_seen, echo_ok, to, iss, k_syn))
+             echo_seen, echo_ok, to, iss, k_syn, tb_slow, syn_cnt, k_syn2))
+
+    # P1-2: 慢对端模式必须真发生 SYN 重传 (T_SYN_SENT 限次重传路径覆盖);
+    # 常规模式必须恰好 1 个 SYN (无意外 RTO 重传)。TCP_MAX_RETRY 超限释放需
+    # 4 次超时 (RTO 每次翻倍 100k+200k+400k+800k ~1.5M 拍) — 超出 250k 拍尾窗,
+    # 本门跑不到, 只断言重传 >= 1 次 (超限释放路径留给板级实测)。
+    if slow:
+        if syn_cnt < 2:
+            errs.append('慢对端模式: 捕获 SYN 数 %d < 2 (T_SYN_SENT 重传路径未执行'
+                        ' — TCP_RTO_MIN 缩比失效?)' % syn_cnt)
+    elif syn_cnt != 1:
+        errs.append('常规模式: 捕获 SYN 数 %d != 1 (意外重传 / RTO 缩比漏进)'
+                    % syn_cnt)
 
     # 1) 板侧自发 SYN
     if not syn_seen:
@@ -1094,7 +1141,7 @@ def check_burst(simdir, nburst, txdrop1=0, txdrop2=0, trunc_at=0, trunc_len=8,
         e_tr = (HS_ACKVAL + 16 + hi * 1460) & 0xFFFFFFFF    # 截断段 echo seq
         # adv = 板上真实收下的字节 (S_PAY 截断 = trunc_len; w6 截断 = 0,
         # fend_w6t 不推进 rcv_nxt, ACK/dup-ACK 停 s_tr)
-        adv = trunc_len if trunc_len >= 6 else 0
+        adv = trunc_adv(trunc_len)   # P1-4: 单一谓词
         # ① 截断支被走过 (RTL 按真实字节收下, 而非旧行为静默吞尾不发 fend)
         if tr_n != trunc_at:
             print('MISMATCH: TB TRUNCS n=%d != 期望 %d (trunc.memh 未同步)'
@@ -1111,7 +1158,7 @@ def check_burst(simdir, nburst, txdrop1=0, txdrop2=0, trunc_at=0, trunc_len=8,
         #    段 (PC 整段重传, seq=s_tr) 的 echo 也落在 seq=e_tr 且 plen=1460
         #    — 与截断段短 echo 按 plen 区分 (截断段 echo 只可能 <= 2 字节)
         hit = [e for e in echoes if e[0] == e_tr]
-        if trunc_len <= 2:
+        if trunc_adv(trunc_len) == 0:   # P1-4: 同一谓词 (w6 支)
             w6h = [e for e in hit if e[1] <= 2]
             if w6h:
                 print('MISMATCH: w6 截断段不该有短 echo (seq=%X plen=%d — 0 字节交付)'
@@ -1333,7 +1380,9 @@ def check_burst(simdir, nburst, txdrop1=0, txdrop2=0, trunc_at=0, trunc_len=8,
         print('MISMATCH:', e)
     if _se:
         ok = False
-    print('STRIPPED %s (VLAN 注入 %s)' % (ev['stripped'], 'ON' if VLAN_ON else 'OFF'))
+    print('STRIPPED %s (期望 %d, VLAN 注入 %s)'
+          % (ev['stripped'], VLAN_TAGGED_N if VLAN_ON else 0,
+             'ON' if VLAN_ON else 'OFF'))
     print('BURST %s' % ('OK' if ok else 'FAIL'))
     return ok
 

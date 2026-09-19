@@ -32,7 +32,13 @@ bool arp_lookup(arp_entry_t *table, ap_uint<32> ip, mac_addr_t &mac);
 // RX payload buffer for the largest segment the peer can actually send
 // (536B) so echo data is always populated correctly.
 #define TCP_RX_PAYLOAD    576   // room for a full 536B segment + margin
+// P1-2 (TL 复核): RTO 缩比入口。sim 的 PCACTIVE 门用 -DTCP_RTO_MIN=100000
+// (hls/run_hls_active.tcl) 把 T_SYN_SENT 的限次重传压进 TB 尾窗 (250k 拍),
+// 否则该重传路径 (含 TCP_MAX_RETRY 超限释放) 永远零覆盖; 板级/默认 10000000
+// (~80ms) 不变 — 原为硬宏, 无覆盖入口。
+#ifndef TCP_RTO_MIN
 #define TCP_RTO_MIN      10000000   // ~80ms min RTO
+#endif
 #define TCP_RTO_MAX      80000000   // ~640ms max RTO
 // P4b: SYN+ACK/FIN+ACK 重传限次 — fast path 乐观建连后 HLS 永远收不到握手
 // ACK (纯 ACK 进 fast path), 无限重传会向对端发垃圾 SYN+ACK 触发 RST 杀连接
@@ -464,8 +470,16 @@ static void tcp_active_tick(uint32_t *buf, mac_tx_req_t &tx_req){
         return;
     }
     // ACT_UP: 槽位活着 = 由 tcp_rx_process 推进 (SYN+ACK→ESTABLISHED / RST→FREE);
-    // 槽位消失 (RST 或 SYN 重传超限释放) → 回等待, 重新走一遍 (后续可重试)
-    if(act_cid>=0&&act_cid<MAX_TCP_CONN&&tcp_conn[act_cid].state!=T_FREE)return;
+    // 槽位消失 (RST 或 SYN 重传超限释放) → 回等待, 重新走一遍 (后续可重试)。
+    // P1-3 (TL 复核): 必须按**身份**认槽 — 主动槽被释放后, 同一拍/pass 内
+    // tcp_find 会按最低空闲序把该槽分给新到的**被动**连接 (state 立即 != T_FREE),
+    // 只判 state 会让 act_state 永久卡在 ACT_UP (客户端再不重连)。加 peer
+    // ip/port 校验: 只有仍指向 ACTIVE_IP:ACTIVE_PORT 的槽才算"主动连接还活着"。
+    // 理论边缘: 被动连接的对端恰好 = ACTIVE_IP:ACTIVE_PORT (板级 ACTIVE_PORT
+    // 9090 + ACTIVE_IP 192.168.100.99) 时会被误认 — 该巧合可接受 (真机对端
+    // 端口 9090 主动连本机 8080 的概率与影响均可忽略)。
+    if(act_cid>=0&&act_cid<MAX_TCP_CONN&&tcp_conn[act_cid].state!=T_FREE&&
+       tcp_conn[act_cid].peer_ip==ACTIVE_IP&&tcp_conn[act_cid].peer_port==ACTIVE_PORT)return;
     act_state=ACT_WAIT;act_timer=0;
 #endif
 }

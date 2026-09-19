@@ -17,6 +17,9 @@ REM P4e VLAN injection switch for gen_stim/check (file channel: the xsim
 REM loader splits -testplusarg args containing '='). Always rewritten so a
 REM stale file never leaks; the default gates delete vlan.memh.
 > vlan.memh echo 1
+REM P1-2: the slow-peer gate leaves pcslow.memh behind -- delete it so this
+REM gate runs with the default fast-peer model.
+if exist pcslow.memh del /q pcslow.memh
 set PY=C:\Users\zhxue\anaconda3\python.exe
 set XV=C:\AMDDesignTools\2025.2\Vivado\bin
 set HLS=D:\repo\ECO\udp_hls_10g\hls\slowstack_prj\solution1\syn\verilog

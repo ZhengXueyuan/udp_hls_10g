@@ -11,6 +11,8 @@
 //              m_axis_tready 恒 1
 //   1 STALL  : 同帧表, m_axis_tready 随机抖动
 //   2 RAND   : 随机帧长 (60..220) + 随机 VLAN + 随机 tready
+//   3 RESID  : 上游截断残段 (1 字 SOP 无 tlast) + 紧跟 64B VLAN 帧 — 相位
+//              滑移回归 (S_W1 异常 SOP 必须回 S_W1 而非 S_PASS)
 // 相位边界 = 期望输出字数 (ph0_no/ph1_no), tready 模型与相位号均按 oidx 判定。
 //
 // 覆盖: 非 VLAN 直通逐字全等 / VLAN 剥离逐字全等 (0x8100 与 0x88A8) /
@@ -52,6 +54,8 @@ module tb_vlan_strip;
     integer vlan_frames;          // 期望剥离帧数 (与 stat_stripped 对账)
     integer golden_oidx;          // 黄金帧首输出字下标 (-1 = 未用)
     integer ph0_no, ph1_no;       // 相位 0/1 末的期望输出字数
+    integer ph2_no, ph3_no;       // 相位 2/3 末的期望输出字数
+    integer tp_cnt;               // 相位 3 窗内输出字出现 0x8100@[47:32] 次数
     integer si, t;
     reg [31:0] pcnt;
 
@@ -124,7 +128,15 @@ module tb_vlan_strip;
         end
     end
 
-    // ---- 下游 tready 模型: 相位 0 恒 1; 相位 1/2 随机抖动 ----
+    // ---- 相位 3 哨兵: 残段+VLAN 帧 输出窗内不得再出现 TPID (0x8100) 于字内
+    //      byte 4-5 — 相位滑移 bug 下被直通的 VLAN w1 会在此露出 (期望 0 次) ----
+    always @(posedge clk) begin
+        if (rst_n && m_tvalid && m_tready && oidx >= ph2_no && oidx < ph3_no &&
+            m_tdata[47:32] == 16'h8100)
+            tp_cnt = tp_cnt + 1;
+    end
+
+    // ---- 下游 tready 模型: 相位 0 恒 1; 相位 1/2/3 随机抖动 ----
     wire stall_en = rst_n && (oidx >= ph0_no);
     always @(posedge clk) begin
         if (!rst_n) m_tready <= 1'b0;
@@ -305,12 +317,37 @@ module tb_vlan_strip;
         end
     endtask
 
+    // ---- 上游截断残段: 1 字帧 (SOP 无 tlast), 随后紧跟完整 VLAN 帧 ----
+    // 复现相位滑移: 残段字把 DUT 打进 S_W1; 若下一帧首字离开 S_W1 时错误地回
+    // S_PASS, 则该帧 w1 (TPID 判定拍) 在 S_PASS 被直通 -> tag 不剥整帧走慢路径。
+    task gen_residual;
+        integer j;
+        reg [63:0] word;
+        begin
+            for (j = 0; j < 8; j = j + 1) fb[j] = (pcnt + j) & 8'hFF;
+            fb[12] = 8'h08; fb[13] = 8'h00;     // 残段自身不含 TPID (避免歧义)
+            word = 64'd0;
+            for (j = 0; j < 8; j = j + 1)
+                word = (word << 8) | {56'd0, fb[j]};
+            iw[ni] = word;  ik[ni] = 8'hFF;
+            il[ni] = 1'b0;  iu[ni] = 1'b1;      // SOP, 无 tlast
+            ic[ni] = 1'b0;  ie[ni] = 1'b0;  iv[ni] = 1'b1;
+            ni = ni + 1;
+            // 期望: 直通同字 (SOP 保留, 无 tlast) — 残段不是 w1, 不该被剥
+            ew[no] = word;  ek[no] = 8'hFF;
+            el[no] = 1'b0;  eu[no] = 1'b1;
+            ec[no] = 1'b0;  ee[no] = 1'b0;
+            no = no + 1;
+            pcnt = pcnt + 32'd37;
+        end
+    endtask
+
     initial begin
         clk = 0; rst_n = 0;
         idx = 0; oidx = 0; ni = 0; no = 0;
         nerr = 0; vlan_frames = 0; pcnt = 0;
         golden_oidx = -1;
-        ph0_no = 0; ph1_no = 0;
+        ph0_no = 0; ph1_no = 0; ph2_no = 0; ph3_no = 0; tp_cnt = 0;
         m_tready = 0;
         for (si = 0; si < 16384; si = si + 1) begin
             iw[si] = 64'd0; ik[si] = 8'd0; il[si] = 1'b0; iu[si] = 1'b0;
@@ -331,6 +368,12 @@ module tb_vlan_strip;
         ph1_no = no;
         // 相位 2: 随机帧
         phase_rand(60);
+        ph2_no = no;
+        // 相位 3: 上游残段 (1 字 SOP 无 tlast) + 紧跟 64B VLAN 帧
+        // (相位滑移回归: 该 VLAN 帧必须被剥净, 且输出窗内不得残留 TPID)
+        gen_residual();
+        gen_frame(64, 1, 16'h8100, 0, 0);
+        ph3_no = no;
 
         repeat (5) @(posedge clk);
         // 复位释放在时钟边沿之间 — 与边沿同时刻释放会让部分 always 块看到不同
@@ -343,13 +386,21 @@ module tb_vlan_strip;
         $display("PHASE0 (nostall) done: %0d words", oidx);
         wait_drain(ph1_no);
         $display("PHASE1 (stall) done: %0d words", oidx);
+        wait_drain(ph2_no);
+        $display("PHASE2 (rand) done: %0d words", oidx);
         t = 0;
         while ((idx < ni || oidx < no) && t < 2000000) begin
             @(posedge clk);
             t = t + 1;
         end
         repeat (10) @(posedge clk);
-        $display("PHASE2 (rand) done: %0d words", oidx);
+        $display("PHASE3 (residual+vlan) done: %0d words, tp_leak=%0d",
+                 oidx, tp_cnt);
+        if (tp_cnt !== 0) begin
+            $display("ERR 相位 3 输出残留 TPID 0x8100 %0d 次 (VLAN tag 未剥/相位滑移)",
+                     tp_cnt);
+            nerr = nerr + 1;
+        end
 
         // ---- 统计对账 ----
         if (idx !== ni || oidx !== no) begin
