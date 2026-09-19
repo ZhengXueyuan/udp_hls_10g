@@ -19,7 +19,11 @@ Kintex-7 XC7K325T 纯硬件 TCP/IP 数据面: 64bit 字流 @125MHz, 当前 1G RG
 | P4b-7 | **快速重传自愈** (dup-ACK 触发 + RTO 兜底, retx_ram ring) | ✅ 板级 PASS |
 | P4c | 窗口 12KB→48KB + retx_ram 64KB/连接 + ACK-early 破案 (w6a 纯 ACK 修复) | ✅ 板级 PASS |
 | P4d | 修补包: TCP 主动连接 (客户端) + VLAN fast path + w6 截断支 TB | ✅ sim 全绿 |
-| P5 | app interface (对上层 TCP/UDP 调用接口) | ⬜ 下一步 |
+| P5a | **app interface 数据面** (app AXIS 收发 + 寄存器控制面 + FIN/RST/close + 演示 app) | ✅ **板级双向 PASS** |
+| P5b | 应用 RX 流控闭环 (窗口随缓冲占用收缩 + 慢消费者背压) | ⬜ 下一步 |
+| P5c | 关闭语义完善 (FIN 丢失重传板级用例 / 同时关闭 / 关闭超时) | ⬜ |
+| P5d | 多连接加固 (retx_id 归属 / pend_id 逐字段 / 信用池 / CAM 清除) | ⬜ |
+| P5e | UDP app 接口 (复用 udp_rx/udp_tx_frame) | ⬜ |
 | P6 | 10G 提速 (156.25MHz + PG157 shim) | ⬜ 规划中 |
 
 ## 已完成功能
@@ -61,7 +65,13 @@ Kintex-7 XC7K325T 纯硬件 TCP/IP 数据面: 64bit 字流 @125MHz, 当前 1G RG
 - **重传**: 3×dup-ACK 整窗口回卷重放 + RTO 兜底 (16 连接轮扫, 双丢自愈); 无 SACK/NewReno
   (echo 场景够用)
 - **鲁棒性三层防御**: 截断帧闭合 / 半帧中止防御 / 对端风暴免疫 (详见下)
-- **应用接口**: 尚无 — 当前为 echo 语义 (收什么回什么), P5 提供 socket 化调用接口
+- **应用接口 (P5a)**: `APP_MODE` 构建下, 应用通过 **AXIS 流**发/收 TCP 载荷
+  (`app_tx_*` 一帧 = 一个 TCP 段 ≤1460B, `tid`=conn_id; `app_rx_*` 零拷贝直出接收缓冲,
+  带 `len` 边带), 通过**寄存器面**拿连接事件 (CONN_UP/DOWN + peer ip/port/mac)、下发
+  close(发 FIN)/abort(发 RST)、读每连接状态与计数。默认构建 (宏未定义) 仍为 echo 语义。
+  板级实测: app 连上后主动发 1MB 图案 → PC 收逐字节零失配 + close/FIN; PC 发 32KB →
+  板侧校验器零失配。详见 `PORT_NOTES.md` 的 P5a 段与 `rtl/app_ctrl.v`/`rtl/app_pattern.v` 头注释。
+  窗口闭环 (P5b) 未做: 通告窗仍是静态 48KB, app 不消费时的背压靠既有 frame_fifo。
 
 **鲁棒性 (板级实战逼出的三层防御)**:
 1. 截断帧闭合 — 线上帧短于 IP 承诺载荷时按真实字节收下转发, 缺口由 PC 重传自愈
