@@ -2252,3 +2252,20 @@ conn2), 数据段全收全回 nm=0; 回归 chain/burst 绿; rtl/ 零改动 (数�
 **TL 复核**: HLS diff 逐段核验 (重传 seq-- 补偿 tcp_send SYN +1 / cfg 字段
 逐项对齐 T_LISTEN / 槽位选择不碰 T_LISTEN) + PCACTIVE/activecheck 复跑绿 +
 回归复跑绿。提交 a1980fc。
+
+### P4d 修补包 小项3: VLAN fast path (2026-09-19)
+
+**方案**: 新模块 rtl/vlan_strip.v (mac_rx_64 → vlan_strip → rx_classify) —
+单层 802.1Q/1ad tag (TPID+TCI 4B) 从字节流删除, 下游 (classify/tcp_rx)
+零改动回到无 tag 布局。字节映射 (TL 任务书原公式是 2 字节位移笔误,
+agent 按字节映射推导纠正): out_w1={in_w1[63:32],in_w2[63:32]},
+out_wk(k≥2)={in_{k-1}[31:0],in_k[63:32]}。tlast 边界: 末输入字低半无有效
+→ 同拍; 否则 S_TAIL 尾拍 (上游停 1 拍, mac 8 深 FIFO 吸收)。VLAN 帧 tag
+字处 1 气泡 + 帧尾 ≤1 拍停顿, 1G 帧间隔 ≥1.5 字拍天然吸收 (202 帧零丢实测)。
+QinQ 剥一层后自然退化慢路径; 上游残段 (tuser) 有恢复支不卡死。
+
+**验证**: 单元 TB 65 VLAN 帧逐字全等 (1586→1493 词) + chain VLAN
+(STRIPPED=2 OK) + burst 200 VLAN (STRIPPED=202 OK, RETX=0, 292016B 逐字节
+全等) + 默认门回归 (STRIPPED=0, TRUNC/HALFDROP 复跑绿); 板级构建
+WNS=+0.401 (基线 +0.237, 不退化)。TL 复核复跑全绿。提交 683837b/bf8b262/
+932f6ee/0f8c523。
