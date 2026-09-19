@@ -2230,3 +2230,25 @@ tlast 推到 w7 走 S_PAY) → tlast 落 w6 拍走 fend_w6t。验证:
 - 三边界门绿: M=0 (54B) / M=1 (55B) / M=2 (56B); TRUNC=8/chain 回归绿
 - 判据② M≤2 分支: 断言无 plen≤2 的 e_tr echo (healrem echo 也在 seq=e_tr
   但 plen=1460, 按 plen 区分)
+
+### P4d 修补包 小项2: TCP 主动连接 (客户端) (2026-09-19)
+
+**设计**: ACTIVE_CONNECT 宏 (默认 0 关) — 上电等 ACTIVE_DELAY 后自动向
+ACTIVE_IP:ACTIVE_PORT 主动连接。ARP 前置 (who-has 限次, 新 arp_lookup_l1
+8 项每拍廉价探测 — 完整 arp_lookup 的 L2 顺序扫描 ~800 拍/次, 每拍调用把
+顶层 pass 拉长 30 倍, xsim PROBE 实测被动握手 3.7k→55k 拍) → 占**最高**
+空闲槽 (低槽留给被动分配序) → SYN (seq=ACTIVE_ISS + MSS 1460) →
+T_SYN_SENT 收 SYN+ACK (ack==ISS+1) → tcp_parse_opts (从被动分支提取共用) →
+cfg_write(ADD) 先于纯 ACK (P4b-6 死锁教训) → T_ESTABLISHED; RST→T_FREE;
+SYN 限次重传超限释放半开槽 (P4b-5), 回等待可重试。与被动监听共存。
+
+**验证**: csynth 0 ERROR / Fmax 156.92MHz / 网表核验 (grp_tcp_active_tick,
+T_SYN_SENT=5, ACTIVE_ISS/IP/PORT 全进网表); TB +PCACTIVE 反应式 PC 模型
+(GMII 捕获板侧主动 SYN → 注入 ARP reply/SYN+ACK/100B 数据; sim 网表
+-DACTIVE_IP=0xC0A86463=192.168.100.99 逼出 ARP who-has 路径, 板级默认宏
+192.168.100.1) — PCACTIVE OK: 三连接共存 (conn0 被动 + conn1 预置 + 主动
+conn2), 数据段全收全回 nm=0; 回归 chain/burst 绿; rtl/ 零改动 (数据面冻结)。
+
+**TL 复核**: HLS diff 逐段核验 (重传 seq-- 补偿 tcp_send SYN +1 / cfg 字段
+逐项对齐 T_LISTEN / 槽位选择不碰 T_LISTEN) + PCACTIVE/activecheck 复跑绿 +
+回归复跑绿。提交 a1980fc。
