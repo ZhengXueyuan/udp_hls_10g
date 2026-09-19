@@ -558,6 +558,10 @@ module wrapper_p4 (
     wire [15:0] ra_rcv_wnd;
     wire [3:0]  ra_state;
     wire [3:0]  ra_wscale;
+    // P4d-fix: tcp_tx_frame 回卷会话高水位/活性 -> tcp_rx ack_ok 上界
+    // (纯线束: 会话期 ack 上界 = retx_hi 而非回卷后 snd_nxt, 见 tcp_rx 注释)
+    wire [31:0] tx_retx_hi;
+    wire        tx_retx_active;
     wire [3:0]  rb_id;
     wire [31:0] rb_rcv_nxt, rb_snd_nxt, rb_snd_una;
     wire [15:0] rb_rcv_wnd, rb_snd_wnd;
@@ -661,6 +665,8 @@ module wrapper_p4 (
         .ra_rcv_wnd     (ra_rcv_wnd),
         .ra_state       (ra_state),
         .ra_wscale      (ra_wscale),
+        .ra_retx_hi     (tx_retx_hi),
+        .ra_retx_active (tx_retx_active),
         .upd_wr         (rx_upd_wr),
         .upd_id         (rx_upd_id),
         .upd_sel        (rx_upd_sel),
@@ -909,6 +915,8 @@ module wrapper_p4 (
         .retx_id        (tx_retx_id),
         .retx_gnt       (tx_retx_gnt),
         .stat_retx      (tx_stat_retx),
+        .o_retx_hi      (tx_retx_hi),
+        .o_retx_active  (tx_retx_active),
         .dbg_wnd_open   (tx_dbg_wnd_open),
         .dbg_pay_full   (tx_dbg_pay_full),
         .dbg_sready     (tx_dbg_sready),

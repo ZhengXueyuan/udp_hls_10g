@@ -452,7 +452,7 @@ def parse_gmii(fn):
     ev = dict(fend=[], ack=[], synp=[], stats7=None, stx=None, seco=None,
               camf=None, tcbf=None, srx=None, stx2=None, smac=None, retx=None,
               truncs=None, ecomax=None, halfd=None, stripped=None,
-              pca=None, pcacam=[])
+              pca=None, pcacam=[], pcstall=None)
     with open(fn) as fh:
         for line in fh:
             p = line.split()
@@ -490,6 +490,18 @@ def parse_gmii(fn):
                 ev['halfd'] = tuple(int(x) for x in p[1:])
             elif p[0] == 'STRIPPED':   # P4e VLAN 剥离计数
                 ev['stripped'] = int(p[1])
+            elif p[0] == 'PCSTALL':    # P4d-fix 死锁复现门结果 (?%)
+                # 1..8 dec: thresh delay k_stall sess_seen k_sess inj_sent
+                #           inj_in_sess k_inj
+                # 9..10 hex: hi_inj hi_stall
+                # 11 dec: new_cnt;  12..13 hex: snxt_inj suna_inj
+                # 14..15 hex: snd_nxt_end snd_una_end;  16 dec: retx
+                ev['pcstall'] = (tuple(int(x) for x in p[1:9]) +
+                                 (int(p[9], 16), int(p[10], 16)) +
+                                 (int(p[11]),) +
+                                 (int(p[12], 16), int(p[13], 16)) +
+                                 (int(p[14], 16), int(p[15], 16)) +
+                                 (int(p[16]),))
             elif p[0] == 'PCA':        # P5 PCACTIVE 事件 (第 11 字段 hex = ISS)
                 # p[12]/p[13] = P1-2 慢对端模式 + 捕获 SYN 数 (含重传); 旧 resp
                 # (无这两字段) 兼容 = 快对端 + 1 个 SYN
@@ -832,6 +844,145 @@ def check(simdir):
         return False
     print('P4 CHAIN OK')
     return True
+
+
+PC_ISN = 0x12345679     # conn0 首数据段 seq (HLS_ISS+1) — echo 字节计数基准
+
+
+def read_pcstall(simdir):
+    """pcstall.memh: "THRESH DELAY" (TB 同源文件通道; xsim loader 拆含 '=' 的
+    plusarg)。缺文件 = TB 默认 (0xBFFE, 300)。"""
+    try:
+        with open(os.path.join(simdir, 'pcstall.memh')) as fh:
+            p = fh.read().split()
+        return int(p[0], 0), int(p[1], 0)
+    except (OSError, ValueError, IndexError):
+        return 0xBFFE, 300
+
+
+def check_stall(simdir, nburst):
+    """P4d-fix 数据面死锁复现门 (+PCACK +PCSTALL, RTOLIM_FAST)。
+
+    复现场景 (与板级 48KB 窗死锁同构): PC 把窗口填满后停发纯 ACK -> 板侧
+    in-flight 恒满 -> RTO 回卷 (snd_nxt := snd_una, 高水位存 retx_hi) 重放
+    全程期间, PC 的"已收全部数据"ACK (ack = 高水位) 到达。旧 tcp_rx 的 ack_ok
+    上界 = 回卷后 snd_nxt (重放未完, < 高水位) -> 合法 ACK 被拒; TCP 不重传
+    ACK -> snd_una 永久冻结 -> 窗口门永关 -> 死锁。
+
+    判据:
+      ① 前提链 (复现发生了): 停发拍 k_stall < 会话起点 k_sess < 注入拍 k_inj,
+         sess_seen=1, inj_sent=1, hi_stall >= 阈值;
+      ② 命中原始 bug 条件: 注入落在回卷会话期内 (inj_in_sess=1) 且注入拍板侧
+         snd_nxt < 注入的 ack 号 (snxt_inj < hi_inj) — ack 覆盖"已发出但重放
+         未推到"的字节;
+      ③ 修复判据 (核心): 注入后 (a) snd_una 追上高水位 (snd_una_end >= hi_inj);
+         (b) 板侧继续发新数据 — GMII 捕获里存在 seq >= hi_inj 的 conn0 echo 帧
+         (ring 重放帧 seq 恒 < 高水位, 故 seq >= 高水位 = 回卷后新发); (c) 终态
+         snd_nxt_end > hi_inj。
+      ④ 不变量: mac abort / tx eend = 0; 无合并帧 (plen <= 1460, ECOMAX <= 182)。
+
+    旧 RTL (ack_ok 用回卷后 snd_nxt): ACK 被拒 -> snd_una 冻结 -> 无新数据 ->
+    (a)(b)(c) 全 FAIL。"""
+    thresh, delay = read_pcstall(simdir)
+    got, ev = parse_gmii(os.path.join(simdir, 'resp_p4_chain.memh'))
+    ok = True
+    ps = ev['pcstall']
+    if ps is None:
+        print('PCSTALL FAIL: resp 无 PCSTALL 行 (TB 未跑 +PCACK +PCSTALL?)')
+        return False
+    (th_r, dl_r, k_stall, sess_seen, k_sess, inj_sent, inj_in_sess, k_inj,
+     hi_inj, hi_stall, new_cnt_tb, snxt_inj, suna_inj,
+     snd_nxt_end, snd_una_end, retx) = ps
+    print('PCSTALL 参数: 阈值=%d 延迟=%d (pcstall.memh); TB 实读 阈值=%d 延迟=%d'
+          % (thresh, delay, th_r, dl_r))
+    if (th_r, dl_r) != (thresh, delay):
+        print('MISMATCH: TB 实读参数 %d/%d != pcstall.memh %d/%d'
+              % (th_r, dl_r, thresh, delay))
+        ok = False
+    # ---- ① 前提链: 停发 -> 回卷会话 -> 会话期注入 ----
+    if not sess_seen:
+        print('PCSTALL FAIL: 板侧从未进入回卷会话 (retx_active 未起) — 复现前提'
+              '不成立 (检查 in-flight 是否真打满窗口)')
+        ok = False
+    if not inj_sent:
+        print('PCSTALL FAIL: 高水位 ACK 未注入 (会话/延迟/帧隙未满足)')
+        ok = False
+    if not inj_in_sess:
+        print('PCSTALL FAIL: 注入拍板侧回卷会话已结束 (未命中重放期 — 注入太晚?)')
+        ok = False
+    if inj_sent and k_inj <= k_sess:
+        print('MISMATCH: 注入拍 %d <= 会话起点 %d (时序链异常)' % (k_inj, k_sess))
+        ok = False
+    if (hi_stall - PC_ISN) & 0xFFFFFFFF < thresh:
+        print('PCSTALL FAIL: 停发时已收字节 %d < 阈值 %d (未真填满 — 门无效)'
+              % ((hi_stall - PC_ISN) & 0xFFFFFFFF, thresh))
+        ok = False
+    # 回卷时在飞必须满窗 (板级 51100 = 35x1460): 注入的高水位 - 注入拍 snd_una
+    # = 回卷重放区间长度; 允许 2 帧滑落 (TB 高水位按帧尾取整 + 门 1 拍陈旧越界)
+    infl_rew = (hi_inj - suna_inj) & 0xFFFFFFFF
+    if infl_rew < thresh - 2 * 1460:
+        print('PCSTALL FAIL: 回卷时在飞 %d < 阈值-2帧 %d (窗口未真填满 — 与板级'
+              ' 满窗死锁不同构)' % (infl_rew, thresh - 2 * 1460))
+        ok = False
+    # ---- ② 命中原始 bug 条件: ack 超出注入拍 snd_nxt ----
+    if snxt_inj >= hi_inj:
+        print('PCSTALL FAIL: 注入拍 snd_nxt %08X >= ack %08X (未命中 ack>snd_nxt'
+              ' 条件 — 重放已推到高水位, 门无效)' % (snxt_inj, hi_inj))
+        ok = False
+    # ---- ③ GMII 独立核验: 停摆点之后的新数据帧 (seq >= 高水位) ----
+    new_frames = []
+    echoes = 0
+    max_plen = 0
+    for fb in got:
+        body = fb[8:-4]
+        if len(body) >= 48 and body[12:14] == b'\x08\x00' and body[23] == 6 and \
+                body[47] == 0x18:
+            sport, dport = struct.unpack('!HH', body[34:38])
+            if sport == 0x1F90 and dport == 0x3039:
+                echoes += 1
+                seq, = struct.unpack('!I', body[38:42])
+                plen = struct.unpack('!H', body[16:18])[0] - 40
+                if plen > max_plen:
+                    max_plen = plen
+                if seq >= hi_inj:
+                    new_frames.append((seq, plen))
+    print('PCSTALL 停发拍=%d 会话起点=%d 注入拍=%d 高水位=%08X (停发时 %08X);'
+          ' 注入拍 snd_nxt=%08X snd_una=%08X'
+          % (k_stall, k_sess, k_inj, hi_inj, hi_stall, snxt_inj, suna_inj))
+    print('PCSTALL 终态 snd_nxt=%08X snd_una=%08X 回卷会话数=%d; 停摆后新数据帧 %d'
+          ' (TB 计数 %d); 首帧 %s'
+          % (snd_nxt_end, snd_una_end, retx, len(new_frames), new_cnt_tb,
+             ('seq=%08X plen=%d' % new_frames[0]) if new_frames else '无'))
+    if not new_frames:
+        print('PCSTALL FAIL: 停摆点之后无新数据帧 (seq >= %08X) — snd_una 未解冻,'
+              ' 窗口门永关 (死锁复现: 高水位 ACK 被 ack_ok 拒)' % hi_inj)
+        ok = False
+    if snd_una_end < hi_inj:
+        print('PCSTALL FAIL: 终态 snd_una %08X < 高水位 %08X (注入的合法 ACK 未被'
+              '接受)' % (snd_una_end, hi_inj))
+        ok = False
+    if snd_nxt_end <= hi_inj:
+        print('PCSTALL FAIL: 终态 snd_nxt %08X <= 高水位 %08X (板侧未继续发送)'
+              % (snd_nxt_end, hi_inj))
+        ok = False
+    # ④ 不变量
+    if max_plen > 1460:
+        print('MISMATCH: echo 帧 plen=%d > 1460 (帧合并)' % max_plen)
+        ok = False
+    if ev['ecomax'] is None or ev['ecomax'] > 182:
+        print('MISMATCH: echo 出口 ECOMAX %s > 182 词 (无尽帧)' % (ev['ecomax'],))
+        ok = False
+    if ev['smac'] is None or ev['smac'][1] != 0 or ev['smac'][2] != 0:
+        print('MISMATCH: mac abort / tx eend 非零 (缺陷 A 哨兵): %s' % (ev['smac'],))
+        ok = False
+    _se = _check_stripped(ev, 'stall')
+    for e in _se:
+        print('MISMATCH:', e)
+    if _se:
+        ok = False
+    print('PCSTALL %s (burst=%d, echo 帧 %d)' % ('OK' if ok else 'FAIL', nburst,
+                                                 echoes))
+    return ok
 
 
 # ---- P5 PCACTIVE: 主动连接 (客户端) 门常量 — 必须与 sim 网表一致 ----
@@ -1494,6 +1645,9 @@ if __name__ == '__main__':
             txdrop1 = int(sys.argv[4]) if len(sys.argv) > 4 else 0
             txdrop2 = int(sys.argv[5]) if len(sys.argv) > 5 else 0
             mode = 'burstcheck'
+        elif sys.argv[2] == 'stallcheck':
+            nburst = int(sys.argv[3]) if len(sys.argv) > 3 else 200
+            mode = 'stallcheck'
         elif sys.argv[2] == 'activecheck':
             mode = 'activecheck'
         elif sys.argv[2] == 'replay':
@@ -1536,6 +1690,8 @@ if __name__ == '__main__':
     if mode == 'burstcheck':
         sys.exit(0 if check_burst(simdir, nburst, txdrop1, txdrop2,
                                   trunc_at, trunc_len, half_at, half_k) else 1)
+    if mode == 'stallcheck':
+        sys.exit(0 if check_stall(simdir, nburst) else 1)
     if mode == 'activecheck':
         sys.exit(0 if check_active(simdir) else 1)
     gen_memh(simdir, frames)

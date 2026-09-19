@@ -55,6 +55,9 @@ module tcp_rx (
     input  wire [15:0] ra_rcv_wnd,
     input  wire [3:0]  ra_state,
     input  wire [3:0]  ra_wscale,   // 对端 window scale (snd_wnd drain 缩放用)
+    // P4d-fix: tx 侧重传会话高水位 (来自 tcp_tx_frame o_retx_*; ack_ok 上界)
+    input  wire [31:0] ra_retx_hi,
+    input  wire        ra_retx_active,
     // TCB 更新 (fend 后 drain: 拍1 rcv_nxt, 拍2 snd_una, 拍3 snd_wnd;
     // 组合电平输出, upd_gnt 未给则保持该字段 — 顶层仲裁必须无损 (tx 优先时 rx 靠 gnt 顺延)。
     // P4b-7-P6 ROOT CAUSE #2 修复: pend 标志 sticky — fend 只置位不覆盖, drain 在
@@ -248,7 +251,22 @@ module tcp_rx (
     wire        win_ok   = (seq_diff < {16'b0, ra_rcv_wnd});
     wire        seq_eq   = (seq32 == ra_rcv_nxt);
     wire        seq_lt   = (seq32 < ra_rcv_nxt);   // 重复/旧段 (回绕安全: 无符号比较)
-    wire        ack_ok   = ((ack32 - ra_snd_una) <= (ra_snd_nxt - ra_snd_una));
+    // P4d-fix: 回卷会话期间 ACK 上界 = 高水位 retx_hi (回卷前 snd_nxt = 真正发送
+    // 过的字节)。回卷把 snd_nxt 降到 snd_una, 若仍用 snd_nxt 判上界, 对端"确认
+    // 已到达数据"的合法 ACK (ack > 回卷后 snd_nxt) 被拒 —— TCP 不重传 ACK,
+    // snd_una 永久冻结, in-flight 恒 = 满窗 → 窗口门永关 → 死锁 (板级实证: 48KB
+    // 窗 + RTO 重放 35 帧, PC ack=高水位 落在重放期被拒, 板侧 seq 永不前进)。
+    // 会话期 retx_hi >= snd_nxt 恒成立 (回卷只降 snd_nxt, 重放最多推回 retx_hi),
+    // 故直接用 retx_hi 即可, 无需比较; 会话结束 retx_active=0 自动回 snd_nxt 语义。
+    // 语义自检: ①会话中 ack ∈ [snd_una, retx_hi] 都接受 — 这些字节确实发送过;
+    // ②会话中 ack 超过 retx_hi 仍拒 (防接受未发送数据的 ACK); ③接受 ack =
+    // retx_hi 时 snd_una 可能暂时 > 当前 snd_nxt (重放未完) — in-flight 回绕为
+    // 大数、窗口门保持关 (无害: 重放帧走 ring 绕过门), 重放推进到 retx_hi 后
+    // in-flight = 0; 期间若 RTO 再触发, svc 回卷 snd_nxt := snd_una (= 高水位,
+    // 前跳) 且 ring_delta = 0 → 会话立即收敛结束, 剩余重放帧已被 ACK 确认 →
+    // 语义正确。
+    wire [31:0] ack_hi   = ra_retx_active ? ra_retx_hi : ra_snd_nxt;
+    wire        ack_ok   = ((ack32 - ra_snd_una) <= (ack_hi - ra_snd_una));
     wire        ack_adv  = ack_ok && (ack32 != ra_snd_una);
     wire [15:0] plen_w   = w2_r[63:48] - 16'd40;
     wire        frag_ok  = (w2_r[29:16] == 14'h0);   // MF=0 且片偏移=0 (分片段丢给 P4)

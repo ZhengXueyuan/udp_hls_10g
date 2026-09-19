@@ -2277,3 +2277,113 @@ QinQ 剥一层后自然退化慢路径; 上游残段 (tuser) 有恢复支不卡�
 全等) + 默认门回归 (STRIPPED=0, TRUNC/HALFDROP 复跑绿); 板级构建
 WNS=+0.401 (基线 +0.237, 不退化)。TL 复核复跑全绿。提交 683837b/bf8b262/
 932f6ee/0f8c523。
+
+### P4d 板级验收 第一天: RTO 重放 ACK 拒收死锁 (2026-09-19)
+
+**现象**: 烧 P1-fix bitstream (含 vlan_strip) 跑 32MB 速率测试, ~1.5MB 处板侧停摆,
+PC RTO 退避 (2.6/5/9.8s) 后 RST; UART 快照 = 真死锁 (TXST=0 S_IDLE 空转,
+RXST=1 S_PAY + EMV=1, echo fifo 8192 字全满, 全计数器冻结)。
+
+**抓包解码 (决定性)**: 板侧 seq 最大值恒 = 5,507,085 (t=0.486s 后再无新字节),
+同一 51,100 字节窗口被重放 17 轮 (每 ~100ms = RTO 周期; 560 个 replay 帧);
+PC 的 ACK 恒 = 5,508,545 (= 板侧高水位, "我全收到了")。
+
+**根因链 (逐环实证)**:
+1. 窗口填满: in-flight = 0xC79C = 51,100 = **恰 35×1460** (含 1 拍陈旧门控越界量
+   vs RING_CAP 49,150); PC 随后停发 ACK (延迟 ACK/收缓冲)。
+2. RTO → svc 回卷 snd_nxt := snd_una, tx_frame 存高水位 retx_hi = 5,508,545。
+3. 重放 35 帧 (ring 源帧绕过窗口门), 每帧推进 snd_nxt。
+4. **PC 的 ACK 撞进重放期**: 此时 snd_nxt < 5,508,545 → tcp_rx 的
+   `ack_ok = (ack-snd_una) <= (snd_nxt-snd_una)` 判 ack > snd_nxt → **拒绝**
+   (时间线: 末帧 8581 起始 t=1.9989135 + 12.1us 传输 = S_DONE ~1.9989256;
+   PC 末 ACK 8582 t=1.9989175 → 早 ~5us)。
+5. 重放完成 snd_nxt 回到高水位, 但 **PC 不再发 ACK** (已确认全部数据, 无新数据
+   可 ACK; 重放帧诱发的 dup-ACK 被 Windows 大量抑制 — 21 重放帧只 5 个 ACK)。
+6. snd_una 永久冻结 → in-flight 恒 = 满窗 → win_open 恒 0 → start_data = 0 →
+   echo 管道 (8192 字满) 反压 tcp_rx → **整条 fast path 死锁**, 仅靠下个 RTO
+   再回卷再重放, 循环不止。
+
+**本质**: 回卷暂时降低 snd_nxt 破坏"已发送字节单调"假设 → 对端对已到达数据的
+合法 ACK 被丢, 而 TCP 不重传 ACK → 无自愈路径。**P4c 窗口 12KB→48KB 使重放
+时长 ×4 (~420us), ACK 落进重放期概率大增** → 潜伏 bug (P4b-7 起存在) 现在必现;
+P4b-7/P4c 此前通过属时序未撞。**与 vlan_strip 无关** (排查中证).
+
+**修复方向** (agent 实施中): 会话期 ACK 有效上界 = retx_hi (回卷前 snd_nxt =
+真正发送过的字节), 即 tcp_rx 的 ack_ok 用 `retx_active ? retx_hi : snd_nxt`;
+tx_frame 暴露 retx_hi/retx_active 两个纯线束输出。会话结束 snd_nxt 已追回
+retx_hi, 自动回原语义。TB 补 +PCSTALL 复现门 (窗口填满停 ACK → 重放期注入
+高水位 ACK → 断言 snd_nxt 继续前进; 修复前必须 FAIL)。
+
+### P4d-fix 实施记录 (agent, 同日): 会话高水位 ACK 上界 + PCSTALL 复现门
+
+**RTL 改动 (3 文件, 与 TL 方案逐字一致)**:
+- `rtl/tcp_tx_frame.v`: 新增纯线束输出 `o_retx_hi`/`o_retx_active` (= 内部
+  retx_hi/retx_active, 零逻辑零耦合);
+- `rtl/tcp_rx.v`: TCB 读口组旁新增 `ra_retx_hi`/`ra_retx_active`, ack_ok 改为
+  `ack_hi = ra_retx_active ? ra_retx_hi : ra_snd_nxt`, 判据
+  `(ack32-snd_una) <= (ack_hi-snd_una)` (其余 ack_adv/dup_ack 语义不变;
+  会话结束 retx_active=0 自动回原语义);
+- `board/wrapper_p4.v` + `board/wrapper_tcp.v`: 两处连线 (u_tcp_tx 出 ->
+  u_tcp_rx ack_ok); tcp_rx 另有 4 个 TB 实例同步连线 (tb_tcp_chain/echo/rx
+  走 u_tx.retx_* 层次引用, tb_tcp_rx 无 tx 侧恒接 0)。
+
+**TB 复现门 (+PCSTALL, 仅与 +PCACK 同开)**: `tb/tb_p4_chain.v` 新增
+- 阈值/延迟经 `pcstall.memh` 传入 (xsim loader 拆含 '=' 的 plusarg, 同
+  txdrop/trunc/halfdrop 文件通道), 默认 49150 字节 / 300 拍;
+- 停发判据 = **累计已收 echo 字节** (hi_wm - conn0 ISN 0x12345679 >= 阈) —
+  不能按未确认差判: 本模型每帧即 ACK (PCACK 语义), 未确认差恒 ≈1 帧, 永达
+  不到窗帽; 板级实体是"PC 收满一窗字节后停发 ACK";
+- 停发后 inj_done 冻结; 盯 `u_tx.retx_active && u_tx.retx_id_r==0` (conn0
+  会话, 只看全局 retx_active 会被 conn1 自愈会话误触发) 记会话起点, 会话 +
+  延迟后注入**一个**纯 ACK, ack = 当时高水位 hi_wm (= 板侧 retx_hi, 因为重放
+  帧 seq 恒 < 高水位, 高水位不再增长); 之后不再注入;
+- resp 追加 `PCSTALL` 行 (阈值/延迟/停发拍/会话拍/注入拍/注入时板侧 TCB/
+  高水位/停摆后新数据帧数/终态 TCB/会话数)。
+
+**判据** (`tools/gen_stim_p4_chain.py check_stall`, 模式 `stallcheck`):
+① 前提链 k_stall < k_sess < k_inj + sess_seen + inj_sent + 停发时已收 >= 阈;
+② 命中原始 bug 条件 = 注入落在会话期内 (`inj_in_sess`) **且注入拍 snd_nxt <
+   注入的 ack** (snxt_inj < hi_inj) + 回卷时在飞 >= 阈-2帧;
+③ 修复判据 = 注入后 snd_una 追上高水位 (`snd_una_end >= hi_inj`) + GMII 独立
+   核验出现 seq >= 高水位的 conn0 echo 帧 (ring 重放帧恒 < 高水位) + 终态
+   snd_nxt > 高水位; ④ 不变量 mac abort/eend=0 + max plen<=1460 + ECOMAX<=182。
+
+**突变验证 (硬要求, 两跑拍级同构)**: `sim/p4sim/stall_gate_prefix_fail.log` /
+`stall_gate_postfix_pass.log` — 同一激励下停发拍 141600 / 会话拍 205489 /
+注入拍 206660 完全一致:
+- 修复前 (HEAD): 注入拍 snd_nxt = snd_una = 0x123512BD、高水位 0x1235F129 在
+  重放期被 ack_ok 拒 → 终态 snd_una **恒 0x123512BD < 高水位** → `PCSTALL FAIL`
+  (exit 1);
+- 修复后: 终态 snd_una = 0x1235F129 (= 高水位, ACK 被接受)、snd_nxt =
+  0x1236CF95 (继续发新数据, 127 帧)、`PCSTALL OK` (exit 0)。
+
+**全矩阵回归 (16 门全绿, `sim/p4sim/matrix_p4dfix.log`)**: chain / burst200 /
+TRUNC=50,100 / HALFDROP=100k990 / TXDROP=50 (RETX=1 自愈仍成立) / gate4096 /
+dupstorm / PCACKOOB / VLAN chain+burst / stall 门 / 单元 retx_ram (7 GRP) /
+frame_fifo (PASS_ALL) / vlan_strip / uart_dbg。矩阵用**默认 HLS 网表** (开工时
+工作区是 ACTIVE 变体, 已按 TL 指示 `hls/run_hls.bat` 重综合恢复)。
+
+**板级构建** (`board/run_build_p4.bat`, 默认网表): WNS=+0.110 / WHS=+0.045,
+0 failing endpoints, bitstream 已生成。WNS 最差路径 = `u_tcp_tx/u_retx/
+ra_e_r_reg -> retx_ram ADDRBWRADDR` (P4c 起既有族, 96.99% 走线, 0 逻辑级) —
+**与本次 ack_ok 32 位 mux 无关** (最近两次基线 0.149/0.149, 差 ~0.04ns 属布局
+布线抖动); ack_ok 未进关键路径。
+
+**TB 侧 harness 观察 (供后续门参考, 与本次修复无关)**:
+1. **注册窗口门在仿真里漏** — tcb 的 win_open 用**上一拍 rb_id** 的
+   snd_nxt-snd_una 判定, 而 scan_now 拍 rb_id = scan_id (空闲槽 2..15 在飞 0)
+   → 门每 16 拍被空闲槽"开"一次, 在飞远超窗帽时数据仍按刺激速率发出 (本门
+   停发后在飞涨到 292KB)。**板级 P4b-7-P6 实测门确实关死过** (冻结), 故此处
+   仿真/板级行为差异需 TL 判: 可能板级 app 无数据呈现拍远多于仿真, 或板级
+   scan 拍与 start_data 拍很少相邻。本门判据因此**不依赖门控** (核心判据 =
+   snd_una 追上高水位)。
+2. **RTO tick 实测远慢于标称** — scan_now 需 S_IDLE && !ack_pend_r && scan_tick
+   三条件, 数据/ACK 繁忙期实测 1900~5850 拍/次连接访问 (标称 256) → RTO 门用
+   RTOLIM_STALL=12 才落在尾窗内 (30 次访问已能拖到 175k 拍)。
+3. **修复的残余多连接风险 (建议 TL 裁决, 本次按方案未改)**: `ra_retx_active/
+   ra_retx_hi` 是**全局会话**信号, 而 ack_hi 作用在 `conn_id_l` 的 ack 判据上。
+   若 conn1 正在回卷会话而 conn0 的 ACK 到达, ack_hi 会取 conn1 的 retx_hi —
+   32 位回绕差可能放大成"接受未发送字节的 ACK" → snd_una 越过 snd_nxt →
+   在飞回绕成巨数 → 窗口门永关 (另一种死锁)。数据面单连接假设下无害 (板级
+   conn1 空闲无会话), 一行加固: tx_frame 再暴露 `o_retx_id` (= retx_id_r),
+   tcp_rx 用 `ra_retx_active && (ra_retx_id == conn_id_l)` 选 ack_hi。

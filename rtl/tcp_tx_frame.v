@@ -61,6 +61,11 @@ module tcp_tx_frame (
     input  wire [3:0]  retx_id,
     output wire        retx_gnt,           // 脉冲: retx_req 已服务 (回卷或确认空)
     output reg  [31:0] stat_retx,          // 回卷次数 (重传会话启动数)
+    // P4d-fix 会话高水位暴露 (给 tcp_rx 的 ack_ok 上界; 纯线束 assign, 零逻辑):
+    // 回卷把 snd_nxt 降到 snd_una, 本会话重放上界 = 回卷前 snd_nxt = retx_hi
+    // (= 真正发送过的最高字节)。会话期间 ACK 合法上界必须用它 (理由见 tcp_rx)。
+    output wire [31:0] o_retx_hi,          // 回卷高水位 (retx_active=1 时有效)
+    output wire        o_retx_active,      // 重传会话进行中
     // TCB 更新 (数据段末字消费拍组合脉冲: sel=1 snd_nxt <= seq+plen;
     // 与状态回 S_IDLE 同拍写入 — 下一帧最早下拍启动, 读到的是更新后的值)
     output wire        upd_wr,
@@ -160,6 +165,10 @@ module tcp_tx_frame (
     reg  [31:0] snd_una_prev [0:15];      // 上次 svc 拍的 snd_una (进展比对基)
     reg  [3:0]  epoch [0:15];             // 连续 svc 无进展会话计数 (封顶 15)
     integer     ri;
+
+    // ---- P4d-fix 会话状态线束输出 (纯 assign, 与内部逻辑零耦合) ----
+    assign o_retx_hi     = retx_hi;
+    assign o_retx_active = retx_active;
 
     // ---- ACK 请求队列 ([36:33]=id [32]=syn [31:0]=ack_val) ----
     wire        ackq_full, ackq_empty;

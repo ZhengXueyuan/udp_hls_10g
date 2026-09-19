@@ -19,6 +19,16 @@ module tb_p4_chain;
 `ifdef RTOLIM_FAST
     defparam u_tx.RTO_LIM = 125;
 `endif
+    // P4d-fix PCSTALL 门 (run_tb_p4_chain_stall.bat -d RTOLIM_STALL): RTO 必须
+    // 在"PC 停发后板侧在飞已远超窗"时触发, 且尾部刺激仍有大量余量 (修复后
+    // 新数据要真发得出来)。sim 实测 scan_now 很稀 (S_IDLE && !ack_pend_r &&
+    // scan_tick 三条件): 数据/ACK 繁忙期实测 ~1900..5850 拍/次连接访问 ->
+    // 30 次访问能拖到 175k 拍 (会与尾窗重叠)。12 次访问 = 3k..70k 拍, 停发
+    // (49KB ≈ 133k 拍) 后 RTO 落在 136k..203k, 距刺激尾 (~394k) 余量充足。
+    // (默认 48828 = 12.5M 拍/RTOLIM_FAST 125 = 212k+ 拍都跑出尾窗。)
+`ifdef RTOLIM_STALL
+    defparam u_tx.RTO_LIM = 12;
+`endif
 
     reg        clk, rst_n;
     reg [7:0]  rx_d;
@@ -233,6 +243,62 @@ module tb_p4_chain;
     // RFC 合法)。旧 tcp_rx 对 seq 非边界纯 ACK 无 fend -> ACK 丢弃 -> snd_una
     // 停滞 -> RTO 风暴 (板级 17.6Mbps 暴跌复现); 修复后应正常推进。
     reg        pcack_oob;
+
+    // ============ P4d-fix 数据面死锁复现门 (+PCACK +PCSTALL) ============
+    // 板级 32MB 速率测试死锁 (48KB 窗 + RTO 回卷): PC 填满窗口后停发纯 ACK,
+    // 板侧 RTO 回卷 (snd_nxt := snd_una, 高水位存 retx_hi) 重放 35 帧期间,
+    // PC 的"确认全部已收数据"ACK (ack = 高水位) 到达 — 旧 tcp_rx 的 ack_ok
+    // 上界用回卷后的 snd_nxt (重放未完, < 高水位) -> 合法 ACK 被拒; TCP 不重传
+    // ACK -> snd_una 永久冻结 -> in-flight 恒满窗 -> 窗口门永关 -> 死锁。
+    // 本门复现该时序:
+    //   ① 累计注入 ACK (同 PCACK), 在飞 (hi_wm - ack_last) 达阈值 -> 永久停发
+    //      (inj_done 冻结 = 板侧"PC 停发纯 ACK");
+    //   ② 板侧被填满窗口 -> 门关 -> RTO (RTOLIM_FAST=125 -> 32k 拍) -> svc 回卷;
+    //      观察 u_tx.retx_active 上升沿 = 会话开始;
+    //   ③ 会话开始 + pcst_delay 拍后注入**一个**纯 ACK, ack = hi_wm (高水位 =
+    //      板侧 retx_hi = 回卷前 snd_nxt; 板级实证 PC ack 落在重放期);
+    //   ④ 断言: 会话期内注入 (inj_in_sess, 且 snxt_inj < hi_inj = ack 超出当前
+    //      snd_nxt 的原始条件) + 之后板侧继续发**新数据** (new_cnt > 0: echo 帧
+    //      seq >= 高水位; 旧 RTL 的 ring 重放帧 seq 恒 < 高水位) + snd_una 追上
+    //      高水位。旧 RTL 必 FAIL (ACK 被拒, snd_una 冻结, 新数据永不发)。
+    // 阈值/延迟经 pcstall.memh 传入 (xsim loader 拆含 '=' 的 plusarg, 同
+    // txdrop 文件通道; 与 stallcheck 同源)。+PCSTALL 单独无效 (须同开 +PCACK)。
+    reg        pcst_mode;      // = pcack_en && $test$plusargs("PCSTALL")
+    reg        pcst_stall;     // 在飞达阈: 永久停发 ACK
+    reg [31:0] pcst_thresh;    // 停发阈值字节 (pcstall.memh 第 1 数, 默认 0xBFFE)
+    reg [31:0] pcst_delay;     // 会话开始->注入延迟拍 (pcstall.memh 第 2 数, 默认 300)
+    reg [31:0] hi_wm;          // conn0 echo 高水位 = max(seq+plen) (板侧 snd_nxt)
+    reg [31:0] ack_last;       // 最近注入的 ack 值 (= 板侧 snd_una 模型)
+    reg [31:0] hi_stall;       // 停发拍的高水位 (报告用)
+    reg [31:0] k_stall, k_sess, k_inj;   // 拍号: 停发 / 会话起点 / 单独注入
+    reg        sess_seen;      // 观察到板侧回卷会话 (retx_active 上升)
+    reg        inj_sent;       // 单独的高水位 ACK 已注入
+    reg [31:0] hi_inj;         // 注入的 ack 值 (= 注入时高水位 = 板侧 retx_hi)
+    reg        inj_in_sess;    // 注入决策拍 retx_active 仍为 1
+    reg [31:0] snxt_inj;       // 注入拍板侧 snd_nxt (证据: < hi_inj = 被拒条件)
+    reg [31:0] suna_inj;       // 注入拍板侧 snd_una
+    reg [15:0] new_cnt;        // 停摆点之后的新数据 echo 帧数 (seq >= hi_inj)
+    // 停发判据 (组合, 与注入分支同拍互斥): PC 收满阈值字节后停发纯 ACK。
+    // 量纲说明: 本模型每帧即 ACK (PCACK 语义), 未确认差 (hi_wm - ack_last) 恒
+    // ≈ 1 帧, 永达不到 0xBFFE; 板级实体是"PC 收满一个窗口的字节后停发 ACK"
+    // (PC 接收缓冲/延迟 ACK 满)。故阈值按**累计已收 echo 字节**计 (hi_wm 相对
+    // conn0 首数据段 seq 0x12345679 = HLS_ISS+1), 停发后板侧继续发 (在飞累积
+    // 到远超窗口帽) 直到 RTO — 回卷时在飞远大于窗, 重放区间长, 高水位 ACK 必
+    // 落在重放期中段。默认阈值 0xBFFE = RTL RING_CAP = 板级 48KB 窗。
+    // 判据写成 hi_wm >= ISN+阈 (不能用差: 复位后 hi_wm=0 时 0-ISN 无符号回绕
+    // 成大数 -> 首拍即误冻结)
+    wire pcst_freeze = pcst_mode && !pcst_stall && !inj_play &&
+                       (hi_wm >= (32'h12345679 + pcst_thresh));
+    // 单独注入请求: 会话期内 + 延迟到点 + 未注入过 (电平, 等下一个帧隙)
+    wire pcst_go = pcst_mode && pcst_stall && sess_seen && !inj_sent &&
+                   ((k - k_sess) >= pcst_delay);
+    // 注入请求仲裁: pcst 模式两阶段 (累计期 = inj_pend; 停发后 = pcst_go 一次),
+    // 非 pcst 模式 = 原 PCACK。冻结拍 (pcst_freeze) 同拍禁注入 (下拍 pcst_stall=1)
+    wire inj_go = pcst_mode ? ((pcst_stall || pcst_freeze) ? pcst_go : inj_pend)
+                            : (pcack_en && inj_pend);
+    // done 收尾用: 冻结后 inj_pend 恒视为 0 (不再有注入请求, 防 echo_seen 持续
+    // 递增把 SIMDONE 挡住)
+    wire inj_pend_eff = (pcst_mode && pcst_stall) ? 1'b0 : inj_pend;
 
     // ================= P5 PCACTIVE 主动连接反应式模型 (+PCACTIVE) =================
     // HLS 侧 ACTIVE_CONNECT=1 时复位后自发 SYN (sport 1F90 / dport 2382 /
@@ -629,6 +695,7 @@ module tb_p4_chain;
         .ra_id(ra_id),
         .ra_rcv_nxt(ra_rcv_nxt), .ra_snd_nxt(ra_snd_nxt), .ra_snd_una(ra_snd_una),
         .ra_rcv_wnd(ra_rcv_wnd), .ra_state(ra_state), .ra_wscale(ra_wscale),
+        .ra_retx_hi(u_tx.retx_hi), .ra_retx_active(u_tx.retx_active),
         .upd_wr(rx_upd_wr), .upd_id(rx_upd_id), .upd_sel(rx_upd_sel), .upd_val(rx_upd_val),
         .upd_gnt(rx_upd_gnt),
         .ack_req(ack_req), .ack_id(ack_id), .ack_val(ack_val),
@@ -870,6 +937,10 @@ module tb_p4_chain;
             i <= 0; k <= 32'hFFFFFFFF; rx_d <= 8'h07; rx_dv <= 0; rx_er <= 0; done <= 0;
             cphase <= 0;
             inj_play <= 0; inj_idx <= 0; inj_done <= 0; gap_cnt <= 0;
+            pcst_stall <= 0; hi_wm <= 0; ack_last <= 0; hi_stall <= 0;
+            k_stall <= 0; k_sess <= 0; k_inj <= 0;
+            sess_seen <= 0; inj_sent <= 0; hi_inj <= 0; inj_in_sess <= 0;
+            snxt_inj <= 0; suna_inj <= 0; new_cnt <= 0;
             pca_play <= 0; pca_idx <= 0; pca_len <= 0; pca_tot <= 0;
             pca_arp_inj <= 0; pca_synack_inj <= 0; pca_data_inj <= 0;
             cfg_wr <= 0; cfg_addr <= 0; cfg_sip <= 0; cfg_dip <= 0;
@@ -896,6 +967,27 @@ module tb_p4_chain;
                 cphase <= cphase + 1;
             end else begin
                 cfg_wr <= 0; cfg_upd_wr <= 0;
+                // ---- P4d-fix PCSTALL 状态机 (仅 pcst 模式; 非 pcst 模式恒空转) ----
+                if (pcst_mode) begin
+                    if (pcst_freeze) begin
+                        // ① 在飞达阈: 永久停发 ACK (板侧 PC 停发纯 ACK 的模型)
+                        pcst_stall <= 1'b1;
+                        inj_done   <= echo_seen;
+                        k_stall    <= k;
+                        hi_stall   <= hi_wm;
+                    end else if (pcst_stall) begin
+                        // ②/③ 停发后: 持续冻结 inj_done (inj_pend 恒 0); 盯板侧
+                        //    回卷会话起点 (retx_active 上升沿 = svc 回卷拍后)
+                        inj_done <= echo_seen;
+                        // 会话起点: conn0 的回卷会话 (retx_id_r = 会话连接;
+                        // 只看全局 retx_active 会被 conn1 自愈会话误触发)
+                        if (!sess_seen && u_tx.retx_active &&
+                            (u_tx.retx_id_r == 4'd0)) begin
+                            sess_seen <= 1'b1;
+                            k_sess    <= k;
+                        end
+                    end
+                end
                 if (inj_play) begin
                     // 注入帧播放 (静态流暂停, i 冻结 — rcv_nxt 播放期不变)。
                     // 前 12 拍播 IFG (dv=0)! 直接进前导会让 mac_rx_64 收不到
@@ -936,15 +1028,17 @@ module tb_p4_chain;
                     if (pca_idx == (pca_tot - 9'd1)) pca_play <= 1'b0;
                     pca_idx <= pca_idx + 9'd1;
                 end else if (i < nstim) begin
-                    if (pcack_en && inj_pend && !stim_v[i][0] &&
-                        gap_cnt >= 4'd11) begin
+                    if (inj_go && !stim_v[i][0] && gap_cnt >= 4'd11) begin
                         // 帧间隙: 构建纯 ACK (此刻静态流在间隙, rcv_nxt 冻结)。
                         // 本拍仍播该间隙字节, 下拍起 12 拍 IFG 再进前导。
                         // P4c PCACKOOB: seq = 窗口右沿 (板级满窗纯 ACK 语义)
                         seq_b  = pcack_oob ?
                                  (u_tcb.rcv_nxt_r[0] + {16'b0, u_tcb.rcv_wnd_r[0]}) :
                                  u_tcb.rcv_nxt_r[0];
-                        ack_b  = inj_ack_val;
+                        // P4d-fix PCSTALL: ack = 高水位 hi_wm (板侧 PC 累计确认
+                        // 语义 = 已收全部数据的 ACK 号; 累计期与 inj_ack_val 等价,
+                        // 会话期注入即板级"ack = retx_hi"场景)
+                        ack_b  = pcst_mode ? hi_wm : inj_ack_val;
                         ipcs_c = ip_csum_inj(1'b0);
                         inj_crc = 32'hFFFFFFFF;
                         for (bi = 0; bi < 8; bi = bi + 1)
@@ -958,6 +1052,16 @@ module tb_p4_chain;
                         inj_buf[69] <= inj_crc[15:8];
                         inj_buf[70] <= inj_crc[23:16];
                         inj_buf[71] <= inj_crc[31:24];
+                        ack_last <= pcst_mode ? hi_wm : inj_ack_val;
+                        if (pcst_mode && pcst_stall) begin
+                            // 会话期单独注入: 记证据 (注入拍板侧 TCB + 会话活性)
+                            inj_sent    <= 1'b1;
+                            k_inj       <= k;
+                            hi_inj      <= hi_wm;
+                            inj_in_sess <= u_tx.retx_active;
+                            snxt_inj    <= u_tcb.snd_nxt_r[0];
+                            suna_inj    <= u_tcb.snd_una_r[0];
+                        end
                         inj_done <= echo_seen;   // 累计 ACK 一次覆盖全部待注入
                         inj_play <= 1'b1;
                         inj_idx  <= 7'd0;
@@ -982,13 +1086,14 @@ module tb_p4_chain;
                         if (stim_v[i][0]) gap_cnt <= 4'd0;
                         else if (gap_cnt != 4'hF) gap_cnt <= gap_cnt + 4'd1;
                     end
-                end else if (pcack_en && inj_pend && gap_cnt >= 4'd11) begin
+                end else if (inj_go && gap_cnt >= 4'd11) begin
                     // 静态流已尽, 尾帧 echo 的 ACK 仍需注入 (否则门控卡住尾批)
                     // P4c PCACKOOB: seq = 窗口右沿 (板级满窗纯 ACK 语义)
                     seq_b  = pcack_oob ?
                              (u_tcb.rcv_nxt_r[0] + {16'b0, u_tcb.rcv_wnd_r[0]}) :
                              u_tcb.rcv_nxt_r[0];
-                    ack_b  = inj_ack_val;
+                    // P4d-fix PCSTALL: ack = 高水位 (同 stim 分支, 板级语义)
+                    ack_b  = pcst_mode ? hi_wm : inj_ack_val;
                     ipcs_c = ip_csum_inj(1'b0);
                     inj_crc = 32'hFFFFFFFF;
                     for (bi = 0; bi < 8; bi = bi + 1)
@@ -1002,6 +1107,15 @@ module tb_p4_chain;
                     inj_buf[69] <= inj_crc[15:8];
                     inj_buf[70] <= inj_crc[23:16];
                     inj_buf[71] <= inj_crc[31:24];
+                    ack_last <= pcst_mode ? hi_wm : inj_ack_val;
+                    if (pcst_mode && pcst_stall) begin
+                        inj_sent    <= 1'b1;
+                        k_inj       <= k;
+                        hi_inj      <= hi_wm;
+                        inj_in_sess <= u_tx.retx_active;
+                        snxt_inj    <= u_tcb.snd_nxt_r[0];
+                        suna_inj    <= u_tcb.snd_una_r[0];
+                    end
                     inj_done <= echo_seen;
                     inj_play <= 1'b1;
                     inj_idx  <= 7'd0;
@@ -1019,7 +1133,7 @@ module tb_p4_chain;
                 end
                 // P5: 主动链未完成 (或注入帧在播) 时不收尾 — done 后 initial 块
                 // 才写 resp (PCA/PCACAM 行), 必须等回显落地
-                if (i >= nstim && !inj_pend && !inj_play && !pca_play &&
+                if (i >= nstim && !inj_pend_eff && !inj_play && !pca_play &&
                     !(pca_en && !pca_done)) done <= 1;
             end
         end
@@ -1031,6 +1145,21 @@ module tb_p4_chain;
         pcack_oob = $test$plusargs("PCACKOOB");
         pca_en = $test$plusargs("PCACTIVE");
         inj_wnd = $test$plusargs("PCWND1K") ? 16'h0010 : 16'h4000;
+        // P4d-fix PCSTALL 参数: 阈值/延迟经 pcstall.memh (文件通道, 同 txdrop —
+        // xsim loader 拆含 '=' 的 plusarg)。run_tb_p4_chain_stall.bat 写入
+        // "THRESH DELAY"; 缺文件 = 默认 (0xBFFE, 300)。
+        pcst_mode  = 0;
+        pcst_thresh = 32'hBFFE;
+        pcst_delay  = 32'd300;
+        if ($test$plusargs("PCSTALL")) begin
+            pcst_mode = pcack_en;      // 单独 +PCSTALL 无效 (注入机制共用 PCACK)
+            fdi = $fopen("pcstall.memh", "r");
+            if (fdi != 0) begin
+                $fscanf(fdi, "%d", pcst_thresh);
+                $fscanf(fdi, "%d", pcst_delay);
+                $fclose(fdi);
+            end
+        end
         txdrop_n1 = 0; txdrop_n2 = 0;
         // TXDROP 索引经 txdrop.memh 传入 (run_tb_p4_burst.bat 由 %7/%8 生成):
         // xsim.bat 经 loader 会把含 '=' 的 plusarg 拆碎 ("Expected a switch
@@ -1122,6 +1251,15 @@ module tb_p4_chain;
         // P4e: VLAN 剥离计数 (u_vlan.stat_stripped) — 仅 VLAN 注入模式 (vlan.memh)
         // 下应 > 0; 默认模式必须为 0 (fast path 不带 tag 发/收)。
         $fwrite(fd, "STRIPPED %0d\n", vlan_stat_stripped);
+        // P4d-fix PCSTALL 结果 (?%): 阈值/延迟 + 停发拍/会话起点/注入拍 +
+        // 注入证据 (会话活性 + 注入拍板侧 TCB) + 高水位 + 停摆点之后的新数据
+        // echo 帧数 + 终态 TCB (snd_una 是否追上高水位) + 回卷会话总数
+        if (pcst_mode)
+            $fwrite(fd, "PCSTALL %0d %0d %0d %0d %0d %0d %0d %0d %08h %08h %0d %08h %08h %08h %08h %0d\n",
+                    pcst_thresh, pcst_delay, k_stall, sess_seen, k_sess,
+                    inj_sent, inj_in_sess, k_inj, hi_inj, hi_stall,
+                    new_cnt, snxt_inj, suna_inj,
+                    u_tcb.snd_nxt_r[0], u_tcb.snd_una_r[0], tx_stat_retx);
         $fclose(fd);
         if (trunc_n > 0 && rx_stat_trunc == 0)
             $display("TRUNC_MISS n=%0d stat_drop_trunc=0 (截断支未走过)", trunc_n);
@@ -1133,6 +1271,12 @@ module tb_p4_chain;
                      pca_arp_req, pca_arp_inj, pca_syn_seen, pca_synack_inj,
                      pca_ack_seen, pca_data_inj, pca_echo_seen, pca_echo_ok,
                      pca_iss, pca_k_syn, pca_to);
+        if (pcst_mode)
+            $display("PCSTALL thresh=%0d delay=%0d k(stall=%0d sess=%0d inj=%0d) sess=%0d inj_sent=%0d in_sess=%0d hi_inj=%08h hi_stall=%08h new_after=%0d snxt_inj=%08h suna_inj=%08h snd_nxt=%08h snd_una=%08h retx=%0d",
+                     pcst_thresh, pcst_delay, k_stall, k_sess, k_inj,
+                     sess_seen, inj_sent, inj_in_sess, hi_inj, hi_stall,
+                     new_cnt, snxt_inj, suna_inj,
+                     u_tcb.snd_nxt_r[0], u_tcb.snd_una_r[0], tx_stat_retx);
         $display("DONE rx(pass=%0d nm=%0d ack=%0d) tx(fr=%0d ack=%0d) eco(echo=%0d) slow(cmt=%0d drp=%0d tx=%0d pg=%0d)",
                  rx_stat_pass, rx_stat_nonmatch, rx_stat_ack,
                  tx_stat_frames, tx_stat_ack, eco_stat_echo,
@@ -1171,6 +1315,35 @@ module tb_p4_chain;
             end else begin
                 if (eco_run + 1 > eco_max) eco_max <= eco_run + 1;
                 eco_run <= eco_run + 1;
+            end
+        end
+    end
+
+    // ---- P4d-fix PCSTALL 排障探针 (+RTODBG): RTO 计时/回卷/门控时间线 ----
+    // 目的: 确证"停发 -> 窗口填满 -> RTO 回卷 -> 重放"链的拍级节奏 (含
+    // rto_timer[0]/scan 频率/门控开闭), 仅在 +RTODBG 下打印。
+    reg        svc_d;
+    reg [31:0] gate_closed, gate_open, wm_prev;
+    always @(posedge clk) begin
+        if (!rst_n) begin
+            svc_d <= 0; gate_closed <= 0; gate_open <= 0;
+        end else if ($test$plusargs("RTODBG")) begin
+            if (u_tx.svc && !svc_d)
+                $display("SVCDBG k=%0d id=%0d rewind=%b nxt=%08h una=%08h hi=%08h ep=%0d pend=%04h tmr=%0d",
+                         k, u_tx.svc_id, u_tx.svc_rewind, rb_snd_nxt, rb_snd_una,
+                         u_tx.retx_hi, u_tx.epoch[u_tx.svc_id], u_tx.rto_pend,
+                         u_tx.rto_timer[u_tx.svc_id]);
+            svc_d <= u_tx.svc;
+            if (k % 20000 == 0)
+                $display("RTODBG k=%0d t0=%0d t1=%0d sid=%0d st=%0d ackp=%b nxt0=%08h una0=%08h wnd0=%04h pend=%04h retxa=%b closed=%0d open=%0d",
+                         k, u_tx.rto_timer[0], u_tx.rto_timer[1], u_tx.scan_id,
+                         u_tx.state, u_tx.ack_pend_r, u_tcb.snd_nxt_r[0],
+                         u_tcb.snd_una_r[0], u_tcb.snd_wnd_r[0], u_tx.rto_pend,
+                         u_tx.retx_active, gate_closed, gate_open);
+            // 门控开闭统计 (仅 conn0 活数据展示拍): win_open 0 = 门关
+            if (u_tx.state == 3'd0 && u_tx.s_axis_tvalid) begin
+                if (u_tx.wnd_open) gate_open <= gate_open + 32'd1;
+                else               gate_closed <= gate_closed + 32'd1;
             end
         end
     end
@@ -1290,6 +1463,12 @@ module tb_p4_chain;
                     echo_seen <= echo_seen + 16'd1;
                     s_cur = {cap[38], cap[39], cap[40], cap[41]};
                     p_cur = {16'b0, cap[16], cap[17]} - 32'd40;
+                    // P4d-fix PCSTALL: 高水位 (max 帧尾 seq) = 板侧 snd_nxt 模型;
+                    // 注入的高水位 ACK 号 = hi_wm; 停摆点之后 seq >= hi_inj 的帧
+                    // = 板侧新发数据 (ring 重放帧恒 < 高水位, 不计)
+                    if ((s_cur + p_cur) > hi_wm) hi_wm <= s_cur + p_cur;
+                    if (pcst_mode && inj_sent && (s_cur >= hi_inj))
+                        new_cnt <= new_cnt + 16'd1;
                     if (s_cur == exp_seq) begin
                         // 顺序帧: 累计推进
                         exp_seq <= s_cur + p_cur;

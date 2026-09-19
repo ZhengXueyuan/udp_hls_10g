@@ -192,6 +192,9 @@ module wrapper_tcp (
     wire [15:0] ra_rcv_wnd;
     wire [3:0]  ra_state;
     wire [3:0]  ra_wscale;
+    // P4d-fix: tcp_tx_frame 回卷会话高水位/活性 -> tcp_rx ack_ok 上界
+    wire [31:0] tx_retx_hi;
+    wire        tx_retx_active;
     // ---- TCB 读口 B (TX) ----
     wire [3:0]  rb_id;
     wire [31:0] rb_rcv_nxt, rb_snd_nxt, rb_snd_una;
@@ -308,6 +311,8 @@ module wrapper_tcp (
         .ra_rcv_wnd     (ra_rcv_wnd),
         .ra_state       (ra_state),
         .ra_wscale      (ra_wscale),
+        .ra_retx_hi     (tx_retx_hi),
+        .ra_retx_active (tx_retx_active),
         .upd_wr         (rx_upd_wr),
         .upd_id         (rx_upd_id),
         .upd_sel        (rx_upd_sel),
@@ -523,7 +528,9 @@ module wrapper_tcp (
         .retx_req       (tx_retx_req),
         .retx_id        (tx_retx_id),
         .retx_gnt       (tx_retx_gnt),
-        .stat_retx      ()
+        .stat_retx      (),
+        .o_retx_hi      (tx_retx_hi),
+        .o_retx_active  (tx_retx_active),
     );
 
     mac_tx_64 u_mac_tx (

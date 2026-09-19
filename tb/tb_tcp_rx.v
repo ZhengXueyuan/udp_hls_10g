@@ -112,6 +112,7 @@ module tb_tcp_rx;
         .ra_id(ra_id),
         .ra_rcv_nxt(ra_rcv_nxt), .ra_snd_nxt(ra_snd_nxt), .ra_snd_una(ra_snd_una),
         .ra_rcv_wnd(ra_rcv_wnd), .ra_state(ra_state), .ra_wscale(ra_wscale),
+        .ra_retx_hi(32'd0), .ra_retx_active(1'b0),
         .upd_wr(u_rx_upd_wr), .upd_id(u_rx_upd_id), .upd_sel(u_rx_upd_sel), .upd_val(u_rx_upd_val),
         .upd_gnt(rx_gnt),
         .ack_req(ack_req), .ack_id(ack_id), .ack_val(ack_val),

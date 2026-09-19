@@ -111,12 +111,24 @@ cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p4sim\run_tb_p4_burst.bat 200'             
 TRUNC=100 TRUNCM=8   cmd //c '...run_tb_p4_burst.bat 200'                              # 门2 截断帧
 HALFDROP=100 HALFDROPK=990 cmd //c '...run_tb_p4_burst.bat 200'                        # 门3 半帧中止
 cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p4sim\run_tb_p4_chain.bat'                        # 门4 全链
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p4sim\run_tb_p4_chain_stall.bat'                  # 门5 死锁复现 (P4d-fix)
 # 附加: TXDROP=50 (快速重传自愈) / gate-4096 / dupstorm / pause-300k /
 #       PCACKOOB=1 (纯 ACK 窗口右沿语义, w6a 修复复现门) / conn1 判据
 #       单元 TB: retx_ram (7 组含 latency=2cyc) / frame_fifo (D=8192) / uart_dbg
+# 全矩阵一键: bash sim/p4sim/run_matrix_p4dfix.sh (16 门, 逐门日志 matrix_*.log)
 ```
 判据: BURST OK + 载荷逐字节全等 + ECOMAX≤182 (无合并巨帧) + TRUNCS/HALFD 哨兵 +
 ACK 位置合法性 (截断段/OOO/补缺口段) + abort/eend=0。P4c 当前全矩阵 13 门绿。
+
+**门5 (PCSTALL, P4d-fix)**: 复现板级 48KB 满窗 + RTO 重放期收到"已收全部数据"
+的高水位 ACK。TB: 累计 ACK 到阈值字节后**永久停发 ACK** → 板侧在飞累积 → RTO
+回卷 → 重放开始后注入**一个** ack = 高水位的纯 ACK → 之后不再注入。判据
+(`gen_stim_p4_chain.py stallcheck`): 注入确在会话期内且注入时 snd_nxt < ack
+(原始 bug 条件) + 之后 **snd_una 追上高水位** 且新数据继续发出 (seq >= 高位
+的 echo 帧)。**修复前 (ack_ok 用回卷后 snd_nxt) 必 FAIL** (ACK 被拒 → snd_una
+永久冻结), 修复后 OK — 两跑拍级同构, 证据 `sim/p4sim/stall_gate_*.log`。
+参数: `run_tb_p4_chain_stall.bat [N [BYTES [DELAY]]]` (默认 200 49150 300;
+BYTES/DELAY 经 pcstall.memh 同源传入 TB 与 checker)。
 
 **板级测试** (`tools/`):
 - `pc_tcp_rate_test.py [MB]` — TCP echo 吞吐 (双线程, 稳态 10-90% 速率)
