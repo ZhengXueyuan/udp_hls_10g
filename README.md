@@ -18,6 +18,7 @@ Kintex-7 XC7K325T 纯硬件 TCP/IP 数据面: 64bit 字流 @125MHz, 当前 1G RG
 | P4b | HLS 正式握手 (SYN/FIN/RST 分流 + cfg 通道) | ✅ 板级 PASS |
 | P4b-7 | **快速重传自愈** (dup-ACK 触发 + RTO 兜底, retx_ram ring) | ✅ 板级 PASS |
 | P4c | 窗口 12KB→48KB + retx_ram 64KB/连接 + ACK-early 破案 (w6a 纯 ACK 修复) | ✅ 板级 PASS |
+| P4d | 修补包: TCP 主动连接 (客户端) + VLAN fast path + w6 截断支 TB | ✅ sim 全绿 |
 | P5 | app interface (对上层 TCP/UDP 调用接口) | ⬜ 下一步 |
 | P6 | 10G 提速 (156.25MHz + PG157 shim) | ⬜ 规划中 |
 
@@ -49,9 +50,12 @@ Kintex-7 XC7K325T 纯硬件 TCP/IP 数据面: 64bit 字流 @125MHz, 当前 1G RG
 | DHCP | DISCOVER 自发行文 (主动 UDP 客户端行为) | HLS |
 | TCP | 服务端被动握手 (SYN→SYN+ACK→ESTABLISHED / FIN→FIN+ACK→LAST_ACK / RST) + **数据 echo** | 握手 HLS; 数据 fast path |
 
-- **TCP 角色**: 服务端 (被动打开, 无主动 connect); 端口 8080; 16 连接 CAM/TCB
-- **VLAN**: fast path RTL 无 VLAN (按无 VLAN 字节布局解析); 慢路径 HLS 支持 802.1Q/802.1ad
-  自动跳过 → VLAN 帧可到达慢路径协议, 但 fast path TCP 数据面带 VLAN 不支持
+- **TCP 角色**: 服务端 (被动打开) + **客户端 (主动 connect, P4d)** — ACTIVE_CONNECT 宏
+  上电自动连固定 IP:port (ARP 前置 + T_SYN_SENT 状态 + SYN 限次重传, 与被动监听共存);
+  端口 8080; 16 连接 CAM/TCB
+- **VLAN**: fast path 单层 802.1Q/1ad 剥离 (P4d: vlan_strip shim — mac_rx 后剥 TPID+TCI
+  重对齐, 下游零改动; QinQ 剥一层后自然退化慢路径); 慢路径 HLS 支持多层 802.1Q/1ad;
+  TX 恒无 tag (接 trunk 时回包不带 tag — 已知语义)
 - **流控**: TX 窗口门控 in_flight < min(peer_wnd, RING_CAP); RX 通告 48KB; seq 窗口语义
   (边界接受 / 窗口内 OOO 丢数据回 dup-ACK / 超窗静默丢 / 零长 ACK 含右沿); 无拥塞控制 (设计决策)
 - **重传**: 3×dup-ACK 整窗口回卷重放 + RTO 兜底 (16 连接轮扫, 双丢自愈); 无 SACK/NewReno
@@ -128,8 +132,11 @@ cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_program_p4.bat'    # JTAG 烧录 (1MH
 ## 遗留
 
 - P5 app interface / P6 10G 未开工; DDR 留给 10G 大窗口 (BRAM ring 64KB/连接已用 69% BRAM)
-- TCP 主动连接 (客户端)、VLAN fast path、SACK、拥塞控制未实现 (echo 场景决策)
+- SACK、拥塞控制未实现 (echo 场景决策); TCP 主动连接/VLAN fast path 已补 (P4d),
+  板级实测待做 (主动连接默认宏关, VLAN 无真实带 tag 对端)
+- 10G 风险预记: VLAN 剥离的 tag 字气泡 + 尾拍停靠 (1G 由 mac 8 深 FIFO + IFG 吸收)
+  在 10G 线速会吃掉 IFG 的 2/3 — P6 需复核 (与 rx_classify 已知 min-frame 丢帧叠加)
 - PC 侧网卡 (Killer E5000B) 驱动重启的怪帧/半帧由 RTL 三层防御兜底, 对端根因未深究;
   PC 网卡线级截断/线级丢帧是 1G 线速不可达的最终瓶颈 (FPGA 侧可做项已尽)
-- w6 截断支 (帧在头字就结束) 无干净 TB 用例 (激励侧构造限制); wrapper_tcp.v (P3 目标) 端口过时
+- wrapper_tcp.v (P3 目标) 端口过时
 - 诊断脚手架 (UART/trace/LED) 保留为长期板级诊断接口
