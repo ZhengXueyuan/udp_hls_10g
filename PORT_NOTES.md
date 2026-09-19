@@ -2424,3 +2424,20 @@ RegVlanid; 抓包点在 tag 插入之前故抓包看不见 tag, 用板侧 MW 计
 **测试工具结论 (用户议题)**: 噪声/性能问题的根因 = 内核栈参与测试, 解法 =
 合成对端 (不走 socket) + 屏蔽内核反应, 语言 (C++ vs Python) 次要; C++/npcap 的
 增量价值在精确时序/线速生成/故障注入 (P6 10G 仍不够, 需 DPDK 或硬件测试仪)。
+
+### P4d 板级验收: TCP 主动连接通过 (2026-09-19)
+
+- 烧 ACTIVE_CONNECT=1 板级 bitstream (WNS +0.219), PC 侧 `tools/board_active_test.py`
+  监听 9090 → **71.1s 后板侧主动连上** (源 192.168.100.2:8080) → 握手 OK →
+  100B 数据 echo 逐字节一致 ✓ (fast path TCB 由 HLS cfg 记录配好)
+- **ACTIVE_DELAY 实测**: 71s 而非注释估的 2s — "pass" 换算系数实为 ~52 cycle/pass
+  (与修复 agent 的 sim 实测一致), 250000000 passes ≈ 100s 量级。板级默认值宜下调
+  (或注释修正); 不影响功能 (期间自动重试)。
+- 期间踩坑: 两个并行任务 (我 + C++ agent) 先后用板, C++ agent 把板压死时用
+  `run_program_tcp.bat` (P3 旧 bitstream, Aug 28) 重烧恢复 → 我的主动测试一度失败。
+  **教训: 板子必须串行占用; 恢复用 run_program_p4.bat (当前设计), 不要用旧项目
+  bitstream。**
+
+### P4d 板级验收总计: 3/3 通过
+① 死锁修复 (32/64MB 全通) ② VLAN fast path (全 tag 链路 32/64MB 全通)
+③ 主动连接 (握手 + echo)
