@@ -566,11 +566,29 @@ module tb_p4_chain;
         else if (raw_badtail) hd_fired <= 1'b1;
     end
 
-    rx_classify u_classify (
+    // ---- P4e: VLAN 剥离 shim (与 board/wrapper_p4.v 同位置: mac_rx_64 出口 ->
+    //      rx_classify 之前; HALFDROP 掩码是 mac 级仿真注入, 保持在本模块之前) ----
+    wire [63:0] vs_tdata;
+    wire [7:0]  vs_tkeep;
+    wire        vs_tvalid, vs_tready, vs_tlast, vs_tuser, vs_tcrs, vs_terr;
+    wire [31:0] vlan_stat_stripped;
+
+    vlan_strip u_vlan (
         .clk(clk), .rst_n(rst_n),
         .s_axis_tdata(s_tdata), .s_axis_tkeep(s_tkeep), .s_axis_tvalid(s_tvalid),
         .s_axis_tready(s_tready), .s_axis_tlast(s_tlast), .s_axis_tuser(s_tuser),
         .s_axis_tcrs(s_tcrs), .s_axis_terr(s_terr),
+        .m_axis_tdata(vs_tdata), .m_axis_tkeep(vs_tkeep), .m_axis_tvalid(vs_tvalid),
+        .m_axis_tready(vs_tready), .m_axis_tlast(vs_tlast), .m_axis_tuser(vs_tuser),
+        .m_axis_tcrs(vs_tcrs), .m_axis_terr(vs_terr),
+        .stat_stripped(vlan_stat_stripped), .dbg_vlan()
+    );
+
+    rx_classify u_classify (
+        .clk(clk), .rst_n(rst_n),
+        .s_axis_tdata(vs_tdata), .s_axis_tkeep(vs_tkeep), .s_axis_tvalid(vs_tvalid),
+        .s_axis_tready(vs_tready), .s_axis_tlast(vs_tlast), .s_axis_tuser(vs_tuser),
+        .s_axis_tcrs(vs_tcrs), .s_axis_terr(vs_terr),
         .m_fast_tdata(f_tdata), .m_fast_tkeep(f_tkeep), .m_fast_tvalid(f_tvalid),
         .m_fast_tready(f_tready), .m_fast_tlast(f_tlast), .m_fast_tuser(f_tuser),
         .m_fast_tcrs(f_tcrs), .m_fast_terr(f_terr),
@@ -1074,6 +1092,9 @@ module tb_p4_chain;
         $fwrite(fd, "ECOMAX %0d\n", eco_max);
         // P4b-7-P6: 半帧中止注入参数 + 掩码触发 + TX 卡 S_RECV 连拍
         $fwrite(fd, "HALFD %0d %0d %0d %0d\n", hd_n, hd_k, hd_fired, tdstk_max);
+        // P4e: VLAN 剥离计数 (u_vlan.stat_stripped) — 仅 VLAN 注入模式 (vlan.memh)
+        // 下应 > 0; 默认模式必须为 0 (fast path 不带 tag 发/收)。
+        $fwrite(fd, "STRIPPED %0d\n", vlan_stat_stripped);
         $fclose(fd);
         if (trunc_n > 0 && rx_stat_trunc == 0)
             $display("TRUNC_MISS n=%0d stat_drop_trunc=0 (截断支未走过)", trunc_n);

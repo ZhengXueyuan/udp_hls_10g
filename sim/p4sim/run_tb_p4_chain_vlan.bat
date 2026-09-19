@@ -1,4 +1,9 @@
 @echo off
+REM run_tb_p4_chain_vlan.bat -- P4e VLAN gate: same chain gate but every
+REM   conn0 TCP data frame (data7a/data7b/burst) carries a single 802.1Q tag
+REM   (vlan.memh=1, read by BOTH gen_stim and the checker). Echo/ACK/stats
+REM   expectations are UNCHANGED (fast TX sends no tag); only stat_stripped
+REM   > 0 is added.
 REM run_tb_p4_chain.bat — P4a 全链 (含真 HLS udp_echo) xsim 一条线
 REM 自生成刺激; 从 Git Bash: cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p4sim\run_tb_p4_chain.bat'
 cd /d %~dp0
@@ -8,9 +13,10 @@ REM from a previous run_tb_p4_burst.bat TRUNC run (TB/gen both read it).
 if exist trunc.memh del /q trunc.memh
 REM P4b-7-P6: same for the HALFDROP half-frame abort injection (halfdrop.memh).
 if exist halfdrop.memh del /q halfdrop.memh
-REM P4e: the VLAN gate leaves vlan.memh behind -- delete it so this default
-REM gate runs without VLAN tagging (gen_stim/check both read that file).
-if exist vlan.memh del /q vlan.memh
+REM P4e VLAN injection switch for gen_stim/check (file channel: the xsim
+REM loader splits -testplusarg args containing '='). Always rewritten so a
+REM stale file never leaks; the default gates delete vlan.memh.
+> vlan.memh echo 1
 set PY=C:\Users\zhxue\anaconda3\python.exe
 set XV=C:\AMDDesignTools\2025.2\Vivado\bin
 set HLS=D:\repo\ECO\udp_hls_10g\hls\slowstack_prj\solution1\syn\verilog
@@ -36,6 +42,7 @@ call %XV%\xvlog.bat -work xil_defaultlib ^
   D:\repo\ECO\udp_hls_10g\rtl\tcp_echo.v ^
   D:\repo\ECO\udp_hls_10g\rtl\axis_pipe.v ^
   D:\repo\ECO\udp_hls_10g\rtl\rx_classify.v ^
+  D:\repo\ECO\udp_hls_10g\rtl\vlan_strip.v ^
   D:\repo\ECO\udp_hls_10g\rtl\slow_cfg_adp.v ^
   D:\repo\ECO\udp_hls_10g\rtl\slow_rx_adp.v ^
   D:\repo\ECO\udp_hls_10g\rtl\slow_tx_adp.v ^

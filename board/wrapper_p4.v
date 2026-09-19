@@ -288,7 +288,21 @@ module wrapper_p4 (
         .dbg_stat_words_out (mac_dbg_words_out)
     );
 
-    rx_classify u_classify (
+    // --- P4e VLAN 剥离 shim: mac_rx_64 → rx_classify 之间剥单层 802.1Q/1ad
+    //     (TPID+TCI = 4 字节左移), 使带 tag 帧在 classify/tcp_rx 眼里就是无 tag
+    //     字节布局 (ethertype 回 byte 12-13) — tcp_rx 载荷偏移 54B 无须改动。
+    //     MW (mac_rx_64 出词) 计数点在本模块之前, 不受影响; VLAN 帧剥后短 4B
+    //     => 出词少 0~1 个 (CW/RW 相应少, 非丢词)。QinQ 剥一层后内层 TPID 仍落
+    //     byte 12-13 -> 慢路径 (HLS 支持多层), 本模块不误判。
+    //     时序: 非 VLAN 恒 1 拍直通; VLAN 帧 tag 字处 1 拍输出气泡 + 尾字至多
+    //     1 拍 S_TAIL (s_axis_tready=0), 由 mac_rx_64 的 8 深 FIFO + IFG 吸收。 ---
+    wire [63:0] vs_tdata;
+    wire [7:0]  vs_tkeep;
+    wire        vs_tvalid, vs_tready, vs_tlast, vs_tuser, vs_tcrs, vs_terr;
+    wire [31:0] vlan_stat_stripped;   // 板级观测: UART 帧行未接 (后续可加)
+    wire        vlan_dbg;
+
+    vlan_strip u_vlan_strip (
         .clk            (gmii_clk),
         .rst_n          (reset_n),
         .s_axis_tdata   (rx_tdata),
@@ -299,6 +313,29 @@ module wrapper_p4 (
         .s_axis_tuser   (rx_tuser),
         .s_axis_tcrs    (rx_tcrs),
         .s_axis_terr    (rx_terr),
+        .m_axis_tdata   (vs_tdata),
+        .m_axis_tkeep   (vs_tkeep),
+        .m_axis_tvalid  (vs_tvalid),
+        .m_axis_tready  (vs_tready),
+        .m_axis_tlast   (vs_tlast),
+        .m_axis_tuser   (vs_tuser),
+        .m_axis_tcrs    (vs_tcrs),
+        .m_axis_terr    (vs_terr),
+        .stat_stripped  (vlan_stat_stripped),
+        .dbg_vlan       (vlan_dbg)
+    );
+
+    rx_classify u_classify (
+        .clk            (gmii_clk),
+        .rst_n          (reset_n),
+        .s_axis_tdata   (vs_tdata),
+        .s_axis_tkeep   (vs_tkeep),
+        .s_axis_tvalid  (vs_tvalid),
+        .s_axis_tready  (vs_tready),
+        .s_axis_tlast   (vs_tlast),
+        .s_axis_tuser   (vs_tuser),
+        .s_axis_tcrs    (vs_tcrs),
+        .s_axis_terr    (vs_terr),
         .m_fast_tdata   (f_tdata),
         .m_fast_tkeep   (f_tkeep),
         .m_fast_tvalid  (f_tvalid),

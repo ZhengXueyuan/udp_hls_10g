@@ -117,6 +117,31 @@ def mk_syn_ws(wnd=0x2000, wscale=SYN_WSCALE):
     return finish(fb)
 
 
+# P4e VLAN: fast path 单层 802.1Q 剥离门 (vlan.memh = "1" 开)。
+# 开启时所有 conn0 TCP 数据帧 (data7a/data7b/burst 段) 在 dst+src 之后插单层
+# tag (TPID 0x8100 + TCI 0x0000), IP 头内容 (total_len/csum) 不变 (total_len
+# 不含 tag), FCS 由 finish/重算覆盖 tag 字节。慢路径帧 (ARP/ICMP/UDP/SYN) 与
+# conn1 数据段不加 tag (只测 fast path); echo (TX) 恒无 tag -> 判据全部照旧,
+# 仅多一条 stat_stripped > 0 断言。
+VLAN_ON = False
+
+
+def vlan_tag(fb):
+    """帧字节 (dst+src+ethertype+...) -> 插单层 802.1Q tag: dst+src+TPID+TCI+eth。"""
+    return fb[:12] + b'\x81\x00' + b'\x00\x00' + fb[12:]
+
+
+def read_vlan(simdir):
+    """VLAN 注入开关: vlan.memh 由 run_tb_p4_chain_vlan.bat / run_tb_p4_burst_vlan.bat
+    写入 ("1" = 开, 缺失或 0 = 关)。与 trunc.memh/txdrop.memh 同通道 (xsim loader
+    会拆含 '=' 的 -testplusarg)。"""
+    try:
+        with open(os.path.join(simdir, 'vlan.memh')) as fh:
+            return int(fh.read().split()[0]) != 0
+    except (OSError, ValueError, IndexError):
+        return False
+
+
 def read_trunc(simdir):
     """P4b-7-P6 截断注入参数: trunc.memh 由 run_tb_p4_burst.bat 写入 ("N M",
     bat 环境变量 TRUNC/TRUNCM); 文件缺失 = (0, 8) 关。与 txdrop.memh 同通道 —
@@ -183,6 +208,16 @@ def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000,
     def add(name, fb, fcs, gap):
         F.append(dict(name=name, fb=fb, fcs=fcs, gap=gap))
 
+    def mk_data(seq, plen, wnd, flags=0x18):
+        """conn0 TCP 数据段 (VLAN_ON 时插单层 tag 并重算 FCS)。段内字段 (seq/ack/
+        plen/total_len/csum) 与无 tag 版逐字节相同 — 板上剥 tag 后 tcp_rx 视图
+        完全一致, 故 echo/ACK/统计期望值不变。"""
+        fb, fcs = C.mk_tcp_frame(0, seq, HS_ACKVAL, flags, plen, wnd, True)
+        if VLAN_ON:
+            fb = vlan_tag(fb)
+            fcs = struct.pack('<I', zlib.crc32(fb) & 0xFFFFFFFF)
+        return fb, fcs
+
     fb, fcs = mk_arp_req()
     add('arp1', fb, fcs, GAP_SLOW)
     fb, fcs, _pl = mk_icmp_req()
@@ -197,9 +232,9 @@ def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000,
     # CAM/TCB 配好前到达被丢 (SYN 重传才能救)。
     fb, fcs = C.mk_tcp_frame(0, 1000, HS_ACKVAL, 0x10, 0, 0x4000, True)
     add('hs_ack', fb, fcs, GAP_SLOW)
-    fb, fcs = C.mk_tcp_frame(0, 1000, HS_ACKVAL, 0x18, 7, 0x4000, True)
+    fb, fcs = mk_data(1000, 7, 0x4000)          # VLAN_ON 时单层 tag + 重算 FCS
     add('data7a', fb, fcs, GAP_TCP)
-    fb, fcs = C.mk_tcp_frame(0, 1007, HS_ACKVAL, 0x18, 9, 0x4000, True)
+    fb, fcs = mk_data(1007, 9, 0x4000)
     add('data7b', fb, fcs, GAP_TCP)
     # echo 载荷地图: data7a echo seq = 0x12345679 (握手后 snd_nxt = HLS_ISS+1,
     # 板测/TCBF 观序实证), data7b = +7, burst 段顺延实际 plen (pause/608 变体
@@ -253,7 +288,7 @@ def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000,
             plen = 1460
         segs.append((seq, plen))
         dfi += 1
-        fb, fcs = C.mk_tcp_frame(0, seq, HS_ACKVAL, 0x18, plen, burst_wnd, True)
+        fb, fcs = mk_data(seq, plen, burst_wnd)
         if dfi == trunc_at:
             # 截断帧: 头 (:total_len=40+plen=1500 / seq / 端口 / 原 csum) 原样,
             # 载荷只留前 trunc_len 字节, FCS 按截断后内容重算
@@ -287,8 +322,7 @@ def build_rx_frames(burst=0, pause_at=-1, pause_len=0, burst_wnd=0x4000,
         # RX 重放段是 dup (seq < rcv_nxt → 纯 ACK 应答, 无 echo) — 不进 pmap。
         if dupstorm and (b % 9) == 8 and b >= 2:
             for d in (b - 2, b - 1):
-                fb, fcs = C.mk_tcp_frame(0, seq_hist[d], HS_ACKVAL, 0x18,
-                                         1460, burst_wnd, True)
+                fb, fcs = mk_data(seq_hist[d], 1460, burst_wnd)
                 add('dup%d_%d' % (b, d), fb, fcs, 12)
             # RTT 间隙 (12KB 窗口周期: PC 等 ACK ~0.1ms = 12500 拍)
             if len(F) >= 1:
@@ -388,7 +422,7 @@ def parse_gmii(fn):
     byte_lines = []
     ev = dict(fend=[], ack=[], synp=[], stats7=None, stx=None, seco=None,
               camf=None, tcbf=None, srx=None, stx2=None, smac=None, retx=None,
-              truncs=None, ecomax=None, halfd=None,
+              truncs=None, ecomax=None, halfd=None, stripped=None,
               pca=None, pcacam=[])
     with open(fn) as fh:
         for line in fh:
@@ -425,6 +459,8 @@ def parse_gmii(fn):
                 ev['ecomax'] = int(p[1])
             elif p[0] == 'HALFD':
                 ev['halfd'] = tuple(int(x) for x in p[1:])
+            elif p[0] == 'STRIPPED':   # P4e VLAN 剥离计数
+                ev['stripped'] = int(p[1])
             elif p[0] == 'PCA':        # P5 PCACTIVE 事件 (倒数第二字段 hex = ISS)
                 ev['pca'] = tuple(int(x) for x in p[1:10]) + \
                             (int(p[10], 16), int(p[11]))
@@ -575,6 +611,21 @@ def tcp_fields(body):
     ack, = struct.unpack('!I', body[42:46])
     plen = struct.unpack('!H', body[16:18])[0] - 40
     return kind, cid, seq, ack, plen
+
+
+def _check_stripped(ev, tag):
+    """P4e VLAN 剥离计数断言 (chain/burst 共用): VLAN 注入模式 (vlan.memh=1) 下
+    conn0 数据帧全部带单层 tag -> stat_stripped 必须 > 0; 默认模式必须恰为 0
+    (fast path 两端都不带 tag, 计数非零即误剥)。"""
+    errs = []
+    if ev['stripped'] is None:
+        errs.append('%s: resp 缺 STRIPPED 行 (TB 未接 u_vlan.stat_stripped)' % tag)
+    elif VLAN_ON and ev['stripped'] == 0:
+        errs.append('%s: STRIPPED=0 (VLAN 注入模式应 > 0 — 剥离未生效)' % tag)
+    elif (not VLAN_ON) and ev['stripped'] != 0:
+        errs.append('%s: STRIPPED=%d (默认模式应 0 — 误剥非 tag 帧)'
+                    % (tag, ev['stripped']))
+    return errs
 
 
 def check(simdir):
@@ -734,9 +785,12 @@ def check(simdir):
         errs.append('TRUNCS got %s exp (0, 0) (全链不应有截断)' % (ev['truncs'],))
     if ev['ecomax'] is not None and ev['ecomax'] > 182:
         errs.append('ECOMAX got %s > 182 (echo 帧合并/无尽帧)' % (ev['ecomax'],))
+    # P4e VLAN 剥离: 注入模式必须真剥到 (stat_stripped > 0); 默认模式必须 0
+    errs += _check_stripped(ev, 'chain')
 
-    print('frames RX=%d TX=%d (fast=%d slow=%d)'
-          % (len(frames), len(got), len(fast_got), len(slow_got)))
+    print('frames RX=%d TX=%d (fast=%d slow=%d)  STRIPPED=%s (VLAN %s)'
+          % (len(frames), len(got), len(fast_got), len(slow_got),
+             ev['stripped'], 'ON' if VLAN_ON else 'OFF'))
     if errs:
         for e in errs[:12]:
             print('MISMATCH:', e)
@@ -1273,6 +1327,13 @@ def check_burst(simdir, nburst, txdrop1=0, txdrop2=0, trunc_at=0, trunc_len=8,
     if not pv_ok:
         print('MISMATCH: 载荷逐字节验证未全过')
         ok = False
+    # P4e VLAN 剥离: 注入模式必须真剥到 (stat_stripped > 0); 默认模式必须 0
+    _se = _check_stripped(ev, 'burst')
+    for e in _se:
+        print('MISMATCH:', e)
+    if _se:
+        ok = False
+    print('STRIPPED %s (VLAN 注入 %s)' % (ev['stripped'], 'ON' if VLAN_ON else 'OFF'))
     print('BURST %s' % ('OK' if ok else 'FAIL'))
     return ok
 
@@ -1405,6 +1466,16 @@ if __name__ == '__main__':
     if half_at:
         print('HALFDROP 注入: 第 %d 个 conn0 数据段线上半帧中止 (K=%d 字节载荷)'
               % (half_at, half_k))
+    # P4e VLAN 注入开关 (vlan.memh, 同 trunc/halfdrop 文件通道)。与 TRUNC/
+    # HALFDROP 互斥: 那两个注入按 fb[14] 算 IP 头偏移 (无 tag 布局), 插 tag 会
+    # 错位; 三类注入各自独立成门, 不同开。
+    VLAN_ON = read_vlan(simdir)   # 模块级赋值 (main 体在 __main__ 守卫下)
+    if VLAN_ON and (trunc_at or half_at):
+        print('VLAN 与 TRUNC/HALFDROP 不能同时注入 (帧内篡改按无 tag 布局定位)')
+        sys.exit(2)
+    if VLAN_ON:
+        print('VLAN 注入: conn0 数据帧 (data7a/data7b/burst) 加单层 802.1Q tag'
+              ' (TPID 0x8100 + TCI 0)' )
     frames, pmap = build_rx_frames(burst=nburst, pause_at=pause_at,
                                    pause_len=pause_len, burst_wnd=burst_wnd,
                                    tail608=tail608, dupstorm=dupstorm,

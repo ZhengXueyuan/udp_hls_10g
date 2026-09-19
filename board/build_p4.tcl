@@ -3,7 +3,8 @@
 #                create_project -force + synth/impl/bitstream
 # 用法: 由 run_build_p4.bat 全路径调用 (vivado -mode batch -source board/build_p4.tcl)
 # 产物: vivado_prj/p4_prj.runs/impl_1/wrapper_p4.bit
-# 源: wrapper_p4.v + rtl 16 个 .v + util_gmii_to_rgmii.v
+# 源: wrapper_p4.v + rtl 17 个 .v + util_gmii_to_rgmii.v
+#     (含 P4e vlan_strip.v: mac_rx_64 -> rx_classify 之间单层 VLAN 剥离 shim)
 #     + udp_hls_eco HLS 慢路径综合产物 (161 个 .v, import + .dat 拷贝,
 #       模式照抄 udp_hls_eco/run_vivado_phy1g2.tcl)
 #=============================================================================
@@ -30,6 +31,7 @@ import_files -norecurse ${root_dir}/rtl/crc32_8b.v \
                          ${root_dir}/rtl/tcp_echo.v \
                          ${root_dir}/rtl/axis_pipe.v \
                          ${root_dir}/rtl/rx_classify.v \
+                         ${root_dir}/rtl/vlan_strip.v \
                          ${root_dir}/rtl/slow_rx_adp.v \
                          ${root_dir}/rtl/slow_cfg_adp.v \
                          ${root_dir}/rtl/slow_tx_adp.v \
