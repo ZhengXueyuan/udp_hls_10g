@@ -17,6 +17,9 @@ REM must not leak in -- the TB and the generator both read them)
 if exist txdrop.memh del /q txdrop.memh
 if exist trunc.memh del /q trunc.memh
 if exist halfdrop.memh del /q halfdrop.memh
+REM P4e: delete vlan.memh so this gate never inherits VLAN tagging from a
+REM previous run_tb_p4_*_vlan.bat (gen_stim/apply both read that file).
+if exist vlan.memh del /q vlan.memh
 set PY=C:\Users\zhxue\anaconda3\python.exe
 set XV=C:\AMDDesignTools\2025.2\Vivado\bin
 set HLS=D:\repo\ECO\udp_hls_10g\hls\slowstack_prj\solution1\syn\verilog

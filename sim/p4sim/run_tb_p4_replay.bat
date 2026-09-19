@@ -6,6 +6,9 @@ REM   %1 = NOPCACK (缺省 +PCACK); %2 = 运行日志名 (默认 xsim_run.log)
 REM   用法 (Git Bash): cmd //c 'D:\...\run_tb_p4_replay.bat NOPCACK xsim_runa.log'
 cd /d %~dp0
 if exist txdrop.memh del /q txdrop.memh
+REM P4e: delete vlan.memh so this gate never inherits VLAN tagging from a
+REM previous run_tb_p4_*_vlan.bat (gen_stim/apply both read that file).
+if exist vlan.memh del /q vlan.memh
 set XV=C:\AMDDesignTools\2025.2\Vivado\bin
 set HLS=D:\repo\ECO\udp_hls_10g\hls\slowstack_prj\solution1\syn\verilog
 set XPA=-testplusarg PCACK
