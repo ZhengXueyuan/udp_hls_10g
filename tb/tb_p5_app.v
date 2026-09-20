@@ -352,14 +352,16 @@ module tb_p5_app;
         .stat_fast(), .stat_slow()
     );
 
-    tcp_rx #(
-        // P5b C12: APP_MODE 全链 TB 必须镜像 wrapper 的配置 (.ACC_MARGIN=4096)。
+    tcp_rx u_rx (
+        // P5b C12 / P5d H-fix: APP_MODE 全链 TB 必须镜像 wrapper 的接受裕度配置。
         // 漏传 = 用默认 0 跑 ⇒ 接受界 = 通告界 (无 Δ 裕度) ⇒ 窗口收缩期"seq==
         // rcv_nxt 但窗已塌到 0"的顺序段被拒 (acc_l=0/ackr_l=1) ⇒ 形成空洞 ⇒
         // 后续全乱序 ⇒ 对端 go-back-N 重传 (flow 门实测: seq 丢弃 79 / 重传 75)。
-        // 板级 (wrapper) 传 4096, TB 不传就是"用另一个配置跑门"。
-        .ACC_MARGIN(16'd4096)
-    ) u_rx (
+        // H-fix 后 wrapper 的取值 = min(4096, 10550/ESTAB数) —— 本门是**单连接**
+        // (conn0, 建连期最多瞬时 2 条 ⇒ N<=2) ⇒ wrapper 动态值恰 = 4096 (旧常量)
+        // ⇒ 本门这个常量是**逐位镜像**, 不是"另一个配置" (N>=3 由新门
+        // sim/p5d_multi 覆盖, 那里是动态值)。
+        .ACC_MARGIN(16'd4096),
         .clk(clk), .rst_n(rst_n),
         .s_axis_tdata(f_tdata), .s_axis_tkeep(f_tkeep),
         .s_axis_tvalid(f_tvalid), .s_axis_tready(f_tready),

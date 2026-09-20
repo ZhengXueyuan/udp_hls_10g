@@ -323,15 +323,16 @@ module tb_p5_adv;
         .stat_fast(), .stat_slow()
     );
 
-    tcp_rx #(
-        // P5b C12: APP_MODE 对抗集 TB 镜像 wrapper 配置 (.ACC_MARGIN=4096)
-        // P5b 必修4: 改成 localparam 具名常量 —— 它既是 DUT 的实际配置, 也是
-        // "接受裕度 <= 物理余量" 判据的**唯一绑定点** (checker 断言 ADVCFG 行里
-        // 的 acc_margin <= 物理预算, 见 tools/gen_stim_p5_adv.py 的 ACC_BUDGET)。
-        // 改这里 = 改 DUT 配置, 门会当场响; 不再有"checker 里硬编码 4096 而 DUT
-        // 跑别的值"的脱钩空间。
-        .ACC_MARGIN(TB_ACC_MARGIN)
-    ) u_rx (
+    tcp_rx u_rx (
+        // P5b C12 / P5d H-fix: APP_MODE 对抗集 TB 镜像 wrapper 的接受裕度配置。
+        // (H-fix 后 ACC_MARGIN 由参数变端口; 本门最多 2 条并发连接 ⇒ wrapper 的
+        //  动态值 = min(4096, 10550/N) = 4096 (N<=2) ⇒ 本常量 = 逐位镜像。
+        //  P5b 必修4: localparam 具名常量 —— 它既是 DUT 的实际配置, 也是"接受裕度
+        //  <= 物理余量"判据的**唯一绑定点** (checker 断言 ADVCFG 行的 acc_margin
+        //  <= 物理预算, 见 tools/gen_stim_p5_adv.py 的 ACC_BUDGET; 该 checker 按
+        //  文本解析 `.ACC_MARGIN` 行 ⇒ 端口名保持大写, 见 rtl/tcp_rx.v 注释)。
+        //  改这里 = 改 DUT 配置, 门会当场响。)
+        .ACC_MARGIN(TB_ACC_MARGIN),
         .clk(clk), .rst_n(rst_n),
         .s_axis_tdata(f_tdata), .s_axis_tkeep(f_tkeep),
         .s_axis_tvalid(f_tvalid), .s_axis_tready(f_tready),

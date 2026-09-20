@@ -347,10 +347,69 @@ module tcp_tx_frame (
     // !(a|b|c), 且三位本来就是同源向量); 合并后 16:1 mux 由两个表达式共享 ⇒
     // 面积/深度都不比原式差 (该锥是最差路径: rb_id->TCB 读->wnd 比较->tready->
     // accept->retx_ram WEA, 基线 WNS 仅 +0.2~0.5ns)。
-    wire [15:0] tx_blk = fin_req | fin_sent_r | rst_sent_r;  // 该连接禁止新数据帧
+    // ---- P5d-D1 修复① : + rst_req (abort 请求窗) ----
+    // G3 的 fence 原来只覆盖 rst_sent_r = "RST **已发出**"。RST 的发出要等一次
+    // 扫描 (256 拍) + 组装 ⇒ [app 请求 abort, RST 上线] 这段最长 ~300 拍的窗口里
+    // rst_sent_r 还是 0, 该连接的数据帧照样能起、字照样被接受 ⇒ 给一个**已被 app
+    // 中止**的连接组帧发数据 (协议违规; 且它的 seq 已被 RST 的语义终结)。
+    // app 侧的 app_tx_ready (app_ctrl.v tx_ready_calc) 含 !rst_req ⇒ 合规 app 不
+    // 触发, 但那是"靠 app 自觉" —— 帧侧的启动/接受门必须结构性同门 (坑 10 家族,
+    // P5a-D2 同族)。默认构建 rst_req 恒 0 (wrapper_p4.v:1213 常量, 各 TB 接地) ⇒
+    // 本项逐位不变, 无需 ifdef ✓
+    // 位宽: rst_req 与另三项同为 16 位按连接位图 ⇒ 直接同或, 只多一级 OR,
+    // 不加深 start_id 选择锥 (三项合并的那次 mux 不动)。
+    wire [15:0] tx_blk = fin_req | fin_sent_r | rst_sent_r | rst_req; // 该连接禁止新数据帧
+    // ---- P5d-D1 修复② : 残余 F 项 (FIN 已入 ackq、fin_req 已被清、fin_sent_r 仍 0)
+    //      的闭合 —— "连接必须 ESTAB" 状态门 ----
+    // 残余窗口 (复核后**恰好 1 拍**, 但结构性存在): fin_push 在扫描拍 T 把 FIN
+    // 条目写进 ackq。T 拍 start_data 被 !scan_now 挡住 (fin_push 要求 scan_now),
+    // 但 **T+1 拍** ack_pend_r 还是旧值 0 —— 它由 fifo_sync 的**寄存器指针**比较
+    // (ackq_empty) 寄存得来, 写入拍 T 的 empty 仍为 1 ⇒ 要到 T+2 才反映非空 ——
+    // 于是 T+1 拍 start_data 的全部条件都可能成立。此刻若 fin_req 刚被 app 清掉
+    // (app_ctrl.v:937 只在 state != ESTAB 时清) 且 fin_sent_r 仍 0, 则 tx_blk 三项
+    // 全 0 ⇒ 给一个已被拆掉的连接起一帧数据: CAM 已清 ⇒ dst MAC=0 垃圾帧, 且该帧
+    // 把 snd_nxt 推走 ⇒ 排在 ackq 里的 FIN 落地时 seq 漂移 (侦察 §1-F)。T+2 起
+    // ack_pend_r=1 就挡住了。
+    // 修法: 帧启动/接受门再要求该连接 **ESTAB**。这是与 app 侧 tx_ready_calc 逐项
+    // 对齐的最后一项 (app 四项 ↔ 帧侧: st ← 本项, 在飞 < 帽 ← wnd_open,
+    // !fr/!fs/!rs/!rq ← tx_blk)。
+    // ⚠️ 位宽/时序口径 (必读): tx_blk 是 16 位**按连接位图**, 而 rb_state 是 tcb.v
+    // 的**组合读** `state_r[rb_id]` = **当前 rb_id 那一个连接**的状态 (单值) ⇒ 不能
+    // 按位与, 只能对 **start_id 那一位**做状态门。该口径成立的前提 (两个消费点都在
+    // 前提内, 结构性):
+    //   ① start_data 的合取含 !ack_pend_r && !svc && !ring_eval && !scan_now 且
+    //      state == S_IDLE ⇒ rb_id 的 mux (下方 assign rb_id) 取 start_id ⇒
+    //      rb_state === state_r[start_id];
+    //   ② s_axis_tready 的 S_IDLE 子句含**同样**这 5 个条件 ⇒ 同拍同值。
+    // 本门**只准**出现在 S_IDLE 子句里: S_RECV 拍 rb_id = cur_id ≠ start_id, 那时
+    // rb_state 查的是别的连接 ⇒ 那个子句不得引用本门 (现在 S_RECV 子句只判
+    // state==S_RECV, 结构性满足)。
+    // 写法只加"一次比较 + 一次 OR", 并**共享**原来那个 16:1 mux (不新增第二个位图
+    // mux / 16 位移位器 / 优先编码): rb_state 的 4 位读 mux 本模块已被 fin_push/
+    // fin_repush/scan_estab 消费, 这里只是多一个扇出。落到关键锥的是
+    // `rb_id -> state_r LUTRAM 读 -> 4 位比较 -> OR` 约 2 级 LUT, 与**已注册**的
+    // win_open 并联后才进 tready; P5c 实测该锥 3.533ns 富余 ⇒ 不进最差路径。
+    // 为什么包 ifdef APP_MODE (而不是无条件): 本门是**常驻**黑名单 —— 释放只能等
+    // 该槽被重新配置成 ESTAB (unlike rst_sent_r/fin_sent_r 有扫描/cfg_up 释放路径)。
+    // 默认构建的数据面 (fast echo: tcp_echo -> frame_fifo -> 本模块) **没有 app 侧
+    // 就绪门**, 帧一进 FIFO 就不可撤; 对端 close 时 (PC 发 FIN/RST, HLS 会 CFG_DEL
+    // ⇒ state=0) 若 FIFO 里还有该槽的一帧, 它会永久占住队首 (tready 恒 0) ⇒ 整条
+    // TX 数据面饿死 (要等该槽被新连接复用才恢复) —— 与 P5a-D1 (无释放路径的挡连 ⇒
+    // 全局死锁, 坑 9) 同族, 默认构建不能冒 (P4 矩阵的刺激里没有对端 FIN/RST ⇒ 那
+    // 16 门**测不到**这条风险, 不能拿"矩阵绿"当默认构建安全的证据)。
+    // 而 F 项的窗口**只在 APP_MODE 可达** (要 app_ctrl 去清 fin_req; 默认构建
+    // fin_req 恒 0 ⇒ fin_push 恒 0 ⇒ 窗口结构性不存在) ⇒ 只在 APP_MODE 编译
+    // (与 scan_estab 的 `ifdef APP_MODE` 同惯例, 也符合工程规约"新增逻辑一律包
+    // ifdef APP_MODE"): 默认构建 st_ok 常量 1 被折叠 ⇒ 表达式逐位不变 ✓
+`ifdef APP_MODE
+    wire        st_ok    = (rb_state == 4'd1);   // 当前 rb_id (S_IDLE 非旁路拍 = start_id) 是否 ESTAB
+`else
+    wire        st_ok    = 1'b1;                 // 默认构建: 本门不生效 (见上)
+`endif
+    wire        tx_blk_sid = tx_blk[start_id] | ~st_ok;  // start_id 那一位 + 状态门
     wire        start_data = (state == S_IDLE) && !ack_pend_r && !svc && !ring_eval &&
                              !scan_now && !flush_pend && s_axis_tvalid && !pay_full &&
-                             wnd_open && !tx_blk[start_id];
+                             wnd_open && !tx_blk_sid;
 
     // rb/cam 读口 mux: svc/ring_eval/scan_now 拍旁路 start_id (TCB/CAM 组合读,
     // 本拍即目标连接值)。scan_now 仅依赖 scan_tick (寄存器) 与 state/ack_pend_r
@@ -397,10 +456,13 @@ module tcp_tx_frame (
     // 字收进载荷 FIFO (FIFO 满 + 无人排空 = 死锁)。start_id 在 !ack_pend_r 下
     // = s_axis_tid (本子句已排除 ack_pend_r)。
     // P5c-T3 G3: 与 start_data 用**同一个** tx_blk (同门铁律, 坑 10 + 共享 mux)
+    // P5d-D1: 用 tx_blk_sid (= tx_blk[start_id] | 状态门), **与 start_data 逐字相同**
+    // 的表达式 —— 接受门与启动门继续同门 (坑 10); 本子句已排除 ack_pend_r/svc/
+    // ring_eval/scan_now ⇒ rb_id = start_id ⇒ 状态门查的就是本帧的连接 (见上口径)。
     assign s_axis_tready = ((state == S_RECV) ||
                             ((state == S_IDLE) && !ack_pend_r && !svc &&
                              !ring_eval && !scan_now && !flush_pend && wnd_open &&
-                             !tx_blk[start_id])) &&
+                             !tx_blk_sid)) &&
                            !pay_full;
     wire        accept = s_axis_tvalid && s_axis_tready;
 

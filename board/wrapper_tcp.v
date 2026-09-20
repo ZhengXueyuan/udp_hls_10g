@@ -281,6 +281,9 @@ module wrapper_tcp (
 
     tcp_rx u_tcp_rx (
         .clk            (gmii_clk),
+        // P5d H-fix: ACC_MARGIN 由参数改为端口。默认构建显式传 0 ⇒
+        // acc_wnd = {1'b0,ra_rcv_wnd} ⇒ 与旧参数版逐位等价 (C12: 参数→端口必须补全)
+        .ACC_MARGIN     (16'd0),
         .rst_n          (reset_n),
         .s_axis_tdata   (rx_tdata),
         .s_axis_tkeep   (rx_tkeep),

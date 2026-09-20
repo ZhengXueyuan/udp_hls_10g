@@ -127,6 +127,14 @@ struct tcp_conn_t {
 static tcp_conn_t tcp_conn[MAX_TCP_CONN];
 static uint8_t    tcp_retrans_buf[MAX_TCP_CONN][TCP_RX_PAYLOAD];  // BRAM
 
+// P5d-D6: 槽耗尽 (新 SYN 无槽可分配被静默丢弃) 的观测计数 — 纯寄存器, 不新增
+// 端口 (端口表变动会影响 wrapper 与网表替换); 生成的 udp_echo.v 里是
+// grp_tcp_rx_process_fu_*_tcp_stat_no_slot_o, 可 xsim 层级探测。
+static uint16_t tcp_stat_no_slot = 0;
+// 计数读口 (csim 检查用: 顶层不可达 ⇒ csynth 丢弃, 不进网表; 仅让 C++ 模型
+// 能把"槽耗尽"这一原本静默的丢弃观测出来)。
+uint16_t tcp_slot_drop_count(){ return tcp_stat_no_slot; }
+
 
 //=============================================================================
 // Helpers
@@ -571,6 +579,37 @@ static void tcp_rx_process(bool rst, ip_rx_t &ip_rx, uint32_t *buf, mac_tx_req_t
     uint8_t payload[TCP_RX_PAYLOAD];
     if(plen>0&&plen<=TCP_RX_PAYLOAD){int ps=tb+doff;for(int i=0;i<plen;i++){uint16_t wi=ps+(i>>2),bi=i&0x3;payload[i]=(frame_buf[wi]>>((3-bi)*8))&0xFF;}}
     int8_t cid=tcp_find(sp,ip_rx.src_ip);
+    // P5d-D6 签名 #4: 槽耗尽观测。tcp_find 返回 -1 = 既无同四元组槽也无空闲槽
+    // ⇒ 新连接 SYN 被静默丢弃 (策略不变, 只计数; cid<0 时状态不可知, 故按
+    // bare SYN 判 — 与下方建连入口同条件。计数寄存器见文件头声明)。
+    if(cid<0&&(flags&TCP_SYN)&&!(flags&TCP_ACK))tcp_stat_no_slot++;
+    // P5d-D6 (P5d 阻断出口): 本地发起的拆除 (app abort→RST / 关闭超时→RST)
+    // **完全不经 HLS** — fast path 自清 CAM/TCB, 而本文件的槽状态机只有
+    // "对端 FIN/RST"能释放槽 ⇒ 槽停在旧状态, 同四元组的新 SYN 到达时:
+    //   T_ESTABLISHED: 旧码只认 plen>0 / ACK / FIN ⇒ **完全静默**
+    //                  (无 SYN+ACK 且无 cfg ADD), 对端 connect 超时;
+    //   T_SYN_RCVD   : 只重发 SYN+ACK, **不重发 cfg ADD** ⇒ 线上看着正常
+    //                  (对端握手完成) 而 fast 侧无 TCB ⇒ **死数据路径**。
+    //                  板级命中的就是这条: rtl/rx_classify.v 只让 RST/SYN/FIN
+    //                  进 HLS (纯 ACK 走 fast), 故被动连接的 HLS 恒停在
+    //                  T_SYN_RCVD, 拿不到那条唯一的 cfg ADD;
+    //   T_LAST_ACK   : 等一个已被 fast path 消费掉的最终 ACK ⇒ **完全静默**。
+    // 统一在**建连入口**修: bare SYN (无 ACK) 落在非空闲槽 = 对端重新发起该
+    // 四元组 (旧会话已在本地拆除/失联) ⇒ 先清 fast 侧残留 (CFG_DEL, 与
+    // T_SYN_RCVD 的 FIN 分支同语义), 再把槽归零, 由下方既有的"全新 SYN"
+    // 初始化路径接管 (init → T_LISTEN → cfg ADD + SYN+ACK) — 与首建连**逐字段
+    // 同码**, 不新增状态/流水线/缓存。
+    // ⚠️ 必须在正常帧处理 pass 里发 cfg: idle pass 发会因 slow_cfg_adp 的
+    // s_axis_tready=!f_full 背压 (ap_ctrl_none 无握手) 卡死主 FSM。
+    // DEL+ADD 两条记录 (16 词) 同 pass 发出 = slow_cfg_adp 16 深 FIFO 的上限;
+    // 该适配器 S_RECV 逐词排空 (1 词/拍), 而 TCP 帧间 ≥84 拍 (1G 线速), 故
+    // 峰值占用远低于深度, 不引入稳态背压 (仅"帧同时到达"的极端排布才有 1~2
+    // 拍瞬时 tready=0 — HLS 侧只是等一拍, 不丢记录)。
+    if(cid>=0&&tcp_conn[cid].state!=T_FREE&&(flags&TCP_SYN)&&!(flags&TCP_ACK)){
+        cfg_write(cfg_stream,CFG_CMD_DEL,cid,0,0,0,0,0,0,0);
+        tcp_conn[cid].state=T_FREE;
+        tcp_conn[cid].retrans_pending=false;
+    }
     // FIX 2026-08-18: tcp_find() returns a free slot index (>=0) when no
     // connection matches, so the old `cid<0` test was never true and every
     // SYN was dropped (new-connection init skipped -> T_FREE -> return).
@@ -642,6 +681,10 @@ static void tcp_rx_process(bool rst, ip_rx_t &ip_rx, uint32_t *buf, mac_tx_req_t
             // P4b-5: 对端 SYN 重传 = SYN+ACK 丢失 — 原样重发 (seq 不变;
             // tcp_send 对 SYN 会再 +1, 先退一拍)。定时重传已废除 (会 RST
             // 活连接, 见 RTO 扫描处), 丢失恢复全靠此分支。
+            // P5d-D6: 同四元组 bare SYN 已在**入口**统一接管 (CFG_DEL 清 fast
+            // 残留 + 走全新建连 ⇒ 重发 SYN+ACK **且**重发 cfg ADD, 见上方
+            // P5d-D6 块) — 本支对 bare SYN 已不可达, 保留为防御性死支 (旧
+            // 语义: 只重发 SYN+ACK; 缺的正是 fast 侧那条 cfg ADD)。
             else if((flags&TCP_SYN)&&!(flags&TCP_ACK)){
                 c.seq--;
                 tcp_send(buf,tx_req,cid,TCP_SYN|TCP_ACK,NULL,0);}

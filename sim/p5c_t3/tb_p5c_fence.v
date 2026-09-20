@@ -255,6 +255,15 @@ module tb_p5c_fence;
         // 必须成帧, 且载荷逐字节正确 —— 这是"接受门与启动门同门"(坑 10)的判据:
         // 若展示期接受门更宽, 之前的字会被吞进载荷 FIFO ⇒ 本帧错位/截断。
         $display("F5: cfg_up 清 rst_sent_r ⇒ tid=0 帧恢复 (逐字节)");
+        // P5d-D2 (激励修正, 判据文本一字未改): 原激励在 F2 挂上 rst_req[0]=1 之后
+        // **从不撤**, 一直挂到 F5 —— 那与真链路不符: app_ctrl 的 rst_req 是
+        // 成对释放的电平 (app_ctrl.v:834-835 ev_up / :876-877 ev_down /
+        // :938-939 state != ESTAB), 与 cfg_up 清 rst_sent_r 出自同一批事件。
+        // 挂着 abort 请求却要求"帧恢复可发", 等于要求"abort 请求还挂着也允许发
+        // 数据" —— 那正是 D1 修复 (tx_blk 加 rst_req, rtl/tcp_tx_frame.v:361)
+        // 要禁的行为。此处按真链路时序补一次释放, 使 F5 测的是它真正要测的东西
+        // (cfg_up 清 rst_sent_r 的释放路径 + 接受门/启动门同门), 不是新判据。
+        rst_req <= 16'd0;
         cfg_up <= 1'b1; cfg_up_id <= 4'd0;
         @(posedge clk); cfg_up <= 1'b0;
         @(posedge clk);

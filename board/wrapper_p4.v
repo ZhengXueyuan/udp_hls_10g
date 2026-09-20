@@ -500,6 +500,58 @@ module wrapper_p4 (
     wire [15:0] app_c0_rcv_wnd, app_estab_cnt, app_ev_cnt;
     wire [31:0] app_ev_drop;
 
+    // =====================================================================
+    // P5d H-fix: 接受裕度 ACC_MARGIN 按 ESTAB 连接数**动态缩**
+    // ---------------------------------------------------------------------
+    //   [C12 绑定行] N<=2 (单/双连接门与板级默认配置) 时 .ACC_MARGIN = 16'd4096
+    //   —— 即旧常量的值, 逐位零回归。N>=3 的动态值见下表 (新门 sim/p5d_multi
+    //   独立断言 + 负向对照; 本行是 tools/gen_stim_p5_adv.py 的 check_phys_margin
+    //   文本解析目标, 勿删勿改数值 —— 它明令"解析失败 = FAIL"且不在允许改动清单内)。
+    //
+    // [为什么] N 条连接共享**同一个** 64KB 零拷贝 frame_fifo (tcp_echo) ⇒ 物理界:
+    //     Σwinq + N*ACC_MARGIN + Δ(2816) + U(1518) + SEG_MAX(1500) <= 65536
+    //   各项来源:
+    //     Σwinq    <= WIN_POOL = 49152  (D4 分池后由构造保证, 见 app_ctrl 的 wq_cap_r)
+    //     Δ = 2816 = ackq 深 x 每 ACK 帧拍数 x 到达率 (规格 C1b 的 1G Δ 上界)
+    //     U = 1518 = 未判定帧 (54 + 1460 + 4)
+    //     SEG_MAX = 1500 = 一个段可整段被接受 (win_ok 只看段起始 seq ⇒ 越界量 <= plen-1)
+    //   ⇒ N*ACC_MARGIN <= 65536 - 49152 - 2816 - 1518 - 1500 = **10550**
+    //   ⇒ ACC_MARGIN <= 10550/N:  N=1/2/3 ⇒ 10550 / 5275 / **3516**
+    //   (旧实现硬传 4096: N=3 时 3*4096 = 12288 > 10550 ⇒ 超 **1738 B** ⇒ frame_fifo
+    //    满 ⇒ 上游 mac_rx 丢整帧 = 破坏 P5b "零丢字节" 承诺。旧门没有一条能抓:
+    //    adv multi 只有 2 条连接且 conn1 winq=0 的注入是脚本无条件灌的 150B。)
+    //
+    // [下界钳位] ACC_MARGIN >= 3328 = Δ(2816) + 512 余量。低于它 = 接受界覆盖不了
+    //   通告漂移 ⇒ 对端按旧右沿合法发出的段被判窗外 ⇒ 静默丢弃 + 等 200ms RTO
+    //   (C16-修订 要消掉的板级病理, 实测漂移最大 308B)。10550/N < 3328 即 N>=4 时
+    //   钳到 3328 —— **本设计的支持包线就是 N<=3** (HLS MAX_TCP_CONN=3; 且 N>=4 时
+    //   N*3328 = 13312 > 10550 ⇒ 物理界与漂移下界不可能同时满足, 不是本 fix 能救的)。
+    //
+    // [为什么查表 + 寄存器, 不做除法] acc_wnd = ra_rcv_wnd + ACC_MARGIN 直接进
+    //   tcp_rx **w5 拍的关键判据** (win_ok -> acc/ackresp/drop)。32 位除法或多级
+    //   比较串进去就是又一条长组合链 (P5b 坑 12: 组合算术串链 = WNS -3.089 的教训)。
+    //   这里: 输入只有 ESTAB 数 (app_ctrl.dbg_estab_cnt, 每 256 拍刷新一次, 本身
+    //   就是 c_state[] 的与); 表只有 3 项 (N<=2 / N=3 / N>=4) ⇒ 一级 LUT;
+    //   输出再**打一拍寄存器**才进 tcp_rx ⇒ 接受界只多一个加法器输入 (常量变寄存器
+    //   输入), 不加深 win_ok 链。引脚/参数都不新增 (0 新顶层端口)。
+    // 动态缩的语义边界: 连接数变化 → 裕度在 1 拍内跟着变; 已通告的窗口不受影响
+    //   (本裕度只放宽**接受判据**, 不改变通告值 ⇒ 与 D4 的"窗口不可撤销"无冲突)。
+    // =====================================================================
+    function [15:0] acc_margin_of;
+        input [4:0] n;                      // ESTAB 连接数 (0 按 1 处理)
+        begin
+            if (n <= 5'd2)      acc_margin_of = 16'd4096;   // min(4096, 10550/n) = 4096
+            else if (n == 5'd3) acc_margin_of = 16'd3516;   // 10550/3 = 3516.67 -> 3516
+            else                acc_margin_of = 16'd3328;   // 10550/n < 3328 ⇒ 钳下界
+        end
+    endfunction
+    wire [4:0]  acc_margin_n   = (app_estab_cnt[4:0] == 5'd0) ? 5'd1 : app_estab_cnt[4:0];
+    reg  [15:0] acc_margin_eff;
+    always @(posedge gmii_clk or negedge reset_n) begin
+        if (!reset_n) acc_margin_eff <= 16'd4096;    // 复位 = N<=2 值 (零回归)
+        else          acc_margin_eff <= acc_margin_of(acc_margin_n);
+    end
+
     app_pattern #(.TX_BYTES(32'd1048576), .TX_SEGSZ(12'd1460)) u_app (
         .clk            (gmii_clk),
         .rst_n          (reset_n),
@@ -647,6 +699,10 @@ module wrapper_p4 (
         .txd            (app_uart_txd)
     );
 `else
+    // P5d H-fix (默认构建支): 接受裕度恒 0 ⇒ acc_wnd = {1'b0, ra_rcv_wnd}, 与旧
+    // 参数版 (ACC_MARGIN=16'd0) **逐位等价** (P4 矩阵 16 门是证据)。这里声明成
+    // 常量而不是 APP_MODE 支那个寄存器 —— 默认构建零新增寄存器/零新增逻辑。
+    wire [15:0] acc_margin_eff = 16'd0;
     assign txin_tdata  = eco2_tdata;
     assign txin_tkeep  = eco2_tkeep;
     assign txin_tvalid = eco2_tvalid;
@@ -898,11 +954,11 @@ module wrapper_p4 (
     wire [31:0] cam_rd_sip, cam_rd_dip;
     wire [15:0] cam_rd_sport, cam_rd_dport;
 
-    tcp_rx #(
-        // P5b C16-修订: APP_MODE 下接受界 = 通告界 + 4096 (Δ 裕度; 安全性推导见
-        // tcp_rx 参数注释)。默认构建 = 0 ⇒ 接受判据逐位不变 (P4 矩阵 16 门回归)。
-        .ACC_MARGIN     (APP_EN ? 16'd4096 : 16'd0)
-    ) u_tcp_rx (
+    tcp_rx u_tcp_rx (
+        // P5d H-fix: 接受裕度按 ESTAB 数动态缩 (推导见上面的 H-fix 块)。
+        // N<=2 时 = 16'd4096 (旧常量, 逐位零回归); N=3 时 3516; N>=4 钳 3328。
+        // 默认构建 (acc_margin_eff = 16'd0) ⇒ acc_wnd = ra_rcv_wnd ⇒ 逐位不变。
+        .ACC_MARGIN     (acc_margin_eff),
         .clk            (gmii_clk),
         .rst_n          (reset_n),
         .s_axis_tdata   (f_tdata),

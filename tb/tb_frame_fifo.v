@@ -6,6 +6,8 @@
 //       (c) 灌满后顺序弹出  (d) snap/rollback  (e) 空读 gating
 //       (f) P4c D=8192/AW=13 回归: 8191/8192 灌满边界 + 512k-1/512k 回卷浸泡
 //           (占用贴满, 13 位指针回卷 64 次) + 回卷后 snap/rollback
+//       (g) P5d 应用侧形态回归 (永久守卫): 长只写 (占用贴满) -> 续读必须逐字精确
+//           (全速 / 并发写 / 慢 1/64 / bursty 2/3 四种续读形态)
 // 用法: xvlog <frame_fifo 源码> tb_frame_fifo.v glbl; xelab -L unisims_ver tb_frame_fifo glbl
 // 驱动约束 (消费端语义同此): rollback 不与 rd/snap 同拍; snap 与帧首字写同拍。
 // 空态 dout = 旧槽残留 (不定), 仅 !empty 时比较 dout (消费者亦按 !empty 取用)。
@@ -442,6 +444,44 @@ module tb_frame_fifo;
         for (i = 0; i < 4200; i = i + 1) cyc_drive(0, 1, 0, 0, 73'h0);   // 排空
         expect_empty(2, 1);
         $display("PASS_ph_f3 D=8192 snap/rollback after pointer wrap: discarded frame gone, prior words intact");
+
+        // ============ (g) 应用侧形态回归: 长只写停顿 -> 续读 (P5d known_idle_fifo 指控复核) =====
+        //  背景: P5d 多连接门的 known_idle_fifo 探针报 "帧 FIFO 读侧长只写后续读吐 1 重复
+        //  字 + 丢 1 字 (8B 错位)". 独立复核结论 = **非本模块行为**: 写侧流逐字连续
+        //  (插桩 WSTRM=0), 错位由 P5d TB 命令脚本 `22: sink_rate = sa[31:0];` 的**阻塞赋值**
+        //  在时钟沿同拍改 readiness 引起 (坑 3: 阻塞赋值 + @(posedge) 与 DUT 竞争 ->
+        //  frame_fifo 的组合读址 r_ad = rptr + rd_ok 与时钟沿同时间步变化 -> unisim BRAM
+        //  在该沿采到"沿后"地址 -> 读输出提前一个字). 把该写改成非阻塞分级后, 同一 RTL
+        //  下 P5d 探针与主用例失配字节数均归零 (main: 122 checks / 0 FAIL, miss=0).
+        //  本阶段把**应用侧形态**固定为永久回归: 该形态下读侧必须逐字精确 (C 实例 D=8192).
+        //  (g1) 20k 拍纯只写 (满后拒写, rd=0) -> 全速续读排空
+        for (i = 0; i < 20000; i = i + 1) cyc_drive(1, 0, 0, 0, mkword(13, i, 0));
+        if (full_s[2] !== 1'b1) begin
+            $display("FATAL (g1) not full after 20k write-only cycles"); $fatal;
+        end
+        for (i = 0; i < 8300; i = i + 1) cyc_drive(0, 1, 0, 0, 73'h0);
+        expect_empty(2, 1);
+        $display("PASS_ph_g1 long write-only (20k, pinned full) -> full-speed resume byte-exact");
+        //  (g2) 长只写 -> 续读与写并发 (占用贴满; 每拍 rd+wr)
+        for (i = 0; i < 12000; i = i + 1) cyc_drive(1, 0, 0, 0, mkword(14, i, 0));
+        for (i = 0; i < 30000; i = i + 1) cyc_drive(1, 1, 0, 0, mkword(14, 12000 + i, 0));
+        for (i = 0; i < 12000; i = i + 1) cyc_drive(0, 1, 0, 0, 73'h0);
+        expect_empty(2, 1);
+        $display("PASS_ph_g2 long write-only -> resume with concurrent write byte-exact");
+        //  (g3) 长只写 -> 慢续读 (1/64) / bursty 续读 (2/3)
+        for (i = 0; i < 12000; i = i + 1) cyc_drive(1, 0, 0, 0, mkword(15, i, 0));
+        for (i = 0; i < 64 * 400; i = i + 1)
+            cyc_drive(1, (i % 64) == 0 ? 1 : 0, 0, 0, mkword(15, 12000 + i, 0));
+        for (i = 0; i < 3000; i = i + 1) cyc_drive(0, 1, 0, 0, 73'h0);
+        for (i = 0; i < 12000; i = i + 1) cyc_drive(1, 0, 0, 0, mkword(16, i, 0));
+        for (i = 0; i < 20000; i = i + 1)
+            cyc_drive(1, (i % 3) != 2 ? 1 : 0, 0, 0, mkword(16, 12000 + i, 0));
+        for (i = 0; i < 20000; i = i + 1) cyc_drive(0, 1, 0, 0, 73'h0);
+        for (i = 0; i < 4; i = i + 1) begin
+            cyc_drive(0, 1, 0, 0, 73'h0);
+            expect_empty(2, 1);
+        end
+        $display("PASS_ph_g3 long write-only -> slow (1/64) / bursty (2/3) resume byte-exact");
 
         $display("PASS_ALL  frame_fifo unit: writes A=%0d B=%0d C=%0d pops A=%0d B=%0d C=%0d cycles=%0d",
                  wr_cnt[0], wr_cnt[1], wr_cnt[2], pop_cnt[0], pop_cnt[1], pop_cnt[2], cyc);

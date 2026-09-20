@@ -42,6 +42,16 @@
   `state=0`, 残留会让 `start_data` 永久挡住该连接 ⇒ 数据面死锁。
 - **tready 必须与启动门同门 (D2)**: `s_axis_tready` 的 S_IDLE 分支与 `start_data`
   用同一组条件 (含 `!fin_req/!fin_sent_r`), 否则帧起不来却照样收字 → 填满载荷 FIFO。
+- **多连接 = 建连前分池 (P5d D4)**: 窗口一旦通告不可撤销 ⇒ 每条连接的上限必须
+  **建连之前**设小: app 写 `app_ctrl` 寄存器 `0x0C` = `WIN_POOL/预期连接数`
+  (复位默认 `0xC000` = 旧行为; 不写 = 零回归; 逐拍 `Σwinq + pool == WIN_POOL`)。
+  参数 `WIN_Q_MAX` 只剩"复位默认值"语义 —— **不做成 wrapper 传参** (那会强制所有
+  TB 镜像它的取值, 坑 11)。
+- **接受裕度按 ESTAB 数动态缩 (P5d H-fix)**: `tcp_rx.ACC_MARGIN` 由参数改**端口**,
+  由 `wrapper_p4` 用查表 + **寄存器**下发 `min(4096, 10550/N)`, 下界钳 `3328`
+  (N = ESTAB 数; 10550 = 65536 - WIN_POOL(49152) - Δ(2816) - U(1518) - SEG_MAX(1500))。
+  默认构建与各默认 TB 显式传 `16'd0` ⇒ 逐位不变。端口名**保持大写** `ACC_MARGIN`
+  是故意的: `tools/gen_stim_p5_adv.py` 的 `check_phys_margin` 按文本解析这一行。
 
 ## 目录
 
@@ -49,7 +59,7 @@
 |------|------|
 | `rtl/` | 数据面 RTL (mac_rx_64/mac_tx_64/tcp_rx/tcp_tx_frame/tcb/tcp_cam/retx_ram/…) + `app_*.v` (P5 app 接口与演示 app) |
 | `tb/` | xsim testbench (`tb_p4_chain` 全链 / `tb_p5_*` app 门与对抗集 / 各单元 TB) |
-| `sim/` | xsim 工作目录 (每个门用**独立目录**, 避免 `xsim.dir` 文件锁; 见下"本工程新增坑" 7)。**canonical 门** = `sim/p4sim/` (P4 矩阵) / `sim/p5sim/` (P5 app 门) / `sim/p5close/` (P5c 定向证伪门); 其余 `sim/p5b_*/`、`sim/p5c_*/`、`sim/p5bfix/`、`sim/f2chk/`、`sim/t1run/` 等是**复核/跑数产物目录**, 已 ignore (只保留其中的 `run_tb_*.bat` 与 TB 源码) |
+| `sim/` | xsim 工作目录 (每个门用**独立目录**, 避免 `xsim.dir` 文件锁; 见下"本工程新增坑" 7)。**canonical 门** = `sim/p4sim/` (P4 矩阵) / `sim/p5sim/` (P5 app 门) / `sim/p5close/` (P5c 定向证伪门) / `sim/p5d_multi/` (P5d 多连接门, 独立工作目录 main/neg_wq/neg_mgn/neg_mgn0/known_idle_fifo); 其余 `sim/p5b_*/`、`sim/p5c_*/`、`sim/p5bfix/`、`sim/f2chk/`、`sim/t1run/` 等是**复核/跑数产物目录**, 已 ignore (只保留其中的 `run_tb_*.bat` 与 TB 源码) |
 | `tools/` | Python (anaconda: `/c/Users/zhxue/anaconda3/python.exe`) + `cpp_peer/` 合成 TCP 对端 |
 | `board/` | `wrapper_p4.v` (顶层, APP_MODE 分支) / `uart_dbg.v` / XDC / 构建烧录 bat 与 tcl |
 | `hls/` | HLS 慢路径 (`src/` 源码 + `tb/` 测试台跟踪; `slowstack_prj/` 与 `logs/` 是产物, 已 ignore) |
@@ -72,6 +82,18 @@ cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_flow.bat'     # 512KB 慢�
 # P5c 关闭语义门
 cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_app.bat' close  # 关闭语义门 (FIN/RTO 重发/RST+fence/同时关闭/超时)
 cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5close\run_tb_tcp_close.bat' # 定向证伪门 (G1 FIN 重推死锁 / G9 回卷洪水)
+# P5d 多连接门 (3 连接并发大流量 + 慢消费者 + 并发 close; 分池/动态裕度/物理界)
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5d_multi\run_tb_p5_multi.bat' main            # 判据 ①-⑨ (exit=0)
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5d_multi\run_tb_p5_multi.bat' neg_wq          # 负对照: 不分池 ⇒ ① FAIL (期望 1)
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5d_multi\run_tb_p5_multi.bat' neg_mgn         # 负对照: 裕度 4096 ⇒ ④ FAIL (期望 1)
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5d_multi\run_tb_p5_multi.bat' neg_mgn0        # 负对照: 裕度 0 ⇒ ⑦ FAIL (期望 1)
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5d_multi\run_tb_p5_multi.bat' known_idle_fifo # 长只写后首读逐字节守卫 (TB 激励竞争的常驻回归; 曾误判为 frame_fifo 预存缺陷)
+# P5d 定向门 (单元级; 均需 -d APP_MODE)
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5d_d1\run_tb_p5d_d1.bat'     # D1: abort 请求窗 (rst_req) + 残余 F 项 ESTAB 状态门 + 释放
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5e_win\run_tb_p5e_win.bat'   # 0 载荷 opener 窄窗 (pipe 残余字跨会话 ⇒ 零负载泄漏)
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5c_t3\run_tb_p5c_fence.bat'  # abort fence 单元门 (F1-F5; D1 后判据不变、激励按真链路修正)
+# 板级: 同四元组重连验收 (D6)
+C:/Users/zhxue/anaconda3/python.exe tools/pc_p5d_reconn_test.py --rounds 5 --gap 0.6   # 判别性轮间隔; 判据: 全部轮次建连+传输成功
 # 构建与烧录
 cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_build_p4.bat'    # 默认 (echo)
 cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_build_p5.bat'    # APP_MODE (app 接口)
@@ -139,3 +161,26 @@ tools/cpp_peer/peer.exe --iface '\Device\NPF_{...}' --rx-only --expect-pattern 1
    (图案生成 1.13s) **必须先于 connect** (否则板侧 400ms 关闭超时先到, 连接被拆);
    ④ 计数口径写清 fast path 还是线上 —— `FI` 只是 fast path FIN 计数, 慢路径 HLS 另发
    FIN+ACK ⇒ "一次 close 恰 1 帧 FIN" 在线上的判据不成立。
+17. **TB 激励的 0 延迟竞争 (坑 3 的一般化, P5d 抓到的最隐蔽一条)**: 脚本进程用
+   `@(posedge clk)` 恢复执行时**阻塞赋值**到 DUT-facing 信号 (或其组合前级) ⇒ 该信号在
+   **时钟沿同一步**变化 ⇒ 同一步内不同进程采到不同值 (xsim 进程序决定谁赢)。
+   `22: sink_rate = sa;` 阻塞写 ⇒ readiness 组合变 ⇒ `frame_fifo` 的组合读址沿后变化而
+   rptr 寄存器采沿前值 ⇒ BRAM 提前一字 ⇒ 下游呈现"丢/重 1 个字"的 8B 错位, 看着像模块缺陷。
+   **危险的是方向无关** —— readiness **任意方向**的同拍变化都触发 (0→1 同样破)。
+   修法 = 分级非阻塞落地 (脚本只写 `*_rq_*` 请求, 下一沿非阻塞转正)。
+   **定位法**: TB 侧影子写流**逐拍断言读侧恒等** (`dout(N) === mem[rptr(N)]`) ⇒
+   `checks=263674 bad=1` 且那 1 拍恰在 readiness 变化同拍 ⇒ 一秒定案 (vs 猜 RTL 几天)。
+18. **判据要有判别力: 选"只有修复后才成立"的量** (P5c/P5d 各踩一次): ① 板级"4MB 用例 `RS`
+   必须为 0"**不可达且无判别力** (drain 静默窗口必然产生良性 RST, 旧位流同样给
+   `RX=0x400000`); ② A/B 的"判别性变体"在**默认轮间隔**下两版不可分 —— 轮周期 (~5.5s) 晚于
+   缺陷的 **RTO 自释放**窗口 (~2-5s) ⇒ 必须把轮间隔缩到自释放之前 (`--gap 0.6`) 才得到
+   `15-23ms vs ~1.0s`。**造判别性实验前先算清"缺陷的自愈时间尺度"**。
+19. **"窗口不可撤销" ⇒ 上限必须提前设小, 且只能做成寄存器 (不是 wrapper 参数)**:
+   通告窗一旦发出收不回 (降窗会让在飞段被拒), 所以多连接的分池只能在**建连之前**由 app 写
+   `app_ctrl` `0x0C`; 做成模块参数会强制**所有 TB 镜像取值** ⇒ 漏一个就是"门与板跑两个配置"
+   (坑 11)。寄存器化 + 复位默认 = 旧值 ⇒ 不写 = 零回归, 不破任何既有门。
+20. **修复会曝光既有隐患 (改一处, 另一处才显形)**: D1 把 TX 启动门做实之后
+   `app_pattern`/`axis_pipe` 的**跨会话残余字**才显形 (帧边界上 pipe 里的下一帧首字跨过
+   DEL→ADD 就被当新会话首帧首字收下 = 8B 旧载荷 + 整段图案偏移) ⇒ 用 **0 载荷 opener**
+   (`tkeep=0`, 帧器只按 `pop8(keep)` 计长 ⇒ 不入 FIFO/不进 ring/不推进 seq) **结构性**根除,
+   代价 1 拍/帧。**推论**: 硬化一条门之后必须重跑跨会话/换流场景, 别假设"门修好了就没事了"。

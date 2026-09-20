@@ -167,6 +167,9 @@ module tb_tcp_chain;
 
     tcp_rx u_rx (
         .clk(clk), .rst_n(rst_n),
+        // P5d H-fix: ACC_MARGIN 由参数改为端口。默认构建显式传 0 ⇒
+        // acc_wnd = {1'b0,ra_rcv_wnd} ⇒ 与旧参数版逐位等价 (C12: 参数→端口必须补全)
+        .ACC_MARGIN     (16'd0),
         .s_axis_tdata(s_tdata), .s_axis_tkeep(s_tkeep), .s_axis_tvalid(s_tvalid),
         .s_axis_tready(s_tready), .s_axis_tlast(s_tlast), .s_axis_tuser(s_tuser),
         .s_axis_tcrs(s_tcrs), .s_axis_terr(s_terr),

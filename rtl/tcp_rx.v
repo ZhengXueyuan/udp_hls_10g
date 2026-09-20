@@ -14,17 +14,27 @@
 // snd_una/snd_wnd, 绝不回 ACK (防 ACK 环)。TCP 校验和 cut-through 无法验证, 不查。
 // 填充帧: pop8(TLAST) 允许 > 剩余载荷 (60B 最小帧填充), 多余字节按填充忽略。
 // 坏 FCS 段: 载荷照发 (tuser[0]=0 标记) 但不回 ACK、不推进 rcv_nxt (对端重传)。
-module tcp_rx #(
-    // P5b C16-修订: **接受界对通告界的裕度** (字节)。
-    // 通告窗 W = max(0, winq - occ) 是"我还能收多少"; 但对端在收到新窗口之前是按
-    // **旧窗口**发的, 其右沿 = redge + Δ (Δ = 通告滞后, 见规格 C1b) ⇒ 接受判据
-    // 必须预留 Δ, 否则"按旧窗合法发出的零头段"落地时窗已塌陷 ⇒ 顺序段被拒
-    // (只回 ACK 靠重传 = 活性问题; 更早的静默丢弃 = 200ms RTO)。
-    // 默认 0 ⇒ 接受界 == ra_rcv_wnd, 默认构建逐位不变。
-    // APP_MODE 由 wrapper 传 4096: occ + W + 4096 <= 49152 + 4096 = 53248,
-    // 再加未判定帧 U(<=1518) = 54766 < 65536 ✓ 余量 ~10.7KB (不会物理溢出)。
-    parameter [15:0] ACC_MARGIN = 16'd0
-) (
+module tcp_rx (
+    // ---- P5d H-fix: 接受裕度 ACC_MARGIN 由**参数**改为**输入端口** ----------
+    // 语义 (P5b C16-修订) 不变: 接受界 = 通告界 + ACC_MARGIN。
+    //   W = max(0, winq - occ) 是"我还能收多少"; 但对端在收到新窗口之前按**旧窗口**
+    //   发, 其右沿 = redge + Δ (Δ = 通告滞后, 见规格 C1b) ⇒ 接受判据必须预留 Δ,
+    //   否则"按旧窗合法发出的零头段"落地时窗已塌陷 ⇒ 顺序段被拒 (只回 ACK 靠重传
+    //   = 活性问题; 更早的静默丢弃 = 200ms RTO)。
+    // 变的是**取值来源**: 常量 → wrapper 按 ESTAB 连接数动态缩 (H-fix, 因为
+    //   N 条连接共享同一个 64KB frame_fifo ⇒ N*ACC_MARGIN 必须进入物理预算,
+    //   见 board/wrapper_p4.v 的 H-fix 推导)。
+    // 默认构建逐位不变: 所有默认例化点显式传 16'd0 ⇒ acc_wnd = {1'b0,ra_rcv_wnd}
+    //   ⇒ 与旧参数版 (ACC_MARGIN=0) 逐位等价 ✓
+    // 端口名保持大写 ACC_MARGIN (不是完全重命名): ① 与旧参数同名 ⇒ 例化点改动最小、
+    //   机械可核对; ② tools/gen_stim_p5_adv.py 的 check_phys_margin 按**文本**
+    //   `.ACC_MARGIN` 解析本文件/wrapper (C12 的唯一绑定点), 改名会让该判据解析失败
+    //   (它明令"不允许静默跳过" ⇒ 直接 FAIL), 而该 checker 不在本任务允许改动清单内。
+    //   ⇒ 保留原名是"不改 checker 又保持判据有鉴别力"的唯一写法。
+    // 时序: 本端口直接进 w5 拍的 acc_wnd 加法 → win_ok → base_ok/acc/ackresp 判据
+    //   (tcp_rx 内 depth 最浅的一条关键锥) ⇒ wrapper 侧必须送**寄存器输出**
+    //   (H-fix 在 wrapper 里查表 + 打一拍), 不得送组合长链 (除法/多级比较)。
+    input  wire [15:0] ACC_MARGIN,
     input  wire        clk,
     input  wire        rst_n,
     // 来自 mac_rx_64
@@ -259,8 +269,10 @@ module tcp_rx #(
     wire        len_ok   = (w2_r[63:48] >= 16'd40);
     wire [31:0] seq_diff = seq32 - ra_rcv_nxt;
     // P5b C16-修订: 接受界 = 通告界 + ACC_MARGIN (位宽扩展防 16 位回绕)。
-    // 默认构建 ACC_MARGIN=0 ⇒ acc_wnd = {1'b0,ra_rcv_wnd} ⇒ 与旧判据逐位等价
-    // (多了 1 位零扩展, 数值不变)。
+    // 默认构建 ACC_MARGIN=16'd0 (端口常量) ⇒ acc_wnd = {1'b0,ra_rcv_wnd} ⇒ 与旧
+    // 参数判据逐位等价 (多了 1 位零扩展, 数值不变)。P5d H-fix: ACC_MARGIN 现在是
+    // 端口 (wrapper 按 ESTAB 数动态下发寄存器值) ⇒ 本式只剩一级 17 位加法,
+    // 深度不随裕度的来源变化。
     wire [16:0] acc_wnd  = {1'b0, ra_rcv_wnd} + {1'b0, ACC_MARGIN};
     wire        win_ok   = (seq_diff < acc_wnd);
     wire        seq_eq   = (seq32 == ra_rcv_nxt);

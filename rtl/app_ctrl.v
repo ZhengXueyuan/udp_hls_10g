@@ -45,6 +45,8 @@
 //   0x09 R: {estab_cnt[15:0], ev_cnt[15:0]}   ESTAB 连接数 / 事件总数
 //   0x0A R: conn7..0 的 state (每连接 4 位, conn0 在 [3:0])
 //   0x0B R: conn15..8 的 state
+//   0x0C RW: {16'b0, wq_cap_r} 单连接配额上限 (P5d D4; 写 = WIN_POOL/预期连接数;
+//            复位默认 0xC000 = 旧参数值 ⇒ 不写 = 旧行为)
 //   0x10+4c R: 每连接块 4 字: +0 = {28'b0,state} +1 = snd_una +2 = snd_nxt
 //              +3 = {rcv_wnd, snd_wnd}
 //   0x50+c R: 每连接 rcv_nxt[31:0]
@@ -168,8 +170,8 @@
 //   拍 T+2: fc_pend / C6 wu 判定 / C15 增量授权 (全用寄存值)
 // 每拍只剩一级算术 ⇒ 组合深度 ~1/3。
 // **等价性 (P0 优化 ①)**: 原式 wscan = wcalc(redge_post, rn) 与 fq[15:0] 恒等 ——
-// wcalc(redge_n, rn) = fq 因为 redge_n - rn = fq 无回绕 (fq <= WIN_Q_MAX < 2^31),
-// wd[31]=0 / wd[31:16]=0 / wd[15:0]=fq <= WIN_Q_MAX ⇒ 三个夹紧分支全假;
+// wcalc(redge_n, rn) = fq 因为 redge_n - rn = fq 无回绕 (fq <= wq_cap_r < 2^31),
+// wd[31]=0 / wd[31:16]=0 / wd[15:0]=fq <= wq_cap_r ⇒ 三个夹紧分支全假;
 // 而 redge_post 与 redge_n 的差别只在 redge_upd=0 时 (sdelta == 0 ⇒
 // redge_n == redge[c] ⇒ wcalc(redge[c],rn) = redge_n - rn = fq, 同样相等)。
 // sdelta 的物理含义 = 自上次扫描以来 app 消费的字节数 (饱和分支下亦 >= 0 —
@@ -189,10 +191,25 @@ module app_ctrl #(
     parameter [15:0] WIN_CAP   = 16'hBFFE,  // 与 tcp_tx_frame.RING_CAP 同值 (发送侧帽)
     parameter [15:0] WIN_POOL  = 16'hC000,  // 信用池上限 (单连接 = 今天静态 48K)
     // P5b: 单连接配额上限 (按构造 Σ winq <= WIN_POOL, 窗口不可撤销 ⇒ 必须预分配)。
-    // 多连接场景把它调成 WIN_POOL/预期连接数 (P5d 文档写明): 池空时后续连接只能
-    // 拿到剩余量 (stat_pool_exhaust 观测), 已建连接不重分配 (降级是有意的 —
-    // 窗口不可撤销)。
-    parameter [15:0] WIN_Q_MAX = 16'hC000,
+    //
+    // ---- P5d D4: WIN_Q_MAX 由**参数**改为**可写寄存器** wq_cap_r (地址 0x0C) ----
+    // 实测缺口 B (前置实验): 参数固定 0xC000 = 池容 ⇒ 第一条连接拿满池, 后续连接
+    // g_grant = min(0xC000, pool - occ) = 0 ⇒ winq=0 ⇒ 通告窗 0 ⇒ 线上每帧 win=0
+    // (TCB rcv_wnd=0000) —— **永久而非瞬态**, 且现有多连接门 (adv multi 的
+    // "conn1 winq=0 是 C15 语义演进") 恰好把它当成预期行为 ⇒ 覆盖漏洞。
+    // 修法 (唯一正确解): **窗口一旦通告不可撤销** ⇒ 每条连接的上限必须**在建连
+    // 之前**设小 = WIN_POOL/N ⇒ Σwinq <= WIN_POOL 由构造保证。故做成寄存器:
+    // app 建连前写 0x0C = WIN_POOL/预期连接数 (本模块的 C14/C15 一律用 wq_cap_r)。
+    // 写法纪律 (坑 11 / P5b C12): **不做成 wrapper 传参** —— 参数化会让每个 TB
+    // 必须镜像 wrapper 的取值, 漏一个就是"门与板跑两个配置"。做成内部寄存器后,
+    // 现有 TB 不写它 = 0xC000 = 旧参数值 ⇒ 逐位不变, 不破任何门 (零回归)。
+    // 本参数**只剩"复位默认值"语义** (tb_app_fc.v:137 的 .WIN_Q_MAX(16'hC000)
+    // 仍然有效 —— 它就是复位值, 不再控制运行时行为)。
+    // 越界防御: app 写 > WIN_POOL 的值也不会破池 —— C14-① 的 g_grant 取
+    // min(wq_cap_r, pool-occ) 且 pool 17 位 ⇒ g <= pool 恒成立 ⇒ Σwinq <= WIN_POOL。
+    // 面积/时序: pool_q 由常量变寄存器输出 (16 位), 只在授予/补授/夹紧三处使用;
+    // 授予锥 (pool_reg[*]/D) 实测 slack 1.149ns (T3 复核) ⇒ 无新增关键路径。
+    parameter [15:0] WIN_Q_MAX = 16'hC000,  // = wq_cap_r 的**复位默认值** (非运行时参数)
     // P5c-T3 G2: 关闭超时阈值 (单位 = 该槽被扫描到的轮次; 见文件头换算 —
     // 生产值 195313 轮 = 400ms = 4xRTO @125MHz)。18 位 (195313 < 2^18)。
     parameter [17:0] FIN_TO_LIM = 18'd195313,
@@ -360,6 +377,10 @@ module app_ctrl #(
     reg  [2:0]  fc_sel_r;
     reg  [3:0]  fc_rr;               // round-robin 起点 (上次服务的 id+1)
     reg  [16:0] pool;
+    // P5d D4: 单连接配额上限 (可写寄存器; 复位 = WIN_Q_MAX 参数 = 0xC000)。
+    // 写口 = 寄存器总线 0x0C (W): {16'b0, wq_cap_r} 读出。app 必须在建连 (cfg ADD)
+    // **之前**写 WIN_POOL/N —— 已通告的窗口不可撤销, 事后调小不会收回 (见参数注释)。
+    reg  [15:0] wq_cap_r;
     reg         init_pend;
     reg  [3:0]  init_slot;
     // ---- P5c-T3 G2/G3: 关闭超时 + state=0 写请求 ----
@@ -469,14 +490,15 @@ module app_ctrl #(
     // wdiff[31] = 1 表示 redge 落后 rcv_nxt (占用曾满期间 redge 停在 rcv_nxt 而
     // rcv_nxt 继续推进) ⇒ 窗口必须为 0。裸减法在此回绕成巨大值 ⇒ W 撑满 ⇒
     // 物理缓冲溢出 (本里程碑的安全核心)。
-    // 夹紧帽用 WIN_Q_MAX (配额上限) 而**不是** WIN_CAP(0xBFFE): 配额 0xC000 是
+    // 夹紧帽用 wq_cap_r (配额上限寄存器) 而**不是** WIN_CAP(0xBFFE): 配额 0xC000 是
     // 与 P5a 静态值逐位一致的合法窗口, 用 0xBFFE 当帽会把它夹掉 ⇒ 通告窗变小、
     // 与 HLS SYN-ACK 通告的 48K 不一致 (P5a 门判据也按 0xC000)。redge 由构造
-    // 恒 <= rcv_nxt + winq <= rcv_nxt + WIN_Q_MAX ⇒ 夹紧分支结构性不可达, 纯防御。
+    // 恒 <= rcv_nxt + winq <= rcv_nxt + wq_cap_r ⇒ 夹紧分支结构性不可达, 纯防御。
     // ⚠️ P5b 第二轮: 本函数**不再参与扫描拍的关键路径** (扫描拍用 fq[15:0], 见
     // 文件头的等价性证明 —— wcalc(redge_n, rn) ≡ fq); 保留它是为了保留那条
     // 参考语义 (以及 init/调试口径), 若将来有"从注册阵列算窗口"的新路径, 必须
-    // 用它而不是自己拼减法。
+    // 用它而不是自己拼减法。P5d D4: 夹紧帽同步改为 wq_cap_r (寄存器) —— 本函数
+    // 全文件**无调用点** (纯参考语义) ⇒ 不产生逻辑, 无时序影响。
     function [15:0] wcalc;
         input [31:0] rg;             // redge
         input [31:0] rn;             // rcv_nxt
@@ -484,14 +506,14 @@ module app_ctrl #(
         begin
             wd = rg - rn;
             if (wd[31])                      wcalc = 16'd0;
-            else if (|wd[31:16])             wcalc = WIN_Q_MAX;
-            else if (wd[15:0] > WIN_Q_MAX)   wcalc = WIN_Q_MAX;
+            else if (|wd[31:16])             wcalc = wq_cap_r;
+            else if (wd[15:0] > wq_cap_r)    wcalc = wq_cap_r;
             else                             wcalc = wd[15:0];
         end
     endfunction
 
     // ---- C1: 配额内剩余 fq (饱和) + 右沿候选 (同一表达式 ⇒ 算术不可能分叉) ----
-    // fq = (occ >= winq) ? 0 : (winq - occ); 0 <= fq <= winq <= WIN_Q_MAX < 2^16
+    // fq = (occ >= winq) ? 0 : (winq - occ); 0 <= fq <= winq <= wq_cap_r < 2^16
     // ⇒ fq[16] 恒 0, fq[15:0] 即窗口 (等价性证明见文件头)。
     function [16:0] fq_calc;
         input [15:0] q;              // winq[c]
@@ -627,6 +649,7 @@ module app_ctrl #(
             reg_rdata = c_rcv_nxt[reg_addr[3:0]];
         end else begin
             case (reg_addr)
+                8'h0C: reg_rdata = {16'b0, wq_cap_r};  // P5d D4: 单连接配额上限
                 8'h90: reg_rdata = stat_ev_up;
                 8'h91: reg_rdata = stat_ev_down;
                 8'h92: reg_rdata = stat_ev_drop;
@@ -649,9 +672,9 @@ module app_ctrl #(
     end
 
     // ---- C4/C14: 授予量/归还量 (组合, 只用当拍可见的注册值) ----
-    // 授予 (C14-①): g = (pool > occ) ? min(WIN_Q_MAX, pool - occ) : 0
+    // 授予 (C14-①): g = (pool > occ) ? min(wq_cap_r, pool - occ) : 0
     // 池与物理缓冲共享同一笔额度 —— 零拷贝遗留占用 (occ) 必须从新连接配额里扣掉。
-    wire [16:0] pool_q    = {1'b0, WIN_Q_MAX};
+    wire [16:0] pool_q    = {1'b0, wq_cap_r};   // P5d D4: 上限 = 寄存器 (非参数)
     wire [16:0] pool_occ  = (pool > rx_occ_bytes) ? (pool - rx_occ_bytes) : 17'd0;
     wire [16:0] g_grant   = (pool_q < pool_occ) ? pool_q : pool_occ;
     // 归还: pool + winq[ev_slot], 封顶 WIN_POOL (重复 ev_down 时 winq=0 ⇒ 归还 0)。
@@ -667,12 +690,12 @@ module app_ctrl #(
     wire [17:0] pool_reuse = {1'b0, pool} - {1'b0, g_grant} + {2'b0, winq[ev_slot]};
     wire [16:0] pool_upd   = (pool_reuse > {2'b0, WIN_POOL}) ? {1'b0, WIN_POOL}
                                                              : pool_reuse[16:0];
-    // C15-② 增量授权量: min(WIN_Q_MAX - winq[c], pool), 位宽扩展防下溢
+    // C15-② 增量授权量: min(wq_cap_r - winq[c], pool), 位宽扩展防下溢
     // ⚠️ 与 C14-① 的交互 (测试 agent 实测): 扫描拍若与 ev_up 同拍, 增量补授会
     // **赢过** C14-① 的授予预留 (occ=20480 时预留 28672 被补成 49152)。安全性仍由
     // redge_calc 的 occ 修正兜住 (occ + 窗 = 49152 <= 65536 ✓), 但"双保险"实为
     // 单保险 ⇒ C17 的扫描让位 (下 always 的采样守卫) 使两者不再同拍。
-    wire [15:0] inc_room  = WIN_Q_MAX - winq[pb_sid];    // 用流水槽号 (拍 T+2)
+    wire [15:0] inc_room  = wq_cap_r - winq[pb_sid];     // 用流水槽号 (拍 T+2)
     wire [16:0] inc_grant = ({1'b0, inc_room} < pool) ? {1'b0, inc_room}
                                                       : pool;
 
@@ -752,6 +775,7 @@ module app_ctrl #(
             stat_wu <= 32'd0; stat_pool_exhaust <= 32'd0; stat_fc_upd <= 32'd0;
             stat_slot_reuse <= 32'd0;
             pool <= {1'b0, WIN_POOL};
+            wq_cap_r <= WIN_Q_MAX;            // P5d D4: 复位默认 = 旧参数值 (零回归)
             fc_rr <= 4'd0; init_pend <= 1'b0; init_slot <= 4'd0;
             fc_v <= 1'b0; fc_id_r <= 4'd0; fc_val_r <= 32'd0;
             fc_sel_r <= 3'd3;                 // P5c-T3: 复位默认 = rcv_wnd 纠偏写
@@ -834,7 +858,7 @@ module app_ctrl #(
                     fin_req[ev_slot] <= 1'b0;   // 新连接槽位清关闭/中止请求
                     rst_req[ev_slot] <= 1'b0;
                     // ---- C4/C14-①: 信用池授予 (预留物理占用) ----
-                    // g = (pool > occ) ? min(WIN_Q_MAX, pool - occ) : 0
+                    // g = (pool > occ) ? min(wq_cap_r, pool - occ) : 0
                     // 语义: 池与物理缓冲**共享同一笔额度** — 零拷贝占用不随
                     // ev_down 释放 (单帧 FIFO 服务所有连接), 故建立新连接时必须
                     // 从配额里扣掉当前占用量, 否则遗留占用与新配额叠加即溢出。
@@ -846,7 +870,7 @@ module app_ctrl #(
                     pool          <= pool_upd;
                     if (winq[ev_slot] != 16'd0)
                         stat_slot_reuse <= stat_slot_reuse + 32'd1;
-                    if (g_grant < WIN_Q_MAX)
+                    if (g_grant < wq_cap_r)
                         stat_pool_exhaust <= stat_pool_exhaust + 32'd1;
                     // ---- C3/C10: 一拍的 init (读新槽 TCB 值) ----
                     init_pend <= 1'b1;
@@ -1035,7 +1059,7 @@ module app_ctrl #(
             // ---- 轮扫 拍 T+2: 窗口判据 (fc / C6 wu / C15 增量授权) ----
             if (pb_v && !hit_c) begin
                 // ---- C15-②: 增量授权 (池回收后自愈, 不会永久零窗) ----
-                // 并发建连时 WIN_Q_MAX=WIN_POOL ⇒ 后续连接 winq=0 (单 64KB FIFO
+                // 并发建连时 wq_cap_r=WIN_POOL (旧默认) ⇒ 后续连接 winq=0 (单 64KB FIFO
                 // 服务 N 条连接, Σwinq <= WIN_POOL 是物理约束); 池里有余额就补授,
                 // 否则该连接永久零窗。补授只抬高 winq ⇒ redge 单调 ✓ 安全。
                 // P5c-T3 G2/G3: 追加 !st_done[pb_sid] && !to_fired[pb_sid] —— 正在
@@ -1047,7 +1071,7 @@ module app_ctrl #(
                 // 旧池余额**再授一份 (pool 只减一份) ⇒ Σwinq 越过 WIN_POOL (实测 2x),
                 // 后果是"授予总量 + occ" 可超 64KB 物理缓冲 (C4/C15 想守的那条界)。
                 // 事件 1 拍脉冲且稀疏 ⇒ 该拍不授、下一次扫描访到该槽再授, 零代价。
-                if ((pb_state == ST_ESTAB) && (winq[pb_sid] < WIN_Q_MAX) &&
+                if ((pb_state == ST_ESTAB) && (winq[pb_sid] < wq_cap_r) &&
                     (pool != 17'd0) && !ev_blk &&
                     !st_done[pb_sid] && !to_fired[pb_sid]) begin
                     winq[pb_sid] <= winq[pb_sid] + inc_grant[15:0];
@@ -1132,6 +1156,12 @@ module app_ctrl #(
                 fin_req[close_id] <= 1'b1;
                 stat_cmd_close <= stat_cmd_close + 32'd1;
             end
+
+            // ---- P5d D4: 单连接配额上限写 (0x0C) ----
+            // app 在建连之前写 WIN_POOL/N (N = 预期连接数) ⇒ 每条连接的上限就是
+            // 池的 1/N ⇒ Σwinq <= WIN_POOL 由构造保证 (窗口不可撤销 ⇒ 必须预分配)。
+            // 单连接常量 (0xC000) 或不写 = 旧行为 (逐位不变)。
+            if (reg_wr && reg_addr == 8'h0C) wq_cap_r <= reg_wdata[15:0];
 
             // ---- 事件弹出 (0x05 写) ----
             if (reg_wr && reg_addr == 8'h05) ev_pop <= 1'b1;

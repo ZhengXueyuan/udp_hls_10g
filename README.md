@@ -6,7 +6,7 @@ Kintex-7 XC7K325T 纯硬件 TCP/IP 数据面: 64bit 字流 @125MHz, 当前 1G RG
 
 ## 状态 (2026-09-20)
 
-**P0-P5c 全部完成并提交; P5a/P5b/P5c 均通过板级验证。**
+**P0-P5d 全部完成并提交; P5a/P5b/P5c/P5d 均通过板级验证。**
 
 | 里程碑 | 内容 | 状态 |
 |---|---|---|
@@ -22,8 +22,8 @@ Kintex-7 XC7K325T 纯硬件 TCP/IP 数据面: 64bit 字流 @125MHz, 当前 1G RG
 | P5a | **app interface 数据面** (app AXIS 收发 + 寄存器控制面 + FIN/RST/close + 演示 app) | ✅ **板级双向 PASS** |
 | P5b | 应用 RX 流控闭环 (窗口随缓冲占用收缩 + 慢消费者背压) | ✅ **门全绿 + 板级 PASS** |
 | P5c | 关闭语义完善 (FIN 重推死锁 / RST 回卷洪水 / abort fence / 关闭超时) | ✅ **门全绿 + 板级 PASS** |
-| P5d | 多连接加固 (信用池分池 / HLS 槽泄漏 + 48K 硬编码通告窗 + ackq 条目带 seq) | ⬜ 下一步 |
-| P5e | UDP app 接口 (复用 udp_rx/udp_tx_frame) | ⬜ |
+| P5d | 多连接加固 (信用池分池 / 动态接受裕度 / 并发关闭门 / TX 双门硬化 + 0 载荷 opener / HLS 槽释放) | ✅ **门全绿 + 构建/板级 PASS** |
+| P5e | UDP app 接口 (复用 udp_rx/udp_tx_frame) | ⬜ 下一步 |
 | P6 | 10G 提速 (156.25MHz + PG157 shim) | ⬜ 规划中 |
 
 - **P5b 一句话结论**: 通告窗口 = `winq - occ` 随 frame_fifo 占用收缩、零窗后由 `wu` ACK
@@ -32,6 +32,12 @@ Kintex-7 XC7K325T 纯硬件 TCP/IP 数据面: 64bit 字流 @125MHz, 当前 1G RG
 - **P5c 一句话结论**: 修掉 FIN 重推死锁 (G1) 与 `ring_delta` 下溢洪水 (G9),abort 加 TX
   fence + `state=0` 写 + 配额归还,关闭超时**带对端活性判据** (静默 400ms 才 RST)。
   板级: FIN 后持续有数据 **5.2s 不被 RST**;对端静默后 **400ms RST**。
+- **P5d 一句话结论**: 多连接可用 —— 窗口不可撤销 ⇒ 分池上限由 app 在**建连前**写寄存器
+  `0x0C` (`WIN_POOL/N`,不写 = 旧行为),接受裕度按 ESTAB 数动态缩 `min(4096, 10550/N)`;
+  新多连接门 (3 连接并发 + 慢消费者 + 并发 close) **122 checks / 0 FAIL** 且三条负对照
+  (不分池 / 裕度 4096 / 裕度 0) 各自 FAIL;TX 启动门补 `rst_req` + ESTAB、帧首改 **0 载荷
+  opener** ⇒ 跨会话零载荷泄漏;HLS 槽泄漏 (D6) 修复后**同四元组重连 15-23ms**
+  (修复前 ~1.0s);构建 WNS **+0.268** / WHS **+0.035**,单连接 4MB 板级回归 `RX` 逐字节精确。
 
 ## 已完成功能
 
@@ -78,7 +84,7 @@ Kintex-7 XC7K325T 纯硬件 TCP/IP 数据面: 64bit 字流 @125MHz, 当前 1G RG
   close(发 FIN)/abort(发 RST)、读每连接状态与计数。默认构建 (宏未定义) 仍为 echo 语义。
   板级实测: app 连上后主动发 1MB 图案 → PC 收逐字节零失配 + close/FIN; PC 发 32KB →
   板侧校验器零失配。详见 `PORT_NOTES.md` 的 P5a 段与 `rtl/app_ctrl.v`/`rtl/app_pattern.v` 头注释。
-  窗口闭环与关闭语义见下 (P5b/P5c)。
+  窗口闭环与关闭语义见下 (P5b/P5c/P5d)。
 - **应用 RX 流控闭环 (P5b)**: 每连接信用配额 `winq` (池 `WIN_POOL=0xC000`,按构造
   `Σwinq + pool == WIN_POOL`) + 单调右沿 `redge`;通告窗口 = `winq - occ`
   (`occ` = 全局 frame_fifo 占用,字粒度向上取整 ⇒ 保守) ⇒ app 消费慢则窗口收、零窗后
@@ -90,6 +96,21 @@ Kintex-7 XC7K325T 纯硬件 TCP/IP 数据面: 64bit 字流 @125MHz, 当前 1G RG
   逐字节可验证的旧数据)、abort 后 TX fence (`rst_sent` 进 `start_data` 与 `s_axis_tready`
   同门) + `state=0` 写 (复用 fc 写通道) + 配额归还、**关闭超时 = 连续 400ms 对端无进展**
   (活性判据:该槽 `rcv_nxt` 未推进;合法半关闭的数据流不会被误拆)。
+- **多连接加固 (P5d)**:
+  · **信用分池**: `WIN_Q_MAX` 由参数改**可写寄存器 `wq_cap_r`** (`app_ctrl` 地址 `0x0C`,
+    复位默认 `0xC000` = 旧行为) —— 窗口一旦通告不可撤销 ⇒ 上限必须**建连之前**设小:
+    app 写 `WIN_POOL/N` ⇒ `Σwinq <= WIN_POOL` 由构造保证 (逐拍 `Σwinq + pool == WIN_POOL`)。
+  · **动态接受裕度 (H-fix)**: `tcp_rx.ACC_MARGIN` 由参数改**端口**,wrapper 查表 + 寄存器
+    下发 `min(4096, 10550/N)`、下界钳 `3328` (N = ESTAB 数) —— N 条连接共享同一个 64KB
+    `frame_fifo` ⇒ `N*ACC_MARGIN` 必须进物理预算;N≤2 时 = 旧常量 4096 (逐位零回归)。
+  · **TX 双门硬化 (D1)**: 启动/接受门补 `rst_req` (abort 请求到 RST 上线之间最长 ~300 拍
+    的数据帧窗口) + "该连接必须 ESTAB" (残余 1 拍 F 项 ⇒ 已拆连接的帧 + FIN seq 漂移)。
+  · **0 载荷 opener**: 每帧首字 = `{tdata=0, tkeep=0, tlast=0}` 占位字 ⇒ `axis_pipe` 的
+    1 拍前瞻把"下一帧首字"跨过 DEL→ADD 时只是"预开一帧",载荷/seq 从新会话起点算
+    ⇒ 跨会话**零载荷泄漏** (代价 1 拍/帧)。
+  · **HLS 槽释放 (D6)**: bare SYN 落在非空闲槽 = 对端重新发起该四元组 ⇒ 入口处
+    `CFG_DEL` 清 fast 侧残留 + 槽归零走既有全新建连路径 (与首建连逐字段同码) ⇒
+    同四元组重连不再依赖 RTO 自释放 (~1.0s → 15-23ms)。
 
 **鲁棒性 (板级实战逼出的三层防御)**:
 1. 截断帧闭合 — 线上帧短于 IP 承诺载荷时按真实字节收下转发, 缺口由 PC 重传自愈
@@ -107,14 +128,21 @@ Kintex-7 XC7K325T 纯硬件 TCP/IP 数据面: 64bit 字流 @125MHz, 当前 1G RG
 
 | 项 | 值 |
 |---|---|
-| 时序 | **WNS +0.137 ns**, TNS=0.000 / **WHS +0.041** / THS=0.000, **0 失败端点** (P5c, 全部约束达成) |
-| Slice LUT | 49,426 / 203,800 (24.25%) — 含诊断脚手架与 P5 app/流控逻辑 |
-| Slice Register | 39,887 / 407,600 (9.79%) |
-| Block RAM | **310 / 445 (69.66%)** (RAMB36 ×279 + RAMB18 ×62) — retx_ram 16 连接 × 64KB (256 片 RAMB36) + 各级 frame FIFO + HLS 内部缓存 |
+| 时序 | **WNS +0.268 ns**, TNS=0.000 / **WHS +0.035** / THS=0.000, **0 失败端点** (P5d post-D6, 全部约束达成; 0 DRC error) |
+| Slice LUT | 48,938 / 203,800 (24.01%) — 含诊断脚手架与 P5 app/流控/多连接逻辑 |
+| Slice Register | 39,827 / 407,600 (9.77%) |
+| Block RAM | **311 / 445 (69.89%)** — retx_ram 16 连接 × 64KB + 各级 frame FIFO + HLS 内部缓存 |
 | 布局策略 | Performance_ExtraTimingOpt (retx_ram 写地址寄存器化 + max_fanout 修 256 片布线拥塞) |
 
-⚠️ **hold 余量极薄** (WHS 仅 +0.041,最差 hold = 0 级逻辑纯布线) ⇒ 后续每次构建都要盯 WHS;
-setup 侧近临界族 = `ack_pend_r → TCB CE` (slack 0.465–0.523,见 PORT_NOTES 的 P5c 段)。
+⚠️ **hold 余量极薄** (WHS 仅 **+0.035**,最差 hold 在 `u_hls/grp_mac_tx_process_fu_1710` 的
+CRC 寄存器**短路径**,纯布线主导) ⇒ 后续若往 **mac_tx 的 CRC 链**或 **slow_tx FIFO** 加逻辑,
+会**先在这里失败**;
+setup 侧本轮新风险族 = **`app_ctrl.c_snd_wnd → app_pattern.stg_reg/CE` (slack 0.419ns)** ——
+opener/fence 引入的**跨模块锥** (app_ctrl → app_pattern),是当前最接近临界的新增族;
+另见 PORT_NOTES 的 P5c 段 (`ack_pend_r → TCB CE`, 0.465–0.523)。
+**注**: 18:16 的 D6 构建相对 17:47 的 pre-D6 构建 `+0.272/+0.052 → +0.268/+0.035` 属
+布局布线方差 + 旁观族名次洗牌 (HLS 换网表后 `u_hls/*` 内部 setup 依旧不在最差 400),
+不是新增逻辑的代价。
 
 ## 板级结果
 
@@ -150,6 +178,16 @@ setup 侧近临界族 = `ack_pend_r → TCB CE` (slack 0.465–0.523,见 PORT_NO
   · ⚠️ `FI` 口径: 它只是 **fast path** 的 FIN 计数;慢路径 HLS 另发一帧 FIN+ACK
     (`hls/src/layer_tcp.cpp` 的 `T_SYN_RCVD` 收 FIN 分支,seq 用旧值 ⇒ 对端 out-of-window
     丢弃,是该分支的正确行为) ⇒ **"一次 close 恰 1 帧 FIN"在线上不成立**,判据勿按线帧数写。
+- **P5d 板级 (同四元组重连 / D6 判别性变体)**: 固定本地源端口连续重连,轮间隔 `--gap 0.6`
+  压到 D6 的 RTO 自释放窗口 (~2-5s) **之前** ⇒ **post-D6 建连 15-23ms**,pre-D6 同脚本
+  **~1.0s** (轮 2/3 各 1.029/1.012s) —— 两版位流可判别。
+  逐帧签名 (pre-D6): `SYN → SYN+ACK(ack=旧 ISN+1, 无 cfg ADD) → PC RST → 1.0s 后 SYN 重传才成功`。
+  (**默认 `--gap 4.0` 两版都过** —— 轮周期 ~5.5s 晚于自释放 ⇒ 不可分,判据必须用窄间隔)
+  · **4MB 单连接回归** (post-D6): `RX` 逐字节精确、`MM=0` ⇒ 分池/动态裕度/opener 不破单连接。
+  · ⚠️ **板级多连接不可行**: `app_pattern` 是单连接演示 app、板级寄存器总线无 CPU ⇒
+    分池门槛 (app 建连前写 `0x0C`) 只能在 TB 侧设 ⇒ 板级只验**单连接不回归**。
+  · ⚠️ `FI` 口径同 P5b/P5c: `FI`/`RS`/`EC`/`ST` 都不是 D6 的判据 (两版一样) ——
+    `RS` 每轮重连 +1 是关闭超时 RST 的正常语义,`DP` (事件丢弃) 会随重连爬升 (每轮 +1)。
 
 ## 验证
 
@@ -187,6 +225,11 @@ BYTES/DELAY 经 pcstall.memh 同源传入 TB 与 checker)。
   (板侧校验器消费 ~0.89 字节/拍 ⇒ 必然积压 ⇒ 触发窗口收缩/wu 重开);图案生成**先于 connect**
 - `board_p5b_check.py [--port COM9] [--expect-rx N]` — 读板侧 P5B1 状态行并自动判据
   (RX/MM/AD/DL/OC);`WU`/`PX`/`FI`/`RS` 只作诊断,口径见脚本头注释
+- `pc_p5d_reconn_test.py [--rounds 5] [--gap 0.6] [--bytes 32768]` — **P5d D6 同四元组重连
+  板级验收**: 固定本地源端口连续轮 [connect → 灌 32KB → drain → close],每轮读 P5B1 状态行;
+  判据 = 全部轮次建连 + 传输成功 (槽泄漏未修时第 4 轮起 (MAX_TCP_CONN=3) connect 失败/超时)。
+  **必须用窄轮间隔** (`--gap 0.6`): 默认 `4.0` 的轮周期 (~5.5s) 晚于 D6 的 RTO 自释放窗口
+  ⇒ 修前修后不可分
 
 **构建/烧录** (`board/`) — 两套独立工程, 位流互不覆盖:
 ```bash
@@ -205,33 +248,50 @@ cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_timing_p5.bat'     # 快速时序迭�
 `run_tb_p5_flow.bat` (**P5b 窗口闭环门**: 慢消费者 + 对端灌数据,逐拍占用/右沿/零重传)。
 **P5c 定向证伪门**: `run_tb_tcp_close.bat` (`sim/p5close/`, G1 FIN 重推死锁 / G9 回卷洪水;
 修复前 FAIL、修复后 PASS)。
+**P5d 门**: `run_tb_p5_multi.bat [case]` (`sim/p5d_multi/`, **多连接门**: 3 连接并发大流量 +
+可编程慢消费者 + 并发 close;判据 ①-⑨ = 122 checks / 0 FAIL;负对照 `neg_wq`⇒①FAIL /
+`neg_mgn`⇒④FAIL / `neg_mgn0`⇒⑥⑦FAIL;`known_idle_fifo` = 长只写后首读**逐字节守卫**
+(曾误判为 `frame_fifo` 预存缺陷,已证伪:实为 TB 激励的 0 延迟竞争)) /
+`run_tb_p5d_d1.bat` (`sim/p5d_d1/`, **D1 单元门**: abort 请求窗 `rst_req` + 残余 F 项
+ESTAB 状态门 + 释放,6 条判据) / `run_tb_p5e_win.bat` (`sim/p5e_win/`, **0 载荷 opener
+窄窗门**: pipe 残余字跨会话 ⇒ 逐字节图案零泄漏) / `run_tb_p5c_fence.bat` (`sim/p5c_t3/`,
+abort fence 单元门 F1-F5,判据文本未改、激励按真链路补 `rst_req` 释放)。
 
 ## 遗留
 
-- **P5d (下一步, 多连接加固)**:
-  · **HLS 槽位泄漏**: abort/关闭后 HLS 槽停在 `T_ESTABLISHED`,同四元组新 SYN 被静默忽略
-    (`hls/src/layer_tcp.cpp` 只有 `T_FREE+SYN+!ACK` 才建连) ⇒ 槽位永久占用
-    (MAX_TCP_CONN=3 ⇒ 三次半关闭后建不了连)。
-  · **HLS 硬编码 48K 通告窗 (C21)**: 慢路径每个段 (含 SYN-ACK) 都写死 `0xC000` ⇒
-    零配额连接 (多连接池耗尽) 被告诉 48K 而猛发 ⇒ 全被 `tcp_rx` 拒 (物理安全由接受窗兜住,
-    但**流控闭环对这类连接第一步就失效**) ⇒ 必须与**多连接信用分池**一起解决。
-  · **多连接分池**: 零拷贝是单一全局 64KB FIFO ⇒ 今天 `WIN_Q_MAX = WIN_POOL` 让第 2 条连接
-    `winq=0`;分池策略 (每连接配额上限 / `occ` 按连接归属) 未做。
-  · **ackq 条目不带 seq** (P5c T1 残余): FIN 条目弹出那 1 拍内对端 ACK 到达时仍可能发
-    `seq = fin_seq+1` 的 FIN ⇒ 需条目带 seq (接口改动)。
+- **P5e (下一步)**: UDP app 接口 (复用 `udp_rx`/`udp_tx_frame`); `app_pattern` 每帧首字的
+  **0 载荷 opener** 已按 P5e 语义提前落地 (通用到 UDP 亦然)。
+- **P5d 剩余 (非阻断)**:
   · **`scan_now` 饥饿**: `fin_push`/`rst_push`/RTO 装表只在 FSM `S_IDLE` 拍评估 ⇒ app 饱和
     发送时 close/abort 被推到数据流结束才发 (生产 1MB ≈ 8ms);判据全绿但"应用中途 abort
     的响应延迟"无上界。
-- **P5e**: UDP app 接口 (复用 udp_rx/udp_tx_frame)。**P6**: 10G 未开工; DDR 留给 10G 大窗口
-  (BRAM 已用 69.66%)
+  · **ackq 条目不带 seq** (P5c T1 残余): FIN 条目弹出那 1 拍内对端 ACK 到达时仍可能发
+    `seq = fin_seq+1` 的 FIN ⇒ 需条目带 seq (接口改动)。
+  · **HLS 硬编码 48K 通告窗 (C21) 未改**: 慢路径每个段 (含 SYN-ACK) 仍写死 `0xC000`;
+    D4 分池后**零配额连接这一成因消失** (N≤3 每条连接都拿 `WIN_POOL/N > 0`),但 N≥2 时
+    SYN-ACK 通告值 (>实际配额) 与 fast path 实际窗口不一致 —— 物理安全由接受窗兜住,
+    代价是首轮多发的段被拒/回 ACK。
+  · **3 槽耗尽后的新连接仍被静默丢弃**: `tcp_find` 对不匹配四元组在**无空槽**时返回 −1
+    ⇒ 属**策略**问题 (D6 修的是"槽未释放",不含"槽不够");已加只读观测计数
+    `tcp_stat_no_slot` (`hls/src/layer_tcp.cpp`)。
+  · **`ACTIVE_CONNECT=1`** (当前 netlist 的 SourceFlags) 让板子每 ~6.7s 自发占一个 HLS 槽
+    ⇒ `MAX_TCP_CONN=3` 的可用包线要扣掉一个。
+- **P6 (10G 提速) — 时钟必须来自 GT**: 板载系统时钟 **50MHz 数学上产生不了 156.25MHz**
+  (10G 参考时钟),且 **PG157 的 `clk_out` 是硬约束** ⇒ 必须用 PG157 的 `clk_out` 经
+  **`BUFG_GT`** 供全设计 (不能用 MMCM 凑)。迁移必改项: **UART `BIT_LAST` 从 13020 → 16276**
+  (波特率按 156.25/125 重算),否则串口状态行全乱码。**另有 C1b 的 10G Δ 溢出三选一**。
+  DDR 留给 10G 大窗口 (BRAM 已用 69.89%)。
 - **P6 前哨 — 通告右沿 Δ 漂移在 10G 会溢出 (C1b)**: 实际通告右沿 = `redge + Δ`
   (`Δ = ackq 深 × 每帧拍数 × 到达速率`):1G (1B/拍) `32×88×1 = 2816` ⇒ `49152+2816 < 65536` ✓;
   **10G (8B/拍) `32×88×8 = 22528` ⇒ `49152+22528 = 71680 > 65536` ❌ 溢出**。
   P6 必做 (三选一): ① 减小 ackq 深 ② 缩 `WIN_Q_MAX` ③ **把 `redge[c]` 直接接进 ACK 帧组装**
   (窗口字段 = `clamp(redge[rb_id] - rb_rcv_nxt)`,精确右沿,根治;代价 16×32 位寄存器跨模块)。
-- **P5b/P5c 已知代价**: 接受窗 (`ACC_MARGIN=4096`) 只在单连接 + 1G 流量下压测;
-  多连接 + 大流量只有推导,无压测。构建 **hold 余量 +0.041ns 极薄** ⇒ 换布局种子或加逻辑时
-  首当其冲是 hold。
+  ⚠️ 若选 ② (`WIN_Q_MAX`/分池上限调小),记得 **H-fix 的 10550 预算式与下界钳 3328 要一起重算**。
+- **P5b/P5c/P5d 已知代价**: 接受窗 (`ACC_MARGIN` = `min(4096, 10550/N)`) 的多连接 + 大流量
+  组合已由 `p5d_multi` 门覆盖 (3 连接),但**板级只验单连接** (`app_pattern` 单连接 + 无 CPU)。
+  构建 **hold 余量 +0.035ns 极薄** (最差 hold = `u_hls/.../mac_tx` CRC 寄存器短路径) ⇒
+  往 **mac_tx 的 CRC 链 / slow_tx FIFO** 加逻辑会先在这里失败;
+  setup 侧新族 = `app_ctrl.c_snd_wnd → app_pattern.stg_reg/CE` (0.419ns)。
 - 板侧既有病理 (P4 起就有, 非 P5 引入): 偶发突发丢帧 + TX 静默 ~200ms
   (因果链推断 = 乱序 dup-ACK 请求 → `ackq` 8 深溢出 → 对端只能等 200ms RTO);
   P5b 对症 = ackq 加深 (8→32) + `stat_ack/drop` 接进 UART 快照 + 窗口闭环
