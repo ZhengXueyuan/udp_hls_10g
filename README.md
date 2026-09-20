@@ -119,7 +119,9 @@ Kintex-7 XC7K325T 纯硬件 TCP/IP 数据面: 64bit 字流 @125MHz, 当前 1G RG
 3. 对端风暴免疫 — PC 网卡驱动重启 (抓包强杀) 引发的 dup-ACK/重传风暴全消化
 
 **板级诊断接口 (长期保留)**:
-- UART 9600-8N1 (板载 CH340E, COM8) 全精度快照: TCB/窗口/FSM/三站词计数/tlast 三计数/
+- UART 9600-8N1 (板载 CH340E — **枚举为 COM9**, 换 USB 口会变; `tools/board_vlan_test.py`
+  与 `tools/board_p5b_check.py --port` 用 COM9, `tools/board_diag18_test.py` 里的 COM8 已过时)
+  全精度快照: TCB/窗口/FSM/三站词计数/tlast 三计数/
   截断计数 (TRU)/慢路径存活字段 (SC/SD/SF/SP/SV/HR)/线缆帧长 (WL) + 64 拍 TR/RXT 轨迹环
   + FIFO tlast 位图 (TL), boot 自检后每 5s 一行 (见 `board/uart_dbg.v` 头注释)
 - LED: boot 自检 3 闪 + 门控/锁存/满标志实时探针
