@@ -143,6 +143,13 @@ setup 侧近临界族 = `ack_pend_r → TCB CE` (slack 0.465–0.523,见 PORT_NO
 - **P5c 板级 (关闭超时活性判据)**: FIN 之后对端**持续有数据 5.2s 不被 RST** (旧判据
   400ms 就 RST,会把对端 4MB 全丢);对端**静默 400ms 后 RST** ✓ —— 合法半关闭不再被误拆,
   无响应连接仍能拆干净 (RST 上线 + `state=0` + 配额归还)。
+  · **阴性对照 (对端主动关闭)**: PC `shutdown(SHUT_WR)` ⇒ 走 HLS 慢路径 DEL ⇒ `RS` 不增
+    (线上无 RST 帧),超时**不误触发** ✓
+  · **配额归还后新连接可用**: 超时拆除后新连接拿到满窗 `WQ=C000` 并收全数据 ✓
+    (累计 `RX=10,960,896` 逐字节精确、`MM=0`,工具 `BOARD_P5B OK`)
+  · ⚠️ `FI` 口径: 它只是 **fast path** 的 FIN 计数;慢路径 HLS 另发一帧 FIN+ACK
+    (`hls/src/layer_tcp.cpp` 的 `T_SYN_RCVD` 收 FIN 分支,seq 用旧值 ⇒ 对端 out-of-window
+    丢弃,是该分支的正确行为) ⇒ **"一次 close 恰 1 帧 FIN"在线上不成立**,判据勿按线帧数写。
 
 ## 验证
 
