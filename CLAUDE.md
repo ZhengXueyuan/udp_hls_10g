@@ -49,7 +49,7 @@
 |------|------|
 | `rtl/` | 数据面 RTL (mac_rx_64/mac_tx_64/tcp_rx/tcp_tx_frame/tcb/tcp_cam/retx_ram/…) + `app_*.v` (P5 app 接口与演示 app) |
 | `tb/` | xsim testbench (`tb_p4_chain` 全链 / `tb_p5_*` app 门与对抗集 / 各单元 TB) |
-| `sim/` | xsim 工作目录 (每个门用**独立目录**, 避免 `xsim.dir` 文件锁; 见下"本工程新增坑" 7) |
+| `sim/` | xsim 工作目录 (每个门用**独立目录**, 避免 `xsim.dir` 文件锁; 见下"本工程新增坑" 7)。**canonical 门** = `sim/p4sim/` (P4 矩阵) / `sim/p5sim/` (P5 app 门) / `sim/p5close/` (P5c 定向证伪门); 其余 `sim/p5b_*/`、`sim/p5c_*/`、`sim/p5bfix/`、`sim/f2chk/`、`sim/t1run/` 等是**复核/跑数产物目录**, 已 ignore (只保留其中的 `run_tb_*.bat` 与 TB 源码) |
 | `tools/` | Python (anaconda: `/c/Users/zhxue/anaconda3/python.exe`) + `cpp_peer/` 合成 TCP 对端 |
 | `board/` | `wrapper_p4.v` (顶层, APP_MODE 分支) / `uart_dbg.v` / XDC / 构建烧录 bat 与 tcl |
 | `hls/` | HLS 慢路径 (`src/` 源码 + `tb/` 测试台跟踪; `slowstack_prj/` 与 `logs/` 是产物, 已 ignore) |
@@ -64,8 +64,14 @@ bash sim/p4sim/run_matrix_p4dfix.sh
 # P5 app 门 (APP_MODE)
 cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_app.bat'      # 1MB 图案逐字节
 cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_wrapper.bat'  # wrapper APP_MODE 全链 (接线错误只有它能抓)
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_status.bat'   # 136 字符状态行
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_adv.bat' reconn_fast   # 对抗集 (len/b2b/wnd/fin/findrop/abort/evfifo/reconn_fast/reconn_slow/multi)
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_status.bat'   # 220 字符状态行
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_adv.bat' reconn_fast   # 对抗集 (len/b2b/wnd/fin/findrop/abort/evfifo/reconn_fast/reconn_slow/multi/accmgn)
+# P5b 流控闭环门 (独立单元门 + 全链慢消费者门)
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_fc.bat'       # tb_app_fc: 池/右沿算术边界/回绕/事件撞车 (110 项)
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_flow.bat'     # 512KB 慢消费者 + 对端灌数据 (占用/右沿/零重传)
+# P5c 关闭语义门
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_app.bat' close  # 关闭语义门 (FIN/RTO 重发/RST+fence/同时关闭/超时)
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5close\run_tb_tcp_close.bat' # 定向证伪门 (G1 FIN 重推死锁 / G9 回卷洪水)
 # 构建与烧录
 cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_build_p4.bat'    # 默认 (echo)
 cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_build_p5.bat'    # APP_MODE (app 接口)
@@ -105,3 +111,31 @@ tools/cpp_peer/peer.exe --iface '\Device\NPF_{...}' --rx-only --expect-pattern 1
    永久残留 → 数据面死锁)。**事件型状态必须由事件脉冲 (cfg ADD/DEL 收尾拍) 驱动清理**。
 10. **接受门与启动门必须同门**: 若 `s_axis_tready` 的条件比"能否启动一帧"的条件宽,
    收进来的字会既不成帧也不被排空 → 填满 FIFO 死锁 (P5a D2)。
+11. **新增模块"参数"后, 全链 TB 必须镜像 wrapper 的配置 (C12 扩展, 不只是端口连接)**:
+   P5b 给 `tcp_rx` 加 `ACC_MARGIN` (默认 0) 后, APP_MODE 的全链 TB 忘传 4096 ⇒
+   **门与板跑的是两个配置**, 假故障看着像 DUT 缺陷 (79 丢弃 / 75 重传 / 256B 失配),
+   补齐参数后同一次仿真三项全归零。加参数时除 `grep -rn "<module>" tb/ board/` 补端口外,
+   还要核对每个例化点的**参数值**是否镜像了 wrapper 的 ifdef 分支取值。
+12. **组合算术串一条链 = 时序致命; 先等价化简, 再拆流水**: P5b 扫描块
+   `winq → fq → redge_n → sdelta → wcalc → wu_mark` 全组合 ⇒ **37 级逻辑 / 22 CARRY4 /
+   WNS −3.089 / 4027 失败端点**。修法优先级 ① **等价化简** (证出 `wcalc ≡ fq` 的逐位恒等,
+   砍掉三级算术) ② **拆流水** (扫描周期 256 拍、中间大量空闲 ⇒ 流水免费)。
+   **流水 valid 位必须每拍默认清零** (同坑 6 的脉冲铁律), 否则 stage B/C 每拍重放陈旧 item
+   ⇒ 连拍狂发/池被抽干 (P5b 最大自伤)。
+13. **多级流水/扫描必须对"事件同拍撞车"让位**: 事件块在前、流水 landing 在后 ⇒ 同槽事件
+   落在流水窗口内必须丢弃该 item (采样拍守卫 `!(ev_blk && ev_slot==scan_id)` + stage B/C 的
+   `hit_b/hit_c` 比较), 否则用旧会话数据毒化 `redge/fc_pend/wu_pend` ⇒ 记账偏离 (C17)。
+14. **跨会话状态一律事件脉冲清, 且"确实落地才清"**: 条件清理会漏 (坑 9); 而"清位"≠"落地"
+   —— P5c F3: `st_pend` 被无关的 fc `gnt` 吞掉而标志已清 ⇒ `state=0` 写永久丢失。
+   清理条件必须绑定"本次落地的是不是这个写" (`fc_sel_r==5`)。
+15. **关闭/拆除类判据必须查线上帧 + 资源归还, 且超时要带对端活性**: `rst_req` 挂了 ≠
+   RST 发出 (触发同拍挂 `state=0` ⇒ `rb_state==1` 门关闭 ⇒ **结构性发不出**, P5c F2);
+   超时判据不能只看本地 (`fin_sent && ESTAB`) —— 合法半关闭的 4MB 会被 400ms 全丢
+   (板级实测 PC WinError 10053)。**活性 = 该槽 `rcv_nxt` 连续 N 轮未推进**。
+16. **板级工具四坑 (全是"判据全过却报 FAIL / 报假数据")**: ① GBK 控制台下 print 非 ASCII
+   抛 `UnicodeEncodeError` ⇒ **退出码变 1** (按 exit code 判 PASS 的自动化误报 FAIL) ⇒
+   脚本开头 `sys.stdout.reconfigure(encoding="utf-8", errors="replace")`; ② 解析函数定义了
+   必须真的调用 (`parse()` 漏调 ⇒ AttributeError); ③ 与板侧有超时窗口的脚本, 耗时准备
+   (图案生成 1.13s) **必须先于 connect** (否则板侧 400ms 关闭超时先到, 连接被拆);
+   ④ 计数口径写清 fast path 还是线上 —— `FI` 只是 fast path FIN 计数, 慢路径 HLS 另发
+   FIN+ACK ⇒ "一次 close 恰 1 帧 FIN" 在线上的判据不成立。

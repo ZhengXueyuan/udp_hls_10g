@@ -784,6 +784,9 @@ module tb_p4_chain;
         // 与 tcp_tx_frame 的默认语义逐位一致)
         .ack_fin(1'b0), .ack_rst(1'b0),
         .fin_req(16'h0), .rst_req(16'h0), .o_fin_sent(), .cfg_up(1'b0), .cfg_up_id(4'd0),
+        // P5b: wu (窗口更新) 通道本门不驱动 (恒 0 = P5a/P4 行为不变; 悬空输入
+        // 会成 Z/X 进 ackq 比较逻辑 ⇒ 必须显式接地 — C12)
+        .wu_req(1'b0), .wu_id(4'd0), .wu_val(32'd0), .wu_gnt(),
         .rb_id(rb_id), .rb_snd_nxt(rb_snd_nxt), .rb_rcv_nxt(rb_rcv_nxt),
         .rb_rcv_wnd(rb_rcv_wnd), .rb_snd_una(rb_snd_una), .rb_snd_wnd(rb_snd_wnd),
         .rb_state(rb_state),

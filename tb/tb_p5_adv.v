@@ -45,6 +45,9 @@ module tb_p5_adv;
     localparam [63:0] P5_SEED      = 64'h9E3779B97F4A7C15;
     localparam [31:0] K_MAX        = 32'd120_000_000;  // 全局死锁上限 (拍)
     localparam [31:0] TMO_OP       = 32'd24_000_000;   // 单 op 上限 (RTO ~12.5M 拍)
+    // P5b C16-修订 接受裕度 —— **镜像 board/wrapper_p4.v 的 APP_MODE 取值**
+    // (C12 扩展: 参数也必须镜像; 唯一绑定点, 见 u_rx 例化处注释)。
+    localparam [15:0] TB_ACC_MARGIN = 16'd4096;
 
     // RTL 图案 (D6): 先取 s[31:24] 再推进 s ^= s<<13; s ^= s>>7; s ^= s<<17
     function [63:0] xs_next;
@@ -207,12 +210,14 @@ module tb_p5_adv;
     wire        tx_retx_active, tx_retx_gnt;
     wire [3:0]  tx_retx_id;
     wire [15:0] tx_fin_sent;
+    wire [15:0] tx_rst_sent;   // P5c-T3 G3: tcp_tx_frame.o_rst_sent -> u_app_ctrl
     wire [15:0] app_tx_ready;
     wire [63:0] a_tdata;    wire [7:0] a_tkeep;
     wire        a_tvalid, a_tready, a_tlast;
     wire [7:0]  gmii_txd;
     wire        gmii_tx_en;
     wire [31:0] mac_stat_frames, mac_stat_abort;
+    wire [31:0] mac_stat_drop;
     wire        scfg_cam_wr;
     wire [3:0]  scfg_cam_addr;
     wire [31:0] scfg_cam_sip, scfg_cam_dip;
@@ -246,6 +251,12 @@ module tb_p5_adv;
     wire [31:0] ac_c0_snd_nxt, ac_c0_snd_una, ac_c0_rcv_nxt;
     wire [15:0] ac_c0_rcv_wnd;
     wire [16:0] rx_occ;
+    // P5b: 流控跨模块线网
+    wire        fc_upd_wr, app_wu_req, app_wu_gnt;
+    wire [3:0]  fc_upd_id, app_wu_id;
+    wire [2:0]  fc_upd_sel;
+    wire [31:0] fc_upd_val, app_wu_val;
+    wire        fc_gnt;
     wire        dbg_wnd_open, dbg_pay_full, dbg_sready, dbg_saxis_tvalid;
     wire [11:0] dbg_plen_r, dbg_plen;
     wire [2:0]  dbg_txstate;
@@ -254,15 +265,21 @@ module tb_p5_adv;
     wire [13:0] eco_wptr, eco_rptr;
     reg         tmo;                 // 脚本 WAIT 超时标志
 
-    // ---- cam/tcb 仲裁 (tx > rx > cfg) ----
+    // ---- cam/tcb 仲裁 (tx > rx > cfg; P5b: + 第 4 级 fc 最低优先) ----
+    // 与 board/wrapper_p4.v 的 APP_MODE 支同构 (scfg_gnt 表达式逐字不变)
     wire        sel_tx = tx_upd_wr;
     wire        sel_rx = !sel_tx && rx_upd_wr;
-    wire        tcb_wr  = sel_tx || sel_rx || (scfg_upd_wr && scfg_gnt);
-    wire [2:0]  tcb_sel = sel_tx ? tx_upd_sel : (sel_rx ? rx_upd_sel : scfg_upd_sel);
-    wire [3:0]  tcb_id  = sel_tx ? tx_upd_id  : (sel_rx ? rx_upd_id  : scfg_upd_id);
-    wire [31:0] tcb_val = sel_tx ? tx_upd_val : (sel_rx ? rx_upd_val : scfg_upd_val);
     assign rx_upd_gnt = sel_rx;
     assign scfg_gnt   = !sel_tx && !sel_rx && scfg_upd_wr;
+    wire        sel_fc = !sel_tx && !sel_rx && !scfg_upd_wr && fc_upd_wr;
+    wire        tcb_wr  = sel_tx || sel_rx || (scfg_upd_wr && scfg_gnt) || sel_fc;
+    wire [2:0]  tcb_sel = sel_tx ? tx_upd_sel : (sel_rx ? rx_upd_sel :
+                          (scfg_upd_wr ? scfg_upd_sel : fc_upd_sel));
+    wire [3:0]  tcb_id  = sel_tx ? tx_upd_id  : (sel_rx ? rx_upd_id  :
+                          (scfg_upd_wr ? scfg_upd_id  : fc_upd_id));
+    wire [31:0] tcb_val = sel_tx ? tx_upd_val : (sel_rx ? rx_upd_val :
+                          (scfg_upd_wr ? scfg_upd_val : fc_upd_val));
+    assign      fc_gnt  = sel_fc;
 
     // ======================= DUT =======================
     mac_rx_64 u_mac (
@@ -272,7 +289,8 @@ module tb_p5_adv;
         .m_axis_tvalid(raw_tvalid), .m_axis_tready(raw_tready),
         .m_axis_tlast(raw_tlast), .m_axis_tuser(raw_tuser),
         .m_axis_terr(raw_terr), .m_axis_tcrs(raw_tcrs),
-        .stat_frames(), .stat_crc_err(), .stat_drop(), .stat_bytes()
+        // P5b: stat_drop 接线 (multi 门要断言"板侧物理不丢帧")
+        .stat_frames(), .stat_crc_err(), .stat_drop(mac_stat_drop), .stat_bytes()
     );
 
     vlan_strip u_vlan (
@@ -305,7 +323,15 @@ module tb_p5_adv;
         .stat_fast(), .stat_slow()
     );
 
-    tcp_rx u_rx (
+    tcp_rx #(
+        // P5b C12: APP_MODE 对抗集 TB 镜像 wrapper 配置 (.ACC_MARGIN=4096)
+        // P5b 必修4: 改成 localparam 具名常量 —— 它既是 DUT 的实际配置, 也是
+        // "接受裕度 <= 物理余量" 判据的**唯一绑定点** (checker 断言 ADVCFG 行里
+        // 的 acc_margin <= 物理预算, 见 tools/gen_stim_p5_adv.py 的 ACC_BUDGET)。
+        // 改这里 = 改 DUT 配置, 门会当场响; 不再有"checker 里硬编码 4096 而 DUT
+        // 跑别的值"的脱钩空间。
+        .ACC_MARGIN(TB_ACC_MARGIN)
+    ) u_rx (
         .clk(clk), .rst_n(rst_n),
         .s_axis_tdata(f_tdata), .s_axis_tkeep(f_tkeep),
         .s_axis_tvalid(f_tvalid), .s_axis_tready(f_tready),
@@ -437,8 +463,13 @@ module tb_p5_adv;
         .o_retx_hi(tx_retx_hi), .o_retx_active(tx_retx_active),
         .o_retx_id(tx_retx_id),
         .fin_req(ac_fin_req), .rst_req(ac_rst_req), .o_fin_sent(tx_fin_sent),
+        // P5c-T3 G3: RST 已发出 (abort fence) -> u_app_ctrl.rst_sent
+        .o_rst_sent(tx_rst_sent),
         // P5a D1: cfg ADD 收尾脉冲清该槽 FIN/RST 已发标志 (同槽重连必需)
         .cfg_up(ev_up), .cfg_up_id(ev_slot),
+        // P5b: wu 条目通道 (app_ctrl 驱动, 与 wrapper APP_MODE 支同构)
+        .wu_req(app_wu_req), .wu_id(app_wu_id), .wu_val(app_wu_val),
+        .wu_gnt(app_wu_gnt),
         .dbg_wnd_open(dbg_wnd_open), .dbg_pay_full(dbg_pay_full),
         .dbg_sready(dbg_sready), .dbg_saxis_tvalid(dbg_saxis_tvalid),
         .dbg_plen_r(dbg_plen_r), .dbg_state(dbg_txstate),
@@ -475,6 +506,13 @@ module tb_p5_adv;
         .rc_rcv_nxt(rc_rcv_nxt), .rc_rcv_wnd(rc_rcv_wnd),
         .rc_snd_wnd(rc_snd_wnd), .rc_state(rc_state),
         .rx_occ_bytes(rx_occ), .fin_sent(tx_fin_sent),
+        .rst_sent(tx_rst_sent),   // P5c-T3 G3: abort fence
+        // P5b: 窗口纠偏写 + 窗口更新 ACK
+        .fc_upd_wr(fc_upd_wr), .fc_upd_id(fc_upd_id),
+        .fc_upd_sel(fc_upd_sel), .fc_upd_val(fc_upd_val),
+        .fc_gnt(fc_gnt),
+        .wu_req(app_wu_req), .wu_id(app_wu_id), .wu_val(app_wu_val),
+        .wu_gnt(app_wu_gnt),
         .o_ev_up(ac_ev_up), .o_ev_down(ac_ev_down), .o_ev_slot(ac_ev_slot),
         .fin_req(ac_fin_req), .rst_req(ac_rst_req),
         .close_req(1'b0), .close_id(4'd0),
@@ -487,7 +525,9 @@ module tb_p5_adv;
         .dbg_c0_state(ac_c0_state), .dbg_c0_snd_nxt(ac_c0_snd_nxt),
         .dbg_c0_snd_una(ac_c0_snd_una), .dbg_c0_rcv_nxt(ac_c0_rcv_nxt),
         .dbg_c0_rcv_wnd(ac_c0_rcv_wnd), .dbg_c0_snd_wnd(),
-        .dbg_estab_cnt(), .dbg_ev_cnt()
+        .dbg_estab_cnt(), .dbg_ev_cnt(),
+        .dbg_redge0(), .dbg_winq0(), .dbg_wu_mark0(), .dbg_pool(),
+        .stat_wu(), .stat_pool_exhaust()
     );
 
     assign eco2_tready = 1'b1;          // app RX 快消费者 (本 TB 不产生 PC 数据)
@@ -958,11 +998,15 @@ module tb_p5_adv;
             dump_reg(8'h15);
             dump_reg(8'h16);
             dump_reg(8'h17);
+            $fwrite(fd, "ADVMDROP %0d\n", mac_stat_drop);
             $fwrite(fd, "ADVMAC frames=%0d abort=%0d\n",
                     mac_stat_frames, mac_stat_abort);
             $fwrite(fd, "ADVRX7 pass=%0d nonmatch=%0d ipcsum=%0d crc=%0d seq=%0d ack=%0d bytes=%0d trunc=%0d\n",
                     rx_stat_pass, rx_stat_nonmatch, rx_stat_ipcsum, rx_stat_crc,
                     rx_stat_seq, rx_stat_ack, rx_stat_bytes, rx_stat_trunc);
+            // P5b 必修4: 暴露编译进 DUT 的接受裕度 (与 u_rx 端口同一 localparam),
+            // checker 用它断言 "接受裕度 <= 物理余量" + "TB 镜像 == wrapper"
+            $fwrite(fd, "ADVCFG acc_margin=%0d\n", TB_ACC_MARGIN);
         end
     endtask
 

@@ -14,6 +14,8 @@ module tb_tcp_tx_dbg;
         .ack_req(1'b0), .ack_id(4'd0), .ack_val(32'd0),
         // P5: FIN/RST 通道未用 (接地); 无 tcb -> rb_state 常量 1 (ESTAB)
         .ack_fin(1'b0), .ack_rst(1'b0), .fin_req(16'h0), .rst_req(16'h0), .cfg_up(1'b0), .cfg_up_id(4'd0),
+        // P5b: wu (窗口更新) 通道恒 0 + 新状态输出空接 (C12: 悬空输入 = Z/X)
+        .wu_req(1'b0), .wu_id(4'd0), .wu_val(32'd0), .wu_gnt(),
         .o_fin_sent(), .o_retx_id(),
         .rb_id(), .rb_snd_nxt(32'd6000), .rb_rcv_nxt(32'd1000), .rb_rcv_wnd(16'h2000),
         .rb_snd_una(32'd6000), .rb_snd_wnd(16'hFFFF), .rb_state(4'd1),

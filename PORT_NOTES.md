@@ -2755,3 +2755,356 @@ P4 矩阵 **16/16 EXIT=0**; P5 四门 OK; 重构建 **WNS +0.264 / TNS 0 / WHS +
 - `6121050` cpp_peer: dup-ACK 标准语义 + 图案相位修正 + `--rx-only/--expect-pattern`
 - `8daa6bd` P5a: app interface 数据面 + 板级双向验证 (35 文件 +5867 行)
 - `706ee8c` README: P5a 收官 + P5b-P5e 分解
+
+
+---
+
+## 2026-09-20 P5b 实现 (应用 RX 流控闭环: 窗口随 frame_fifo 占用收缩 + wu ACK) — 门全绿
+
+**范围**: `rtl/app_ctrl.v` (信用池 winq/pool + 右沿 redge + fc 纠偏写 + wu 请求 +
+增量补授 C15)、`rtl/tcp_tx_frame.v` (ackq 8->32 深 + wu 条目最低优先入队)、
+`board/wrapper_p4.v` (TCB 写口第 4 级 fc 仲裁 + wu 接线 + 状态行源)、
+`rtl/app_status_uart.v` (行尾追加 AK/AD/TS/WQ/WM/WU/PO/PX, 168->220 字符)、
+`rtl/app_pattern.v` (C11: RX 图案流 ev_up 重置, 与 TX 侧对称)。
+
+**门**: P4 矩阵 16/16、P5a 四门 + 对抗集、**新 flow 门** (`sim/p5sim/run_tb_p5_flow.bat`:
+512KB 慢消费者 + 对端灌数据, 逐拍占用/右沿/窗关-重开/零重传完成)、
+**新定向单元门** (`sim/p5sim/run_tb_p5_fc.bat`: occ 四点饱和边界/4GB 回绕/
+ev_up 与扫描拍对撞/同槽 DEL→ADD 遗留占用/池补授/wu 电平握手)。
+
+### 关键事实与坑 (按价值排序)
+
+1. **接收窗 (accept) vs 通告窗 (advertise) —— P5b 已知代价/待修 (第二轮更新)**:
+   帧里 `ack` 来自 ACK 队列 (请求拍采样), `window` 来自 TCB (上次 fc 写) ⇒
+   两者独立陈旧 ⇒ 实际通告右沿 = redge ± 抖动 (C1b 只写了 + 方向)。
+   当窗口收到 0 (占用满) 时, 对端在**旧窗口下合法发出**、落在 rcv_nxt 边界上的段
+   会被 tcp_rx 的 `seq_diff < ra_rcv_wnd`(=0) 判超窗 ⇒ 永久空洞 ⇒ 其后所有段按
+   乱序丢弃 (第一轮 flow TB 实测 34 段)。
+   **P5b 第二轮的处置 (C16-修订, 已落地)**:
+   ① **治本**: `tcp_rx` 新增参数 `ACC_MARGIN` (默认 0 = 默认构建逐位不变),
+      `win_ok` 改用 `acc_wnd = ra_rcv_wnd + ACC_MARGIN`; wrapper 在 APP_MODE 下
+      传 **4096** ⇒ 对端按旧窗口发出的在飞段**被接受, 不丢数据** (安全性:
+      `occ + W + 4096 + 未判定段(≤1518) = 54766 < 65536` ✓)。
+   ② **兜底**: `ackresp` 增加 `|| (seq_eq && !win_ok)` (RFC 793: 不可接受的段也要
+      回 ACK) ⇒ 极端情形下对端**立刻**重传, 而不是等 200ms RTO。
+   **实测 (flow 门, TB 与 wrapper 同配 4096)**: `seq 丢弃 79→0`、
+   `対端重传 75→0`、`图案失配 256→0`、`mac_drop=0`、逐字节完整 ⇒ 零丢失,
+   唯一残余是右沿抖动 ≤ 308B (须 < ACC_MARGIN, checker 已加硬断言)。
+   ⚠️ **门/板配置必须一致**: TB 若漏传 `.ACC_MARGIN(4096)` 就是"用另一个配置跑门"
+   (第一轮 79 丢弃/75 重传全部由此而来) — 见坑 11。
+   → 若将来要彻底消除抖动 (P6): 把 tcp_rx 的 win_ok 改用板侧 `redge`
+   (精确右沿), 或把 window 字段在帧组装时按 `redge - rcv_nxt` 现算。
+2. **C15 多连接语义**: 零拷贝是单一全局 64KB FIFO ⇒ Σwinq ≤ WIN_POOL 是物理约束。
+   默认 `WIN_Q_MAX = WIN_POOL` ⇒ 第 1 条连接拿满 48KB, 第 2 条起 winq=0 (窗口 0,
+   对端不发)。`_adv multi` 门按此语义更新 (不是放宽判据, 是语义演进); 增量补授
+   只在池回收后生效 ⇒ 多连接分池策略是 **P5d** 课题。
+3. **C14 零拷贝占用不在 ev_down 释放**: 同槽 DEL→ADD 时遗留占用会与新配额叠加
+   (`遗留 > 16KB` 即溢出)。两道保险: ev_up 授予 `min(WIN_Q_MAX, pool - occ)` +
+   init/扫描的 redge 一律用 occ 修正 (veto 裸 `rcv_nxt + winq`)。
+4. **wrapping 算术三处铁律**: ① redge 饱和 (occ >= winq ⇒ 右沿 = rcv_nxt), 禁裸
+   17 位相减; ② W = wcalc 必须判 `wdiff[31]`; ③ **ev_down 不得把 redge 写 0**
+   (rcv_nxt ≥ 2^31 时会被序比较判为"未来值"永久留存 ⇒ 窗恒 0 死锁);
+   `init 拍` 才重设 redge。定向门 T2/T3 已锁死这三条。
+5. **wu/ackq 优先级 (M1 类坑)**: wu 条目必须**最低优先**且 `wu_gnt = 确实入队`
+   (若写 `wu_push = wu_req && !ackq_full` 而 ackq_din 的 mux 让 ack_req 优先 ⇒
+   gnt 给了 wu 但条目写的是 ACK ⇒ wu_pend 被清而窗口更新从未发出 ⇒ 对端永久停等)。
+   `fin_repush` 与 wu 严格互斥 (同源条件), FIN 重推不可被抢。
+6. **xvlog 坑**: 给 module 加 ANSI 风格 `#(...)` 参数表会让 **body 里的 parameter
+   变成不可覆盖** (`localparam 'RING_CAP' cannot be overwritten`) ⇒ 顶层
+   `.RING_CAP(WIN_CAP_5)` 覆盖失效。新增参数必须与既有参数同风格 (body parameter)。
+7. **~~tcp_rx pcount 泄漏~~ —— 归因错误, 第二轮已证伪 (勿据此修 P6!)**:
+   第一轮把"窗口吃紧期短段被丢"归因到 `pcount` 跨帧残留泄漏。独立复核证伪:
+   `state <= S_PAY` 全文件唯一 (tcp_rx.v 的 wcnt==6 判定拍) 且**同拍无条件写
+   `pcount` 初值** ⇒ 不存在残留路径 (84 次进入 S_PAY 全部 pcount=2)。
+   **真因**: (a) 窗口收缩期 `ra_rcv_wnd == 0` + ack/window 采样时差 ⇒
+   `seq_eq && !win_ok` 的顺序段被判超窗 ⇒ 空洞 ⇒ 后续全乱序 (即坑 1);
+   (b) TB 侧当时用"只发整段"绕行把该工况从门里删掉了 (假绿)。
+   第二轮处置: 撤销 TB 绕行 (C20, 中流短段成为**显式用例**) + tcp_rx 加
+   ACC_MARGIN 接受裕度 + 拒收回 ACK (C16-修订); 修完实测丢段 0/重传 0。
+   ⚠️ **不要再按"pcount 泄漏"去改 tcp_rx 的 S_PAY 入口**。
+8. **门类**: flow 门逐拍断言 `occ ≤ winq + 2816 + 1518` (C1b 的 Δ + 一段, 这是
+   §3 判据 ① 的保守上界, 不是"抖动实测值") 且 `occ < 65528`;
+   右沿判据 = **抖动幅度 < 512B** 且 **< 接受裕度 ACC_MARGIN(4096)** (后者是真正的
+   安全条件: 抖动必须被接受裕度覆盖, 否则合法在飞数据被拒);
+   活性观测 `stat_fc_wait_max` (fc 请求最长挂起, > 16384 拍即 Δ 界失效)。
+   第二轮实测 (C20 真实短段 + ACC_MARGIN=4096): occ 峰值 49336 (软界 53486)、
+   fc_wait_max = 2、健康流 stat_wu = 0 (零额外帧)、`window` 取值含 **0**、
+   抖动 37 次 / 最大 308B、seq 丢弃 0、重传 0、逐字节完整。
+
+---
+
+## 2026-09-20 P5b 第二轮 (时序不收敛 + 功能复核修复) — 坑与事实
+
+**背景**: 第一版功能门全绿, 但**全量构建时序严重不收敛** (WNS -3.089 / TNS -3475 /
+4027 失败端点), 且复核发现若干功能缺陷 (C16-C20)。本轮修复的坑按价值排序:
+
+9. **流水线 item 必须显式"只活一拍" (本轮最大自伤)**: 扫描块改 3 拍流水后, 第一版
+   只在 scan_tick 置 `pa_v <= 1`, **忘了清** ⇒ stage B/C 每拍都拿陈旧
+   `pa_*/pb_*` 重放 ⇒ C15 增量补授/fc 写/wu 请求连拍狂发 ⇒ 池被瞬间抽干、
+   `pool` 记账全错 (定向门 T5/T6/T8/T9 当场炸)。**铁律**: 流水线的 valid 位必须
+   在"每拍默认清零"段 (always 块顶部) 里落 0, 由产生拍覆盖为 1 —— 与脉冲型
+   寄存器同一条铁律 (坑 6)。判据: 定向门 T5a (`ev_down 后 pool=C000`)。
+10. **扫描块四级算术串一条链 = 时序致命 (22 CARRY4 / 37 级逻辑 / 路由 62.9%)**:
+    `winq[c] -> fq -> redge_n -> sdelta -> wcalc -> wu_mark` 全组合 ⇒ 还诱发
+    Vivado **跨槽资源共享** (winq[14] → wu_mark[1]), 最差路径 37 级。
+    **修法 (已落地)**: ① 扫描拍用 `wscan = fq[15:0]` —— 与 `wcalc(redge_post,
+    rcv_nxt)` **逐位等价** (证明: `redge_n - rn = fq <= WIN_Q_MAX < 2^31` ⇒ 夹紧
+    分支全假; 且 `sdelta` 的物理含义 = 自上次扫描以来 app 消费的字节数 ≥ 0, 故
+    只有 sdelta>0 (redge_post = redge_n ⇒ wcalc = fq) 与 sdelta=0
+    (redge_n == redge[c] ⇒ wcalc(redge[c],rn) = redge_n - rn = fq) 两种情形);
+    ② 扫描拆 3 拍流水 (T 采样 / T+1 右沿 / T+2 fc+wu+C15) —— 扫描周期 256 拍,
+    中间 15 拍空闲 ⇒ 流水免费。
+    **⭐ 流水化后 `fc_upd_val` 必须与判据同源**: 判据用 `wscan_r` ⇒ 写值也取**同一个**
+    `wscan_r` (置 `fc_pend[c]` 时并存进 `fc_wq[c]`, `fc_upd_val` 按 `fc_id` 从
+    `fc_wq` 选)。绝不能用"从注册阵列现算"的组合值 (判据与写值可能不一致 ⇒ 写错窗口)。
+11. **新参数/端口必须同步到所有例化点 —— 包括 TB 的"配置镜像" (C12 血的教训)**:
+    `tcp_rx` 加了 `ACC_MARGIN` (默认 0) 后, **APP_MODE 的 TB 忘了传 4096** ⇒
+    TB 用"无裕度"配置跑 flow 门, 实测 seq 丢弃 79 / 对端重传 75 / 图案失配 256,
+    看着像 DUT 缺陷, 实际是**门与板跑的是两个配置**。判据修复后同一次仿真
+    三项全归零。**铁律**: 全链 TB 必须镜像 wrapper 的 ifdef 分支参数; 加参数时
+    `grep -rn "<module>" tb/ board/` 逐点核对。
+12. **TB 激励的图案 LFSR 不能被"另一条流"覆盖**: `flow_build` 无条件写
+    `plfsr <= tls; plfsr_rt <= tls;` ⇒ 每次重传都把**正常流**的 LFSR 拽到重传位置
+    ⇒ 之后 seq 对而**载荷内容**错位 (sink 侧表现为局部失配后自动对齐)。第一版
+    没暴露是因为绕行下 peer_retx 恒 0 (重传路径从未跑过)。修法: 由**调用方**各自
+    推进自己的流, 并加独立参考 LFSR (pref/pref_rt) 对账 (PATMM 诊断)。
+13. **扫描流水必须对"事件撞车"让位**: 事件块 (ev_up/ev_down) 在 always 里更靠前,
+    流水线的 landing 更晚 ⇒ 同一槽的事件若落在流水窗口内, 必须丢弃该 item
+    (否则用旧会话数据毒化 redge/fc_pend/wu_pend)。实现: 采样拍守卫
+    `!(ev_blk && ev_slot == scan_id)` (C17) + stage B/C 的 `hit_b/hit_c` 比较
+    (当拍 + 上拍事件槽号), 定向门 T9 锁死"授予量 = min(WIN_Q_MAX, pool-occ)
+    且未被 C15 补授覆盖"。
+14. **C18 同槽二次 ev_up 会蒸发配额**: `pool <= pool - g` 覆盖旧 winq 却不归还 ⇒
+    Σwinq + pool < WIN_POOL ⇒ pool=0 时永久零窗 (C15 补授要求 pool != 0, 救不回)。
+    修法: `pool <= pool - g_grant + winq[ev_slot]` (封顶) + `stat_slot_reuse` 观测
+    (寄存器 0x9E); 定向门 T8 锁死守恒式 `Σwinq + pool == WIN_POOL`。
+15. **flow 门右沿判据的正确形态**: "严格单调不降"结构性不成立 (ack/window 采样
+    时刻不同)。第一轮用 ±(2816+1460) = 14× 实测抖动 ⇒ 能静默放过一次 3 段撤回;
+    第二轮改为 **抖动 < 512B (实测 308B 的 ~1.7 倍) 且 < ACC_MARGIN(4096)**
+    —— 后者是真正的安全条件 (抖动被接受裕度覆盖 ⇒ 不拒收合法在飞数据)。
+    ⚠️ C20 撤销"只发整段"绕行后, 实测最大抖动从 136B 升到 **308B** (真实短段参与),
+    故 256B 不可达; 判据值必须随工况重测, 不能照抄。
+
+### P5b 收尾修复 (2026-09-20, checker/TB/文档 only — 不动 RTL)
+
+**背景**: 独立验收 agent 判定 P5b 门全绿 + 板级核心性质成立, 但揪出**判据覆盖**漏洞。
+以下改动全在判据/TB/文档层, **未改任何 RTL**。
+
+16. **判据覆盖的三个漏洞 (必修)**:
+    - `adv > 4096` (multi 门 conn1) 是**恒假断言**: 该门只注入 150B ⇒ `adv ∈ {0,150}`,
+      `150 > 4096` 永假 ⇒ `ACC_MARGIN` 被误设成 60000 也照样 PASS = "接受裕度失控"
+      这个安全方向**零覆盖**。改为 **`adv == 150`** 精确钉住 C16-修订 语义
+      (整段落进裕度内 ⇒ 必须被整段接受 ⇒ 前推不多不少 150)。
+    - conn0 的窗判据曾被放宽成 `(0xC000-8192, 0xC000)` —— 规格 §4c 的 **C19 明确驳回**
+      (下界 8192 是注入量的 79 倍, 能放过 17% 的欠通告)。验收实测 conn0 四帧 `win`
+      全 == `0xC000` ⇒ **已恢复严格判据 `win == 0xC000`**, conn1 的 `(0,1460)` 保持
+      (C15 真语义演进)。
+    - ACK 轨迹的"允许集合"此前用**混合连接**的集合 (`ev['ack']` 不过滤 ack_id), conn0 的
+      rcv_nxt 值漏进 conn1 的判据窗口 (数值恰好更小 ⇒ 侥幸不误报)。已按 `a[1]` 分流,
+      并把 conn1 收紧成**枚举判据** `{pcis+1, pcis+1+150}`。
+17. **"接受裕度必须 <= 物理余量"现在有门了 (新 case `accmgn` + 配置断言)**:
+    物理不等式 (零拷贝单 FIFO 口径, 与 flow 门 ① 同源): `WINQ(49152) + Δ(2816) +
+    U(1518) + 单段(1500) + ACC_MARGIN <= FIFO(65536)` ⇒ **`ACC_MARGIN <= 10550`**。两道:
+    ① **配置级**: `tb_p5_adv.v` 把 `TB_ACC_MARGIN` (与 `u_rx` 端口**同一 localparam**)
+      dump 成 `ADVCFG` 行, checker 断言它 == wrapper 的 APP_MODE 值 (C12 扩展: 参数镜像)
+      且 <= 10550; flow 门同理由**源码解析** wrapper + `tb_p5_app.v` 的镜像值
+      (不再硬编码 4096 ⇒ 与 RTL 参数解耦的毛病一起修掉)。
+    ② **行为级** (`accmgn`): 在**零配额 conn1** (通告窗 = 0) 注乱序探针段 (带洞 ⇒ 不占
+      缓冲、不推进 rcv_nxt), 看 `tcp_rx` 的窗口判决 (win_ok/ackresp):
+      `D < ACC_MARGIN` ⇒ **回 ACK** (`stat_drop_seq` +1); `D >= ACC_MARGIN` ⇒ **静默**
+      (`stat_drop_nonmatch` +1)。探针 `D=3328` (= C1b 1G Δ 2816 + 512) 必须回 ACK;
+      `D=10551` (= 物理余量 +1) 必须静默。
+    **灵敏度自测 (必修证据, 已完成)**: TB 副本改 `TB_ACC_MARGIN = 60000` 重跑 `accmgn`
+    ⇒ `D=10551` 探针从"静默"变成"回 ACK" (`seq` +1) 且 `ADVCFG` 撞预算 ⇒ 门 FAIL 2 项;
+    改回 4096 ⇒ 全 PASS。flow 门同样: wrapper/TB 副本改 60000 ⇒ ⑥ 两条断言 FAIL。
+18. **flow 门现已覆盖真 W=0 关窗 (C23 事实更新)**: 独立验收在 362 条 ACK 上统计
+    `window ∈ [0, 49152]`, **`==0` 的 2 帧** (ACK #213/#214), `<=1460` 共 **11 帧**,
+    且板侧 `stat_wu = 2` (wu 通路真的发出过, 不只是单元级 `tb_p5_fc` T7)。
+    ⇒ C23 早先记的"帧里从未出现真 W=0 / ==0 的 0 帧"是**撤销 C20 绕行之前**的旧口径,
+    已过时并更新。**措辞约束保留**: 判据本身只要求 "<= 1 段", 不得写成"判据证明了
+    真 W=0 关窗"; 可写"本门现已走过真 W=0 + wu 重开"。
+
+### P5b 板级观测补充 (2026-09-20, 数据来自验收 agent 板级实测)
+
+- **`WU` (= `stat_wu`, 已发窗口更新 ACK 数) 的触发源 = 连接建立瞬间的配额竞争**:
+  与 `PX` (`stat_pool_exhaust`) **同步 +1** —— 建连时 `pool` 已被占 ⇒ 授予量
+  `g < WIN_Q_MAX` ⇒ 置 `stat_pool_exhaust` 且窗口需一次纠正 ⇒ 发 wu。
+  **冷启动单次 4MB 运行 `WU = 0`** (无配额竞争 ⇒ 零额外帧) — 与 C6 "数据流正常时
+  `W_new` 恒定 ⇒ 零额外帧" 的设计意图一致。
+- **板级两张 UART 快照闭合 `W + occ ≈ winq`** (窗口收缩公式 `W = winq - occ` 在板级成立,
+  即 C1/C2/C4 的闭环):
+  · `RW=1E40` (7744) / `OC=0A1E8` (41448) ⇒ 和 = 49192 (winq 49152, 差 +40)
+  · `RW=2078` (8312) / `OC=09F60` (40800) ⇒ 和 = 49112 (winq 49152, 差 -40)
+  差值 = 字粒度取整 (occ 按 8B 字向上取整) + `W`/`OC` 两个字段的采样时刻差, 与 flow 门
+  ③ 的"抖动"同源 (非撤窗)。
+
+### P5b 第二轮时序: 根因与结果 (2026-09-20 落档)
+
+**根因 (坑 10 的量化)**: 扫描块把四级算术串成**一条组合链** ——
+`winq[c] → 占用差 fq → 右沿 redge_n → sdelta → wcalc → wu_mark`,最差路径
+**37 级逻辑 / 22 个 CARRY4 / 路由占比 62.9%**,还诱发 Vivado **跨槽资源共享**
+(`winq[14] → wu_mark[1]`)。
+
+**修法**: ① **等价化简** —— 扫描拍直接用 `wscan = fq[15:0]` 顶替 `wcalc(redge_post, rcv_nxt)`:
+`redge_n - rn = fq ≤ WIN_Q_MAX < 2^31` ⇒ wcalc 的夹紧分支全假;而 `sdelta` 的物理含义 =
+"自上次扫描以来 app 消费的字节数" ⇒ **`sdelta ≥ 0` 恒成立**,只剩两种情形 ——
+`sdelta > 0`(`redge_post = redge_n` ⇒ 两式同为 `fq`)与 `sdelta == 0`
+(`redge_n == redge[c]` ⇒ 两式同为 `redge_n - rn = fq`) ⇒ **两式逐位恒等 (非近似)**,
+饱和分支下亦成立。② **扫描拆 3 拍流水** (采样 / 右沿 / fc+wu+C15): 扫描周期 256 拍、
+中间 15 拍空闲 ⇒ 流水免费。
+
+**结果**: WNS **−3.089 / TNS −3475 / 4027 失败端点** → **WNS +0.271 / TNS 0.000 /
+0 失败端点** (routed;WHS 仅 **+0.049**)。
+⚠️ **代价是 hold 边界极薄**: 最差 hold = retx RAM `wa_o_r → ADDRARDADDR`(0 级逻辑,纯布线),
+place 阶段曾 −0.159 / 718 端点,全靠 router 收口 ⇒ **后续每次构建都要盯 WHS**。
+
+### P5b 观测口径与工具坑 (2026-09-20 落档, 编号接坑 18)
+
+19. **C16 的定性 (独立测试 agent 的限定, 口径必须照抄)**: 窗口塌陷期的顺序段
+    (`seq_eq && !win_ok`) 被 `tcp_rx` 静默丢弃 —— 这是**活性/时延问题, 不是内存安全问题**:
+    既没越界也没写坏数据, 代价只是对端白等一个 RTO (200ms) 才重传。`ACC_MARGIN`(接受界
+    宽容于通告界) + "拒收回 ACK" 兜底治的是**丢包重传成本**,不是溢出。
+    物理预算式 (零拷贝单 FIFO 口径):`WINQ(49152) + Δ(2816) + U(1518) + 单段(1500) +
+    ACC_MARGIN ≤ FIFO(65536)` ⇒ **`ACC_MARGIN ≤ 10550`**;wrapper 取 4096 (余量 ~10.7KB)。
+    该式现有双门: **配置级** (`accmgn` case 的 `ADVCFG` 断言 = 与 wrapper 同值且 ≤ 10550) +
+    **行为级** (D=3328 必回 ACK / D=10551 必静默,灵敏度自测 = 改 60000 ⇒ FAIL 2 项)。
+20. **C12 扩展成工程坑: "所有例化点" 包含"参数镜像"这一层**: `tcp_rx` 新增
+    `ACC_MARGIN`(默认 0) 后,APP_MODE 的全链 TB **漏传 4096** ⇒ **门与板跑的是两个配置**,
+    症状看着像 DUT 缺陷 (79 段丢弃 / 75 次重传 / 256B 图案失配),补齐参数后**同一次仿真**
+    三项全归零。**铁律**: 加参数时除 `grep -rn "<module>" tb/ board/` 补端口外,
+    还要核对每个例化点的**参数值是否镜像 wrapper 的 ifdef 分支取值** (已升级为 CLAUDE.md 坑 11)。
+21. **板级工具三坑 (全在 `tools/*.py`, 都是"判据全过却报 FAIL / 报假数据")**:
+    - `board_p5b_check.py` 的 `parse()` **定义了却没被调用** ⇒ 直接 `d.get()` 撞
+      `AttributeError` (板级 agent 实测踩到;已修 `d = parse(line)`)。
+    - **GBK 控制台下 print 非 ASCII 抛 `UnicodeEncodeError` ⇒ 退出码变 1**: 任何按 exit code
+      判 PASS/FAIL 的自动化都会**误报 FAIL** (实测量: 判据全过却 exit 1)。两个板级脚本
+      开头都加了 `sys.stdout.reconfigure(encoding="utf-8", errors="replace")` 兜底。
+    - `pc_p5b_win_test.py` 的**图案必须先于 connect 生成**: 板侧关闭超时 400ms
+      (FIN_TO_LIM=195313 轮 @125MHz = 4×RTO),而本机 4MB 图案生成约 **1.13s** ⇒ 先 connect
+      再生成时,板侧早已发完自己的 1MB + FIN 并超时 RST ⇒ 连接被拆、数据全丢
+      (板级实测 PC WinError 10053 / 板侧 RX=0 RS=1)。
+22. **`--offset` 的口径反转 (C11 的连带)**: C11 让板侧 `rx_lfsr` 在 `ev_up` 重置 ⇒
+    **每个连接都从图案头开始**,所以脚本 `--offset` 的**正确值恒为 0**;照旧文档逐轮累加
+    offset 反而会得到**假的 MM 失配**。脚本与文档都写明"默认 0 就是对的"。
+23. **`FI` 的口径 = fast path 计数, 不是线上的 FIN 帧总数**: UART 状态行的 `FI` 只是
+    `board/wrapper_p4.v` 的 `tx_stat_fin` (fast path)。慢路径 HLS **另发 FIN+ACK**
+    (`hls/src/layer_tcp.cpp` 的 `T_SYN_RCVD` 收 FIN 分支,seq 取 HLS 自己停住的值) ⇒
+    **"一次 close 恰 1 帧 FIN" 这类判据在线上不成立**;板级看到的 `seq=1` 是 Wireshark
+    相对口径。该帧**不是缺陷** (反而是全设计里唯一正确 ACK 对端 FIN 的帧) ——
+    要改的是**观测层口径**,不是 RTL。同类:`WU`/`RS` 也都不是 PASS 判据 (见
+    `tools/board_p5b_check.py` 头注释的完整口径)。
+
+---
+
+## 2026-09-20 P5c 关闭语义完善 (FIN/RST/abort + 关闭完成 + 关闭超时) — 门全绿 + 构建/板级通过
+
+**范围** (默认构建逐位不变;新增逻辑一律走"默认路径无可达置位 ⇒ 自然恒 0"的**无 ifdef** 写法):
+`rtl/tcp_tx_frame.v` (T1: G1 FIN 重推死锁 / G9 `ring_delta` 下溢洪水 / G4 死连接重传 /
+G6 跨会话残留;T3: `tx_blk` fence + `o_rst_sent`)、`rtl/app_ctrl.v` (T3: G2 关闭超时;
+T3b: 超时活性判据;G3: abort 的 `state=0` 写与配额归还)、`board/wrapper_p4.v` (接线 + 状态行源)、
+`tb/tb_p5_app.v` + `tools/gen_stim_p5_app.py` (T4 close 门)、`tb/tb_app_fc.v` (T3b 活性判据)、
+新 `sim/p5close/` (T2 定向证伪门)、新 `sim/p5c_t3/` (fence 单元门)。
+
+**门**: `p5close` 双门 (G1: FIN 帧 **1→17** 且下拍重试成功;G9: flood **31 帧→0**,全文无
+`ffffffff`)、P4 矩阵 16/16、P5b 全门 (app/wrapper/status/adv×11/flow/fc)、fence 门 PASS、
+`tb_app_fc` **110 PASS** (**负对照** 强制 `act_now=0` ⇒ **FAIL 22**,失败项正是新断言 ⇒ 门有鉴别力)、
+`run_tb_p5_app.bat close` **EXIT=0** (39s;5 条判据 + 3 条负向对照 `neg_rst`/`neg_fin`/`neg_pool`
+**三者都 FAIL**)。**T5 取消** —— 计划的三例 (close_simul/close_timeout/abort_fence) 已被
+T4 判据④ / T3b 的 T12-T13 / `tb_p5c_fence` F3 + `tb_app_fc` T11 覆盖,不重复造门。
+
+### 关键坑与事实 (按价值排序)
+
+1. **关闭超时必须带对端活性判据 (T3b, 板级证伪 TL 裁决后的修正)**: 板侧发完自己的 1MB + FIN 后,
+   PC 仍在灌 4MB (**合法半关闭**);旧判据 (`fin_sent[c] && c_state==ESTAB`,**不看对端活性**)
+   400ms 到点就 RST ⇒ **PC 的 4MB 全丢** (板侧 RX=0/RS=1,PC WinError 10053);线上时序
+   FIN@41ms → 最后数据字节@62ms → RST@FIN+400.017ms。
+   **修法 (零新增状态/端口)**: 复用既有 per-slot 扫描快照 —— `act_now = (rc_rcv_nxt !=
+   c_rcv_nxt[scan_id])` (快照与计数同周期、同 always 块非阻塞赋值 ⇒ 读到"上次扫描值",逐位精确;
+   `!=` 比较 4GB 回绕安全),`to_fire` 加 `!act_now` (收严:否则"恰好第 LIM 轮到达数据"那拍会用
+   **旧**计数误触发),计数块 `if (act_now && !to_fired[scan_id]) fin_to <= 0` (触发后配额已归还,
+   不得"复活";计数须继续走向 `fin_to_max` 驱动 `st_grace` 兜底)。
+   **精确语义**: 静默 = 该槽连续 FIN_TO_LIM 轮 `rcv_nxt` 未推进 ⇒ 400ms 无进展才 RST;
+   任一轮有推进 ⇒ 从**最后一次进展**重新起算 (`rcv_nxt` 只在对端新数据被接受时推进,
+   纯 ACK/重复段不推进) ⇒ 精确等价"对端仍有数据流"。
+   **判据 (TL 采纳 T3 的质疑)**: 必须查"**线上真的出现 RST 帧**"(FCS 有效)+"**配额真的归还**"
+   (新槽 `rcv_wnd != 0`),不能只查 `rst_req` 位。
+2. **G1 的致命点不是 `ackq_full` 那一支**: `ackq_full` 支是**死代码** (排空拍要求 `!ack_pend_r`,
+   而 `ack_pend_r <= !ackq_empty` ⇒ 上拍队列空 ⇒ 排空拍 `ackq_full` 恒 0)。真凶 =
+   **`retx_active <= 0` 无守卫** —— 被 `ack_req` 抢的那拍 `fin_repush=1` 仍成立,条目被
+   `ackq_din` 的 mux 吞掉;注释写"下一轮 ring 排空拍再重推"但代码**给不出下一轮**
+   (`snd_nxt == snd_una` ⇒ RTO 装表恒假 ⇒ 再无 svc) ⇒ **FIN 永不重发 ⇒ 关闭永不完成**。
+   修法: 排空拍"**确实入队才清 pend / 才结束会话**" (`ring_delta=0` 时每拍都是排空拍 ⇒ 下拍继续试)
+   + RTO 装表条件加 `|| fin_retx_pend[scan_id]` 兜底 + FIN 被 ACK 后清标志
+   (`rb_snd_una != fin_seq_r` ⇒ 清) 防 spurious FIN。默认构建下相关位恒 0 ⇒ **无需 ifdef**。
+3. **G9 = `ring_delta` 下溢洪水 (本轮最高危)**: `blocked`(epoch=15) 时不回卷,而 FIN 在飞
+   `snd_nxt = fin_seq+1 > retx_hi = fin_seq` ⇒ `ring_delta` **下溢 `0xFFFFFFFF`** ⇒ ring 洪水
+   重放**逐字节可验证的旧数据** (T2 实测 31 帧 / 12000 clk ≈ 490MB/s;投影 **2941758 帧 /
+   4096 MB**),且触发不稀有 (生产 RTO 100ms 下 close 后约 **1.7s** 自己走到,非层级灌值)。
+   修法: `retx_deny = blocked && fin_sent_r` (只否定"blocked && FIN 在飞",可证与默认构建逐位
+   等价) + `retx_hi` 加 `&& svc_rewind` 守卫 —— TL 原稿在"FIN 已被 ACK 但挂起位残留 +
+   无回卷"时**仍会下溢**。**T1 纠正 TL 定稿 4 处,全部接受** (含"给 `fin_repush` 加
+   `rb_state==1` 会引入 **TX 数据面死锁**:重试期若连接被 DEL ⇒ 永不入队而 `ring_eval`
+   压制全部 `S_IDLE && !ack_pend` 拍 ⇒ 整个 TX 面死锁 ⇒ 必须留两条退路)。
+4. **G1 × G9 在同一连接上互斥** (G1 的死锁态让 `snd_nxt==snd_una` ⇒ 不再累积 epoch ⇒
+   不触发 G9): 同一个 svc 代码体的两个出口,门必须**分别**构造 (T2 的双门就是为此)。
+5. **G2/G3 的四个审查真缺陷 (T3 自查 + 修)**:
+   ① **配额泄漏** —— 超时只写 `state=0` 不还配额 ⇒ 池被死连接占死 ⇒ G2 想治的"再也建不了连"
+   以**配额形式复活** (实测新槽 `winq=0/rcv_wnd=0` 收不了数据);
+   ② **RST 结构性发不出** —— 触发同拍挂 `state=0` ⇒ `rb_state==1` 门关闭,而 RST 要等
+   `tcp_tx_frame` 扫描,两模块 tick 同相 (复位起自由运行 /16,同槽访问间隔必为 16 整数倍)
+   ⇒ 永不发出;故 `state=0` 改由 `st_req_now` 挂出 = "RST 确实发出 (`rst_sent` 上升)" 或
+   "再数 `FIN_GRACE=4` 轮仍发不出" 的兜底;
+   ③ **清位 ≠ 落地** —— `st_pend` 只在 `fc_sel_r==5` (本次落地的确是 state 写) 时清,
+   否则一次窗口写的 `gnt` 会吞掉 state 写请求且 `st_done` 已锁 ⇒ **永久丢失**;
+   ④ 脉冲隔离 (保证 `o_ev_down` 是孤立 1 拍)。
+   事件投递**用脉冲** (`o_ev_down/o_ev_slot`),**不推事件 FIFO** (超时事件无 peer/kind 只 2 位/
+   板级无 CPU 消费者 ⇒ FIFO 投递今天零功能价值;真消费者 `app_pattern` 消费的就是这一对) ✓。
+6. **R8 (预存 P5b 漏洞, 本轮闭合)**: C15 增量补授 与 ev_up 的 C18 **同拍各按同一旧池余额
+   各授一份** ⇒ `Σwinq` 可达 **2×WIN_POOL** (可越 64KB 物理界)。修法 = C15 条件加 `!ev_blk`
+   (只延后 ≤256 拍,不饿死) ⇒ 守恒恢复。
+7. **T3 的时序风险预测被构建证伪 (构建 agent 纠正, TL 采纳)**: T3 自评头号风险
+   `u_tcp_echo/wptr → u_app_ctrl/pool_reg[...]/D` 实测 slack **1.149ns (改善 +0.60)**,
+   该锥由布局布线主导 (route 68.8%),连 top-30 都进不去 ⇒ **"归还路径寄存器化 1 拍"不做**
+   (会给 `Σwinq + pool == WIN_POOL` 的同拍饱和不变量引入 1 拍信用归还延迟)。
+   ✅ `tx_blk`/`tready` 锥判断正确 (实测 3.533ns);T1 的 ackq select 锥改善 (0.549 → 1.000ns)。
+   ⚠️ **新记录的上界风险**: 真正的近临界族是 `u_tcp_tx/ack_pend_r_reg → u_tcb/*/CE`
+   (LL=13, slack **0.465–0.523**,占 #4–#30) 与 `→ tcp_len_r[*]/D` (LL=19, 0.465) ——
+   任何给 `ack_pend_r` 扇出或 TCB CE 路径加重逻辑的改动都要先评估。
+8. **T4 发现的语义边界 (P5c 不修, 归 P5d/P6)**: **`scan_now` 饥饿 ⇒ close/abort 延迟无上界** ——
+   `fin_push`/`rst_push`/RTO 装表都只在 `scan_now` 拍评估,而 `scan_now` 要求 FSM `S_IDLE`;
+   app 饱和发送时 FSM 几乎恒在 `S_RECV/S_PAY` (74K 拍窗口内 `scan_now` 仅 **36** 次) ⇒
+   RST/close 被**推到 app 数据流结束才发** (生产 1MB ≈ 8ms)。判据仍全绿 (RST 确实发出、
+   顺序正确)。**推论**: G3 的 fence 在**全链 close 门内是空判据** (RST 总在数据流末尾发出);
+   非空验证由 `sim/p5c_t3/tb_p5c_fence.v` 的 F3 (RST 后同槽 400 拍 `s_axis_tready` 恒 0
+   且零新帧) + `tb_app_fc` T11 承担。
+9. **异常 A 的结论: HLS 慢路径 FIN, 不是缺陷** (TL 初判正确, 板级 agent 的假设被否证):
+   DEL 路径上多出的 `seq=1 ack=65538` FIN 帧出自 `hls/src/layer_tcp.cpp` 的 `T_SYN_RCVD`
+   收 FIN 分支;含**真 HLS 网表**的 `tb_p4_chain` 复现逐字段同签名帧,对照变体 (FIN 的 ack
+   改成 `c.seq`) **不发**该帧 ⇒ 分支判据钉死;fast path **结构性发不出** `seq=1`
+   (FIN seq 恒取 `rb_snd_nxt`)。要改的是**观测层** —— 见 P5b 坑 23 的 `FI` 口径。
+10. **T1 的残余未修 (记录)**: ackq 条目**不带 seq** —— FIN 条目入队后、等弹出那 1 拍内若对端
+    ACK 到达,弹出时按当时 `rb_snd_nxt` 取 seq ⇒ 仍可能发 `seq = fin_seq+1` 的 FIN
+   (老代码同缺陷;不变式守卫把窗口从"整个重试期"缩到 **1 拍**);彻底修需 ackq 条目带 seq
+   (接口改动) ⇒ 归 **P5d**。
+
+### 构建 (全量 APP_MODE, 2026-09-20 12:24-12:30, 通过)
+
+| 指标 | P5b 末 | P5c |
+|---|---|---|
+| WNS | +0.271 | **+0.137** |
+| TNS / 失败端点 | 0.000 / 0 | **0.000 / 0** |
+| WHS | +0.049 | **+0.041** |
+| THS / 失败端点 | 0.000 / 0 | **0.000 / 0** |
+| 面积 (placed) | LUT 47256 / FF 39436 | LUT **49426** / FF **39887** |
+| Block RAM | — | **310** / 445 (69.66%) |
+
+位流 `wrapper_p4.bit` 11,443,735 B @12:30,**晚于最后 RTL 改动 (11:38) 52 分钟** ⇒ 新鲜可用。
+WNS 的 0.09ns 退化与 T1/T3 的逻辑深度无关 (落在 `retx we_o_r → WEA` 这类布局布线方差族,
+与 P5b 基线 #1 同族);T3b (活性判据) 在 `app_ctrl` 的改动落在同一族上。
+
+### 板级 (2026-09-20)
+
+- **关闭超时活性判据**: FIN 之后对端**持续有数据 5.2s 不被 RST** (旧判据 400ms 就 RST);
+ 对端**静默 400ms 后 RST** ✓ —— 合法半关闭的数据流不再被误拆,无响应的连接仍能拆干净
+  (配额归还 + `state=0`)。
+- 板级观测口径同 P5b 坑 19/23: `RS` 递增 = 超时 RST (正常语义);`FI` = fast path FIN 计数。

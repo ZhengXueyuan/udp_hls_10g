@@ -403,9 +403,35 @@ module wrapper_p4 (
     // ---- P5: 新增跨模块线网先声明 (app_ctrl 实例在前引用) ----
     // echo frame_fifo 指针 (P4c: AW=13 -> 14 位含绕回位; app RX 占用换算用)
     wire [13:0] eco_dbg_fifo_wptr, eco_dbg_fifo_rptr;
+    // ---- P5b C9: 状态行观测源 (两种构建都声明 — 由 tcp_tx_frame 输出驱动,
+    //      默认构建无消费者) ----
+    wire [31:0] tx_stat_ack_w, tx_stat_ack_drop_w;
+    wire [2:0]  tx_dbg_state;   // tcp_tx_frame FSM state (P4/P5 诊断共用)
+    // ---- P5c-T3 G3: abort fence 线束 (tcp_tx_frame.o_rst_sent -> app_ctrl) ----
+    // **两种构建都声明**: u_tcp_tx 在两种构建里都例化 (它的 .o_rst_sent 必须接一
+    // 根真网线 — 否则会隐式造出 1 位网线并丢掉高 15 位); 默认构建无消费者
+    // (app_ctrl 不存在) ⇒ 仅空置, 与上面 tx_stat_ack_w 同惯例。声明必须在
+    // u_app_ctrl / u_tcp_tx 两个实例之前 (P5a 教训: 用前必须声明)。
+    wire [15:0] tx_rst_sent;
 `ifdef APP_MODE
     // P5: app RX 缓冲占用 (echo frame_fifo 字节数; 17 位 = 8192 字 x 8)
     wire [16:0] app_rx_occ = {(eco_dbg_fifo_wptr - eco_dbg_fifo_rptr), 3'b0};
+    // ---- P5b: 流控闭环跨模块线网 (先声明后使用; u_app_ctrl 在下面几百行) ----
+    // ① 窗口纠偏写 (app_ctrl -> TCB 写口第 4 级仲裁)
+    wire        fc_upd_wr;
+    wire [3:0]  fc_upd_id;
+    wire [2:0]  fc_upd_sel;
+    wire [31:0] fc_upd_val;
+    wire        fc_gnt;
+    // ② 窗口更新 ACK 请求 (app_ctrl -> tcp_tx_frame 的 ackq 条目)
+    wire        app_wu_req, app_wu_gnt;
+    wire [3:0]  app_wu_id;
+    wire [31:0] app_wu_val;
+    // ③ 状态行 (C9) 观测源
+    wire [15:0] app_winq0, app_wu_mark0;
+    wire [16:0] app_pool;
+    wire [31:0] app_stat_wu, app_stat_pool_exh;
+    wire [31:0] app_stat_slot_reuse;   // C18 观测 (未接状态行; 寄存器读 0x9E 可见)
 `endif
     // tcb 组合读口 C (app_ctrl 轮扫源; 默认模式恒读 0 号条目, 无副作用)
     wire [3:0]  rc_id;
@@ -536,11 +562,23 @@ module wrapper_p4 (
         .rc_state       (rc_state),
         .rx_occ_bytes   (app_rx_occ),
         .fin_sent       (app_fin_sent),
+        // P5c-T3 G3: RST 已发出 (abort fence) — 非 ESTAB/未发 RST 时为 0
+        .rst_sent       (tx_rst_sent),
         .o_ev_up        (app_ev_up),
         .o_ev_down      (app_ev_down),
         .o_ev_slot      (app_ev_slot),
         .fin_req        (app_fin_req),
         .rst_req        (app_rst_req),
+        // P5b: 窗口纠偏写 (第 4 级仲裁) + 窗口更新 ACK 请求
+        .fc_upd_wr      (fc_upd_wr),
+        .fc_upd_id      (fc_upd_id),
+        .fc_upd_sel     (fc_upd_sel),
+        .fc_upd_val     (fc_upd_val),
+        .fc_gnt         (fc_gnt),
+        .wu_req         (app_wu_req),
+        .wu_id          (app_wu_id),
+        .wu_val         (app_wu_val),
+        .wu_gnt         (app_wu_gnt),
         .close_req      (app_close_req),
         .close_id       (app_close_id),
         .reg_addr       (app_reg_addr),
@@ -560,7 +598,15 @@ module wrapper_p4 (
         .dbg_c0_rcv_wnd (app_c0_rcv_wnd),
         .dbg_c0_snd_wnd (),
         .dbg_estab_cnt  (app_estab_cnt),
-        .dbg_ev_cnt     (app_ev_cnt)
+        .dbg_ev_cnt     (app_ev_cnt),
+        // P5b: 流控观测 (状态行 C9)
+        .dbg_redge0     (),
+        .dbg_winq0      (app_winq0),
+        .dbg_wu_mark0   (app_wu_mark0),
+        .dbg_pool       (app_pool),
+        .stat_wu        (app_stat_wu),
+        .stat_pool_exhaust (app_stat_pool_exh),
+        .stat_slot_reuse   (app_stat_slot_reuse)
     );
 
     // P5 寄存器总线默认静止 (板级无 CPU/AXI; 将来接 AXI-Lite 桥)
@@ -589,6 +635,15 @@ module wrapper_p4 (
         .stat_drop_len  (tx_stat_drop_len[15:0]),
         .stat_fin       (tx_stat_fin[15:0]),
         .stat_rst       (tx_stat_rst[15:0]),
+        // P5b C9: 流控闭环观测 (ACK 计数 / 窗口 / 信用池)
+        .stat_ack       (tx_stat_ack_w[15:0]),
+        .stat_ack_drop  (tx_stat_ack_drop_w[15:0]),
+        .fsm_state      (tx_dbg_state),   // C9: 复用已有 dbg_state 线, 不加新端口
+        .winq0          (app_winq0),
+        .wu_mark0       (app_wu_mark0),
+        .stat_wu        (app_stat_wu[15:0]),
+        .pool           (app_pool),
+        .stat_pool_exh  (app_stat_pool_exh[15:0]),
         .txd            (app_uart_txd)
     );
 `else
@@ -625,7 +680,6 @@ module wrapper_p4 (
     wire [31:0] eco_dbg_tlast_wr, eco_dbg_tlast_fwd;   // tcp_echo 写/转发末拍数
     wire [31:0] tx_dbg_tlast_in;                       // tcp_tx_frame 吞到末拍数
     // P4b-7-P6 UART 全精度读出: tx FSM state (纯 assign) + tcb conn0 阵列快照
-    wire [2:0]  tx_dbg_state;
     wire [31:0] dbg_snd_nxt0, dbg_snd_una0, dbg_rcv_nxt0;
     wire [15:0] dbg_snd_wnd0;
     wire [3:0]  dbg_wscale0, dbg_state0;
@@ -844,7 +898,11 @@ module wrapper_p4 (
     wire [31:0] cam_rd_sip, cam_rd_dip;
     wire [15:0] cam_rd_sport, cam_rd_dport;
 
-    tcp_rx u_tcp_rx (
+    tcp_rx #(
+        // P5b C16-修订: APP_MODE 下接受界 = 通告界 + 4096 (Δ 裕度; 安全性推导见
+        // tcp_rx 参数注释)。默认构建 = 0 ⇒ 接受判据逐位不变 (P4 矩阵 16 门回归)。
+        .ACC_MARGIN     (APP_EN ? 16'd4096 : 16'd0)
+    ) u_tcp_rx (
         .clk            (gmii_clk),
         .rst_n          (reset_n),
         .s_axis_tdata   (f_tdata),
@@ -1053,14 +1111,33 @@ module wrapper_p4 (
     );
 
     // ---- TCB 更新仲裁 (组合, tx > rx > cfg 级; cfg 级 = slow_cfg_adp, 带 gnt) ----
+    // P5b C5: APP_MODE 追加第 4 级 fc (窗口纠偏写), **最低**优先级 (在 cfg 之下)。
+    // 硬约束: scfg_gnt 表达式逐字不变 (cfg 语义/时序逐位不变是 P5b 的硬门);
+    // 原三级式也逐字保留在 `else 支 (默认构建源文本不变 ⇒ 逐位等价)。
     wire        sel_tx = tx_upd_wr;
     wire        sel_rx = !sel_tx && rx_upd_wr;
+    assign rx_upd_gnt = sel_rx;
+    assign scfg_gnt   = !sel_tx && !sel_rx && scfg_upd_wr;  // cfg 级授权: 空即给
+`ifdef APP_MODE
+    // sel_fc: fc 请求 (app_ctrl 电平 + gnt 握手) 只有在 tx/rx/cfg 三级都没请求时
+    // 才落地。mux 链里 scfg 的选择条件用 scfg_upd_wr (不是 scfg_gnt) 保持与原来
+    // 等价 —— 原式 `sel_tx ? tx : sel_rx ? rx : scfg` 在 sel_tx||sel_rx 时 scfg
+    // 分支不可达, 加 fc 后同理 (前两支已覆盖)。
+    wire        sel_fc = !sel_tx && !sel_rx && !scfg_upd_wr && fc_upd_wr;
+    assign tcb_wr  = sel_tx || sel_rx || (scfg_upd_wr && scfg_gnt) || sel_fc;
+    assign tcb_sel = sel_tx ? tx_upd_sel : (sel_rx ? rx_upd_sel :
+                     (scfg_upd_wr ? scfg_upd_sel : fc_upd_sel));
+    assign tcb_id  = sel_tx ? tx_upd_id  : (sel_rx ? rx_upd_id  :
+                     (scfg_upd_wr ? scfg_upd_id  : fc_upd_id));
+    assign tcb_val = sel_tx ? tx_upd_val : (sel_rx ? rx_upd_val :
+                     (scfg_upd_wr ? scfg_upd_val : fc_upd_val));
+    assign fc_gnt  = sel_fc;
+`else
     assign tcb_wr  = sel_tx || sel_rx || (scfg_upd_wr && scfg_gnt);
     assign tcb_sel = sel_tx ? tx_upd_sel : (sel_rx ? rx_upd_sel : scfg_upd_sel);
     assign tcb_id  = sel_tx ? tx_upd_id  : (sel_rx ? rx_upd_id  : scfg_upd_id);
     assign tcb_val = sel_tx ? tx_upd_val : (sel_rx ? rx_upd_val : scfg_upd_val);
-    assign rx_upd_gnt = sel_rx;
-    assign scfg_gnt   = !sel_tx && !sel_rx && scfg_upd_wr;  // cfg 级授权: 空即给
+`endif
 
     // ---- SYN 应答器已拆除 (P4b 慢路径 HLS 正式握手) — slow_cfg_adp ----
     // P4b-4 审查 finding: rst_n 必须跟 HLS 看门狗复位 — HLS 被 hls_rst_n
@@ -1102,6 +1179,13 @@ module wrapper_p4 (
     // app 侧推 ACK 条目); P5c/P5d 若需即时推送再驱动这两根线。
     wire        fin_push = 1'b0;
     wire        rst_push = 1'b0;
+    // P5b: wu **不并入** tx_ack_req — 走 tcp_tx_frame 的专用 wu_req/wu_gnt 口
+    // (C7 修正版: wu 条目在 ackq 内是最低优先级, 且 wu_gnt 必须与"条目确实入队"
+    //  严格等价)。若把 wu 并进 ack_req: ① ack_req 在 ackq_din 里最高优先 ⇒ wu
+    // 会盖过 fin_repush (违反 C7 "FIN 重推不可被抢"); ② tcp_tx_frame 的
+    // wu_push 恒假 ⇒ wu_gnt 恒 0 ⇒ app_ctrl 的 wu_pend 永不清 ⇒ 每拍都推一条
+    // wu 值的 ACK (ACK 风暴); ③ 电平请求在 ackq 满时每拍给 stat_ack_drop 计数
+    // (观测污染)。三条都致命, 故此处只用专用口。
     wire        tx_ack_req = rx_ack_req | fin_push | rst_push;
     wire [3:0]  tx_ack_id  = rx_ack_id;
     wire [31:0] tx_ack_val = rx_ack_val;
@@ -1112,13 +1196,24 @@ module wrapper_p4 (
     wire [15:0] tx_fin_req, tx_rst_req, tx_fin_sent;
     wire [31:0] tx_stat_drop_len, tx_stat_fin, tx_stat_rst;
     wire [3:0]  tx_retx_id_o;
+    // P5b: wu 通道 (默认构建 = 常量 0 ⇒ 逐位等价; APP_MODE = app_ctrl)
+    wire        app_wu_req_t, app_wu_gnt_t;
+    wire [3:0]  app_wu_id_t;
+    wire [31:0] app_wu_val_t;
 `ifdef APP_MODE
     assign tx_fin_req = app_fin_req;
     assign tx_rst_req = app_rst_req;
     assign app_fin_sent = tx_fin_sent;
+    assign app_wu_req_t = app_wu_req;
+    assign app_wu_id_t  = app_wu_id;
+    assign app_wu_val_t = app_wu_val;
+    assign app_wu_gnt   = app_wu_gnt_t;
 `else
     assign tx_fin_req = 16'h0;
     assign tx_rst_req = 16'h0;
+    assign app_wu_req_t = 1'b0;
+    assign app_wu_id_t  = 4'd0;
+    assign app_wu_val_t = 32'd0;
 `endif
 
     tcp_tx_frame #(.RING_CAP(WIN_CAP_5)) u_tcp_tx (
@@ -1144,7 +1239,16 @@ module wrapper_p4 (
         // (背靠背 DEL→ADD 同槽重连时, 扫描路径采不到 state=0, 会永久卡死连接)
         .cfg_up         (scfg_ev_up),
         .cfg_up_id      (scfg_ev_slot),
+        // P5b: 窗口更新 (wu) 条目通道 (app_ctrl; 默认模式无此模块 ⇒ 见 `else)
+        .wu_req         (app_wu_req_t),
+        .wu_id          (app_wu_id_t),
+        .wu_val         (app_wu_val_t),
+        .wu_gnt         (app_wu_gnt_t),
         .o_fin_sent     (tx_fin_sent),
+        // P5c-T3 G3: abort fence (RST 已发出) -> u_app_ctrl.rst_sent
+        // (声明在 P5 前置线网块; 默认构建无消费者 ⇒ 空接也可能, 但显式接线
+        //  保证两个构建的端口表一致 — C12)
+        .o_rst_sent     (tx_rst_sent),
         .o_retx_id      (tx_retx_id_o),
         .rb_id          (rb_id),
         .rb_snd_nxt     (rb_snd_nxt),
@@ -1174,8 +1278,9 @@ module wrapper_p4 (
         .m_axis_tlast   (tx_tlast),
         .stat_frames    (tx_stat_frames),
         .stat_bytes     (tx_stat_bytes),
-        .stat_ack       (),
-        .stat_ack_drop  (),
+        // P5b C9: ACK 计数补全 (板级病理定位缺观测: ACK 发没发/丢没丢)
+        .stat_ack       (tx_stat_ack_w),
+        .stat_ack_drop  (tx_stat_ack_drop_w),
         .stat_eend      (),
         .stat_drop_len  (tx_stat_drop_len),
         .stat_fin       (tx_stat_fin),

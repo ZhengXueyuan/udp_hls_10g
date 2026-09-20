@@ -56,10 +56,26 @@ module tcp_tx_frame (
     // scan_now 看到 rb_state!=1 时清): 背靠背 DEL→ADD (间隔 ~70 拍) 落在两次
     // 扫描 (~256 拍) 之间时 state=0 从未被采到 -> fin_sent_r 永久残留 ->
     // start_data 永久挡住该连接 -> app 字被吞进载荷 FIFO 却组不了帧 -> FIFO 满
-    // + FSM 卡 S_IDLE = 数据面死锁 (测试 agent 实测, gap≈70 拍必现 / 4000 拍正常)。
+    // + FSM 卡 S_IDLE = 数据面死锁 (测试 agent 实测, gap≈70 拍即现 / 4000 拍正常)。
     input  wire        cfg_up,
     input  wire [3:0]  cfg_up_id,
     output wire [15:0] o_fin_sent,     // 每连接 FIN 已发出 (纯线束, app_ctrl 用)
+    // ---- P5c-T3 G3: abort 硬化 (TX fence) ----
+    // RST 已发出 (每连接) ⇒ 该连接不再接受 app 数据帧 (abort 后不得再发数据)。
+    // 与 fin_sent_r 同惯例的黑名单位; 纯线束 (app_ctrl 的 app_tx_ready 用)。
+    // 清除路径与 rst_sent_r 完全一致 (扫描见 state!=ESTAB / cfg_up 收尾脉冲)
+    // ⇒ fence 生命周期 = [RST 发出, state=0 落地并被扫描采到]。
+    output wire [15:0] o_rst_sent,     // 每连接 RST 已发出 (abort fence; app_ctrl 用)
+    // ---- P5b: 窗口更新 (wu) 条目通道 (app_ctrl 窗口重开 ACK) ----
+    // wu_req 是**电平请求 + gnt 握手** (与 fin_req 同惯例): 保持到 wu_gnt 回来。
+    // 条目 {wu_id, syn=0, fin=0, rst=0, wu_val} — 三标志皆 0 ⇒ 走现有"纯 ACK"
+    // 路径 (ack = 条目 val, seq = rb_snd_nxt), **帧组装零改动** ✓。
+    // wu_val = 该连接 rcv_nxt 的扫描采样值 (app_ctrl 提供): 与它同拍写进 TCB 的
+    // 通告窗口同源自洽 (右沿 = wu_val + 帧里的 window 字段 = redge)。
+    input  wire        wu_req,
+    input  wire [3:0]  wu_id,
+    input  wire [31:0] wu_val,
+    output wire        wu_gnt,         // 1 拍脉冲: 条目已**确实入队** (见 wu_push)
     // TCB 读口 B (顶层实例化 tcb 并连线)
     output wire [3:0]  rb_id,
     input  wire [31:0] rb_snd_nxt,
@@ -161,6 +177,18 @@ module tcp_tx_frame (
     // (256 字 = 2048B): 超限检出拍最多已写入 (PLEN_MAX+7)/8 = 188 字, 永不满
     // 也永不触发 pay_full 死锁 (>2048B 的帧在旧代码里会把 256 深 FIFO 顶死)。
     parameter [11:0] PLEN_MAX = 12'd1500;
+    // P5b C8: ACK 队列深度提为参数 (原字面量 8/3)。板级突发丢帧时乱序 dup-ACK
+    // 成组到达, 8 深溢出 ⇒ dup-ACK 全丢 ⇒ 对端只能等 200ms RTO (P5a-0 板级
+    // 观测到的 TX 静默)。32 深 = LUTRAM 32:1 读 mux (时序注意: ackq_dout 只喂
+    // start_id/aq_* 的寄存器路径, ack_pend_r 已切断最长链)。时序告急时一键回退
+    // 16 (改这一处即可)。**无条件改动** (echo 模式同病理, 加深是纯改进 —
+    // 不改变任何既有语义, 只减少 stat_ack_drop)。
+    // ⚠️ 必须与上面参数同风格 (module body 内 parameter): 改成 ANSI 风格
+    // #(...) 参数表会让 body 里的 RING_CAP/PLEN_MAX 变成不可覆盖
+    // (xvlog: "localparam 'RING_CAP' cannot be overwritten") ⇒ 顶层
+    // .RING_CAP(WIN_CAP_5) 覆盖失效 (实测踩过)。
+    parameter integer ACKQ_D  = 32;
+    parameter integer ACKQ_AW = 5;
 
     localparam [2:0] S_IDLE = 3'd0, S_RECV = 3'd1, S_WAIT = 3'd2, S_HDR = 3'd3,
                      S_PAY  = 3'd4, S_TAIL = 3'd5, S_DONE = 3'd6, S_RING = 3'd7;
@@ -260,8 +288,25 @@ module tcp_tx_frame (
     // ring_eval: retx 会话期间每个无 ACK 的 S_IDLE 拍评估 (ack 插帧不打断会话)
     wire        ring_eval = (state == S_IDLE) && !ack_pend_r && retx_active && !svc &&
                             !flush_pend;
+    // ---- P5c-T1 G4: "连接可服务"门 (scan_estab) ----
+    // 慢路径 DEL **只写 state=0** (slow_cfg_adp.v S_TCB: upd_sel=5 val=0), CAM 该
+    // 槽已清零, 而 TCB 的 snd_nxt/snd_una/snd_wnd 全部原样保留。于是"死连接"在扫描
+    // 眼里仍满足 snd_wnd!=0 && snd_nxt!=snd_una: 老代码照旧装 RTO -> rto_pend ->
+    // svc 回卷 -> 从 ring 重放数据, 而帧的 dst MAC 取自已清空的 CAM (=0) — 对端收到
+    // 垃圾帧 (G4)。故扫描侧装表、ring 重放、未决重传保留都必须要求 ESTAB。
+    // 默认构建 (P4) 取 `1'b1` 保持老行为 (逐位不变, 硬约束): P4 无 FIN/RST/abort
+    // 语义, 本门只服务 APP_MODE 关闭流程的清理。TL 裁决: 直接把 rb_state 加进装表
+    // 条件必须包 ifdef — 无 ifdef 的"cfg_up 清 rto_pend/rto_timer"等效写法**不足以**
+    // 覆盖 DEL 侧 (DEL 后计时器下一轮扫描仍会重新装表, 见上)。
+`ifdef APP_MODE
+    wire        scan_estab = (rb_state == 4'd1);
+`else
+    wire        scan_estab = 1'b1;
+`endif
     wire [31:0] ring_delta = retx_hi - rb_snd_nxt;   // rb_* 已 mux 到 retx_id_r
-    wire        ring_start = ring_eval && (ring_delta != 32'd0);
+    // G4: 死连接不再起 ring 重放 (否则整段在飞窗口重放给一个 CAM 已清空的连接)。
+    // ring_start 被否后 ring_eval 走"排空拍"分支 => 会话在下拍收尾 (不退化成死锁)。
+    wire        ring_start = ring_eval && (ring_delta != 32'd0) && scan_estab;
     // SEV2-2 (P6 重做): 扫描由自由运行 tick 驱动 (每 16 拍 1 次), 不再依赖
     // s_axis_tvalid。旧实现 (tvalid -> scan_now -> rb_id -> TCB 读 -> wnd 比较
     // -> accept -> retx 写口) 构成 19 级前向链, 板级 WNS -1.6ns; 且旧版门关+
@@ -290,9 +335,22 @@ module tcp_tx_frame (
     wire        wnd_open  = win_open;
     // P5 FIN 前置硬规则 (D4): 已排队/已发出 FIN 的连接不再启动 app 数据帧
     // (无在飞时排队, 帧启动时再查一次 — 保证 FIN 之后不再有新数据)
+    // P5c-T3 G3 (abort fence): 已发出 RST 的连接同样不再启动数据帧 — abort 之后
+    // app 若继续推帧, 帧会带着数据/PSH 发给一个已中止的连接 (协议违规, 且 seq
+    // 已被 RST 终结)。**必须与 s_axis_tready 同门** (坑 10/P5a D2: 接受门比启动门
+    // 宽 ⇒ 字被吞进载荷 FIFO 却组不了帧 ⇒ FIFO 满 + FSM 卡 S_IDLE = 死锁)。
+    // 默认构建 (fin_req/rst_req 恒 0) 下 rst_sent_r 无置位路径 (S_DONE 的
+    // is_rst_r 仅由 ackq 条目的 rst 位来, 而该位仅由 rst_push(rst_req)/ack_rst 置)
+    // ⇒ 本项恒 1, 逐位不变 (与 T1 的 G1 Option B 同惯例, 无需 ifdef) ✓
+    // 时序: 三个屏蔽项合并成一个 16 位 OR 后只做**一次** start_id 选择 (与原来的
+    // `!fin_req[sid] && !fin_sent_r[sid]` 逐位等价 — De Morgan: !a&&!b&&!c ≡
+    // !(a|b|c), 且三位本来就是同源向量); 合并后 16:1 mux 由两个表达式共享 ⇒
+    // 面积/深度都不比原式差 (该锥是最差路径: rb_id->TCB 读->wnd 比较->tready->
+    // accept->retx_ram WEA, 基线 WNS 仅 +0.2~0.5ns)。
+    wire [15:0] tx_blk = fin_req | fin_sent_r | rst_sent_r;  // 该连接禁止新数据帧
     wire        start_data = (state == S_IDLE) && !ack_pend_r && !svc && !ring_eval &&
                              !scan_now && !flush_pend && s_axis_tvalid && !pay_full &&
-                             wnd_open && !fin_req[start_id] && !fin_sent_r[start_id];
+                             wnd_open && !tx_blk[start_id];
 
     // rb/cam 读口 mux: svc/ring_eval/scan_now 拍旁路 start_id (TCB/CAM 组合读,
     // 本拍即目标连接值)。scan_now 仅依赖 scan_tick (寄存器) 与 state/ack_pend_r
@@ -308,6 +366,18 @@ module tcp_tx_frame (
     // 始终释放), rto_pend 清/计时器重装亦无条件 (svc 每次照常应答)。
     wire        blocked = (epoch[svc_id] >= 4'd15);
     wire        svc_rewind = svc && (rb_snd_nxt != rb_snd_una) && !blocked;
+    // P5c-T1 G9 修复①: blocked (对端连续 16 次 svc 无 snd_una 进展 = 死连接) **且
+    // FIN 在飞**时不建 ring 会话。G9 的洪水源恰好是"blocked + FIN 在飞":
+    //   svc_rewind=0 (不回卷, snd_nxt 停在 fin_seq+1) 而 retx_hi 被钉在 fin_seq
+    //   (老代码无条件取 fin_seq) ⇒ ring_delta = fin_seq-(fin_seq+1) = 0xFFFFFFFF
+    //   (32 位下溢) ⇒ ring_start=1, plen_preset=1460 ⇒ 把整圈陈旧数据当"待重放
+    //   区间"洪水重放 (T2 实测 31 帧/12000 拍, 投影 2941758 帧/4096MB)。
+    // 只否定这一种组合 (而不是照抄 `retx_active <= svc_rewind`): blocked 且无 FIN
+    // 时会话本来就只有 1 拍气泡 (无回卷 ⇒ snd_nxt 不变 ⇒ delta 恒 0, 重放窗口为空),
+    // 保留它才能让**默认构建逐位不变** — 默认构建 fin_sent_r 恒 0 ⇒ retx_deny 恒 0
+    // ⇒ retx_begin === svc (与老代码同), 无需 ifdef ✓
+    wire        retx_deny  = blocked && fin_sent_r[svc_id];
+    wire        retx_begin = svc && !retx_deny;
     // P5: FIN/RST 段也推进 snd_nxt (+1; upd_val 的 !is_data_r 分支即 32'd1)。
     // 超长帧走中止支 (S_RECV -> S_IDLE), 永不进 S_DONE ⇒ 其字节不推进 snd_nxt。
     assign upd_wr  = ((state == S_DONE) && (is_data_r || is_syn_r || is_fin_r ||
@@ -326,10 +396,11 @@ module tcp_tx_frame (
     // 原来只挡启动不挡接受: fin_req/fin_sent_r 的连接帧起不来却照样把 app 的
     // 字收进载荷 FIFO (FIFO 满 + 无人排空 = 死锁)。start_id 在 !ack_pend_r 下
     // = s_axis_tid (本子句已排除 ack_pend_r)。
+    // P5c-T3 G3: 与 start_data 用**同一个** tx_blk (同门铁律, 坑 10 + 共享 mux)
     assign s_axis_tready = ((state == S_RECV) ||
                             ((state == S_IDLE) && !ack_pend_r && !svc &&
                              !ring_eval && !scan_now && !flush_pend && wnd_open &&
-                             !fin_req[start_id] && !fin_sent_r[start_id])) &&
+                             !tx_blk[start_id])) &&
                            !pay_full;
     wire        accept = s_axis_tvalid && s_axis_tready;
 
@@ -517,17 +588,53 @@ module tcp_tx_frame (
                            (rb_snd_nxt == rb_snd_una);
     wire        rst_push = scan_now && rst_req[scan_id] && !rst_sent_r[scan_id] &&
                            !ackq_full && (rb_state == 4'd1);
-    // FIN 重推 (RTO 回卷把已发出的 FIN 吞掉): ring 会话排空拍组合推同 seq 条目
+    // FIN 重推 (RTO 回卷把已发出的 FIN 吞掉): ring 会话排空拍组合推同 seq 条目。
+    // P5c-T1 追加两个结构性守卫 (默认构建下两者都不可达 — fin_retx_pend 恒 0 已使
+    // fin_repush 恒 0 ⇒ 逐位不变, 无需 ifdef):
+    //  ① (rb_state == 1): 连接已拆 (DEL, CAM 已清空) 时不得把 FIN 推给死连接 —
+    //     帧的 dst MAC 取自已清空的 CAM = 0 = 垃圾帧 (G4)。
+    //  ② (rb_snd_una == fin_seq_r): FIN 在飞的不变式 = 它正好压在 ACK 边界上
+    //     (snd_una == fin_seq, 因为 FIN 用的是最后一个未确认 seq 且 app 数据在
+    //     fin_sent_r 置位后不再启动)。snd_una 越过 fin_seq ⇒ FIN 已被对端 ACK ⇒
+    //     再推同 seq 条目就是 spurious FIN (seq 落在对端窗口外, 可诱发 RST — TL
+    //     点名的风险)。用**不变式**判定"是否仍未决", 不依赖扫描清挂起位的时延
+    //     (扫描一轮 256 拍, 快 RTO 配置下可能来不及)。
     wire        fin_repush = ring_eval && !ring_start && fin_retx_pend[retx_id_r] &&
-                             !ackq_full;
+                             !ackq_full && (rb_state == 4'd1) &&
+                             (rb_snd_una == fin_seq_r[retx_id_r]);
     wire        ack_req_ok = ack_req && !ackq_full;
-    wire        ackq_wr    = ack_req_ok || fin_push || rst_push || fin_repush;
+    // ---- P5c-T1 G1 主修: FIN 重推"**确实入队**"的等价条件 ----
+    // 排空拍上 ackq_din mux 的更高优先源只剩 ack_req_ok (排空拍要求 !ack_pend_r,
+    // 而 ack_pend_r <= !ackq_empty ⇒ 上拍队列为空 ⇒ 排空拍 ackq_full 恒 0 — T2 实测
+    // 纠正了 TL 的 "或 ackq_full" 猜测; 扫描侧的 fin_push/rst_push 与 ring_eval 互斥,
+    // wu_push 自带 !fin_repush, 都抢不走)。这里仍显式带上 !ackq_full: 防御性 (ackq
+    // 逻辑日后变化时守卫不退化), 且与"确实入队"严格等价。
+    wire        fin_repush_ok = fin_repush && !ack_req_ok && !ackq_full;
+    // ---- P5b C7: 窗口更新 (wu) 条目入队 ----
+    // 优先级 (高→低): ack_req (数据/dup-ACK, 对端时延敏感) > fin_push/rst_push
+    // (关闭语义, 丢不得) > fin_repush (FIN 重推) > wu (窗口更新)。
+    // ⚠️ 坑 (P5a M1 同类): 若写 `wu_push = wu_req && !ackq_full` 而 ackq_din 的
+    // mux 里 ack_req 优先, 同拍 ack_req_ok 为真时会"gnt 给了 wu 但条目写进了
+    // ACK" ⇒ wu_pend 被清而窗口更新从未发出 ⇒ 对端在零窗上永久停等 (死锁)。
+    // 因此 wu_push 必须**同时**排除全部更高优先级的入队源, 且 wu_gnt 与"确实
+    // 入队"严格等价 (gnt = push)。
+    // wu 排 fin_repush 之后 (TL 定稿): fin_repush 的 1 拍机会不可被抢 (抢了要等
+    // 下一次 svc/RTO 才重来, 与 M1 同险); wu 是电平请求 + gnt 握手, 被抢只晚
+    // 一拍, 下一拍仲裁必然重来 (ack_req 是脉冲, 不会长期占满) ⇒ 可接受。
+    // **无需 state == S_IDLE**: ackq 是独立 FIFO, 写入与 FSM 无关 (条目在
+    // start_ack 弹出拍才参与帧组装)。
+    wire        wu_push    = wu_req && !ackq_full && !ack_req_ok && !fin_push &&
+                             !rst_push && !fin_repush;
+    wire        ackq_wr    = ack_req_ok || fin_push || rst_push || fin_repush ||
+                             wu_push;
     wire [ACKQ_W-1:0] ackq_din = ack_req_ok ? {ack_id, ack_syn, ack_fin, ack_rst, ack_val} :
                                  fin_push   ? {scan_id, 1'b0, 1'b1, 1'b0, 32'h0} :
                                  rst_push   ? {scan_id, 1'b0, 1'b0, 1'b1, 32'h0} :
-                                              {retx_id_r, 1'b0, 1'b1, 1'b0, 32'h0};
+                                 fin_repush ? {retx_id_r, 1'b0, 1'b1, 1'b0, 32'h0} :
+                                              {wu_id, 1'b0, 1'b0, 1'b0, wu_val};
+    assign      wu_gnt = wu_push;
 
-    fifo_sync #(.W(ACKQ_W), .D(8), .AW(3)) u_ackq (
+    fifo_sync #(.W(ACKQ_W), .D(ACKQ_D), .AW(ACKQ_AW)) u_ackq (
         .clk(clk), .rst_n(rst_n),
         .wr(ackq_wr), .din(ackq_din),
         .rd(start_ack), .dout(ackq_dout),
@@ -536,6 +643,8 @@ module tcp_tx_frame (
 
     // P5: FIN 已发出状态线束 (app_ctrl 的 app_tx_ready 用) + 重传会话连接号
     assign o_fin_sent = fin_sent_r;
+    // P5c-T3 G3: abort fence 线束 (纯加输出; app_ctrl 的 tx_ready_calc 消费)
+    assign o_rst_sent = rst_sent_r;
     assign o_retx_id  = retx_id_r;
 
     always @(posedge clk or negedge rst_n) begin
@@ -573,6 +682,19 @@ module tcp_tx_frame (
                 fin_sent_r[cfg_up_id]    <= 1'b0;
                 rst_sent_r[cfg_up_id]    <= 1'b0;
                 fin_retx_pend[cfg_up_id] <= 1'b0;
+                // ---- P5c-T1 G4+G6: 跨会话残留清理 (事件脉冲, 坑 9) ----
+                // G6: epoch=15 / snd_una_prev 残留带进新会话 ⇒ 新会话第一次 svc
+                // 就可能撞上 blocked (不回卷), 白丢一轮重传 (~1 个 RTO)。
+                // G4: rto_pend/rto_timer 残留 ⇒ 新连接建连后立刻收到一个属于旧会话
+                // 的"未决 RTO" ⇒ svc 回卷/重放 (新连接的 snd_nxt/snd_una 都还是 0,
+                // 回卷无意义但会占一会话 + 复位计时)。DEL 后 state=0 并不自动让
+                // 装表条件为假 (DEL 只写 state, snd_wnd/snd_nxt/snd_una 残留), 所以
+                // 这两项必须由事件脉冲清, 不能指望轮扫采条件 (坑 9)。
+                // 注: 本块在 always 最前, 同拍撞上 svc/扫描时后者的赋值优先。
+                epoch[cfg_up_id]        <= 4'd0;
+                snd_una_prev[cfg_up_id] <= 32'd0;
+                rto_pend[cfg_up_id]     <= 1'b0;
+                rto_timer[cfg_up_id]    <= 21'd0;
             end
             if (m_axis_tready && m_axis_tvalid) m_axis_tvalid <= 1'b0;
             if (ack_req && ackq_full) stat_ack_drop <= stat_ack_drop + 1;
@@ -615,10 +737,21 @@ module tcp_tx_frame (
                         // snd_nxt 会把 FIN 的 1 字节 seq 当 ring 数据重放
                         // (回卷后 snd_nxt = fin_seq, delta 应为 0: 无数据可重放,
                         //  只重推 FIN 条目, seq 不变 = 无漂移)。
-                        retx_hi <= fin_sent_r[svc_id] ? fin_seq_r[svc_id] : rb_snd_nxt;
+                        // P5c-T1 G9 修复②: 取 fin_seq 的**前提是本次确实回卷**
+                        // (svc_rewind, 即回卷后 snd_nxt = snd_una = fin_seq = retx_hi
+                        // ⇒ delta=0)。若在**不回卷**的会话里仍取 fin_seq (blocked,
+                        // 或 snd_nxt==snd_una 而 FIN 挂起位残留), 而 snd_nxt 还在
+                        // fin_seq+1 ⇒ delta = fin_seq-(fin_seq+1) = 0xFFFFFFFF 下溢
+                        // ⇒ 洪水重放 (G9)。加上 svc_rewind 后, **任何**分支下
+                        // retx_hi >= rb_snd_nxt ⇒ 下溢结构性不可能 (与 ① 双重保险)。
+                        retx_hi <= (fin_sent_r[svc_id] && svc_rewind) ? fin_seq_r[svc_id] :
+                                   rb_snd_nxt;
                         if (fin_sent_r[svc_id]) fin_retx_pend[svc_id] <= 1'b1;
                         retx_id_r <= svc_id;
-                        retx_active <= 1'b1;
+                        // P5c-T1 G9 修复① (见 retx_begin 声明注释): blocked 且 FIN
+                        // 在飞时不建会话 — 否则 ① 的洪水前提 (无回卷却 retx_hi=fin_seq)
+                        // 就成立了。默认构建 retx_begin === svc (fin_sent_r 恒 0)。
+                        retx_active <= retx_begin;
                         rto_pend[svc_id] <= 1'b0;
                         rto_timer[svc_id] <= RTO_LIM;
                         if (svc_rewind) stat_retx <= stat_retx + 32'd1;
@@ -656,16 +789,43 @@ module tcp_tx_frame (
                         end else begin
                             // 区间发完 (ring_delta == 0): 1 拍气泡回活数据。
                             // P5: FIN 曾在此会话被回卷吞掉 (fin_retx_pend) ⇒ 重推
-                            // FIN 条目 (seq = 重卷后 snd_nxt = fin_seq, 与首发同值)
-                            // W2 (P5a 复核): 清零必须同时要求 "本拍 ackq 没被
-                            // ack_req 抢" — 否则同拍 ack_req_ok 写进 ACK、FIN 条目
-                            // 被吞而标志已清 ⇒ 唯一一次重推机会丢失 (fin_sent_r 仍
-                            // 1 又禁止重排队, snd_nxt==snd_una 后 RTO 装表条件也
-                            // 不成立 ⇒ 关闭永不完成)。ack_req 保持优先, 下一轮
-                            // ring 排空拍 (还需 retx_active 会话) 再重推。
-                            if (fin_retx_pend[retx_id_r] && !ackq_full && !ack_req_ok)
-                                fin_retx_pend[retx_id_r] <= 1'b0;   // fin_repush 组合推条目
-                            retx_active <= 1'b0;
+                            // FIN 条目 (seq = 回卷后 snd_nxt = fin_seq, 与首发同值)
+                            // ---- P5c-T1 G1 主修 (T2 mock-A 已验证) ----
+                            // 老代码: 排空拍**无条件** retx_active<=0, 而挂起位的清
+                            // 门是 (!ackq_full && !ack_req_ok) — 两个条件不同源。
+                            // ack_req_ok 抢走 mux 那拍: FIN 条目被 ackq_din 吞掉
+                            // (ACK 优先), 挂起位保留 1, 但会话照样结束 ⇒ 下拍
+                            // snd_nxt == snd_una ⇒ RTO 装表条件恒假 ⇒ 再无 svc ⇒
+                            // 再无排空拍 (排空拍需要 retx_active) ⇒ fin_repush 永不
+                            // 再评估 ⇒ FIN 永不重发, 关闭永不完成 (G1/W2);
+                            // 原注释"下一轮 ring 排空拍再重推"——代码给不出下一轮。
+                            // 修法: 只有条目**确实进了 ackq** (fin_repush_ok) 才清挂起
+                            // 位并结束会话; 被抢则两者都保持 ⇒ 下拍继续试。触发源是
+                            // 会话自身 (ring_delta==0 时**每拍**都是排空拍), 不再依赖
+                            // "下一轮 RTO/排空拍"这种给不出的机会。
+                            // ⚠️ 配套两条退路 — "保持"必须有出口, 否则会话永久挂住会
+                            // 一直压制 start_data/scan_now (ring_eval 覆盖全部
+                            // S_IDLE&&!ack_pend 拍) = 整个 TX 数据面死锁:
+                            //   a) 连接已拆 (rb_state != 1, DEL 后): 条目永不入队
+                            //      (fin_repush 的 ① 守卫) ⇒ 放弃重推并释放会话。
+                            //      同槽重连由 cfg_up 脉冲清全部 FIN 状态, app 重新
+                            //      fin_req 即可。
+                            //   b) FIN 已被对端 ACK (rb_snd_una != fin_seq_r): 挂起位
+                            //      已无意义 (且 fin_repush 的 ② 守卫不会入队) ⇒ 清掉,
+                            //      不再退化成"关闭完成后周期发 spurious FIN"。
+                            if (fin_retx_pend[retx_id_r]) begin
+                                if (fin_repush_ok) begin
+                                    fin_retx_pend[retx_id_r] <= 1'b0;  // fin_repush 组合推条目
+                                    retx_active <= 1'b0;
+                                end else if ((rb_state != 4'd1) ||
+                                             (rb_snd_una != fin_seq_r[retx_id_r])) begin
+                                    fin_retx_pend[retx_id_r] <= 1'b0;  // 退路 a) / b)
+                                    retx_active <= 1'b0;
+                                end
+                                // else: 被 ack_req 抢 ⇒ 两者都保持, 下拍重试
+                            end else begin
+                                retx_active <= 1'b0;
+                            end
                         end
                     end
                     // RTO 扫描: 每 scan_now 拍访 scan_id 连接 (rb_* mux 到 scan_id;
@@ -678,12 +838,36 @@ module tcp_tx_frame (
                         if (rb_state != 4'd1) begin
                             fin_sent_r[scan_id] <= 1'b0;
                             rst_sent_r[scan_id] <= 1'b0;
+                            // P5c-T1 G4: 死连接的 FIN 挂起位同样作废 (svc 会把它重新
+                            // 置 1 而无人消费 ⇒ 跨会话残留; 默认构建 fin_retx_pend
+                            // 恒 0, 本条为无副作用)。
+                            fin_retx_pend[scan_id] <= 1'b0;
                         end
+                        // P5c-T1 G4: 死连接不保留**未决 RTO** (DEL 前装上的 rto_pend
+                        // 仍会触发一次 svc -> 回卷 -> 从 ring 重放给一个 CAM 已清空
+                        // 的连接)。用 !scan_estab 门控 ⇒ 默认构建 (scan_estab 恒 1)
+                        // 本条不可达, 逐位不变。
+                        if (!scan_estab)
+                            rto_pend[scan_id] <= 1'b0;
+                        // P5c-T1 G1 (Option B 兜底配套): FIN 已被 ACK (snd_una 已越过
+                        // fin_seq, 见 fin_repush ② 的不变式) ⇒ 清挂起位。否则兜底的
+                        // 装表条件会被该位长期保持为真 ⇒ **关闭完成后周期发 spurious
+                        // FIN** (seq = 已被 ACK 的 fin_seq, 落在对端窗口外)。
+                        if (fin_retx_pend[scan_id] && (rb_snd_una != fin_seq_r[scan_id]))
+                            fin_retx_pend[scan_id] <= 1'b0;
                         // SEV3-4: 原 '!(retx_active && (scan_id==retx_id_r))' 排除项
                         // 是死代码 — scan_now 要求 !ring_eval; retx_active 期间
                         // ring_eval 覆盖全部 S_IDLE&&!ack_pend 拍 (ack_pend 也
                         // 排除 scan_now), 故 scan_now 拍 retx_active 恒 0
-                        if (rb_snd_wnd != 16'd0 && rb_snd_nxt != rb_snd_una) begin
+                        // P5c-T1 追加两个装表门:
+                        //  ① scan_estab: 死连接 (state!=ESTAB) 不装表 (G4, 只 APP_MODE)。
+                        //  ② || fin_retx_pend[scan_id]: **FIN 未决**的连接即使无在飞
+                        //     数据 (回卷后 snd_nxt==snd_una) 也必须能进 svc — 兜底
+                        //     覆盖"别的路径结束了会话而挂起位还在"的情形 (那时唯一
+                        //     能重推 FIN 的入口就是 svc -> 排空拍)。默认构建
+                        //     fin_retx_pend 恒 0 ⇒ 与老式逐位相同, 无需 ifdef。
+                        if (scan_estab && ((rb_snd_wnd != 16'd0 && rb_snd_nxt != rb_snd_una) ||
+                            fin_retx_pend[scan_id])) begin
                             if (rto_timer[scan_id] == 21'd0)
                                 rto_timer[scan_id] <= RTO_LIM;
                             else if (rto_timer[scan_id] == 21'd1) begin

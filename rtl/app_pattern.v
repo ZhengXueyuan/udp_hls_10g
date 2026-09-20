@@ -222,7 +222,14 @@ module app_pattern #(
             dbg_lfsr  <= tx_lfsr;
 
             // ---- 连接事件 ----
+            // P5b C11 (TL 2026-09-19): RX 图案流**每连接**重置, 与 TX 侧对称。
+            // 旧行为: rx_lfsr <= SEED 只在 rst_n ⇒ RX 期望序列跨连接/跨会话连续
+            // (同槽重连后对端必须"接着上次位置"发才对得上; 多连接下无意义, 板级
+            // 测试不可重复)。TX 侧 tx_lfsr 在 ev_up 就重置 (L231) —— 两侧不对称是
+            // 设计缺陷。这里补上 RX 侧: 新连接 = 新图案流起点 (含丢弃取值中间态)。
             if (ev_up) begin
+                rx_lfsr <= SEED;
+                rxs     <= 2'd0;
                 // 新连接: 启动图案发送 (单会话; 已有会话时忽略新事件)
                 if (!active) begin
                     active   <= 1'b1;

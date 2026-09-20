@@ -6,9 +6,10 @@
 // 行是 P4 板级读出依赖)。本模块只复用其中的 uart_tx_9600 发送器 (8N1 字节
 // 发送, !busy 时 tx_go 取字节), 行内容 = app 视角状态:
 //
-//   P5A1 ST=x NX=xxxxxxxx UA=xxxxxxxx RW=xxxx RN=xxxxxxxx RX=xxxxxxxx
+//   P5B1 ST=x NX=xxxxxxxx UA=xxxxxxxx RW=xxxx RN=xxxxxxxx RX=xxxxxxxx
 //        TX=xxxxxxxx TF=xxxx MM=xxxx OC=xxxxx EV=xxxx DP=xxxx RY=xxxx
 //        EC=xx DL=xxxx FI=xxxx RS=xxxx
+//        AK=xxxx AD=xxxx TS=x WQ=xxxx WM=xxxx WU=xxxx PO=xxxxx PX=xxxx
 //
 //   ST = conn0 TCB state       NX/UA = conn0 snd_nxt / snd_una
 //   RW = conn0 rcv_wnd         RN    = conn0 rcv_nxt
@@ -17,9 +18,17 @@
 //   EV = 连接事件计数          DP    = 事件丢弃计数
 //   RY = app_tx_ready[15:0]    EC    = ESTAB 连接数
 //   DL = 超长帧丢弃计数        FI/RS = 已发 FIN/RST 计数
+//   ---- P5b C9 追加 (板级病理定位缺观测: ACK 发没发/窗口收没收/池耗没耗) ----
+//   AK = 已发 ACK 段数         AD    = ACK 队列满丢弃数
+//   TS = tcp_tx_frame FSM state (0=S_IDLE...7=S_RING)
+//   WQ = conn0 winq (接收配额) WM    = conn0 wu_mark (上次 wu 通告值)
+//   WU = 窗口更新 ACK 发出数    PO    = 信用池余额 (17 位)
+//   PX = 授予被池限制的连接数
 //
-// 行 = 168 字符 (21 组 x 8; 末尾 CR/LF), 9600 下 ~175ms。字段值在行首
-// (ci==0) 一次性锁存 — 行内自洽; 行间 GAP 后重采。
+// 行 = 220 字符 (末尾 CR/LF), 9600 下 ~230ms。**除设计标识外** (index 2 起 4 字符
+// 由 "P5A1" 改 "P5B1"), 前 156 字符的 [0,156) 区间与 P5a 逐字节相同 (P4 板级读出
+// 依赖), P5b 字段一律**追加在行尾**。字段值在行首 (ci==0) 一次性锁存 — 行内自洽;
+// 行间 GAP 后重采。
 //=============================================================================
 module app_status_uart #(
     parameter [13:0] BIT_LAST  = 14'd13020,        // 每比特拍数-1 @125MHz/9600
@@ -46,19 +55,30 @@ module app_status_uart #(
     input  wire [15:0] stat_drop_len,
     input  wire [15:0] stat_fin,
     input  wire [15:0] stat_rst,
+    // P5b C9: 流控闭环观测
+    input  wire [15:0] stat_ack,
+    input  wire [15:0] stat_ack_drop,
+    input  wire [2:0]  fsm_state,
+    input  wire [15:0] winq0,
+    input  wire [15:0] wu_mark0,
+    input  wire [15:0] stat_wu,
+    input  wire [16:0] pool,
+    input  wire [15:0] stat_pool_exh,
     output wire        txd
 );
-    localparam LINE_LEN = 8'd168;
+    localparam LINE_LEN = 8'd220;
 
     // 行模板 (固定文本; hex 位以 'x' 占位, 运行时由 lchar 覆盖)
     // 字节 i = TPL[8*(LINE_LEN-1) - 8*i +: 8] (首字符在最高字节)
     // W5: 追加 DL (超长帧丢弃) / FI (FIN 已发) / RS (RST 已发) 三段 —
     // 板级看不到 FIN 是否发出、坏帧是否被丢。
+    // P5b C9: 行尾再追加 AK/AD/TS/WQ/WM/WU/PO/PX (前 156 字符逐字节不变) —
+    // 板级病理 (对端停等/窗口不重开/池耗尽) 缺可观测量。
     wire [8*LINE_LEN-1:0] TPL = {
-        "P5A1 ST=x NX=xxxxxxxx UA=xxxxxxxx RW=xxxx RN=xxxxxxxx ",
+        "P5B1 ST=x NX=xxxxxxxx UA=xxxxxxxx RW=xxxx RN=xxxxxxxx ",
         "RX=xxxxxxxx TX=xxxxxxxx TF=xxxx MM=xxxx OC=xxxxx EV=xxxx ",
         "DP=xxxx RY=xxxx EC=xx DL=xxxx FI=xxxx RS=xxxx",
-        8'h20, 8'h20, 8'h20, 8'h20, 8'h20, 8'h20, 8'h20, 8'h20, 8'h20, 8'h20,
+        " AK=xxxx AD=xxxx TS=x WQ=xxxx WM=xxxx WU=xxxx PO=xxxxx PX=xxxx",
         8'h0D, 8'h0A
     };
 
@@ -93,6 +113,10 @@ module app_status_uart #(
     reg [15:0] sn_rw, sn_tf, sn_mm, sn_ev, sn_dp, sn_ry, sn_ec;
     reg [15:0] sn_dl, sn_fi, sn_rs;
     reg [16:0] sn_oc;
+    // P5b C9 追加字段
+    reg [15:0] sn_ak, sn_ad, sn_wq, sn_wm, sn_wu, sn_px;
+    reg [2:0]  sn_ts;
+    reg [16:0] sn_po;
 
     reg [7:0]  ci;                       // 行内字符索引
     reg [27:0] gap;
@@ -121,6 +145,17 @@ module app_status_uart #(
         else if (ci >= 8'd136 && ci < 8'd140)       lc = hexd({sn_dl, 16'b0}, ci - 8'd136);
         else if (ci >= 8'd144 && ci < 8'd148)       lc = hexd({sn_fi, 16'b0}, ci - 8'd144);
         else if (ci >= 8'd152 && ci < 8'd156)       lc = hexd({sn_rs, 16'b0}, ci - 8'd152);
+        // ---- P5b C9 追加段 (字段位置见头注释; 前 156 字符不动) ----
+        else if (ci >= 8'd160 && ci < 8'd164)       lc = hexd({sn_ak, 16'b0}, ci - 8'd160);
+        else if (ci >= 8'd168 && ci < 8'd172)       lc = hexd({sn_ad, 16'b0}, ci - 8'd168);
+        else if (ci == 8'd176)                      lc = hexc({1'b0, sn_ts});
+        else if (ci >= 8'd181 && ci < 8'd185)       lc = hexd({sn_wq, 16'b0}, ci - 8'd181);
+        else if (ci >= 8'd189 && ci < 8'd193)       lc = hexd({sn_wm, 16'b0}, ci - 8'd189);
+        else if (ci >= 8'd197 && ci < 8'd201)       lc = hexd({sn_wu, 16'b0}, ci - 8'd197);
+        // PO 17 位: 5 个 hex 数字 — 17 位值左对齐到 nibble 窗口需 12 位零扩
+        // (同 OC 字段; 用 15 位扩会把值再左移 3 位, 实测显示 E06F0 而非 1C0DE)
+        else if (ci >= 8'd205 && ci < 8'd210)       lc = hexd({sn_po, 12'b0}, ci - 8'd205);
+        else if (ci >= 8'd214 && ci < 8'd218)       lc = hexd({sn_px, 16'b0}, ci - 8'd214);
     end
 
     wire uart_busy;
@@ -138,6 +173,8 @@ module app_status_uart #(
             sn_mm <= 16'd0; sn_oc <= 17'd0; sn_ev <= 16'd0; sn_dp <= 16'd0;
             sn_ry <= 16'd0; sn_ec <= 16'd0;
             sn_dl <= 16'd0; sn_fi <= 16'd0; sn_rs <= 16'd0;
+            sn_ak <= 16'd0; sn_ad <= 16'd0; sn_ts <= 3'd0; sn_wq <= 16'd0;
+            sn_wm <= 16'd0; sn_wu <= 16'd0; sn_po <= 17'd0; sn_px <= 16'd0;
         end else begin
             if (!sending) begin
                 // 行间间隔到 -> 锁存快照并开新行
@@ -149,6 +186,9 @@ module app_status_uart #(
                     sn_oc <= rx_occ;     sn_ev <= ev_cnt;   sn_dp <= ev_drop;
                     sn_ry <= app_tx_ready; sn_ec <= estab_cnt;
                     sn_dl <= stat_drop_len; sn_fi <= stat_fin; sn_rs <= stat_rst;
+                    sn_ak <= stat_ack;   sn_ad <= stat_ack_drop;
+                    sn_ts <= fsm_state;  sn_wq <= winq0; sn_wm <= wu_mark0;
+                    sn_wu <= stat_wu;    sn_po <= pool;  sn_px <= stat_pool_exh;
                     ci       <= 8'd0;
                     sending  <= 1'b1;
                 end else begin

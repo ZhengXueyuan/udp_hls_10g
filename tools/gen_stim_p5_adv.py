@@ -7,15 +7,23 @@
   python gen_stim_p5_adv.py <simdir> <case> check    # 校验 resp_p5_adv.memh
 
 case: len / b2b / wnd / fin / findrop / abort / evfifo / reconn_fast /
-      reconn_slow / multi
+      reconn_slow / multi / accmgn
 
 脚本语义见 tb/tb_p5_adv.v 头注释。判据:
   通用: FCS 有效; 数据帧字段 (doff/flags/win/ack/dst mac/ip/ports);
         逐字节 == RTL 图案 (xorshift64 先取后推, 偏移 = 全局 app 流位置);
         覆盖并集逐 seq 连续无洞无重叠; stat_eend==0; mac abort==0; 无 WAIT 超时
+  accmgn (P5b 必修4): 接受裕度 ACC_MARGIN 的物理余量 = **接受界不得超过 FIFO 预算**。
+    行为探针 (窗 0 的 conn1 上注乱序段, 看 tcp_rx 是"回 ACK"还是"静默"):
+      · D=3328 (C1b 的 1G Δ 上界 2816 + 512 余量) 必须**回 ACK** (裕度确实在生效)
+      · D=10551 (= 物理预算 10550 + 1) 必须**静默** (裕度不得超出物理余量)
+    配置断言: ADVCFG 行里的 acc_margin == wrapper 的 APP_MODE 值, 且 <= 物理预算。
+  ⚠️ 灵敏度自测 (必修4 的证据): 把 tb 的 TB_ACC_MARGIN 改成 60000 (或在整链 wrapper
+     里改) 后, D=10551 的探针会变成"回 ACK" ⇒ 本门 FAIL。90000 之类同理。
 退出码: 0 全过, 1 有 FAIL, 2 参数错。
 """
 import os
+import re
 import struct
 import sys
 import zlib
@@ -28,6 +36,105 @@ import gen_stim_p4_chain as G4
 MASK64 = (1 << 64) - 1
 SEED = 0x9E3779B97F4A7C15
 BOARD_MAC = G4.DUT_MAC                       # 00:0A:35:01:FE:C0
+
+# =====================================================================
+# P5b 必修4: 接受裕度 (ACC_MARGIN) 的**物理余量预算** —— 判据的唯一物理依据
+# ---------------------------------------------------------------------
+# 语义 (规格 C16-修订): tcp_rx 的接受界 = 通告窗 + ACC_MARGIN。通告窗
+# W = max(0, winq - occ) ⇒ 已收数据(occ) + 还能被接受的数据 ≤ winq + Δ + U + M,
+# 其中量全部落在**同一个 64KB frame_fifo** 里 (零拷贝, rtl/tcp_echo.v) ⇒
+#
+#   WINQ_REF + OCC_DELTA + OCC_UNIT + SEG_MAX + ACC_MARGIN  <=  FIFO_BYTES
+#
+# 各项口径 (与 flow 门 tools/gen_stim_p5_app.py 的 ① 同源):
+#   FIFO_BYTES = 8192 字 x 8B = 65536   (rtl/frame_fifo.v 深度 8192)
+#   WINQ_REF   = 0xC000 = 49152         (WIN_Q_MAX/WIN_POOL: 单连接配额上限)
+#   OCC_DELTA  = 2816                   (C1b 的 Δ: ackq 深 x 每 ACK 帧拍数 x 到达率, 1G)
+#   OCC_UNIT   = 1518                   (U: 未判定帧 = 54 + 1460 + 4)
+#   SEG_MAX    = 1500                   (PLEN_MAX: win_ok 只看**起始 seq** ⇒ 一个段可
+#                                        整段被接受, 超出接受界的量最多 plen-1)
+# 注: 这是**保守上界** (各项不会同时打满), 取它就是"宁可误报也不漏报安全破坏" ——
+# 与 flow 门 ① 的口径一致。ACC_MARGIN 一旦超过 ACC_BUDGET, FIFO 就可能被顶爆
+# (mac_rx_64.stat_drop > 0 = 物理丢帧)。
+FIFO_BYTES = 8192 * 8
+WINQ_REF   = 0xC000
+OCC_DELTA  = 2816
+OCC_UNIT   = 1518
+SEG_MAX    = 1500
+ACC_BUDGET = FIFO_BYTES - WINQ_REF - OCC_DELTA - OCC_UNIT - SEG_MAX   # 10550
+WRAPPER_SRC = os.path.join(os.path.dirname(TOOLS), 'board', 'wrapper_p4.v')
+TB_SRC      = os.path.join(os.path.dirname(TOOLS), 'tb', 'tb_p5_adv.v')
+
+
+def src_acc_margin(path):
+    """从源码里取 .ACC_MARGIN 端口的实际配置值 (APP_MODE 取值)。
+
+    支持两种写法:
+      .ACC_MARGIN(16'd4096)                 # 字面量 (flow TB / wrapper 的 ?: 分支)
+      .ACC_MARGIN(TB_ACC_MARGIN)            # 具名 localparam (tb_p5_adv.v)
+    解析失败返回 None ⇒ 判据**必须**报错 (不允许静默跳过 = 静默放宽)。
+    """
+    try:
+        with open(path, errors='replace') as fh:
+            lines = fh.readlines()
+    except OSError:
+        return None
+    for i, line in enumerate(lines):
+        if '.ACC_MARGIN' not in line:
+            continue
+        m = re.search(r"16'd(\d+)", line)
+        if m:
+            return int(m.group(1))
+        m = re.search(r"\.ACC_MARGIN\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)", line)
+        if not m:
+            continue
+        name = m.group(1)
+        pat = re.compile(r"\b%s\b\s*=\s*(?:16'd|16'h)([0-9A-Fa-f]+)" % name)
+        for ln in lines[i:] + lines[:i]:          # 先向后 (常在同一段), 再回卷
+            mm = pat.search(ln)
+            if mm:
+                return int(mm.group(1), 16) if "16'h" in ln else int(mm.group(1))
+    return None
+
+
+def check_phys_margin(ck, info):
+    """P5b 必修4: 接受裕度 <= 物理余量 (+ TB 镜像 == wrapper 配置)。
+
+    在此之前 "ACC_MARGIN 过大" 是**没有任何门覆盖**的安全方向: multi 的上界断言
+    (adv>4096) 在只注入 150B 时恒假, flow 的 3 处比较又硬编码 4096 与 RTL 参数
+    解耦。本函数把它绑到 DUT 的实际配置 (ADVCFG 行 = u_rx 端口的同一 localparam)
+    与物理预算 ACC_BUDGET 上 ⇒ 改大到 60000 当场 FAIL。
+    """
+    cfg = info.get('cfg')
+    if not cfg or 'acc_margin' not in cfg:
+        ck.err('resp 缺 ADVCFG 行 (无法断言接受裕度 — 判据不允许静默跳过)')
+        return
+    m = cfg['acc_margin']
+    # 源码路径可用环境变量覆盖 (仅供**灵敏度自测**: 用带 60000 的 TB 副本编译并
+    # 指到这里, 验证本判据确实会因 ACC_MARGIN 变大而 FAIL)。正常工作流不设。
+    wpath = os.environ.get('P5_WRAPPER_SRC', WRAPPER_SRC)
+    tpath = os.environ.get('P5ADV_TB_SRC', TB_SRC)
+    wm = src_acc_margin(wpath)
+    if wm is None:
+        ck.err('无法从 %s 解析 ACC_MARGIN (判据不允许静默跳过)' % wpath)
+    elif m != wm:
+        ck.err('TB 的 ACC_MARGIN=%d != wrapper APP_MODE 值 %d '
+               '(C12 扩展: 参数也必须镜像 — 门必须在与板级相同的配置下跑)' % (m, wm))
+    tm = src_acc_margin(tpath)
+    if tm is None:
+        ck.err('无法从 %s 解析 ACC_MARGIN (判据不允许静默跳过)' % tpath)
+    elif tm != m:
+        ck.err('源码 ACC_MARGIN=%d != 仿真实际配置 %d (编译产物与源码不符?)'
+               % (tm, m))
+    if m > ACC_BUDGET:
+        ck.err('接受裕度 ACC_MARGIN=%d > 物理余量 %d (FIFO %d - 配额 %d - Δ %d '
+               '- U %d - 单段 %d) — 接受界可把 frame_fifo 顶爆 (物理丢帧)'
+               % (m, ACC_BUDGET, FIFO_BYTES, WINQ_REF, OCC_DELTA, OCC_UNIT,
+                  SEG_MAX))
+    else:
+        print('接受裕度: ACC_MARGIN=%d ≤ 物理余量 %d (FIFO %d - 配额 %d - Δ %d - '
+              'U %d - 单段 %d); 与 wrapper 一致'
+              % (m, ACC_BUDGET, FIFO_BYTES, WINQ_REF, OCC_DELTA, OCC_UNIT, SEG_MAX))
 BOARD_IP = 0xC0A86402
 
 CONN = {
@@ -329,6 +436,50 @@ def case_multi():
     return s
 
 
+# ---- accmgn (P5b 必修4): 接受裕度的边界探针 -------------------------------
+# 探针 D 的物理依据:
+#   D_IN  = 3328 = C1b 的 1G Δ 上界 2816 + 512 余量
+#           (ACC_MARGIN 的**存在意义**就是覆盖这个 Δ: 对端按旧右沿合法发出的段
+#            落在这个范围里。裕度 < D_IN ⇒ 这些段被判窗外 ⇒ 静默丢 + 只能等
+#            RTO —— 正是 C16-修订 要消掉的板级病理 ⇒ 必须 FAIL)
+#   D_OUT = ACC_BUDGET + 1 = 10551
+#           (裕度的**物理上界**; 超出 = 接受界能把 64KB frame_fifo 顶爆 ⇒ 必须
+#            静默拒收。取 +1 是为了让判据的边界与预算严格对齐)
+D_IN  = 3328
+D_OUT = ACC_BUDGET + 1
+
+
+def case_accmgn():
+    """P5b 必修4: ACC_MARGIN 的数值边界探针 (零配额 conn1, 通告窗 = 0)。
+
+    探针帧都是**乱序段** (seq = conn1 rcv_nxt + D, 带洞 ⇒ 不进缓冲、不推进
+    rcv_nxt), 只用于观察 tcp_rx 的窗口判决 (tcp_rx.v 的 win_ok/ackresp):
+      D  < ACC_MARGIN ⇒ win_ok=1 ⇒ C16-修订 的"拒收回 ACK" ⇒ stat_drop_seq++
+      D >= ACC_MARGIN ⇒ win_ok=0 ⇒ 静默丢弃            ⇒ stat_drop_nonmatch++
+    于是**不改 RTL 参数**就能把 ACC_MARGIN 的数值边界"打"出来 (旧判据 `adv>4096`
+    在本门恒假 ⇒ 上界方向零覆盖, 见必修1 的说明):
+      · D_IN  = 3328  ⇒ 必须回 ACK  (裕度生效)
+      · D_OUT = 10551 ⇒ 必须静默    (裕度 <= 物理余量 10550)
+    灵敏度自测: 把 TB_ACC_MARGIN 改 60000 ⇒ D_OUT 变"回 ACK" ⇒ 本门 FAIL。
+    """
+    s = Script('accmgn')
+    for c in (0, 1):
+        s.pc_table(c)
+    s.cfg_add(0, 0)
+    s.cfg_add(1, 1)
+    s.w(1, 500)
+    s.push(0, [1000])                 # conn0 正常数据流 (链路活 + 占一点缓冲)
+    s.w(15, 200000)
+    s.w(1, 3000)
+    s.w(12)                           # 快照 0: 基线
+    for d in (D_IN, D_OUT):
+        s.w(17, 1, CONN[1]['pcis'] + 1 + d)   # 探针 seq = rcv_nxt + D (留洞)
+        s.w(10, 1, 0, 64)                     # 注入 64B 乱序段 (ack 字段无效无害)
+        s.w(1, 3000)
+        s.w(12)                           # 快照: 探针后的 rx 计数
+    return s
+
+
 def case_dbg():
     s = Script('dbg')
     s.pc_table(0)
@@ -378,6 +529,7 @@ CASES = {
     'reconn_fast': lambda: case_reconn(True),
     'reconn_slow': lambda: case_reconn(False),
     'multi': case_multi,
+    'accmgn': case_accmgn,
 }
 
 
@@ -417,7 +569,7 @@ def parse_adv(fn):
         fh.writelines(keep)
     frames, ev = G4.parse_gmii(ff)
     info = dict(reg={}, stat=[], tx=[], frm=[], tcb={}, rdy=[], stat2=[],
-                app=[], mac=[], to=[], cmd=[])
+                app=[], mac=[], to=[], cmd=[], rx7=[])
     with open(fn, errors='replace') as fh:
         for line in fh:
             p = line.split()
@@ -452,6 +604,12 @@ def parse_adv(fn):
                         kk, vv = tok.split('=', 1)
                         d[kk] = vv
                 info['rdy'].append(d)
+            elif p[0] == 'ADVMDROP':
+                info['mdrop'] = int(p[1])
+            elif p[0] == 'ADVCFG':
+                info['cfg'] = kv
+            elif p[0] == 'ADVRX7':
+                info['rx7'].append(kv)
             elif p[0] == 'ADVMAC':
                 info['mac'].append(kv)
             elif p[0] == 'ADVTO':
@@ -528,8 +686,17 @@ def check_wire(ck, cl, case, exp, ack_sets, win_exp=RCV_WND, max_plen=1460):
             if rec['plen'] > max_plen:
                 ck.err('%s plen=%d > %d (合并巨帧 / 超契约)'
                        % (tag, rec['plen'], max_plen))
-            if rec['win'] != win_exp:
-                ck.err('%s window=%04x != %04x' % (tag, rec['win'], win_exp))
+            wexp = win_exp.get(c, RCV_WND) if isinstance(win_exp, dict) \
+                else win_exp
+            if isinstance(wexp, tuple):
+                # (下界, 上界): P5b 动态窗口 — 窗口随 frame_fifo 占用收缩 (规格
+                # C5/C6 的刻意行为), 但上界不许超发, 下界不许收缩超过本门注入量
+                # 能解释的范围。旧判据 (逐字节 == 0xC000) 测的是 P5a 静态窗口语义。
+                if not (wexp[0] <= rec['win'] <= wexp[1]):
+                    ck.err('%s window=%04x 越界 [%04x,%04x]'
+                           % (tag, rec['win'], wexp[0], wexp[1]))
+            elif rec['win'] != wexp:
+                ck.err('%s window=%04x != %04x' % (tag, rec['win'], wexp))
             if rec['ack'] not in ack_sets[c]:
                 ck.err('%s ack=%08x 不在允许集合 %s'
                        % (tag, rec['ack'], [hex(x) for x in sorted(ack_sets[c])]))
@@ -753,7 +920,9 @@ def check_evfifo(ck, cl, ev, info, s):
     ck.eq(regs.get(0x90, [None])[0], add_n, '寄存器 0x90 CONN_UP')
     ck.eq(regs.get(0x91, [None])[0], 0, '寄存器 0x91 CONN_DOWN')
     ck.eq(regs.get(0x92, [None])[0], add_n - 16, '寄存器 0x92 事件丢弃')
-    ck.eq(regs.get(0x9F, [None])[0], 0x50354131, '设计标识 0x9F')
+    # P5b C9: 设计标识演进 P5A1 -> P5B1 (标识跟版本走; 不是放宽判据 —
+    # 判据仍是"0x9F 读回等于本版标识", 只是本版标识字面量变了)
+    ck.eq(regs.get(0x9F, [None])[0], 0x50354231, '设计标识 0x9F (P5B1)')
     e1 = regs.get(0x01, [])
     e2 = regs.get(0x02, [])
     e3 = regs.get(0x03, [])
@@ -805,9 +974,25 @@ def check_reconn(ck, cl, ev, info, s, fast):
 
 
 def check_multi(ck, cl, ev, info, s):
+    # ---- P5b C15: 信用池语义 (TL 裁决 2026-09-19) ----
+    # 零拷贝是**单一全局 64KB frame_fifo** ⇒ Σwinq <= WIN_POOL 是物理约束。
+    # 默认 WIN_Q_MAX = WIN_POOL ⇒ 先建连的 conn0 拿满 48KB, **conn1 的 winq = 0**
+    # (C10 的 init 拍纠偏把 TCB.rcv_wnd 从 HLS 写死的 0xC000 改成 0) ⇒
+    #   · conn1 通告窗口 ~0 (守规矩的对端不会发数据)
+    #   · 本门 PC 模型是脚本**无条件注入** ⇒ 那 150B 被 tcp_rx 按超窗拒收 ⇒
+    #     conn1 rcv_nxt 应停在 pcis+1
+    #   · 板侧不得物理丢帧 (mac stat_drop == 0), 也不得静默损坏
+    # **这不是放宽判据, 是语义演进**: 旧断言 (conn1 rcv_nxt=+150) 测的正是 P5b 按
+    # 规格替换掉的"静态 48K/连接"语义; 多连接分池策略是 P5d 课题 (PORT_NOTES 已落档)。
     check_wire(ck, cl, 'multi', s.exp,
                {0: {CONN[0]['pcis'] + 1, CONN[0]['pcis'] + 1 + 100},
-                1: {CONN[1]['pcis'] + 1, CONN[1]['pcis'] + 1 + 150}})
+                1: {CONN[1]['pcis'] + 1, CONN[1]['pcis'] + 1 + 150}},
+               # conn0: **严格判据** (规格 §4c 的 C19 裁决恢复) — 本门只注入 100B 且
+               # 被 app 立即消费 ⇒ 通告窗必然 == 授予配额 0xC000 (C2/C4/C10 算术最紧
+               # 的端到端校验)。旧放宽 (RCV_WND-8192, RCV_WND) 的下界是注入量的 79 倍,
+               # 能放过 17% 的欠通告 —— 无依据, 已驳回。
+               # conn1: (0,1460) 保持 — C15 真语义演进 (零配额连接 winq=0 ⇒ W≈0)。
+               win_exp={0: RCV_WND, 1: (0, 1460)})
     t0 = info['tcb'].get(0)
     t1 = info['tcb'].get(1)
     if t0:
@@ -818,25 +1003,124 @@ def check_multi(ck, cl, ev, info, s):
     else:
         ck.err('缺 conn0 ADVTCB')
     if t1:
-        ck.eq(t1[0], CONN[1]['pcis'] + 1 + 150, 'conn1 rcv_nxt (注入 150B)')
+        # P5b 第二轮 C16-修订: **接受界 = 通告界 + ACC_MARGIN**(wrapper APP_MODE 传
+        # 4096)。零配额连接 (C15: winq=0) 的通告窗为 0, 但"对端在收到新窗口前按
+        # 旧窗口发出的在飞段"必须被接受 —— 否则形成空洞 ⇒ 其后全按乱序丢 ⇒
+        # 对端等 RTO 200ms (板级病理)。本门脚本是**无条件注入** 150B ⇒ 落在裕度
+        # 内 ⇒ 被接受 ⇒ rcv_nxt 前推 150 (第一轮断言"被拒/不动"编码的是旧口径
+        # "接受界 == 通告界", 已被 C16-修订取代)。
+        # ⚠️ 判据 (P5b 必修1 收尾): 由 `adv > 4096` 改为 **`adv == 150` 精确钉住**。
+        # 旧式恒假 (本门只注入 150B ⇒ adv ∈ {0,150}, 150 > 4096 永假) ⇒ 它既证不了
+        # 上界失控 (ACC_MARGIN=60000 时照样 PASS), 又放过了"整段没被接受"的退化。
+        # 精确判据同时钉住两侧: 被接受(>0) 且**不多不少** (150 = 注入量, 即整段进缓冲)。
+        # 上界方向 (裕度不得超出物理余量) 由新 case `accmgn` 的行为探针 + ADVCFG
+        # 配置断言负责 (见该 case 与 ACC_BUDGET 的注释)。
+        adv = (t1[0] - (CONN[1]['pcis'] + 1)) & 0xFFFFFFFF
+        if adv != 150:
+            ck.err(' conn1 零配额连接: 注入 150B 后 rcv_nxt 前推 %d B != 150 '
+                   '(C16-修订语义: 整段落在接受裕度内 ⇒ 必须被整段接受; '
+                   '0 = 裕度被关掉, >150 = 越界接受)' % adv)
+        else:
+            print('  conn1 零配额连接: 注入 150B 被整段接受 (前推 150 B — '
+                  'C16-修订语义, 精确判据)')
+        ck.eq(t1[3], 0, 'conn1 TCB rcv_wnd = 0 (C10 纠偏 = winq)')
         ck.eq(t1[1], CONN[1]['iss'] + 1 + 4 * 1200, 'conn1 snd_nxt')
         ck.eq(t1[2], CONN[1]['iss'] + 1 + 4 * 1200, 'conn1 snd_una')
         ck.eq(t1[5], 1, 'conn1 state')
     else:
         ck.err('缺 conn1 ADVTCB')
-    acks = set(a[2] for a in ev.get('ack', []))
+    # ACK 行 (板侧 ack_req 轨迹) 按 a[1] = 连接 id 过滤 —— 旧代码用混合集合,
+    # conn0 的 rcv_nxt 值会漏进 conn1 的窗口判据里 (数值恰好更小 ⇒ 侥幸不误报,
+    # 但那不是"判据通过", 是判据没看对连接)。必修1 收尾一并修正。
+    ack_tr = ev.get('ack', [])
+    acks = set(a[2] for a in ack_tr if a[1] == 0)      # conn0
+    acks1 = set(a[2] for a in ack_tr if a[1] == 1)     # conn1
     if (CONN[0]['pcis'] + 1 + 100) not in acks:
         ck.err('未见 conn0 rcv_nxt=%08x 的 ACK 行 (样例 %s)'
                % (CONN[0]['pcis'] + 1 + 100,
                   sorted(hex(x) for x in acks)[:6]))
-    if (CONN[1]['pcis'] + 1 + 150) not in acks:
-        ck.err('未见 conn1 rcv_nxt=%08x 的 ACK 行' % (CONN[1]['pcis'] + 1 + 150))
+    # C16-修订: conn1 的 150B 落在 ACC_MARGIN 裕度内 ⇒ 允许 (且应当) 出现
+    # rcv_nxt=+150 的 ACK (被接受了才会有该 ACK)。
+    # P5b 必修1 收尾: 收紧为**枚举判据** —— conn1 的 rcv_nxt 只可能是两个值
+    # (注入前 = pcis+1, 接受 150B 后 = pcis+1+150), ACK 行里出现任何第三个值
+    # 都是本门没有注入过的接受 (旧式 (150, 4096] 区间只报了下半段, 且完全放过
+    # > 4096 的跃变 —— 与 adv 的恒假上界同一个漏洞)。
+    if (CONN[1]['pcis'] + 1 + 150) in acks1:
+        print('  conn1 ACK 出现 rcv_nxt=+150 (裕度内接受 — C16-修订)')
+    else:
+        ck.err('未见 conn1 rcv_nxt=%08x 的 ACK 行 (C16-修订: 裕度内接受必须回 ACK)'
+               % (CONN[1]['pcis'] + 1 + 150))
+    for a in sorted(acks1):
+        if a not in (CONN[1]['pcis'] + 1, CONN[1]['pcis'] + 1 + 150):
+            ck.err('conn1 ACK rcv_nxt=%08x 不是本门注入过的两个值 (pcis+1 / '
+                   'pcis+1+150) — 出现了未注入的接受 (裕度/接受界失控)'
+                   % a)
+    # 板侧物理不丢帧 (窗口决策 != 缓冲溢出)
+    md = info.get('mdrop')
+    if md is None:
+        ck.err('缺 ADVMDROP 行 (无法断言板侧 mac stat_drop)')
+    elif md != 0:
+        ck.err('mac_rx_64.stat_drop=%d != 0 (零配额下物理缓冲仍丢帧)' % md)
     ck.eq(info['tx'][-1].get('eend'), 0, 'stat_eend')
+
+
+def check_accmgn(ck, cl, ev, info, s):
+    """P5b 必修4: ACC_MARGIN 的边界探针 (见 case_accmgn 的 docstring)。
+
+    判据 (逐探针的 rx 计数增量; 探针帧全是乱序段 ⇒ 只有窗口判决会动计数):
+      探针 IN  (D=3328 < ACC_MARGIN):  seq(回 ACK) +1, nonmatch +0, ipcsum/crc +0
+      探针 OUT (D=10551 >= 物理余量):  seq +0,                 nonmatch +1
+    ⚠️ 这是**行为级**参数敏感性: 把 ACC_MARGIN 改大到 60000, 探针 OUT 的判决从
+    "静默"变成"回 ACK" ⇒ 第二组断言当场 FAIL (必修4 的灵敏度证据)。
+    """
+    # 脚本 3 个快照 (基线 + 2 探针) + TB 收尾的 1 个 = 4
+    r7 = info.get('rx7', [])
+    if len(r7) != 4:
+        ck.err('ADVRX7 快照 %d 个 != 4 (脚本 3 + 收尾 1; 不一致则无法逐探针判读)'
+               % len(r7))
+        return
+    print('  rx 基线: %s' % r7[0])
+    names = {0: 'IN(D=%d)' % D_IN, 1: 'OUT(D=%d)' % D_OUT}
+    for k, i in ((0, 1), (1, 2)):          # 探针 k: 快照 i-1 -> i
+        a, b = r7[i - 1], r7[i]
+        d = dict((f, b.get(f, 0) - a.get(f, 0))
+                 for f in ('pass', 'seq', 'nonmatch', 'ipcsum', 'crc', 'trunc'))
+        print('  探针 %s: rx 增量 %s' % (names[k], d))
+        if d['ipcsum'] or d['crc'] or d['trunc']:
+            ck.err('探针 %s 帧被判 ipcsum/crc/trunc 丢弃 (探针帧本身有问题, '
+                   '窗口判决没被观察到)' % names[k])
+            continue
+        if d['pass'] or d['nonmatch'] < 0 or d['seq'] < 0:
+            ck.err('探针 %s 出现非预期增量 %s (本门只注入乱序段)' % (names[k], d))
+        if k == 0:
+            # D < ACC_MARGIN: C16-修订 的"拒收回 ACK"必须生效
+            if d['seq'] != 1 or d['nonmatch'] != 0:
+                ck.err('探针 %s: 期望 stat_drop_seq +1 / nonmatch +0 (裕度内 '
+                       '乱序段必须回 ACK — C16-修订), 实得 %s'
+                       % (names[k], d))
+        else:
+            # D >= 物理余量: 必须静默 (裕度不得超出 10550)
+            if d['nonmatch'] != 1 or d['seq'] != 0:
+                ck.err('探针 %s: 期望 nonmatch +1 / seq +0 (超出物理余量的段必须'
+                       '**静默**), 实得 %s — 若 ACC_MARGIN 被改大到此值以上, '
+                       '就是"接受裕度超出物理余量" (必修4 的 FAIL 条件)'
+                       % (names[k], d))
+    t1 = info['tcb'].get(1)
+    if t1 is None:
+        ck.err('缺 conn1 ADVTCB')
+    elif t1[0] != CONN[1]['pcis'] + 1:
+        ck.err('conn1 rcv_nxt=%08x != %08x (乱序探针段不得被接受/推进 rcv_nxt)'
+               % (t1[0], CONN[1]['pcis'] + 1))
+    if info.get('mdrop', -1) != 0:
+        ck.err('mac_rx_64.stat_drop=%s != 0 (物理缓冲丢帧)' % info.get('mdrop'))
+    eend = info['tx'][-1].get('eend') if info['tx'] else None
+    ck.eq(eend, 0, 'stat_eend')
 
 
 CHECKERS = {'dbg': check_len, 'len': check_len, 'b2b': check_b2b, 'wnd': check_wnd, 'fin': check_fin,
             'findrop': check_findrop, 'abort': check_abort,
             'evfifo': check_evfifo, 'multi': check_multi,
+            'accmgn': check_accmgn,
             'reconn_fast': lambda ck, cl, ev, info, s: check_reconn(ck, cl, ev, info, s, True),
             'reconn_probe': lambda ck, cl, ev, info, s: check_reconn(ck, cl, ev, info, s, True),
             'reconn_slow': lambda ck, cl, ev, info, s: check_reconn(ck, cl, ev, info, s, False)}
@@ -848,6 +1132,7 @@ def check(simdir, case):
     cl = classify(frames)
     ck = Check()
     check_generic(ck, cl, info)
+    check_phys_margin(ck, info)        # P5b 必修4: 全 case 通用 (配置级)
     CHECKERS[case](ck, cl, ev, info, s)
 
     print('=== case %s ===' % case)

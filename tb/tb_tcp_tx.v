@@ -80,6 +80,8 @@ module tb_tcp_tx;
         .ack_req(ack_req), .ack_id(ack_id), .ack_val(ack_val), .ack_syn(1'b0),
         // P5: FIN/RST 通道未用 (接地; 悬空会让 ackq 写入 X)
         .ack_fin(1'b0), .ack_rst(1'b0), .fin_req(16'h0), .rst_req(16'h0), .cfg_up(1'b0), .cfg_up_id(4'd0),
+        // P5b: wu (窗口更新) 通道恒 0 + 新状态输出空接 (C12: 悬空输入 = Z/X)
+        .wu_req(1'b0), .wu_id(4'd0), .wu_val(32'd0), .wu_gnt(),
         .o_fin_sent(), .o_retx_id(),
         .rb_id(rb_id), .rb_snd_nxt(rb_snd_nxt), .rb_rcv_nxt(rb_rcv_nxt),
         .rb_rcv_wnd(rb_rcv_wnd), .rb_snd_una(rb_snd_una), .rb_snd_wnd(rb_snd_wnd),

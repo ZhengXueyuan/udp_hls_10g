@@ -14,7 +14,17 @@
 // snd_una/snd_wnd, 绝不回 ACK (防 ACK 环)。TCP 校验和 cut-through 无法验证, 不查。
 // 填充帧: pop8(TLAST) 允许 > 剩余载荷 (60B 最小帧填充), 多余字节按填充忽略。
 // 坏 FCS 段: 载荷照发 (tuser[0]=0 标记) 但不回 ACK、不推进 rcv_nxt (对端重传)。
-module tcp_rx (
+module tcp_rx #(
+    // P5b C16-修订: **接受界对通告界的裕度** (字节)。
+    // 通告窗 W = max(0, winq - occ) 是"我还能收多少"; 但对端在收到新窗口之前是按
+    // **旧窗口**发的, 其右沿 = redge + Δ (Δ = 通告滞后, 见规格 C1b) ⇒ 接受判据
+    // 必须预留 Δ, 否则"按旧窗合法发出的零头段"落地时窗已塌陷 ⇒ 顺序段被拒
+    // (只回 ACK 靠重传 = 活性问题; 更早的静默丢弃 = 200ms RTO)。
+    // 默认 0 ⇒ 接受界 == ra_rcv_wnd, 默认构建逐位不变。
+    // APP_MODE 由 wrapper 传 4096: occ + W + 4096 <= 49152 + 4096 = 53248,
+    // 再加未判定帧 U(<=1518) = 54766 < 65536 ✓ 余量 ~10.7KB (不会物理溢出)。
+    parameter [15:0] ACC_MARGIN = 16'd0
+) (
     input  wire        clk,
     input  wire        rst_n,
     // 来自 mac_rx_64
@@ -248,7 +258,11 @@ module tcp_rx (
     wire        state_ok = (ra_state == ESTAB);
     wire        len_ok   = (w2_r[63:48] >= 16'd40);
     wire [31:0] seq_diff = seq32 - ra_rcv_nxt;
-    wire        win_ok   = (seq_diff < {16'b0, ra_rcv_wnd});
+    // P5b C16-修订: 接受界 = 通告界 + ACC_MARGIN (位宽扩展防 16 位回绕)。
+    // 默认构建 ACC_MARGIN=0 ⇒ acc_wnd = {1'b0,ra_rcv_wnd} ⇒ 与旧判据逐位等价
+    // (多了 1 位零扩展, 数值不变)。
+    wire [16:0] acc_wnd  = {1'b0, ra_rcv_wnd} + {1'b0, ACC_MARGIN};
+    wire        win_ok   = (seq_diff < acc_wnd);
     wire        seq_eq   = (seq32 == ra_rcv_nxt);
     wire        seq_lt   = (seq32 < ra_rcv_nxt);   // 重复/旧段 (回绕安全: 无符号比较)
     // P4d-fix: 回卷会话期间 ACK 上界 = 高水位 retx_hi (回卷前 snd_nxt = 真正发送
@@ -287,7 +301,13 @@ module tcp_rx (
                            (ra_snd_nxt != ra_snd_una);
     wire        acc      = base_ok && win_ok && seq_eq;
     // 窗口内乱序 (seq > rcv_nxt) 与重复 (seq < rcv_nxt): 丢数据仍回 ACK (快速重传/dup-ACK 依赖)
-    wire        ackresp  = base_ok && !seq_eq && (win_ok || seq_lt) && (plen_w != 16'd0);
+    // P5b C16-修订兜底: `seq_eq && !win_ok` (顺序段但窗瞬时不足 — 即使加了
+    // ACC_MARGIN 仍越界, 即 Δ > margin 的极端情形) 也必须回 ACK, 否则静默丢弃
+    // 只让对端等 200ms RTO (RFC 793 要求不可接受的段回 ACK)。远超前段
+    // (!seq_eq && !win_ok && !seq_lt) 仍不回 ACK (与原语义一致); 纯 ACK 帧
+    // (plen_w==0) 不受影响。
+    wire        ackresp  = base_ok && (plen_w != 16'd0) &&
+                           ((!seq_eq && (win_ok || seq_lt)) || (seq_eq && !win_ok));
 
     // ---- 帧尾/ACK 组合信号 ----
     wire [3:0] pop8w   = pop8(s_axis_tkeep);

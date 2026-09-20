@@ -21,6 +21,10 @@ module tb_p5_status;
     reg [15:0] stat_tx_frames, stat_mismatch, ev_cnt, ev_drop, app_tx_ready,
                estab_cnt;
     reg [15:0] stat_drop_len, stat_fin, stat_rst;
+    // P5b C9 追加字段源
+    reg [15:0] stat_ack, stat_ack_drop, winq0, wu_mark0, stat_wu, stat_px;
+    reg [2:0]  fsm_state;
+    reg [16:0] pool;
     reg [16:0] rx_occ;
     wire txd;
 
@@ -39,6 +43,10 @@ module tb_p5_status;
         .rx_occ(rx_occ), .ev_cnt(ev_cnt), .ev_drop(ev_drop),
         .app_tx_ready(app_tx_ready), .estab_cnt(estab_cnt),
         .stat_drop_len(stat_drop_len), .stat_fin(stat_fin), .stat_rst(stat_rst),
+        // P5b C9: 流控观测字段
+        .stat_ack(stat_ack), .stat_ack_drop(stat_ack_drop), .fsm_state(fsm_state),
+        .winq0(winq0), .wu_mark0(wu_mark0), .stat_wu(stat_wu), .pool(pool),
+        .stat_pool_exh(stat_px),
         .txd(txd)
     );
 
@@ -84,15 +92,20 @@ module tb_p5_status;
         rx_occ = 17'h1ABCD; ev_cnt = 16'h0003; ev_drop = 16'h0001;
         app_tx_ready = 16'h8001; estab_cnt = 16'h0002;
         stat_drop_len = 16'h0003; stat_fin = 16'h0001; stat_rst = 16'h0000;
+        // P5b C9 字段: 取可辨识值 (每个字段一个不同的 hex 图案, 便于错位定位)
+        stat_ack = 16'hBEEF; stat_ack_drop = 16'h00CD; fsm_state = 3'd5;
+        winq0 = 16'hC000; wu_mark0 = 16'h6035; stat_wu = 16'h0011;
+        pool = 17'h1C0DE; stat_px = 16'h0009;
         fd = $fopen("status_line.txt", "wb");   // 二进制: 文本模式会把 0x0A 写成 0x0D0A
         #200; rst_n = 1;
         // 等首行开始 (txd 空闲高 -> start 沿)
         @(negedge txd);
-        for (ci = 0; ci < 200; ci = ci + 1) begin
+        // P5b: 行 168 -> 220 字符, 读循环上界跟着放宽 (原 200 会截尾)
+        for (ci = 0; ci < 240; ci = ci + 1) begin
             get_byte(dbyte);
             nchar = nchar + 1;
             $fwrite(fd, "%c", dbyte);
-            if (dbyte == 8'h0A) ci = 200;      // LF: 行结束
+            if (dbyte == 8'h0A) ci = 240;      // LF: 行结束 (上界一致)
             else @(negedge txd);               // 下一字符 start 沿 (逐字符重对齐)
         end
         $fclose(fd);
