@@ -28,8 +28,10 @@ call %XV%\xvlog.bat -work xil_defaultlib -d APP_MODE ^
   %RTL%\mac_rx_64.v %RTL%\mac_tx_64.v %RTL%\tcp_cam.v %RTL%\tcb.v ^
   %RTL%\tcp_rx.v %RTL%\tcp_tx_frame.v %RTL%\retx_ram.v %RTL%\tcp_echo.v ^
   %RTL%\axis_pipe.v %RTL%\rx_classify.v %RTL%\vlan_strip.v ^
-  %RTL%\slow_rx_adp.v %RTL%\slow_cfg_adp.v %RTL%\slow_tx_adp.v %RTL%\tx_arb.v ^
-  %RTL%\app_ctrl.v %RTL%\app_pattern.v %RTL%\app_status_uart.v ^
+  %RTL%\slow_rx_adp.v %RTL%\slow_cfg_adp.v %RTL%\slow_tx_adp.v ^
+  %RTL%\udp_rx.v %RTL%\udp_split.v %RTL%\tx_arb.v ^
+  %RTL%\udp_tx_cfg.v %RTL%\udp_tx_frame.v ^
+  %RTL%\app_ctrl.v %RTL%\app_pattern.v %RTL%\app_udp_pattern.v %RTL%\app_status_uart.v ^
   %BD%\wrapper_p4.v %BD%\util_gmii_to_rgmii.v %BD%\uart_dbg.v ^
   %TB%\tb_p5_wrapper.v > xvlog_w.log 2>&1 || (type xvlog_w.log & exit /b 1)
 call %XV%\xvlog.bat -work xil_defaultlib "%XV%\..\data\verilog\src\glbl.v" >> xvlog_w.log 2>&1 || (type xvlog_w.log & exit /b 1)

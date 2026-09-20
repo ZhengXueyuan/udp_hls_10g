@@ -3248,3 +3248,423 @@ RTO **自释放**窗口 (~2-5s) ⇒ 必须把轮间隔缩到自释放之前 (`--
 - **4MB 回归**: `RX` 逐字节精确、`MM=0` ⇒ 分池/动态裕度/opener 没有破坏单连接数据面。
 - **板级多连接不可行 (记录)**: `app_pattern` 是**单连接**演示 app、板级寄存器总线**无 CPU** ⇒
   分池门槛 (app 建连前写 `0x0C`) 只能在 TB 侧设; 板级只验**单连接不回归**。
+
+## 2026-09-20 P5e-T1/T2 UDP app 接口施工 (接收侧分流 shim + 发送侧目标锁存/长度守卫) — 设计决定 + 决定性实验
+
+**范围 (整个 P5e 的构建面)**: 新增 `rtl/udp_split.v` (T1 接收侧分流) + `rtl/udp_tx_cfg.v`
+(T2 发送侧目标锁存/使能门) + `rtl/udp_tx_frame.v` 长度守卫 (T2) + wrapper 的 UDP 支
+(`` `ifdef APP_MODE ``); **`rtl/udp_rx.v` 与 `rtl/udp_tx_frame.v` 本轮首次进 p5 构建清单**
+(`board/build_p5.tcl` / `board/timing_p5.tcl` 此前只有 `app_*.v` 与 `tx_arb.v`) —— 两者都是
+P1 就存在且已过 P1 门的模块, 本轮只是把 APP_MODE 构建纳入它们。默认构建 (`build_p4.tcl`,
+宏未定义) **逐位不变** (新逻辑全在 `` `ifdef APP_MODE `` 内, 新增线束在默认路径上是纯线名
+别名, 同 P5a 的 `txin_*`/`srx_*` 手法)。T3 的 `rtl/app_udp_pattern.v` + learn-on-RX 闭合见下一节。
+
+### ① 为什么**不动** `rx_classify` (插在它的 **slow 输出**与 `slow_rx_adp` 之间)
+
+- `rx_classify` 把所有 UDP 都送 slow 口 —— 这是 **P4 门的逐字断言**; 改它要同时改 5 个活例化点
+  (wrapper + `tb_p4_chain` / `tb_p5_app` / `tb_p5_adv` / `tb_p5_multi`) 外加单元 TB
+  `tb_rx_classify`, 且它的 FSM 族在 P5d 是 **0.598ns** 的临界族 (动它 = 拿时序赌一个不需要的功能)。
+- ⇒ **在 slow 支插入** `udp_split` ⇒ **TCP 数据面永不经过本模块** (fast 帧根本不进 slow 口),
+  TCP 侧零功能风险 / 零时序影响。这是"附加功能不碰已验收路径"原则的直接落地。
+
+### ② ⚠️ 真正的风险是**背压**, 不是分类 (决定性实验 `sim/p5e_pre`)
+
+- 初版的担心是"分类判错 ⇒ 帧走错路"。决定性实验 (基线 vs 接入分流器的逐场景对比, 见
+  `sim/p5e_pre/` 的 `tb_p5_baseline.v` / `tb_p5_udp_split.v` + `gen_stim_p5e_udp.py`) 把真风险
+  暴露成另一条: **慢口消费者一停 ⇒ 反压经 `rx_classify` 传到 `mac_rx_64` 的 8 字共享 FIFO**
+  (`rtl/mac_rx_64.v:227`) ⇒ **丢帧, 且受害者可以是 fast TCP 帧**: 实测 **`mac_drop=11`**,
+  13 帧丢 7。(旧 `slow_rx_adp` 是 `assign s_axis_tready = 1'b1` —— 故意永不反压, 就是因为这条。)
+- ⇒ `udp_split` 的输入口**结构性不反压**: `s_axis_tready` 只在"预取 FIFO 满"时为 0, 而这要求
+  `udp_rx` **连续停读 ≥13 拍**; 而 `udp_rx` 唯一的停读是 S_TAIL 的 **≤2 拍** ⇒ **结构性不可能**
+  ⇒ 对外可断言**恒 1** (T1 门与 T4 门都有专项断言, 实测全程恒 1)。装不下时**丢整帧**(绝不吐半帧)。
+- **预取 FIFO 的第二个作用 (易忽略)**: 两支 (透传支 / 分流判据) 看到的是**逐位同源**的字流
+  (同一个 pop 流), 且本模块的帧内字计数 `pw_cnt` 与 `udp_rx` 内部 `wcnt` **严格同拍** ⇒ 判定拍不会错位。
+
+### ③ 帧级缓冲 (store-and-forward) 如何消解 `udp_rx` 的两条已知弱点
+
+| `udp_rx` 的弱点 | `udp_split` 的做法 | 结果 |
+|---|---|---|
+| **坏 FCS 照交** (`crc_ok` 只在 TLAST 拍有效) | TLAST 拍查 `tuser[0]`, 坏则**整帧回卷** (不提交/不交付) | `stat_drop_crc`, 零坏帧进 app |
+| **长度不符 ⇒ 无 TLAST 半帧**(且无 `fend/ferr` 告警) | 用**下一帧的 `meta_valid` 拍**作未决帧边界: 未提交残帧一律回卷作废 | `stat_drop_part`, **永不半帧** |
+
+- **代价 (写清, 是有意的取舍)**: "**匹配但畸形**"的帧 (匹配 app 端口但长度字段坏) 会**从两条路
+  都消失** —— 它既没进 app (被回卷), 也没进 HLS (判定拍已把它从透传支撤走)。app 通路的合同是
+  "要么完整正确, 要么零交付"。
+- **0 长数据报 (合法)** 也照顾到: 播放器合成 1 拍 `tkeep=0/tlast=1` 的 null beat ⇒ app 口硬不变量
+  "一帧 ≥1 拍, 末拍 tlast, 永不半帧/重复/乱序"。
+
+### ④ `udp_tx_cfg`: 下游 `udp_tx_frame` 的 cfg 是**双时刻采样** ⇒ 锁存必须冻结到**帧头发出之后**
+
+- 采样点 ① **帧首接受拍** (`csum_init_val` 进 `checksum16.init`) ② **S_HDR 拍 + TLAST 拍**
+  (帧头字节 + `ip_csum_calc`)。⇒ 任何"帧中途/帧尾后"的 cfg 变化会让**同一帧的头与校验和取自
+  两个对端** (实测症状: 头 = 新 peer, csum = 旧 peer)。
+- ⇒ `udp_tx_frame` 新增 **`o_busy`** (1 = 非空闲) 回授给 `udp_tx_cfg` 作冻结窗口右边界;
+  另加**启动同步门** (刷新未落地不许帧首拍进下游, 否则复位后首帧 csum 少 `src_ip+dst_ip`,
+  换 peer 后首帧差两个 IP 之差)。**两轮才做对** —— 第一版只冻结到"最后一拍被接受"为止, 仍在
+  报文传输期间放走了 cfg 变化。
+- 表项来源 = **learn-on-RX** 的 peer 表 (T3 闭合); **端口是配置而不是学习** (对端的临时端口
+  不是 UDP 语义)。不选 tid 索引的理由 (UDP 不合流到 TCP 的 AXIS ⇒ tid 需自定义; 单对端会话下
+  表+索引 = 纯开销; 且 tid 方案是 learn 方案的超集而非替代) 见 `rtl/udp_tx_cfg.v` 头注释。
+
+### ⑤ `udp_tx_frame`: 长度守卫 (app 契约兜底, 两个**硬**理由)
+
+- 帧内累计 `plen_n > PLEN_MAX(=1500)` ⇒ **整帧中止** (不写 FIFO / 不发帧 / 不进校验和), 残留字
+  在 `S_RECV` 冲洗 (`flush_rd`), `stat_drop_len` 计数。理由:
+  ① **`>2048B` 会永久死锁** —— 内部载荷 FIFO 只有 256 字, 载满后 `s_axis_tready` 恒 0 而 FSM 停在
+     `S_RECV` 等 `tlast` ⇒ **该帧永不收尾也永不放行**;
+  ② **`>1518B` 会上线巨帧** (`mac_tx_64` 不做长度截断), 对端/交换机丢弃或报警。
+  上界必须 < FIFO 容量: 超限检出拍最多已写 189 字 ⇒ 结构性无死锁路径。
+- 接受门 `s_axis_tready` 加 `!flush_pend` (**接受门与"能否启动一帧"同门**, 工程坑 10): 否则新帧
+  首字会与待冲洗的残字混在同一 FIFO, 排空指针吃掉新帧首字 ⇒ **帧长错 8 字节**。
+- 不加 FSM 状态 (同 `tcp_tx_frame` 手法: `len_bad`/`flush_pend` 两个 flag) ⇒ 默认构建与 P1 echo
+  路径的帧恒 ≤1500B ⇒ 两位恒 0, 逐位不变 (P1 门 `run_tb_udp_tx.bat` 的 LENS 含 1500 用例, PASS)。
+
+### ⑥ TX 优先级 (wrapper 的两级 arb)
+
+**TCP fast (严格优先) > UDP app TX > HLS 慢路径**。两个 arb 都是"帧级锁定 + 帧末 1 拍重仲裁"
+⇒ 帧原子性不被切断; UDP 帧 ≤1500B、HLS 帧 ≤1518B ⇒ 单帧有界, 互不无界阻塞。给 UDP 压 HLS 的
+理由: HLS 慢路径自带 `frame_fifo` (512 字, store-and-forward), 被让路**不丢字** ⇒ 优先级给低延迟者。
+
+### ⑦ 零回归论证 (默认不激活, 两条**独立**保险)
+
+- T1 的 `cfg_*` 全 0 哨兵 (不匹配任何帧 ⇒ 分流器对慢路径透明) + T2 的 `peer_v` 复位 0
+  (表空 ⇒ `o_ready=0` ⇒ app 侧推出的帧被**拒在 `udp_tx_frame` 之前**, 线上零新增帧)。
+  ⇒ **app 侧默认不激活, 板上行为与 P5 逐位一致**; 两门里两条保险各自被单独验证过。
+
+### ⑧ 门 (T1/T2)
+
+- **T1 单元门** `sim/p5udp/run_tb_udp_split.bat` (`tb/tb_udp_split.v`): 分流正确性 / 结构性不反压
+  (`s_axis_tready` 恒 1) / 透传逐字保真 / 坏帧与半帧整帧丢弃 / 帧缓冲溢出整帧丢。**PASS**。
+  决定性实验的两个 TB 副本在 `sim/p5e_pre/` (`tb_p5_baseline.v` / `tb_p5_udp_split.v`)。
+- **T2 双门**: `sim/p5e_t2/run_tb_udp_tx_guard.bat` (peer 门 + `PLEN_MAX` 守卫 + 内置负对照;
+  实测 `P5E-T2 GUARD GATE: OK (frames=6 drop_len=2 deny=2 neg_stuck=0)`) 与
+  `sim/p5e_t2/run_tb_p5e_t2_wrapper.bat` (真 wrapper 全链)。
+- ⚠️ **坑 8 再次实锤 (本项实测踩到)**: 漏声明一根 64/8 位内部线 ⇒ Verilog **隐式 1 位线** ⇒
+  连接**静默截断**, 高位 = Z ⇒ `mac_tx` 收到 Z 填充字 ⇒ `cw_len = popc8(Z) = X` ⇒ **永久卡
+  `S_DATA`**, TX 全线死。**子模块 TB 全绿, xelab 只有 unconnected 类警告** ("implicitly declared"
+  **不在**多驱动/未驱动检查里) ⇒ **只有真 wrapper 全链门能抓到**。⇒ 门里应用
+  `findstr implicit` 做**硬失败** (T3/T5 的门已加, 4 个日志命中 0)。
+- 本轮新增坑已补进 `CLAUDE.md` **24-26**: 隐式 1 位线 (本条) / **"这东西从哪来"要单独测**
+  (T2 两门都靠 `force` 灌 peer ⇒ 缺口从两条门逃逸, 只有 `neglearn` 负对照能暴露) /
+  **近似时序门绝对值不可跨流程比较** (手动 opt/place/route 不 `launch_runs` ⇒ 缺 `phys_opt`
+  且 strategy 不生效, 比官方口径悲观 ~0.17ns)。
+
+## 2026-09-20 P5e-T3/T4/T5 UDP 演示 app + learn-on-RX 缺口闭合 (真 wrapper 全链) — 门全绿 + 时序收口
+
+**范围**: TL 重新裁决的**设计缺口** + UDP 演示 app + 门。T1 (`udp_split` 接收侧分流) 与
+T2 (`udp_tx_cfg` + `udp_tx_frame` 发送侧) 的产物**性质不动**, 只加/换接线与新增模块。
+
+### ① 缺口闭合: `udp_split` 的 meta 输出口 (learn-on-RX)
+
+**缺口 (T2 描述与板级事实不符)**: T2 把 `udp_tx_cfg.peer_wr` 接在**慢路径 CONN_UP**
+(`scfg_ev_up`) 上。**UDP 无连接 ⇒ 板上永不产生 CONN_UP ⇒ peer 表永远空 ⇒ UDP TX 永不激活**
+—— T2 的"默认不发送"在板级退化成"**永不发送**"。T2 的单元门与 wrapper 门都是 `force` 灌
+peer 事件才绿的, 所以**门抓不到**这个语义缺口 (两门都测"注入 peer 后会发", 没测"peer 从哪来")。
+
+**闭合** (`rtl/udp_split.v` 新增 5 个输出口, 纯线束):
+
+| 口 | 来源 | 语义 |
+|---|---|---|
+| `meta_valid` | `u_udp_rx.meta_valid` | 匹配帧 w5 接受拍的**单拍组合脉冲** |
+| `meta_src_mac/ip/port` | `u_udp_rx.meta_*` | 该帧解析出的对端 MAC/IP/端口 (w3/w4 拍已寄存, 脉冲拍稳定) |
+| `meta_len` | `u_udp_rx.meta_len` | 该帧载荷字节数 |
+
+body 里就是 5 条 `assign` —— **零新增逻辑/零新增寄存器/零新增状态**, 不改
+`s_axis_tready` / `p_axis_*` / 帧缓冲的任何门控 ⇒ T1 的三条已验证性质 (结构性不反压 /
+透传逐字保真 / 坏帧与半帧整帧丢弃) **结构性不变** (T1 的 `sim/p5udp/run_tb_udp_split.bat`
+在改后仍 PASS, 见下)。**为什么安全**: 纯输出口 + 命名端口例化 ⇒ T1/T2 的既有例化点
+(tb_udp_split / sim/p5e_pre 的副本) 不接新口只是 unconnected 警告, 行为逐位不变。
+
+wrapper 侧: `.peer_wr(udp_meta_valid) / .peer_mac(udp_meta_src_mac) / .peer_ip(udp_meta_src_ip)`,
+并同时把 `udp_split` 的过滤配置从 T1 的"全哨兵 (对慢路径透明)"改成**精确匹配 app 端口**:
+`cfg_dst_ip = 192.168.100.2` (本板) / `cfg_port0 = 8081` / `cfg_port_any = 0`
+(8080 由 `EXCL_PORT` 排除, 仍留给 HLS `udp_echo`)。
+
+**⚠️ 已文档化的语义边界**: `meta_valid` 在 w5 (头字段收全) 就脉冲, 而 **FCS 要到 TLAST 拍
+才知道** ⇒ **坏 FCS 帧的头字段同样会被学入 peer 表** (该帧随后被整帧丢弃, `stat_drop_crc`);
+下一好帧即覆盖。要改成"仅好帧才学"必须把 meta 缓存到 TLAST = **新增状态**, 明确不在本口
+合同内。本语义由 `tb_app_udp` 的 `badcrc` 模式**逐条断言钉死** (改语义必须同时改断言)。
+
+### ② 演示 app `rtl/app_udp_pattern.v` (UDP 版图案发生器 + 校验器)
+
+- **图案约定与 `app_pattern.v` / `peer.exe --udp-*` 逐字节一致**: xorshift64
+  (`s ^= s<<13; s ^= s>>7; s ^= s<<17`), 每步取 `s[31:24]`, 种子 `0x9E3779B97F4A7C15`,
+  **先取后推进**。独立模块 (不是复用 `app_pattern`) 的理由: UDP **无连接语义** —— 没有
+  CONN_UP/DOWN 事件、没有 tid、没有 FIN/RST 收尾, 硬塞进 TCP app 的事件驱动 FSM 会引入
+  一堆板上恒假的分支。
+- **消费速率: 字节串行 + II=1 无缝 (选它, 不选 8 路并行)** —— 论证三条:
+  ① **需求侧**: 本构建是 1G MAC ⇒ 线上字节率结构性 <= 125 MB/s, 而本 verifier 有数据时
+     恰好 **125 MB/s** (1 字节/拍, 8 字节恰 8 拍); 更深一层, 以太网每帧还有 42+4+20 = 66
+     字节开销 ⇒ **载荷**率只有线速的 1472/1538 = 95.7% ⇒ 净余量 ~4.5%, 且 `udp_split` 的
+     4KB 帧缓冲吸收帧间缝隙。板级验收用 `peer --rate-mbps 20` (= 2.5 MB/s) ⇒ 裕度 **50x**。
+     ⚠️ **顺手纠正 T1/T2 与 `tools/cpp_peer/peer.cpp` 的一处 8x 口径错误**: 注释里写的
+     "app RX 消费是字节串行 (~15.6 MB/s @125MHz)" **是错的** —— 1 字节/拍 @125MHz =
+     **125 MB/s = 1 Gbps 线速**; 15.6 MB/s 是 125 **Mbps** 的字节数。真实结论因此相反:
+     T1/T2 的字节串行 RX **不是**"跟不上所以才必须限速", 而是**恰好等于 1G 线速**。
+     (peer.cpp 的默认 `--rate-mbps 50` 的"2.5x 裕量"实际上是 ~20x。)
+  ② **关键改进**: `app_pattern` 的 RX 是"1 拍装字 + n 拍比字节" ⇒ 8 字节 9 拍 = 111 MB/s
+     (89% 线速, **无限速灌包时结构性跟不上**); 本模块把**装载与比对并行** (1 字前瞻寄存器,
+     比对期间把下一字收进 `nx_*`) ⇒ 8 字节恰 8 拍, **无空拍**。`rx_tready = !nx_v`
+     是真反压 (每字 8 拍), 但上游是帧级 store-and-forward + 4KB 缓冲 ⇒ 反压停在缓冲里,
+     永不到 `mac_rx` (T1 的"绝不反压"合同不破)。
+  ③ **上限写清**: 本 verifier 天花板 = **1G 线速**。10G 必须换 8 路并行 (8 步 xorshift/拍
+     = 1 GB/s); 本次不做是因为 (a) 1G 用不到, (b) 8 步 xorshift64 组合链 = 24 级 64 位 XOR
+     (~3-7ns), 而 T2 布线后 **WNS 只剩 +0.230ns @8ns 周期** ⇒ 加进去大概率直接破时序。
+     真要做需要"两级流水 + 4 lane" (500 MB/s 仍不够 10G 的 1.25 GB/s) 或线性代数化
+     (`s_8 = M^8 * s_0` 矩阵异或树, 深度 ~6 级 LUT)。
+- **TX 限速**: 帧间 `TX_GAP` 个空闲拍 (参数)。默认 58000 ⇒ 帧周期 1538+58000 ~= 59538 拍
+  @125MHz ⇒ **1472*8/476us ~= 24.7 Mbps payload (~=25.4 Mbps 线上)**。选它的理由:
+  T6 板级实测 (peer.cpp:2529 记录) —— 参考对端在 20/25 Mbps 全收, >=30 Mbps 丢 ~2/3 帧。
+  `TX_GAP=0` = 全速 (受 mac_tx 线速限制, 约 957 Mbps)。
+- **`TX_BYTES != 0` = 有界会话** (发完 `done` 粘滞): 末帧长 = `min(i_paylen, 剩余)` ⇒
+  逐字节精确。⚠️ 实现里必须用 `rem_eff = first_frm ? TX_BYTES : remain` —— remain 是寄存器,
+  而"首帧启动拍"与 `remain <= TX_BYTES` 是**同一边沿**, 直接读 remain 会拿到复位值 0
+  ⇒ 首帧变成 0 长数据报 (坑 6 同族: 新状态第一次用的采样时刻)。门里有专项断言
+  (`TX_BYTES=1000` ⇒ bytes=1000 / frames=1 / beats=125 / done=1 / 之后零拍)。
+- **超长帧冻结 LFSR**: `seg_len > PLEN_MAX` 的帧必被 `udp_tx_frame` 帧内中止 (零字节上线);
+  若 LFSR 照常推进, 线上图案流就留一个空洞 ⇒ 对端连续校验必然失配。对齐 `app_pattern.bad_frm`
+  的手法 (冻结 + 常数填充) ⇒ **线上图案流始终连续**。板级 `i_paylen` 恒 1472 ⇒ 该路径不可达。
+- **默认不激活**: `i_en=0` (未使能 ⇒ 不校验、LFSR 钉 SEED) 或 `i_tx_ready = udp_tx_cfg.o_ready
+  = peer_v = 0` (peer 表空 ⇒ TX 零帧)。板级在**收到对端任一 app-UDP 帧**后才开始回发图案 ——
+  这本身就是演示: 主机发一个数据报, 板子自动开始回图案流。
+
+### ③ 门 (新目录 `sim/p5e_udp/`, 与 T1 的 `sim/p5udp/` 不撞)
+
+**T4 单元门** `tb/tb_app_udp.v` (自检式, 无 Python) —— 链 = TB 帧流 -> `udp_split`
+-> ①`p_axis`->`slow_rx_adp`(HLS) ②`app_rx`->app; `meta_*`->`udp_tx_cfg.peer_wr`;
+app TX -> `udp_tx_cfg` -> `udp_tx_frame` -> `tx_arb` -> 捕获。
+
+| 模式 | 判据 | 实测 |
+|---|---|---|
+| `pos` (默认) | P① RX 载荷逐字节+meta ② TX 帧逐字节 (双校验和/长度/载荷) ③ 边界 0/1472/1500/1501 ④ 突发 8x1472 零间隙 ⑤ learn-on-RX (+换 peer B) ⑥ `TX_BYTES=1000` 有界会话 | EXIT=0; RX 3 帧/2944B/**零失配**; meta 3 脉冲; 突发: 交付 3 + 溢出丢 5 == 8, `drop_part=0`, **`s_axis_tready` 全程恒 1**; 1501 ⇒ 零帧上线 + `drop_len=1` 且后续帧照常; 全部 18 帧 TX 载荷 = 图案流**连续**前缀 (`pat_bad=0`) |
+| `splitoff` | 拆分器 cfg 全哨兵 ⇒ app **0 帧** + HLS `stat_commit=2` (UDP 逐字走慢路径) | EXIT=0 |
+| `portout` | dport=9090 (过滤外) ⇒ app 0 帧 + HLS 见 echo | EXIT=0 |
+| `badcrc` | 匹配帧坏 FCS ⇒ app **0 帧** + `drop_crc=1` + `drop_part=0` + 不进 HLS; **并断言文档化的边界** (头字段仍被学入 peer 表) | EXIT=0 |
+| `nopeer` | 一个 RX 帧都不注入 ⇒ peer 表空 ⇒ TX **零帧** | EXIT=0 |
+| `neglearn` | **P5d 风格负对照**: peer 学习源钉 0 (复现 T2 配置) ⇒ 正例判据必然不成立 | **EXIT=1 (期望)**; 104 条 FAIL 全部落在 P⑤/③ (P① RX 仍全绿) ⇒ 判别力实证 |
+
+**T5 真 wrapper 全链门** `tb/tb_p5e_udp_wrapper.v` (坑 8) —— 例化 `board/wrapper_p4.v`
+(`-d APP_MODE`), 用 `force` 往 wrapper 内部 **GMII RX 侧** (`u_dut.e_rxd/e_rxdv/e_rxer`)
+注入 1 帧 (前导 8B + MAC 1514B + 自算 FCS), 于是**真走完** `mac_rx_64 -> rx_classify ->
+u_udp_split -> app RX + meta_* -> u_udp_tx_cfg (learn-on-RX) -> u_udp_tx -> u_tx_udp_arb ->
+u_tx_arb -> mac_tx_64 -> 内部 GMII TX`, 并在 GMII 上逐字节解码回帧。未覆盖的只有 RGMII
+DDR 转换器本身 (未改动)。判据: ① 注入前 `app_udp_tx_ready=0` 且零 UDP 帧 ② app RX
+`stat_rx_frames=1`/1472B/**`stat_mismatch=0`** ③ `peer_v=1` 且 `peer_mac_r/peer_ip_r` =
+注入帧 src ④ GMII UDP 帧 MAC 长 1514 / dst=peer / src=板 MAC / IP+UDP 校验和正确 / 载荷逐字节
+⑤ TCP fast 帧照常 + `mac_tx.stat_abort=0`。**结果: `P5E-T5 UDP WRAPPER GATE: OK`**;
+`+NOUDP` 对照 (不注入) ⇒ `peer_v=0 ready=0 udp_tx_fr=0 gufr=0 mac_tx_state=2 abort=0` = **零 UDP 帧**。
+
+**DRC 级静态检查** (xvlog + xelab, **两个 ifdef 配置都查**): `implicit` (T2 建议加 ——
+漏声明 ⇒ 隐式 1 位线 ⇒ 静默截断, `multi/driv/unconnected` 都抓不到) / `multi` / `driv` /
+`unconnected` 各 grep 一次; 结果 **implicit 命中 0 x 4 个日志**, 未连接清单与 T2 期逐项相同
+(全是既有 `dbg_wptr`/`crc_nxt` 类), **无新增**。
+
+**清单镜像 (坑 12)**: `%RTL%\app_udp_pattern.v` 补进了 **13 个**会因缺模块而假失败的清单
+(`board/build_p5.tcl` / `board/timing_p5.tcl` / `sim/p5sim/run_tb_p5_wrapper.bat` /
+`sim/p5e_t2/{run_tb_p5e_t2_wrapper.bat,route_check.tcl}` / `sim/p5udp/route_check.tcl` /
+`sim/p5b_acc|p5b_ind2|p5c_t3/rev|p5c_t4reg|p5c_t5|p5c_t5/g_p5|p5d_multi/p5dpriv/p5sim` 的
+`run_*_wrapper*.bat` / `sim/p5d_multi/chk/chkwrap.bat`), 由 `sim/p5e_udp/patch_manifests.py`
+一次做完 (只动清单行, 不动门逻辑)。
+
+**T2 的门随缺口闭合做了最小激励修正** (`tb/tb_p5e_t2_wrapper.v`): 旧的 `force scfg_ev_*`
+不再产生学习 ⇒ 改成 `force` wrapper 的 `udp_meta_valid/meta_src_mac/meta_src_ip` 一拍
+(仍覆盖 wrapper 里 `meta -> peer_wr` 的**接线本身**, 只跳过 `udp_split` 生成 meta 的那段 ——
+那段由 T5 用真 GMII 注入覆盖)。**T2 的判据 ①②③ 一字未改, 改后 PASS**
+(`gnfr=3 udp=1 tcp=2`)。T1 的 `run_tb_udp_split.bat` 未改任何东西, 改后仍 PASS。
+
+### ④ 时序门 (T1/T2 都点名要重跑的项: app 侧锥是否被覆盖)
+
+T1/T2 的遗留问题: **app 侧无消费者时锥会被综合裁剪 ⇒ 时序报告不覆盖输入侧关键路径**。
+接上真 app (u_app_udp, 且它的 `m_*` 驱动 `udp_tx_cfg`、`rx_tready` 驱动 `udp_split`,
+结构性不可裁) 后重跑:
+
+| 门 | 结果 |
+|---|---|
+| `board/run_timing_p5.bat` (synth+opt+place) | Setup **WNS +0.475 / 0 失败端点**; Hold WHS -0.158 / 604 端点 (place-only 的已知悲观, 基线 718); **place 报告的最差 setup 路径 = `u_app_udp/pw_keep_reg[4]` -> `u_udp_tx/ip_csum_r_reg[13]`** |
+| 私有 route 门 (`sim/p5e_udp/route_check.tcl`, p5r3_prj, +route_design) | **WNS +0.123 / WHS +0.036 / 失败端点 0 / 0** (133674 端点), "All user specified timing constraints are met"; 最差 setup 路径族 = `u_tcp_tx/u_retx` BRAM 地址, 而 **`u_app_udp -> u_udp_tx` 位列第 7 (+0.285ns)** |
+| cell 数探针 | `u_udp_split=1927 / u_udp_tx=1890 / u_udp_tx_cfg=336 / u_app_udp=1128 / u_tx_udp_arb=8` ⇒ **app 侧锥确实被综合进去了** |
+
+**结论 (明确)**: **app 侧锥这次真的被覆盖了** —— 它既出现在 place 的**第一**最差路径, 又在
+route 报告的前 10 名里, 且有 1128 个 cell 实证没被裁。代价: 相对 T2 基线
+(+0.230/+0.036) WNS **-107ps**, WHS 不变, 仍是 0 失败端点 (全部约束 MET)。
+
+### ⑤ 本轮新增坑 (已补进 CLAUDE.md 21-23)
+
+1. **TB 注入以太网帧的两处字节序/拍对齐错, 症状都指向错误的模块**:
+   IP 校验和是**网络序 (大端)** 16 位字段 —— 写成小端 ⇒ `udp_rx` 判 nonmatch, 看着像
+   "拆分器过滤不匹配"; 往 GMII 注入时**帧尾多挂 1 拍 `dv=1`** ⇒ 多算 1 字节 ⇒ FCS 残差错
+   (`mac_rx.stat_crc_err=1`, 看着像"FCS 算错")。**两步定位**: 先 CRC 自检
+   (`crc32("123456789")==0xCBF43926`), 再看 `mac_rx.stat_bytes` 是否**恰等于**帧长
+   (实测 1519 vs 1518 = 拍对齐问题)。
+2. **force 的层次名必须与 wrapper 线名逐字一致** (`udp_meta_smac` vs 实际
+   `udp_meta_src_mac` ⇒ xelab "not declared under prefix"); TB 的整型声明若在引用它的 task
+   之后 ⇒ 编译错 (与 RTL 同一条"先声明后用")。
+3. **被下游中止的帧必须冻结图案 LFSR** (否则线上图案流留空洞 ⇒ 对端连续校验失配)。
+
+### ⑥ 回归 (本轮全部重跑; 驱动 `sim/p5e_udp/run_regress.sh`, 日志 `sim/p5e_udp/regress_t3.log`)
+
+**49 门: 唯一非零退出码 = `t4_neglearn EXIT=1` (P5d 风格负对照的**期望值**), 其余 48 门全 0。**
+
+- **P1 三门** (echo / udp_rx / udp_tx): EXIT=0 x3
+- **P4 矩阵 16 门** (`sim/p4sim/run_matrix_p4dfix.sh`): EXIT=0 x16, 无一失败
+- **P5 全套 24 门**: app / close / wrapper / status / adv x11 (len b2b wnd fin findrop abort
+  evfifo reconn_fast reconn_slow multi accmgn) / flow / fc / p5close / p5c_t3 / p5d_d1 /
+  fence_neg / multi main + known_idle_fifo — 全 EXIT=0
+- **P5e 新增**: T1 splitter 门 (未改动, 仍 PASS) + T2 双门 (判定未改, 激励对齐后 PASS) +
+  T4 x6 模式 + T5 wrapper 门 (含 +NOUDP 对照)
+- **负对照 5 条** (P5d 风格): `t4_splitoff` / `t4_portout` / `t4_badcrc` / `t4_nopeer` 四条
+  **期望 exit 0 且正向判据不成立**; `t4_neglearn` 为**期望 FAIL (exit 1)** 的判别力实证
+  (104 条 FAIL 全落在 P⑤/③, P① RX 仍全绿)。
+
+### ⑦ 官方构建门 (p5_prj, routed) — WNS +0.290 / WHS +0.051 / 0 失败端点
+
+| 项 | 值 |
+|---|---|
+| 时序 (routed, 133723 端点) | **WNS +0.290 / TNS 0.000 / WHS +0.051 / THS 0.000 / 0 失败端点**; "All user specified timing constraints are met" (WPWS +0.264 / TPWS 0) |
+| 面积 | LUT **51588** (25.31%) / FF **41513** (10.18%) / BRAM **312** (70.11%) / DSP 4 / IOB 19 |
+| DRC (routed) | **0 error** — 89 项全为 Warning/Advisory (REQP-1839/1840 RAMB 异步控制、DPOR-1 异步加载、DPIP/DPOP 流水等既有族); 静态侧 `implicit` 命中 **0** (4 个 xelab/xvlog 日志 grep) |
+| route | **78014/78014 全布通**, routing errors **0**; 报告落 `p5e_verify/` (`verify_p5e.tcl`) |
+
+**app 侧锥确实上榜 (T1/T2 点名要复核的那一项)**: `report_timing_summary -max_paths 20` 里 **9/20**
+条落在 `u_app_udp/pw_keep_reg[5] → u_udp_tx/ip_csum_r_reg[*]` (**#3/4/5/8/9/10/11/12/13**, 最差
+**+0.297**); 布线后 worst-400 setup 只有**两个族**: `u_tcp_tx FSM → u_tcb.rcv_nxt_r` (256 条, 0.290)
+与 **app 侧锥 (144 条, 0.297)**。cell 探针 `u_udp_split=1927 / u_udp_tx=1890 / u_udp_tx_cfg=336 /
+u_app_udp=1128 / u_tx_udp_arb=8` ⇒ **没被综合裁掉** (T1/T2 期的"无消费者则锥被裁"疑虑解除)。
+
+**旧族大幅改善**: `u_retx → RAMB` 从 setup 最差 400 **完全消失** (0 命中), `u_hls` 也 0 命中;
+P5d 记录的新风险族 `app_ctrl.c_snd_wnd → app_pattern` 同样**完全退出** (0 命中)。worst-400 hold
+里最差换成 `u_app_ctrl/c_snd_una_reg → u_app_status/sn_ua_reg` (0.051), 其次
+`retx wa_o_r_reg → mem ADDRARDADDR` (0.056)、`mac_tx fifo wptr → RAMB WADR` (0.057)。
+
+**⚠️ T3 私有 route 门 (+0.123) 与官方构建 (+0.290) 的差异是流程差异, 不是布局方差**:
+`sim/p5e_udp/route_check.tcl` 在 `set_property strategy Performance_ExtraTimingOpt` 之后是
+**手动 `opt_design/place_design/route_design`**、从未 `launch_runs impl_1` ⇒ **strategy 未生效**,
+且**缺 `phys_opt_design`** (官方 build 走 launch_runs 全流程) ⇒ 该报告的绝对值**只能当相对参考**
+(它给出的"app 侧锥位列第 7"这类族序结论仍有效)。
+
+### ⑧ 板级验证 (T6, APP_MODE 位流)
+
+- **`peer.exe --udp-selftest` PASS** (无板闭环: 构造 → 解析 → 图案校验 + 5 类负对照)。
+- **UDP app 通路 (板发 → PC 收, 逐字节校验)**: `--udp-rx-only` 收板侧图案流
+  **`verified=82432 mismatch=0`**。
+- **帧间隔实测 478.5µs** vs 设计值 `TX_GAP=58000` 拍 @125MHz ⇒ (1538+58000)/125MHz = **476.3µs**
+  ⇒ 限速发生器与设计一致 (差 0.5% 内, 时间戳分辨率)。
+- **限速档全通**: 20 / 50 / 100 / 200 Mbps 全档 PASS (`--rate-mbps`)。
+- **TCP 不回归**: 4MB 单连接逐字节精确 + **同四元组重连 5/5** (D6 判据)。
+- **端口分流实测**: 8080 = HLS `udp_echo` 照旧回显 / **8081 = app 分流** (app 收 + app 回图案流);
+  **负对照: 往 8080 发不会教 peer 表** ⇒ 8081 的 app TX 仍零帧 (学习源只认自己匹配的帧)。
+- **UDP 与 TCP 共存互不干扰** (TCP 4MB 期间 app 图案流照常被 TCP 优先让路)。
+
+### ⑨ ⚠️ 板级观测缺口 (这一版**没验**的东西, 必须记)
+
+- `udpapp_*` (app 演示统计: `tx_bytes/tx_frames/rx_bytes/rx_frames/rx_null/mismatch/active/done`)
+  在 wrapper 里**只有 LED 消费者** (`led_d0..d3`), **无 UART 消费者**; `u_udp_split` 的
+  `app_udp_stat_*` (frames/bytes/null/**drop_crc/drop_ovf/drop_part/drop_excl**/hls_*) 更是**完全悬空**。
+- ⇒ 口径 (以本段为准): **板 → PC 方向有硬证据** (PC 逐字节 82432B / `mismatch=0`);
+  **PC → 板方向 (app RX 口) 只有"PC 连续灌入无异常"**, 板侧校验器的逐字节结论
+  (`udpapp_rx_bytes/mismatch`) 与**全部丢帧计数**都**读不出来** ⇒ 该方向的正确性**只有 TB 门**
+  (T4 `pos`/`badcrc` 等 + T5 真 wrapper 全链) 覆盖, 板级不覆盖。
+- 影响: 将来要板级断言 app RX 正确性/丢帧率, 必须先把这几根计数线接进 `uart_dbg` 状态行
+  (工作量小, 但要动 `board/uart_dbg.v` 与 wrapper 的状态行拼接)。
+
+### ⑩ 口径更正: "app RX 字节串行 = 15.6 MB/s" 是 **8× 口径错误**
+
+- **1 字节/拍 @125MHz = 125 MB/s = 1 Gbps 线速**; 15.6 是 125 **Mbps** 的字节数 (TL 的说明与
+  `tools/cpp_peer/README.md` 都写错了 —— **README 已同步更正**; `peer.cpp` 的三处注释
+  (`://364` / `://2283` / `://2611` 附近) 里同一错误**按本轮"只写文档"的纪律未改**, 重启 P6 时顺手修)。
+- ⇒ **字节串行 RX 不是"跟不上"**, 而是**恰好等于 1G 线速** (以太网每帧 66B 开销 ⇒ 载荷率只有线速
+  的 1472/1538 = **95.7%**, 净余量 ~4.5%, 帧间缝隙由 `udp_split` 的 4KB 帧缓冲吸收)。
+- **T6 实测的 ~25 Mbps 天花板是 HLS 慢路径的限制** (816B/ms 量级), 与 app RX 通路**无关**。
+- ⇒ 推论 (写给将来): 若以"app RX 必须限速所以设计要迁就"为前提做取舍, 该前提是**错的**;
+  限速只对 HLS 慢路径方向成立。
+
+## P6 交接记录 (未做 — 用户 2026-09-20 裁决: P5e 完成后停止, 不做 P6)
+
+> 本节是 **P6 的调研结论存档**, 不是施工记录。**P6 一行 RTL 都没写、一次板都没上。**
+> 素材 = `../udp_hls_eco/design_review/04` (10G 迁移评估) + 本工程的实测基线 + 本轮针对 10G 的
+> 专项核查。**用途**: 将来无论谁重启 10G, 从本节开始, 不要重新调研。
+
+### 定性: P6 的技术前提**不是"提时钟"而是"换前端 + 重收敛"**
+
+- 本工程 CLAUDE.md 的立项目标写的是"10G 时仅提时钟到 156.25MHz, 流水线不改"。**这句话只对
+  中间各级成立, 对 MAC 边界不成立**: `rtl/mac_rx_64.v` / `rtl/mac_tx_64.v` 是**字节串行
+  (1 字节/拍) 的 GMII 模块** (前导/GMII 字节搬运/FCS 逐字节 CRC 都在里面) ⇒ 10G 下**必须整体
+  替换**, 否则 **TX 天花板 1.25 Gbps** (1B/拍 @156.25MHz), 连 10G 的 1/8 都不到。
+- ⇒ P6 = **前端替换 (PCS/PMA + shim + MAC 语义) + 全设计重收敛 (时序/BRAM 映射/HLS 域) +
+  对端与工具链换代**, 是一个**新工程量的里程碑**, 不是一次时钟手术。
+
+### 要做的事 (6 块)
+
+| 块 | 内容 | 关键点 |
+|---|---|---|
+| **A 时钟与前端** | 换晶振 (10G 参考钟) + PCS/PMA + AXIS→左对齐字流 shim | 参考钟归属**必须先定案** (见"物理前提") |
+| **B MAC 语义** | **FCS 改 8B/拍** (现有逐字节 CRC 在 8B/拍 下要么 8 路并行要么换算法) + 前导/IFG/pad 语义复核 | 64B 帧下每帧开销敏感 |
+| **C 吞吐复核** | `rx_classify` 的 **skid 改真 FIFO** (现每帧停 6 拍 ⇒ 64B 帧下吞吐只剩 **57%**); VLAN 重构 | 1G 时代"停 6 拍"无所谓, 10G 是致命 |
+| **D 窗口与缓冲** | **DDR3 大窗** (BRAM 只剩 ~30%, 且 retx 已用 16×64KB = 1MB) | 见风险 ②: 不换大窗, TCP 方向**测出来还是 ~1G** |
+| **E HLS 慢路径** | `u_hls` = **38.7% LUT** (层次面积实测) ⇒ **单域 vs 双域**抉择 (慢路径是否也跑 156.25MHz) | 单域省 CDC 但要重收敛最重的块; 双域省事但要 CDC 与一致性论证 |
+| **F 工具链** | 校验器 8 路并行 (图案/校验吞吐) + **10G 对端** (1G 的 C++ 合成对端 flush 上限 ~191k fps ≈ 1.1 Gbps, 必须换) | 见"要准备" |
+
+### 要准备的东西
+
+- **晶振** (10G 参考钟候选: `SiT9120AI-2B3-33E156.25`, 156.25MHz)。
+- **10G 对端**: 现有 PC 网卡 **Killer E5000B 是 5G RJ45、无 SFP+** ⇒ 10G 对端**不存在**,
+  必须新购/新配 (SFP+ 网卡 + DAC/光模块, 或同板双口自环)。
+- ⚠️ **一个必须先定案的物理前提 (可能推翻整个 A 块)**: `PORT_NOTES` 记的 10G 参考钟引脚是
+  **X5 → Quad 115 (H5/H6)**, 而 **DEMO `k724` 的 XDC 实测是 D6 / quad 116 / X0Y0 / G4** ——
+  **两者冲突。若晶振实际在 quad 115, 换晶振无效** (参考钟必须进 GT 对应的 quad)。
+  **定案方法**: 读 `DEMO/k724*` 的 XDC + 本板原理图 `开发板硬件资料/` 的 GT 时钟网络,
+  两者对上再动硬件。**这件事在买晶振之前做。**
+
+### 六个前置实验 (K1-K6, 都不需要新硬件, 可以现在就做)
+
+| 编号 | 实验 | 产出 |
+|---|---|---|
+| **K1** | 156.25MHz 时序尖峰: 用现有网表 + 收紧周期跑一次 impl, 看最差族的 slack 分布 | 判断 10G 时序是"紧"还是"崩" |
+| **K2** | 字节序实测: MAC 边界改 8B/拍后 FCS/前导的字节序在真链路上复核 | 避免"仿真对/板子错" |
+| **K3** | HLS 收敛探针: `u_hls` 单独在 156.25MHz 跑一次 | 单域/双域抉择的输入 |
+| **K4** | **license 核查**: PG157 (10G MAC) 是否在现有 license 覆盖范围内 | **可阻断**: 不覆盖则只能走免费 PCS/PMA 路线 |
+| **K5** | 参考钟定案 (上面那条物理前提) | 决定 A 块是否要改板 |
+| **K6** | BRAM 映射尖峰: 8B/拍 下各级 FIFO/缓冲的 BRAM 映射 (现 312/445 = 70%) | 判断是否必须先上 DDR3 |
+
+### 三个决策点
+
+1. **单域 vs 双域** (数据面与 HLS 慢路径是否都跑 156.25MHz) —— 输入 = K3 + 风险 ①。
+2. **前端 IP 路线**: **免费 10GBASE-R PCS/PMA (PG068) + 自写 shim** vs **PG157** (10G MAC
+   收费核; **eval 版硬件有 8 小时停机限制** ⇒ 板级长时间测试不可行)。输入 = K4。
+3. **10G 对端方案**: PCIe NIC + DPDK / **同板双 SFP+ 自环对打** (最省外部依赖) / 商用测试仪 /
+   仅物理层自环 (只验链路不验数据面)。输入 = 预算 + 现有工具余量。
+
+### 两个**阻断级**风险
+
+1. **156.25MHz 时序**: 当前 125MHz 下 worst-400 的 slack **全在 0.290–0.297ns** (app 锥最差
+   0.297, TCP 锥 0.290), **85% 是布线延迟** (`net (fo=46642…) 1.454ns` 这种扇出/布线主导项),
+   最差族扇出 **fo=498** ⇒ 从 8ns 压到 6.4ns 要**每条砍 ≥1.6ns**。这不是"收紧约束再跑一遍"
+   能解决的量级 —— 它要求**结构性改动** (降扇出/加流水级/换算法), 属于 P6 的主体工程量。
+2. **TCP 吞吐 = 窗口 × RTT 的天花板**: 现通告窗 48KB、PC↔板 RTT 428µs ⇒
+   `48KB / 428µs ≈ 890 Mbps` —— **这就是 TCP 方向的天花板** (`--rx-only` 实测 1GB @ 891.5 Mbps
+   正是它)。⇒ **不换 DDR3 大窗, 10G 下 TCP 方向测出来还是 ~1G**。**行情 (UDP 组播) 方向无此问题**
+   (单/双向流式, 无窗口约束) ⇒ 若 P6 的目标是行情通路, TCP 窗口改造可以推后。
+
+### 建议阶段划分与工期
+
+`P6-0` (前置 K1-K6 + 硬件定案) → `P6a` (时钟/前端替换, 含新 MAC 8B/拍) → `P6b` (数据面重收敛:
+`rx_classify` skid→FIFO / VLAN / 各级 FIFO 重映射) → `P6c` (BRAM/DDR3 大窗) → `P6d` (HLS 慢路径
+单域/双域 + 收敛) → `P6e` (工具链 + 对端) → `P6f` (板级验收: 线速/延迟/共存)。
+
+**工期估计 33–66 天** (取决于单域/双域与 DDR3 是否进范围)。⚠️ `../udp_hls_eco/design_review/04`
+给的 **"8–15 人天"只覆盖了前端替换那一段** (A/B 块的一部分), 不含 C/D/E/F 与验收 ⇒ **不能引用
+那个数字做排期**。
+
+### 六条更正 (调研中查出的既有记载错误, 将来别照抄)
+
+1. **C1b 的 `Δ = 32×88×8 = 22528` 是单位混乘** (TL 的旧记载): 把"ackq 深 × 每帧拍数"的**字节**比
+   当成了**拍**数。按拍/字节的**不变量**算, Δ 实为 **≈2.7KB**; 再加扫描周期项 ~2KB, 合计
+   **~4.7KB < 16KB 余量** ⇒ **大概率不溢出**。⚠️ 但**门的判据要重写** (旧判据基于错误算式)。
+2. **10G 参考钟归属冲突** (见"物理前提"): `PORT_NOTES` 的 X5→Quad115 与 `k724` XDC 的
+   D6/quad116 不一致, 必须定案。
+3. `design_review/04` 说慢路径是 **`ap_ctrl_hs`**, **实际是 `ap_ctrl_none`** (本工程 HLS 全
+   自由运行) ⇒ 该文档中依赖 `ap_ctrl_hs` 握手时序的论证**不适用本工程**。
+4. `design_review/04` 的工期估计**只覆盖前端替换** (见上)。
+5. `PORT_NOTES` 早前记的 **"3 字 skid"** 已过时 —— **代码里是 6 字** (见 `rx_classify`)。
+6. **P5e 提交后基线冻结**: 本节的实测数字全部锚在 `9218c47` 之后的 **P5e 提交** (WNS +0.290 /
+   LUT 51588 / BRAM 312); 若将来在 1G 上继续改代码, 这些数字需要重测才能当 10G 的起点。

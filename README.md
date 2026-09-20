@@ -4,9 +4,11 @@ Kintex-7 XC7K325T 纯硬件 TCP/IP 数据面: 64bit 字流 @125MHz, 当前 1G RG
 (10G 仅提时钟到 156.25MHz, 流水线不改)。顶层 = `board/wrapper_p4.v`。
 施工日志/踩坑/决策详见 `PORT_NOTES.md`; 工程规范与铁律见 `CLAUDE.md`。
 
-## 状态 (2026-09-20)
+## 状态 (2026-09-21)
 
-**P0-P5d 全部完成并提交; P5a/P5b/P5c/P5d 均通过板级验证。**
+**P0-P5e 全部完成并提交; P5a/P5b/P5c/P5d/P5e 均通过板级验证。**
+**P6 (10G 提速) 经用户裁决停止, 未做** —— 调研结论作为交接记录存档 (见"遗留"; 定性与
+6 块工作、K1-K6 前置实验、三个决策点、两个阻断级风险、工期更正都在那里)。
 
 | 里程碑 | 内容 | 状态 |
 |---|---|---|
@@ -23,8 +25,8 @@ Kintex-7 XC7K325T 纯硬件 TCP/IP 数据面: 64bit 字流 @125MHz, 当前 1G RG
 | P5b | 应用 RX 流控闭环 (窗口随缓冲占用收缩 + 慢消费者背压) | ✅ **门全绿 + 板级 PASS** |
 | P5c | 关闭语义完善 (FIN 重推死锁 / RST 回卷洪水 / abort fence / 关闭超时) | ✅ **门全绿 + 板级 PASS** |
 | P5d | 多连接加固 (信用池分池 / 动态接受裕度 / 并发关闭门 / TX 双门硬化 + 0 载荷 opener / HLS 槽释放) | ✅ **门全绿 + 构建/板级 PASS** |
-| P5e | UDP app 接口 (复用 udp_rx/udp_tx_frame) | ⬜ 下一步 |
-| P6 | 10G 提速 (156.25MHz + PG157 shim) | ⬜ 规划中 |
+| P5e | **UDP app 接口** (接收侧分流 shim + 发送侧目标锁存/长度守卫 + UDP 演示 app + learn-on-RX) | ✅ **门全绿 + 构建/板级 PASS** |
+| P6 | 10G 提速 (换前端 + 重收敛, 不是"提时钟") | ⬜ **未做 (用户 2026-09-20 裁决停止)** |
 
 - **P5b 一句话结论**: 通告窗口 = `winq - occ` 随 frame_fifo 占用收缩、零窗后由 `wu` ACK
   主动重开;接受界加 `ACC_MARGIN(4096)` 裕度 + 拒收回 ACK ⇒ 慢消费者背压**零丢字节**。
@@ -38,6 +40,16 @@ Kintex-7 XC7K325T 纯硬件 TCP/IP 数据面: 64bit 字流 @125MHz, 当前 1G RG
   (不分池 / 裕度 4096 / 裕度 0) 各自 FAIL;TX 启动门补 `rst_req` + ESTAB、帧首改 **0 载荷
   opener** ⇒ 跨会话零载荷泄漏;HLS 槽泄漏 (D6) 修复后**同四元组重连 15-23ms**
   (修复前 ~1.0s);构建 WNS **+0.268** / WHS **+0.035**,单连接 4MB 板级回归 `RX` 逐字节精确。
+- **P5e 一句话结论**: UDP app 通路成立 (10G-ready 行情方向先行) —— 接收侧在 `rx_classify` 的
+  **slow 支**插 `udp_split` (不改已验收的分类器 ⇒ **TCP 数据面永不经过它**), 用**帧级缓冲**
+  消解 `udp_rx` 的"坏 FCS 照交/无 TLAST 半帧"两条弱点, 并对上游**结构性不反压**
+  (决定性实验: 慢口一停就经 `mac_rx_64` 的 8 字共享 FIFO 丢帧, 实测 `mac_drop=11`, 受害者
+  可以是 fast TCP 帧); 发送侧 `udp_tx_cfg` (learn-on-RX 的 peer 表 + cfg 冻结) → `udp_tx_frame`
+  (长度守卫 ≤1500, 防 `mac_tx` 巨帧与 FIFO 死锁) → 两级 arb (**TCP fast > UDP app > HLS**)。
+  默认不激活 (两条独立保险) ⇒ 零回归; 门 **49 + 5 条负对照**; 构建 **WNS +0.290 / WHS +0.051 /
+  0 失败端点**,**app 侧锥实测进 worst-400 setup (144/400 条, 0.297ns) 且未被综合裁掉**;
+  板级: PC 收板侧图案流 `verified=82432 mismatch=0`、帧间隔 478.5µs ≈ 设计 476.3µs、
+  20/50/100/200 Mbps 全档通、TCP 4MB + 同四元组重连 5/5、8080(HLS)/8081(app) 分流正确。
 
 ## 已完成功能
 
@@ -111,6 +123,24 @@ Kintex-7 XC7K325T 纯硬件 TCP/IP 数据面: 64bit 字流 @125MHz, 当前 1G RG
   · **HLS 槽释放 (D6)**: bare SYN 落在非空闲槽 = 对端重新发起该四元组 ⇒ 入口处
     `CFG_DEL` 清 fast 侧残留 + 槽归零走既有全新建连路径 (与首建连逐字段同码) ⇒
     同四元组重连不再依赖 RTO 自释放 (~1.0s → 15-23ms)。
+- **UDP app 接口 (P5e)**: UDP **无连接** ⇒ 与 TCP app 口完全独立的一套通路 (无握手/ACK/重传/
+  窗口/CAM):
+  · **RX 侧**: `rx_classify.slow → udp_split →` ①透传口 → `slow_rx_adp` (非 app-UDP 帧**逐字保真**)
+    ②帧缓冲 → app UDP RX 口 (`app_rx_*` AXIS + `len/src_ip/src_port/sof` 边带)。**结构性不反压**
+    (输入只写预取 FIFO; 装不下丢**整帧**), **坏 FCS 整帧丢** (`stat_drop_crc`), 长度不符的残帧
+    用"下一帧 meta"作边界**整帧回卷** (`stat_drop_part`) ⇒ **永不半帧**。⚠️ 已知取舍: 匹配但
+    畸形的帧**两条路都不进**。
+  · **TX 侧**: app → `udp_tx_cfg` (**learn-on-RX** 的 peer 表: 学的是收到的那个帧的 src mac/ip;
+    cfg 冻结到帧头发出后 — 因 `udp_tx_frame` 在**两个时刻**采 cfg) → `udp_tx_frame`
+    (**长度守卫 ≤1500**: 防内部 FIFO 死锁与线上巨帧) → `tx_arb`(UDP 压 HLS) → `tx_arb`(TCP 严格优先)。
+  · **演示 app** `app_udp_pattern`: UDP 版图案发生器+校验器 (与 `peer.exe --udp-*` 逐字节一致);
+    RX 校验 1 字节/拍 II=1 无缝 (天花板 = 1G 线速 = 125 MB/s), TX 限速帧间 `TX_GAP` 拍 (默认 ≈25Mbps)。
+  · **默认不激活** (cfg 全哨兵 + peer 表复位为空 ⇒ 零新增帧) ⇒ 板上行为与 P5 逐位一致。
+  · 板级: 8080 仍走 HLS `udp_echo`, **8081 = app 分流** (负对照: 往 8080 发不教 peer 表);
+    PC 收板侧图案流 `verified=82432 mismatch=0`; 帧间隔 478.5µs ≈ 设计 476.3µs;
+    20/50/100/200 Mbps 全档 PASS; TCP 4MB + 重连 5/5 不回归。
+  ⚠️ **板级观测缺口**: `udpapp_*` / `app_udp_stat_*` 计数**没有 UART 消费者** (只接 LED 或悬空)
+    ⇒ PC→板方向 (app RX 口) 的板侧校验读数与**全部丢帧计数**读不出来 (只有 TB 门覆盖)。
 
 **鲁棒性 (板级实战逼出的三层防御)**:
 1. 截断帧闭合 — 线上帧短于 IP 承诺载荷时按真实字节收下转发, 缺口由 PC 重传自愈
@@ -126,25 +156,33 @@ Kintex-7 XC7K325T 纯硬件 TCP/IP 数据面: 64bit 字流 @125MHz, 当前 1G RG
   + FIFO tlast 位图 (TL), boot 自检后每 5s 一行 (见 `board/uart_dbg.v` 头注释)
 - LED: boot 自检 3 闪 + 门控/锁存/满标志实时探针
 
-## 综合结果 (Vivado 2025.2, routed)
+## 综合结果 (Vivado 2025.2, routed — P5e)
 
 | 项 | 值 |
 |---|---|
-| 时序 | **WNS +0.268 ns**, TNS=0.000 / **WHS +0.035** / THS=0.000, **0 失败端点** (P5d post-D6, 全部约束达成; 0 DRC error) |
-| Slice LUT | 48,938 / 203,800 (24.01%) — 含诊断脚手架与 P5 app/流控/多连接逻辑 |
-| Slice Register | 39,827 / 407,600 (9.77%) |
-| Block RAM | **311 / 445 (69.89%)** — retx_ram 16 连接 × 64KB + 各级 frame FIFO + HLS 内部缓存 |
-| 布局策略 | Performance_ExtraTimingOpt (retx_ram 写地址寄存器化 + max_fanout 修 256 片布线拥塞) |
+| 时序 | **WNS +0.290 ns**, TNS=0.000 / **WHS +0.051** / THS=0.000, **0 失败端点** (133723 端点, 全部约束达成; **0 DRC error**) |
+| Slice LUT | 51,588 / 203,800 (25.31%) — 含诊断脚手架与 P5 app/流控/多连接/UDP app 逻辑 |
+| Slice Register | 41,513 / 407,600 (10.18%) |
+| Block RAM | **312 / 445 (70.11%)** — retx_ram 16 连接 × 64KB + 各级 frame FIFO + HLS 内部缓存 |
+| 布局策略 | Performance_ExtraTimingOpt (官方 build 走 `launch_runs impl_1` 全流程, 含 `phys_opt_design`) |
 
-⚠️ **hold 余量极薄** (WHS 仅 **+0.035**,最差 hold 在 `u_hls/grp_mac_tx_process_fu_1710` 的
-CRC 寄存器**短路径**,纯布线主导) ⇒ 后续若往 **mac_tx 的 CRC 链**或 **slow_tx FIFO** 加逻辑,
-会**先在这里失败**;
-setup 侧本轮新风险族 = **`app_ctrl.c_snd_wnd → app_pattern.stg_reg/CE` (slack 0.419ns)** ——
-opener/fence 引入的**跨模块锥** (app_ctrl → app_pattern),是当前最接近临界的新增族;
-另见 PORT_NOTES 的 P5c 段 (`ack_pend_r → TCB CE`, 0.465–0.523)。
-**注**: 18:16 的 D6 构建相对 17:47 的 pre-D6 构建 `+0.272/+0.052 → +0.268/+0.035` 属
-布局布线方差 + 旁观族名次洗牌 (HLS 换网表后 `u_hls/*` 内部 setup 依旧不在最差 400),
-不是新增逻辑的代价。
+- **cell 探针 (P5e 新增块)**: `u_udp_split=1927 / u_udp_tx=1890 / u_udp_tx_cfg=336 /
+  u_app_udp=1128 / u_tx_udp_arb=8` ⇒ app 侧逻辑**确实在网表里** (没被当无消费者裁掉)。
+  层次面积 (`p5e_verify/p5e_util_hier.rpt`): `u_udp_split` **869 LUT** (含 222 LUTRAM) + 1 BRAM /
+  `u_app_udp` **460 LUT** / `u_udp_tx_cfg` **122 LUT**; 参照 **`u_hls` = 19953 LUT = 全设计 38.7%**
+  (10G 决策点 E 的输入: 慢路径比整个 UDP app 支重一个数量级)。
+- **app 侧锥进 setup 最差族**: `report_timing_summary -max_paths 20` 里 **9/20** 条是
+  `u_app_udp/pw_keep_reg[5] → u_udp_tx/ip_csum_r_reg[*]` (#3/4/5/8/9/10/11/12/13, 最差 +0.297);
+  worst-400 setup 只有两个族 = `u_tcp_tx FSM → u_tcb.rcv_nxt_r` (256 条, 0.290) + app 侧锥 (144 条)。
+- **旧族退出**: `u_retx → RAMB` 与 `u_hls/*` 在 worst-400 setup 里 **0 命中**; P5d 记录的
+  新风险族 `app_ctrl.c_snd_wnd → app_pattern` 也**完全退出**。
+- ⚠️ **hold 余量仍薄** (WHS 仅 **+0.051**): 最差 hold = `u_app_ctrl/c_snd_una_reg[0][15] →
+  u_app_status/sn_ua_reg[15]` (诊断状态行的跨模块短路径, 纯布线主导), 其后是
+  `retx wa_o_r_reg → mem ADDRARDADDR` (0.056) 与 `mac_tx fifo wptr → RAMB WADR` (0.057) ——
+  比 P5d 的 `u_hls/.../mac_tx` CRC 短路径更好 (**+0.051 vs +0.035**)。往这三族加逻辑仍会先失败。
+- **注**: T3 期的私有 route 门 (`sim/p5e_udp/route_check.tcl`) 报 +0.123 属**流程差异**
+  (手动 opt/place/route、未 `launch_runs` ⇒ strategy 未生效且缺 `phys_opt_design`),
+  **不是布局方差**; 官方口径以本表为准。
 
 ## 板级结果
 
@@ -259,10 +297,25 @@ ESTAB 状态门 + 释放,6 条判据) / `run_tb_p5e_win.bat` (`sim/p5e_win/`, **
 窄窗门**: pipe 残余字跨会话 ⇒ 逐字节图案零泄漏) / `run_tb_p5c_fence.bat` (`sim/p5c_t3/`,
 abort fence 单元门 F1-F5,判据文本未改、激励按真链路补 `rst_req` 释放)。
 
+**P5e 门 (UDP app, 需 `-d APP_MODE`)**:
+- `run_tb_udp_split.bat` (`sim/p5udp/`, **T1 分流器单元门**: 分流/结构性不反压 (`tready` 恒 1)/
+  透传逐字保真/坏帧与半帧整帧丢弃/缓冲溢出整帧丢; 决定性实验副本在 `sim/p5e_pre/`)。
+- `run_tb_udp_tx_guard.bat` (`sim/p5e_t2/`, **T2 守卫单元门**: peer 门 + `PLEN_MAX` 守卫 +
+  内置负对照) / `run_tb_p5e_t2_wrapper.bat` (**T2 真 wrapper 全链**, 含 `implicit` 检查)。
+- `run_tb_app_udp.bat <case>` (`sim/p5e_udp/`, **T4 UDP 演示 app**: `pos` 正例 EXIT=0;
+  负对照 `splitoff`/`portout`/`badcrc`/`nopeer` 各 EXIT=0 且正向判据不成立;
+  `neglearn` **期望 exit 1** = 判别力实证) / `run_tb_p5e_udp_wrapper.bat`
+  (**T5 真 wrapper 全链**: 真 GMII 注入 + 内部 GMII 解码 + `+NOUDP` 零帧对照 + DRC)。
+- 一键: `bash sim/p5e_udp/run_regress.sh` — **49 门**, 唯一非零 = `t4_neglearn` (期望值)。
+
 ## 遗留
 
-- **P5e (下一步)**: UDP app 接口 (复用 `udp_rx`/`udp_tx_frame`); `app_pattern` 每帧首字的
-  **0 载荷 opener** 已按 P5e 语义提前落地 (通用到 UDP 亦然)。
+- **P5e 已收官 (2026-09-21)**: UDP app 接口完成 (见上"已完成功能"与 `PORT_NOTES.md` 的
+  P5e-T1/T2 与 P5e-T3/T4/T5 两节)。**未闭合的板级缺口** = app 通路的板侧观测无读数
+  (`udpapp_*` 只接 LED、`app_udp_stat_*` 悬空) ⇒ **PC→板方向的板侧校验/丢帧计数不可见**;
+  要补只需把这几根计数线接进 `uart_dbg` 状态行 (小工作量, 非阻断)。另: **口径更正** ——
+  "app RX 字节串行 15.6 MB/s" 是 **8× 错误** (实为 **125 MB/s = 1G 线速**);
+  **~25 Mbps 天花板是 HLS 慢路径的**, 与 app 通路无关。
 - **P5d 剩余 (非阻断)**:
   · **`scan_now` 饥饿**: `fin_push`/`rst_push`/RTO 装表只在 FSM `S_IDLE` 拍评估 ⇒ app 饱和
     发送时 close/abort 被推到数据流结束才发 (生产 1MB ≈ 8ms);判据全绿但"应用中途 abort
@@ -278,22 +331,46 @@ abort fence 单元门 F1-F5,判据文本未改、激励按真链路补 `rst_req`
     `tcp_stat_no_slot` (`hls/src/layer_tcp.cpp`)。
   · **`ACTIVE_CONNECT=1`** (当前 netlist 的 SourceFlags) 让板子每 ~6.7s 自发占一个 HLS 槽
     ⇒ `MAX_TCP_CONN=3` 的可用包线要扣掉一个。
-- **P6 (10G 提速) — 时钟必须来自 GT**: 板载系统时钟 **50MHz 数学上产生不了 156.25MHz**
-  (10G 参考时钟),且 **PG157 的 `clk_out` 是硬约束** ⇒ 必须用 PG157 的 `clk_out` 经
-  **`BUFG_GT`** 供全设计 (不能用 MMCM 凑)。迁移必改项: **UART `BIT_LAST` 从 13020 → 16276**
-  (波特率按 156.25/125 重算),否则串口状态行全乱码。**另有 C1b 的 10G Δ 溢出三选一**。
-  DDR 留给 10G 大窗口 (BRAM 已用 69.89%)。
-- **P6 前哨 — 通告右沿 Δ 漂移在 10G 会溢出 (C1b)**: 实际通告右沿 = `redge + Δ`
-  (`Δ = ackq 深 × 每帧拍数 × 到达速率`):1G (1B/拍) `32×88×1 = 2816` ⇒ `49152+2816 < 65536` ✓;
-  **10G (8B/拍) `32×88×8 = 22528` ⇒ `49152+22528 = 71680 > 65536` ❌ 溢出**。
-  P6 必做 (三选一): ① 减小 ackq 深 ② 缩 `WIN_Q_MAX` ③ **把 `redge[c]` 直接接进 ACK 帧组装**
-  (窗口字段 = `clamp(redge[rb_id] - rb_rcv_nxt)`,精确右沿,根治;代价 16×32 位寄存器跨模块)。
-  ⚠️ 若选 ② (`WIN_Q_MAX`/分池上限调小),记得 **H-fix 的 10550 预算式与下界钳 3328 要一起重算**。
-- **P5b/P5c/P5d 已知代价**: 接受窗 (`ACC_MARGIN` = `min(4096, 10550/N)`) 的多连接 + 大流量
+### P6 (10G 提速) — **未做 (用户 2026-09-20 裁决: P5e 完成后停止)。以下为调研交接记录, 一行 RTL 都没写**
+
+> 存档位置 = `PORT_NOTES.md` 末节 "P6 交接记录"; 将来重启 10G 从那里读, **不要重新调研**。
+
+- **定性 (最重要的一条)**: P6 的技术前提**不是"提时钟"而是"换前端 + 重收敛"** ——
+  `mac_rx_64`/`mac_tx_64` 是**字节串行 (1B/拍) 的 GMII 模块** ⇒ 10G 下**必须整体替换**
+  (否则 TX 天花板 **1.25 Gbps**)。"流水线不改"对**中间各级**成立, **对 MAC 边界不成立**。
+- **要做的 6 块**: A 时钟与前端 (换晶振 + PCS/PMA + shim) / B **MAC 语义 (FCS 改 8B/拍)** /
+  C 吞吐复核 (`rx_classify` **skid 改真 FIFO**: 现每帧停 6 拍 ⇒ 64B 帧下吞吐只剩 **57%**;
+  VLAN 重构) / D 窗口与缓冲 (**DDR3 大窗**: BRAM 只有 2MB, retx 已占 1MB) /
+  E HLS 慢路径 (`u_hls` = **38.7% LUT** ⇒ **单域/双域抉择**) / F 工具链 (校验器 8 路并行 + 10G 对端)。
+- **要准备**: 换晶振 (`SiT9120AI-2B3-33E156.25`) + **10G 对端** (现网卡 Killer E5000B 是
+  **5G RJ45、无 SFP+**) + SFP+/DAC。⚠️ **一个必须先定案的物理前提**: `PORT_NOTES` 记参考钟
+  **X5→Quad115(H5/H6)**, 但 **DEMO `k724` XDC 实测是 D6/quad116/X0Y0/G4** —— 冲突;
+  **若晶振真在 quad 115, 换晶振无效**。**买硬件之前先定案**。
+- **六个前置实验 K1-K6** (都不需要新硬件, 可现在做): K1 156.25MHz 时序尖峰 / K2 字节序实测 /
+  K3 HLS 收敛探针 / K4 **license 核查** / K5 参考钟定案 / K6 BRAM 映射尖峰。
+- **三个决策点**: ① 单域 vs 双域 ② **免费 10GBASE-R PCS/PMA (PG068) + 自写 shim** vs
+  PG157 (**收费核, eval 版硬件 8 小时停机**) ③ 10G 对端方案 (PCIe NIC+DPDK /
+  **同板双 SFP+ 自环对打** / 商用测试仪 / 仅物理层自环)。
+- **两个阻断级风险**: ① **156.25MHz 时序** (worst-400 slack 全在 **0.290–0.297ns**、**85% 是
+  布线**、扇出 `fo=498` ⇒ 每条要砍 **≥1.6ns**, 属结构性改动) ② **TCP 吞吐 = 窗口 × RTT**
+  (48KB × 428µs ⇒ **~890Mbps 就是天花板** ⇒ **不换 DDR3 大窗, TCP 方向测出来还是 ~1G**;
+  **UDP 行情方向无此问题**)。
+- **建议阶段 P6-0→P6f + 工期 33–66 天**; ⚠️ `../udp_hls_eco/design_review/04` 的 **"8–15 人天"
+  只覆盖前端替换那一段**, 不能拿来排期。
+- **六条更正** (别照抄旧记载): ① **C1b 的 `Δ=32×88×8=22528` 是单位混乘** —— Δ 实为按
+  字节比不变量 **≈2.7KB**, 加扫描周期项 2KB 合计 ~4.7KB **< 16KB 余量 ⇒ 大概率不溢出**
+  (但**门判据要重写**); ② **参考钟归属冲突** (X5/quad115 vs k724 D6/quad116); ③
+  `design_review/04` 说慢路径是 `ap_ctrl_hs`, **实际是 `ap_ctrl_none`**; ④ 该文档工期只覆盖前端;
+  ⑤ `PORT_NOTES` 旧记的 "**3 字 skid**" 已过时 (**代码是 6 字**); ⑥ **P5e 提交后基线冻结**
+  (本节数字锚在 P5e 提交: WNS +0.290 / LUT 51588 / BRAM 312)。
+- **P5b/P5c/P5d/P5e 已知代价**: 接受窗 (`ACC_MARGIN` = `min(4096, 10550/N)`) 的多连接 + 大流量
   组合已由 `p5d_multi` 门覆盖 (3 连接),但**板级只验单连接** (`app_pattern` 单连接 + 无 CPU)。
-  构建 **hold 余量 +0.035ns 极薄** (最差 hold = `u_hls/.../mac_tx` CRC 寄存器短路径) ⇒
-  往 **mac_tx 的 CRC 链 / slow_tx FIFO** 加逻辑会先在这里失败;
-  setup 侧新族 = `app_ctrl.c_snd_wnd → app_pattern.stg_reg/CE` (0.419ns)。
+  构建 **hold 余量 +0.051ns 仍薄** (P5e 最差 hold = `u_app_ctrl/c_snd_una_reg →
+  u_app_status/sn_ua_reg` 诊断状态行的跨模块短路径; 其后 `retx wa_o_r → mem ADDRARDADDR`
+  0.056 / `mac_tx fifo wptr → RAMB WADR` 0.057) ⇒ 往这三族加逻辑会先在这里失败;
+  **setup 侧当前最差族 = `u_tcp_tx FSM → u_tcb.rcv_nxt_r` (0.290) 与
+  `u_app_udp/pw_keep_reg[5] → u_udp_tx/ip_csum_r_reg[*]` (0.297, P5e 新增)** ——
+  P5d 记录的 `app_ctrl.c_snd_wnd → app_pattern` 与 `retx → RAMB` 已**退出最差 400**。
 - 板侧既有病理 (P4 起就有, 非 P5 引入): 偶发突发丢帧 + TX 静默 ~200ms
   (因果链推断 = 乱序 dup-ACK 请求 → `ackq` 8 深溢出 → 对端只能等 200ms RTO);
   P5b 对症 = ackq 加深 (8→32) + `stat_ack/drop` 接进 UART 快照 + 窗口闭环

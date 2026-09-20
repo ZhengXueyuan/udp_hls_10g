@@ -141,6 +141,90 @@ ACK 策略:
 
 ---
 
+## 3b. UDP 模式（P5e，2026-09-20 新增）
+
+UDP **无连接** ⇒ 这一模式里没有握手/ACK/重传/窗口/CAM，只有"发图案"与"收+校验"
+两件事（TCP 那套逻辑完全不参与）。CLI：
+
+```
+--udp                       切到 UDP（裸写 = 发 --bytes 字节图案）
+--udp-send-pattern <n>      发 n 字节 RTL 图案（每帧 --udp-paylen），板侧 echo 则逐字节校验
+                            （别名 --udp-tx；不给 n 时用 --bytes）
+--udp-rx-only [<n>]         只收 + 校验板侧图案流（自 offset 0 起；n 可选，缺省到 stall）
+--udp-paylen <n>            每帧 UDP 载荷字节（默认 1472 = MTU 1514-42）
+--rate-mbps <n>             发送限速（默认 50；0 = 不限）
+--udp-csum <0|1>            UDP 校验和（默认 1 = RFC 768 正确算；0 = 置零，板侧回包就是 0）
+--udp-spin <0|1>            限速等待用亚毫秒自旋（默认 1，流量平滑；0 = 只用 1ms 睡眠）
+--udp-resync <n>            丢帧重同步搜索上限（默认 65536 B；0 = 关）
+--udp-any-port              收方向不限端口（默认严格：peer_port <-> our_port 配对，
+                            顺带挡掉板侧周期 HELLO 8080->8080 的噪声）
+--udp-no-echo               发完不等/不校回包（纯 TX 方向）
+--udp-dump <file>           把收到的载荷流落盘（事后解剖失配）
+--udp-selftest              无板自检：构造->解析->图案校验闭环
+```
+
+典型用法：
+
+```bash
+# 1) 无板自检（先跑这个；含 5 类负对照 + 相位保持/重同步回归）
+./peer.exe --udp-selftest
+
+# 2) 对板：发图案 + 校验 echo（当前位流 = HLS 慢路径 echo，paylen 必须 <=996）
+./peer.exe --iface '\Device\NPF_{528A3E8C-...}' --src-mac FC:9D:05:7D:88:6B \
+           --udp-send-pattern 65536 --udp-paylen 996 --rate-mbps 20
+#    => verified=65536 mismatch=0, 66/66 帧, frame loss 0%
+
+# 3) P5e app 通路（RTL udp_rx/udp_tx_frame）满 MTU
+./peer.exe --iface '...' --udp-send-pattern 1048576 --udp-paylen 1472 --rate-mbps 50
+```
+
+- **限速是硬要求，但原因要写对（P5e 口径更正）**：板侧 app RX 逐字节串行 = **1 字节/拍
+  @125MHz = 125 MB/s = 1 Gbps 线速** —— 它**不是**"跟不上"，而是**恰好等于 1G 线速**。
+  （⚠️ 本文档与 `peer.cpp` 早前写的 "~15.6 MB/s" 是 **8× 口径错误**：15.6 是 125 **Mbps**
+  的字节数。⇒ 默认 `--rate-mbps 50` 的实际裕量是 ~20× 而不是 2.5×。）
+  真正的限速理由 = **板侧 HLS 慢路径**的回包吞吐天花板（实测 **~25 Mbps**，见下实测表），
+  以及"无限速灌包制造假失配、掩盖真问题"。限速按**线上字节**计（1472 载荷 + 42 头 =
+  1514 B/帧 ⇒ 载荷速率 ≈ 限速的 97%）。
+- **图案**：与 TCP 路径同一约定（xorshift64，先取 `s[31:24]` 再推进，种子 `0x9E3779B97F4A7C15`），
+  但 UDP 侧用**相位精确的 LFSR 行走**而非 64 KiB 查表（查表每 65536 B 重复，>64 KiB 的流会与 RTL 图案错开）。
+- **失配判读**（`--udp-resync` 默认开）：
+  * 相位内的少量坏字节 ⇒ 报 `mismatch=N subst_events>=1`，**holes=0**（不脱相，逐字节计数）；
+  * 整帧丢失 ⇒ 报 `holes / hole_bytes`（按图案相位重同步，16 字节确认）；
+  * 首失配恰在载荷偏移 **996** 且 `got=00` ⇒ 板侧 HLS echo 的 TX 载荷区上限（见下），不是构造问题。
+
+### 对板实测（2026-09-20，P5d/APP_MODE 位流，`--udp-paylen 996`，66 帧 / 65536 B）
+
+| 限速 | 回帧 | 逐字节校验 | 结论 |
+|---|---|---|---|
+| 5 / 10 / 20 Mbps | 66/66 | verified=65536 mismatch=0 | **PASS（3/3 复现）** |
+| 25 Mbps | 66/66 | mismatch=1（帧尾 1 字节） | 帧尾 hazard 起点 |
+| 30 Mbps | 66/66 | mismatch=10~35（帧尾） | 不丢帧、帧尾偶发改写 |
+| 50 Mbps | 21/66 | —— | **丢 68% 帧**（板侧 HLS 慢路径吞吐天花板在 25~30 之间） |
+| 1 / 2 Mbps | 66/66 | mismatch=19~176（帧尾） | 与速率非单调的帧尾 hazard |
+
+- **`--udp-paylen > 996` 必错**：当前位流的 UDP 走 HLS 慢路径 echo，回包载荷区 =
+  `TX_UDP_BASE` 起 1024 B − 28 B 头 = **996 B**（`hls/src/eth_types.h` 的 `TX_UDP_SIZE` +
+  `udp_echo.cpp:200` 的载荷拷贝循环），超过部分回包为 `0x00`。工具会在开跑前提示，
+  并在首失配恰为偏移 996/值 0x00 时给出诊断。P5e 的 app 通路（`rtl/udp_rx.v`）无此限制。
+- 板侧 HLS echo 的**帧尾若干字节会被改写**（1~35 B，时序相关，不丢帧）。这是
+  P2 时代（纯 RTL `udp_echo`、48 B 载荷 + 5 ms 间隔）没有测到的工况 —— 当时的板测
+  在 ~0.2 Mbps 下跑，从未压到这条路径。
+
+### UDP 模式下的既有约束（从 peer.cpp / 板侧源码读出）
+
+1. **无 MAC 过滤**：接收靠 npcap 抓 + 按 `src host/dst host` 过滤，板侧 echo 的 dst MAC
+   可能是广播（板侧 ARP 表没有本端 IP 时回落到 `FF:FF:FF:FF:FF:FF`，见 `layer_udp.cpp:156`），
+   本工具**不按 MAC 过滤**，因此照样收得到。
+2. **端口配对**：板侧 echo 的 src 端口固定 8080、dst 端口 = 请求的源端口 ⇒ `--sport` 必须是
+   本端真实监听意图的端口（默认 40000）；P5e app 发方向若用别的端口，加 `--udp-any-port`。
+3. **长度字段必须自洽**：板侧 echo 把请求的 `ip.totlen` 与 `udp_len` **照抄**回去
+   （`layer_udp.cpp:116-122`），所以 `ip.totlen == 20+udp_len == 20+8+plen` 是硬要求；`udp_len < 8`
+   会被 `rtl/udp_rx.v:135` 丢掉。本工具构造时天然满足。
+4. **`--udp-rx-only` 目前拿不到板侧数据**：P5e 之前板子只在"收到请求"时发 UDP（+ 周期 HELLO），
+   所以该模式对当前位流只会走到 stall 收尾；它是给 P5e app TX 方向准备的。
+
+---
+
 ## 4. 防火墙：把内核"关掉"
 
 合成对端最大的障碍是**内核**：板卡回的 SYN+ACK / echo 帧会到达内核，

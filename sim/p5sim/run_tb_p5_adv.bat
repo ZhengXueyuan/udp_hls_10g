@@ -20,7 +20,8 @@ call %XV%\xvlog.bat -work xil_defaultlib_a ^
   %RTL%\mac_rx_64.v %RTL%\mac_tx_64.v %RTL%\tcp_cam.v %RTL%\tcb.v ^
   %RTL%\tcp_rx.v %RTL%\tcp_tx_frame.v %RTL%\retx_ram.v %RTL%\tcp_echo.v ^
   %RTL%\axis_pipe.v %RTL%\rx_classify.v %RTL%\vlan_strip.v ^
-  %RTL%\slow_cfg_adp.v %RTL%\tx_arb.v %RTL%\app_ctrl.v ^
+  %RTL%\slow_cfg_adp.v %RTL%\udp_rx.v %RTL%\udp_split.v %RTL%\tx_arb.v %RTL%\app_ctrl.v ^
+  %RTL%\udp_tx_cfg.v %RTL%\udp_tx_frame.v ^
   %TB%\tb_p5_adv.v > xvlog_adv.log 2>&1 || (type xvlog_adv.log & exit /b 1)
 call %XV%\xvlog.bat -work xil_defaultlib_a "%XV%\..\data\verilog\src\glbl.v" >> xvlog_adv.log 2>&1 || (type xvlog_adv.log & exit /b 1)
 

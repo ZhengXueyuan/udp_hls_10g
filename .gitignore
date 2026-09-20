@@ -122,3 +122,41 @@ sim/p4spot/
 # (whs_reroll_probe/ 整目录忽略, 不进库)
 whs_reroll_probe/
 p5d_verify/
+
+# P5e-T3/T4/T5 UDP app 门目录: 只保留驱动/门源码/检查脚本, 其余 (memh/wdb/xsim.dir/日志) 是产物
+sim/p5e_udp/*
+!sim/p5e_udp/run_tb_*.bat
+!sim/p5e_udp/run_route_check.bat
+!sim/p5e_udp/*.tcl
+!sim/p5e_udp/*.py
+!sim/p5e_udp/*.sh
+
+# P5e-T1/T2 门目录 (sim/p5udp = T1 分流器单元门; sim/p5e_t2 = T2 目标锁存守卫 + 真 wrapper
+# 全链门): 只保留驱动 (bat/tcl/py/sh), 其余 (memh/wdb/xsim.dir/hls_files_w.f/日志/warn_*.txt) 是产物
+sim/p5udp/*
+!sim/p5udp/*.bat
+!sim/p5udp/*.tcl
+!sim/p5udp/*.py
+!sim/p5udp/*.sh
+sim/p5e_t2/*
+!sim/p5e_t2/*.bat
+!sim/p5e_t2/*.tcl
+!sim/p5e_t2/*.py
+
+# P5e 预实验目录 (T1 的决定性实验: 分流器接入前后 GT/STIM 响应对比 + 逐场景复跑):
+# 只保留激励生成/驱动脚本与 TB 源码, 其余 (memh/wdb/xsim.dir/日志) 是产物
+sim/p5e_pre/*
+!sim/p5e_pre/*.py
+!sim/p5e_pre/*.bat
+!sim/p5e_pre/*.v
+
+# P5e 后验核对 (布线后时序/时序锥/DRC/层次面积报告 + 探针): 只保留查询脚本, 报告是产物
+p5e_verify/*
+!p5e_verify/*.tcl
+!p5e_verify/*.py
+
+# 仿真顶层 console 转储 (P5 对抗集的控制台输出等)
+sim/*.txt
+
+# Python 字节码缓存 (工具/门目录下的 gen_stim/rank_cones 等)
+__pycache__/

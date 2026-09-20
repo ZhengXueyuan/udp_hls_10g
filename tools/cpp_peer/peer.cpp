@@ -353,6 +353,22 @@ struct Config {
     bool        rx_only     = false;    /* --rx-only: send no app data */
     uint32_t    expect_bytes= 0;        /* --expect-pattern N: bytes to verify
                                          * from the board (0 = until its FIN) */
+
+    /* ---- P5e: UDP 模式 (无连接; 见 5b 节) ---- */
+    bool        udp         = false;    /* --udp / --udp-send-pattern / --udp-rx-only */
+    bool        udp_send    = false;    /* --udp-send-pattern N: 发图案 (板侧 echo 则校验) */
+    bool        udp_rx_only = false;    /* --udp-rx-only [N]: 只收 + 校验 */
+    uint32_t    udp_bytes   = 0;        /* 发送/接收目标字节数 (0 = rx-only 时到 stall) */
+    int         udp_paylen  = 1472;     /* 每帧 UDP 载荷字节 (1514 - 42 = MTU 内) */
+    double      rate_mbps   = 50.0;     /* 发送限速 (0 = 不限); 板侧 app RX 是字节
+                                         * 串行 (~15.6 MB/s) ⇒ 必须限速 */
+    bool        udp_csum    = true;     /* 计算 UDP 校验和 (0 = 置零, 板侧回包恒 0) */
+    bool        udp_spin    = true;     /* 限速等待用亚毫秒自旋 (流量平滑) */
+    int         udp_resync  = 65536;    /* 失配重同步搜索上限 (字节; 0 = 关) */
+    bool        udp_strict_ports = true;/* 收方向要求 peer_port<->our_port 严格配对 */
+    bool        udp_echo_wait = true;   /* 发完等回包并校验 (0 = 纯 TX) */
+    bool        udp_selftest= false;    /* --udp-selftest: 无板闭环自检 */
+    std::string udp_dump;               /* --udp-dump <file>: 收到的载荷流落盘 */
     bool        pat_selftest= false;    /* --pat-selftest: print+check pattern */
     bool        selftest_rx = false;    /* --selftest-rx: rx verifier unit test */
     uint32_t    tx_bench    = 0;        /* --tx-bench N: raw send self-test */
@@ -1762,6 +1778,796 @@ public:
 };
 
 /* =====================================================================
+ * 5b. UDP 模式 (P5e) — 无连接对端: 发图案 / 收+校验图案
+ * =====================================================================
+ * 板侧 UDP 通路 (P5e 侦察):
+ *   现状 (P5d 位流): 所有 UDP 帧 -> HLS 慢路径 udp_echo (只认 dst_port==8080),
+ *     收什么原样 echo 回来 ⇒ "板子自己"就是本工具帧构造/解析的现成对照。
+ *   P5e (rtl/udp_rx.v + rtl/udp_tx_frame.v): app 侧自己消费/产生图案流,
+ *     并**不 echo** ⇒ 发送模式退化为"只发", 收方向另跑 --udp-rx-only。
+ * UDP 无连接 ⇒ 无握手/ACK/重传/窗口/CAM — 只有"发图案"和"收+校验"两件事。
+ *
+ * 头字段约束 (hls/src/layer_udp.cpp:116-122: 板侧 echo 把请求的 ip.totlen 与
+ * udp_len **照抄**回去) ⇒ 本端必须自洽:
+ *     ip.totlen == 20 + udp_len == 20 + 8 + plen
+ * udp_len < 8 会被 rtl/udp_rx.v:135 丢弃; 板侧慢路径只接受 dst_port == 8080
+ * (layer_udp.cpp:53); RTL 的 udp_rx 还要求校验和正确的 IP 头 + ver/ihl==0x45
+ * (:137/:139)。UDP 校验和: 板侧回包恒置 0 (layer_udp.cpp:175), 两侧都不校验
+ * ⇒ 本端默认仍按 RFC 768 正确算 (自检里独立验算), --udp-csum 0 可置零。
+ *
+ * 图案: 与 TCP 路径同一约定 (xorshift64, 先取 s[31:24] 再推进, 种子 RPAT_SEED),
+ * 但 UDP 侧用**相位精确的 LFSR 行走**而不是 64 KiB 查表 —— 查表每 65536 B 重复
+ * 一次, 流长超过 64 KiB 就与 RTL 图案流错开 (TCP 的 --bytes 有同样限制, 见
+ * README §8.5)。自检里有"表 == LFSR 前 64 KiB"的交叉验证。
+ * ===================================================================== */
+
+#define IP_PROTO_UDP 17
+
+static uint16_t g_udp_ip_id = 0;
+
+/* 一条 UDP 流的全部寻址参数 (发送构造 / 收方向过滤 / 自检 三处共用一份) */
+struct UdpFlow {
+    uint8_t  our_mac[6], peer_mac[6];
+    uint32_t our_ip, peer_ip;
+    uint16_t our_port, peer_port;
+    bool     csum_en;
+};
+
+/* ---- 帧构造: 载荷 = 图案流 [off, off+plen) ----
+ * payload != 0 时直接用该缓冲 (运行期用相位精确的 LFSR 发生器), 否则用
+ * 64 KiB 查表 pay_fill (自检用; 两者在前 64 KiB 逐字节相同)。
+ * buf 至少 14+20+8+plen 字节; 返回线上帧长 (不含 FCS, 已按最小帧 60B 补齐)。 */
+static int udp_build(uint8_t *buf, const UdpFlow &fl, uint32_t off, int plen,
+                     const uint8_t *payload = 0) {
+    int udp_len   = 8 + plen;
+    int ip_len    = 20 + udp_len;
+    int frame_len = ETH_HDR_LEN + ip_len;
+    memset(buf, 0, (size_t)std::max(frame_len, ETH_MIN_FRAME));
+
+    EthHdr *e = (EthHdr *)buf;
+    memcpy(e->dst, fl.peer_mac, 6);
+    memcpy(e->src, fl.our_mac, 6);
+    e->type = htons(ETH_IP4);
+
+    IpHdr *ip = (IpHdr *)(buf + ETH_HDR_LEN);
+    ip->vihl   = 0x45;
+    ip->tos    = 0;
+    ip->totlen = htons((uint16_t)ip_len);
+    ip->id     = htons(++g_udp_ip_id);
+    ip->frag   = htons(0x4000);            /* DF */
+    ip->ttl    = 64;
+    ip->proto  = IP_PROTO_UDP;
+    ip->csum   = 0;
+    ip->src    = htonl(fl.our_ip);
+    ip->dst    = htonl(fl.peer_ip);
+    ip->csum   = htons(csum_fold(csum_acc(0, (const uint8_t *)ip, 20)));
+
+    uint8_t *u = buf + ETH_HDR_LEN + 20;
+    u[0] = (uint8_t)(fl.our_port  >> 8); u[1] = (uint8_t)(fl.our_port  & 0xFF);
+    u[2] = (uint8_t)(fl.peer_port >> 8); u[3] = (uint8_t)(fl.peer_port & 0xFF);
+    u[4] = (uint8_t)(udp_len >> 8);      u[5] = (uint8_t)(udp_len & 0xFF);
+    u[6] = 0; u[7] = 0;                    /* 校验和占位 */
+    if (plen > 0) {
+        if (payload) memcpy(buf + ETH_HDR_LEN + 28, payload, (size_t)plen);
+        else         pay_fill(buf + ETH_HDR_LEN + 28, off, plen);
+    }
+
+    if (fl.csum_en) {
+        /* 伪头 (src_ip|dst_ip|0|proto|udp_len) + UDP 头 + 载荷 */
+        uint32_t sum = 0;
+        uint8_t pseudo[12];
+        memcpy(pseudo + 0, &ip->src, 4);
+        memcpy(pseudo + 4, &ip->dst, 4);
+        pseudo[8] = 0;
+        pseudo[9] = IP_PROTO_UDP;
+        pseudo[10] = (uint8_t)(udp_len >> 8);
+        pseudo[11] = (uint8_t)(udp_len & 0xFF);
+        sum = csum_acc(sum, pseudo, 12);
+        sum = csum_acc(sum, u, 8);
+        if (plen > 0) sum = csum_acc(sum, buf + ETH_HDR_LEN + 28, plen);
+        uint16_t cs = csum_fold(sum);
+        if (cs == 0) cs = 0xFFFF;          /* RFC 768: 0 = "无校验和", 用全 1 代替 */
+        u[6] = (uint8_t)(cs >> 8); u[7] = (uint8_t)(cs & 0xFF);
+    }
+    return frame_len < ETH_MIN_FRAME ? ETH_MIN_FRAME : frame_len;
+}
+
+/* ---- 帧解析 + 收方向接受判定 ---- */
+
+struct UdpPkt {
+    uint32_t src_ip, dst_ip;
+    uint16_t sport, dport, udp_len;
+    const uint8_t *pay;
+    int      plen;          /* udp_len - 8, 且不超过帧内实际可用字节 */
+    int      ihl;
+    bool     ip_csum_ok;
+    bool     udp_len_ok;
+    bool     ihl5;          /* ver/ihl == 0x45 (板侧 RTL 硬要求) */
+};
+
+/* 解析到 UDP 层 (含 IP 校验和判定)。返回 false = 不是 IPv4/UDP 或头被截断。 */
+static bool udp_parse(const uint8_t *f, int flen, UdpPkt *o) {
+    if (flen < ETH_HDR_LEN) return false;
+    const EthHdr *e = (const EthHdr *)f;
+    int off = ETH_HDR_LEN;
+    uint16_t et = ntohs(e->type);
+    if (et == ETH_VLAN) { off += 4; if (flen < off + 2) return false; et = rd16(f + off - 2); }
+    if (et != ETH_IP4) return false;
+    if (flen < off + 20) return false;
+    const IpHdr *ip = (const IpHdr *)(f + off);
+    if ((ip->vihl >> 4) != 4) return false;
+    int ihl = (ip->vihl & 0x0F) * 4;
+    if (ihl < 20 || flen < off + ihl + 8) return false;
+    if (ip->proto != IP_PROTO_UDP) return false;
+
+    const uint8_t *u = f + off + ihl;
+    o->src_ip = ntohl(ip->src);
+    o->dst_ip = ntohl(ip->dst);
+    o->sport  = (uint16_t)((u[0] << 8) | u[1]);
+    o->dport  = (uint16_t)((u[2] << 8) | u[3]);
+    o->udp_len= (uint16_t)((u[4] << 8) | u[5]);
+    o->ihl    = ihl;
+    o->ihl5   = (ip->vihl == 0x45);
+    /* 反码和折叠到 0xFFFF ⇒ 头正确 (csum_fold 取反 ⇒ 正确时得 0) */
+    o->ip_csum_ok = (csum_fold(csum_acc(0, (const uint8_t *)ip, (uint32_t)ihl)) == 0);
+    o->udp_len_ok = (o->udp_len >= 8);
+    int avail = flen - off - ihl - 8;
+    o->plen = (int)o->udp_len - 8;
+    if (o->plen < 0) o->plen = 0;
+    if (o->plen > avail) o->plen = avail;
+    o->pay = u + 8;
+    return true;
+}
+
+/* 收方向接受判定 (镜像板侧 udp_rx 的门): 协议/IP 校验和/长度 + 双向地址配对。
+ * strict_ports = true 时还要求 sport==peer_port && dport==our_port
+ * (板侧 echo 就是 src 8080 -> dst 请求源端口, 这条把板侧周期 HELLO
+ *  (8080->8080) 这类噪声挡在外面; P5e app 发方向端口不同时用 --udp-any-port)。 */
+static bool udp_accept(const UdpPkt &p, const UdpFlow &fl, bool strict_ports) {
+    if (!p.ihl5 || !p.ip_csum_ok || !p.udp_len_ok) return false;
+    if (p.src_ip != fl.peer_ip || p.dst_ip != fl.our_ip) return false;
+    if (strict_ports && (p.sport != fl.peer_port || p.dport != fl.our_port)) return false;
+    return true;
+}
+
+/* 反向流 (对端 -> 本端): 自检里用它模拟"板子发来的帧", 好让构造出来的帧
+ * 真的能通过本端 udp_accept 的地址/端口配对判定。 */
+static UdpFlow udp_flow_reverse(const UdpFlow &f) {
+    UdpFlow r;
+    r.our_ip = f.peer_ip;    r.peer_ip = f.our_ip;
+    r.our_port = f.peer_port; r.peer_port = f.our_port;
+    memcpy(r.our_mac, f.peer_mac, 6);
+    memcpy(r.peer_mac, f.our_mac, 6);
+    r.csum_en = f.csum_en;
+    return r;
+}
+
+/* ---- 相位精确的 RTL 图案流发生器 (LFSR 行走, 任意长度不重复) ---- */
+struct RtlPatGen {
+    uint64_t s   = RPAT_SEED;
+    uint64_t pos = 0;
+    void reset() { s = RPAT_SEED; pos = 0; }
+    void seek(uint64_t off) { while (pos < off) { s = xs_next64(s); pos++; } }
+    void fill(uint8_t *dst, int n) {
+        for (int i = 0; i < n; i++) { dst[i] = (uint8_t)(s >> 24); s = xs_next64(s); }
+        pos += (uint64_t)n;
+    }
+};
+
+/* ---- UDP 图案流校验器: RxPatChecker 语义 + 失配重同步 ----
+ * UDP 没有序号, 丢帧只能靠图案流相位发现: 某字节失配时向后搜索最小的 k >= 1
+ * 使接下来的 W 字节全部对上 ⇒ 判为"丢了 k 字节", 记 hole 并继续 (W=16 时误判
+ * 概率 2^-128)。搜索预算用 LFSR 步数封顶, 防止"完全错图案"退化成热循环。 */
+struct UdpStreamChecker {
+    enum { W = 16, SEARCH_STEPS_MAX = 64000000 };   /* 约 100 ms 的搜索预算 */
+    uint64_t s = RPAT_SEED;
+    uint64_t pos = 0;
+    uint64_t verified = 0, mismatch = 0;
+    uint64_t holes = 0, hole_bytes = 0;
+    uint64_t subst = 0;                 /* 相位内的单字节替换 (板侧回包被改写) */
+    uint64_t subst_events = 0;
+    uint64_t searches = 0, searches_ok = 0, search_steps = 0;
+    int      search_cooldown = 0;       /* 搜索失败后的退避 (连片坏字节别逐字节搜) */
+    uint64_t first_bad_off = 0;
+    uint8_t  first_bad_got = 0, first_bad_exp = 0;
+    bool     have_bad = false;
+    /* 首次失配处的 24 字节对照 (诊断: 截断/错位/重复 一眼可分) */
+    uint8_t  dbg_got[24] = {0}, dbg_want[24] = {0};
+    int      dbg_n = 0;
+
+    void reset() { *this = UdpStreamChecker(); }
+    void skip(uint64_t n) { for (uint64_t i = 0; i < n; i++) s = xs_next64(s); pos += n; }
+
+    /* 从当前相位向后找 p[0..need) 的落点; 返回偏移 k >= 1 (0 = 没找到) */
+    int find_resync(const uint8_t *p, int n, int kmax) {
+        int need = n < W ? n : W;
+        uint64_t t = s;
+        for (int k = 1; k <= kmax; k++) {
+            t = xs_next64(t);
+            if (search_steps + (uint64_t)k > SEARCH_STEPS_MAX) { search_steps = SEARCH_STEPS_MAX; return 0; }
+            if ((uint8_t)(t >> 24) != p[0]) continue;
+            uint64_t tv = t;
+            bool ok = true;
+            for (int j = 0; j < need; j++) {
+                if ((uint8_t)(tv >> 24) != p[j]) { ok = false; break; }
+                tv = xs_next64(tv);
+            }
+            if (ok) { search_steps += (uint64_t)k; return k; }
+        }
+        search_steps += (uint64_t)kmax;
+        return 0;
+    }
+
+    /* 是"单字节被替换"还是"丢了一段"? 判据: 看后续 W 字节是否与**当前相位+1**
+     * 吻合 —— 吻合说明流没移位, 只是这个字节坏了 (只记 1 个 mismatch, 相位照常
+     * 前进, 不记 hole)。不做这个判断的话, 一个坏字节会被当成"丢了 1 字节",
+     * 之后整个流的相位就永久超前 1 ⇒ 满屏 mismatch (实测把 8 个坏字节报成 1988)。 */
+    bool in_phase_after_mismatch(const uint8_t *p, int n, int i) {
+        int probe = n - i - 1;
+        if (probe > W) probe = W;
+        if (probe <= 0) return false;              /* 窗口尾部: 无从判断 */
+        uint64_t t = s;
+        for (int j = 0; j < probe; j++) {
+            t = xs_next64(t);
+            if ((uint8_t)(t >> 24) != p[i + 1 + j]) return false;
+        }
+        return true;
+    }
+
+    /* 校验 n 个连续字节 (与上一次 check 的窗口首尾相接) */
+    void check(const uint8_t *p, int n, int kmax) {
+        for (int i = 0; i < n; i++) {
+            uint8_t exp = (uint8_t)(s >> 24);
+            if (p[i] == exp) { verified++; s = xs_next64(s); pos++; continue; }
+            /* 失配: 情形 ① —— 流仍在相位上, 只是这个字节被换掉了 */
+            bool subst = in_phase_after_mismatch(p, n, i);
+            if (subst) subst_events++;
+            /* 失配: 情形 ② —— 向后搜索丢帧重同步 (kmax=0 关闭)。
+             * 硬要求: 本窗口剩余字节 >= W, 否则"重同步"只是拿 1~2 个字节去撞
+             * 匹配 (64K 个候选里几乎必然撞上) ⇒ 相位凭空跳走, 之后满屏假失配。
+             * 实测: 帧尾最后 1 字节坏掉 (板侧最常见的形态) 被误报成 992 个失配。 */
+            if (!subst && kmax > 0 && (n - i) >= W &&
+                search_steps < SEARCH_STEPS_MAX && !search_cooldown) {
+                searches++;
+                int k = find_resync(p + i, n - i, kmax);
+                if (k > 0) {
+                    searches_ok++;
+                    holes++; hole_bytes += (uint64_t)k;
+                    skip((uint64_t)k);
+                    exp = (uint8_t)(s >> 24);
+                    if (p[i] == exp) { verified++; s = xs_next64(s); pos++; continue; }
+                } else {
+                    search_cooldown = 64;   /* 搜不到就别逐字节再搜 (连片坏字节) */
+                }
+            }
+            if (search_cooldown) search_cooldown--;
+            if (!have_bad) {
+                have_bad = true; first_bad_off = pos;
+                first_bad_got = p[i]; first_bad_exp = exp;
+                /* 同步留一份 24 字节对照: 期望值用当前相位往后走 */
+                dbg_n = (n - i < (int)sizeof(dbg_got)) ? (n - i) : (int)sizeof(dbg_got);
+                uint64_t tv = s;
+                for (int j = 0; j < dbg_n; j++) {
+                    dbg_got[j]  = p[i + j];
+                    dbg_want[j] = (uint8_t)(tv >> 24);
+                    tv = xs_next64(tv);
+                }
+                for (int j = dbg_n; j < (int)sizeof(dbg_want); j++) dbg_want[j] = 0;
+            }
+            mismatch++;
+            s = xs_next64(s); pos++;
+        }
+    }
+};
+
+/* ---- UDP 统计 (纯 UDP 运行期的一段计数; 与 TCP 的 Stats 互不干扰) ---- */
+struct UdpStats {
+    uint64_t tx_frames = 0, tx_pay_bytes = 0, tx_wire_bytes = 0, tx_words = 0;
+    uint64_t tx_flushes = 0, tx_calls = 0;
+    double   tx_time_us = 0;
+    uint64_t rx_raw = 0, rx_frames = 0, rx_rejected = 0, rx_junk = 0, rx_bad_ipcsum = 0;
+    uint64_t rx_pay_bytes = 0, rx_zero_pay = 0;
+    uint64_t rx_calls = 0, rx_timeouts = 0, rx_errors = 0;
+    double   rx_time_us = 0;
+    Hist     h_ia;              /* 回包到达间隔 (板侧 echo/app TX 节奏) */
+    FILE    *dump = 0;          /* --udp-dump: 收到的载荷流落盘 (事后解剖) */
+    uint64_t dump_bytes = 0;
+    uint64_t dump_cap = 4u << 20;
+    uint64_t iters = 0;
+    double   cpu_user_s = 0, cpu_sys_s = 0;
+    void reset() { *this = UdpStats(); }
+};
+static UdpStats us;
+
+/* ---- UDP 对端 ---- */
+
+class UdpPeer {
+public:
+    UdpFlow  flow;
+    pcap_t  *pcap = 0;
+    struct pcap_send_queue *txq = 0;
+    uint64_t queued_frames = 0;
+
+    /* TX */
+    RtlPatGen gen;
+    uint64_t  lim_bytes = 0;         /* 限速记账: 已发线上字节 */
+    uint64_t  lim_t0 = 0;
+    uint64_t  tx_calls_ = 0;
+    /* RX */
+    UdpStreamChecker chk;
+    uint64_t  rx_first_t = 0, rx_last_t = 0;
+    uint64_t  t_rx_prev = 0;
+    /* 控制 */
+    bool      aborted = false;
+    std::string abort_reason;
+    uint64_t  t_start = 0, t_end = 0;
+    uint64_t  t_send0 = 0, t_send_end = 0;   /* 发送窗口 (限速/速率结论只看这段) */
+    uint64_t  t_log_prev = 0, t_log_next = 0;
+    uint64_t  log_tx_prev = 0, log_rx_prev = 0;
+    std::vector<std::pair<double, uint64_t>> rate_samples;   /* (秒, 已发载荷字节) */
+
+    std::mutex             rx_mtx;
+    std::deque<RxItem>     rx_q;
+    HANDLE                 rx_evt = 0;
+    std::atomic<bool>      stop_rx{false};
+    std::thread            rx_thread;
+
+    /* ---------------- 初始化 ---------------- */
+
+    void init(pcap_t *p) {
+        pcap = p;
+        memcpy(flow.our_mac, cfg.src_mac, 6);
+        memcpy(flow.peer_mac, cfg.dst_mac, 6);
+        flow.our_ip = cfg.src_ip;
+        flow.peer_ip = cfg.dst_ip;
+        flow.our_port = cfg.sport;
+        flow.peer_port = cfg.dport;
+        flow.csum_en = cfg.udp_csum;
+
+        if (!cfg.udp_dump.empty()) {
+            us.dump = fopen(cfg.udp_dump.c_str(), "wb");
+            if (!us.dump) fprintf(stderr, "note: 无法打开 --udp-dump 文件 %s\n",
+                                  cfg.udp_dump.c_str());
+        }
+
+        rx_evt = CreateEventA(0, FALSE, FALSE, 0);
+        lim_t0 = t_start = t_log_prev = now_ticks();
+        t_log_next = t_start +
+                     (uint64_t)(cfg.stats_interval_ms * 1000.0 / g_us_per_tick);
+        if (cfg.tx_batch) {
+            txq = pcap_sendqueue_alloc((unsigned int)cfg.tx_queue_kb * 1024);
+            if (!txq) {
+                printf("[!!] pcap_sendqueue_alloc(%d KB) failed; 退化为逐帧 pcap_sendpacket\n",
+                       cfg.tx_queue_kb);
+                cfg.tx_batch = false;
+            }
+        }
+    }
+
+    void do_abort(const std::string &why) {
+        if (aborted) return;
+        aborted = true;
+        abort_reason = why;
+    }
+
+    /* ---------------- RX 线程 (与 TCP 版同构: 线程只入队, 主线程解析) -------- */
+
+    void start_rx(void) { rx_thread = std::thread([this] { rx_loop(); }); }
+
+    void halt_rx(void) {
+        stop_rx.store(true);
+        if (rx_evt) SetEvent(rx_evt);
+        if (rx_thread.joinable()) rx_thread.join();
+    }
+
+    void rx_loop(void) {
+        uint64_t t_prev = 0;
+        while (!stop_rx.load()) {
+            struct pcap_pkthdr *hdr = 0;
+            const unsigned char *data = 0;
+            uint64_t t0 = now_ticks();
+            int r = pcap_next_ex(pcap, &hdr, &data);
+            uint64_t t1 = now_ticks();
+            us.rx_time_us += ticks_to_us(t1 - t0);
+            us.rx_calls++;
+            if (r == 1) {
+                if (!hdr || hdr->caplen < (unsigned)ETH_HDR_LEN) continue;
+                RxItem it;
+                it.data.assign(data, data + hdr->caplen);
+                it.t_recv = t1;
+                us.rx_raw++;
+                if (t_prev) us.h_ia.add(ticks_to_us(t1 - t_prev));
+                t_prev = t1;
+                {
+                    std::lock_guard<std::mutex> g(rx_mtx);
+                    if (rx_q.size() < 200000) rx_q.push_back(std::move(it));
+                }
+                if (rx_evt) SetEvent(rx_evt);
+            } else if (r == 0) {
+                us.rx_timeouts++;
+            } else {
+                us.rx_errors++;
+                break;
+            }
+        }
+    }
+
+    /* 取走待处理帧并解析; 返回本次校验的载荷字节数 */
+    uint64_t drain_rx(void) {
+        std::deque<RxItem> batch;
+        {
+            std::lock_guard<std::mutex> g(rx_mtx);
+            if (rx_q.empty()) return 0;
+            batch.swap(rx_q);
+        }
+        uint64_t got = 0;
+        for (auto &it : batch) got += handle_frame(it.data.data(), (int)it.data.size(), it.t_recv);
+        return got;
+    }
+
+    uint64_t handle_frame(const uint8_t *f, int flen, uint64_t t_recv) {
+        /* 自己发的帧也会被抓到 (npcap 双向) —— 按源 MAC 丢掉 */
+        if (flen >= 12 && memcmp(f + 6, flow.our_mac, 6) == 0) return 0;
+        UdpPkt p;
+        if (!udp_parse(f, flen, &p)) { us.rx_junk++; return 0; }
+        if (!udp_accept(p, flow, cfg.udp_strict_ports)) { us.rx_rejected++; return 0; }
+        us.rx_frames++;
+        if (!p.ip_csum_ok) us.rx_bad_ipcsum++;
+        if (p.plen <= 0) { us.rx_zero_pay++; return 0; }
+        if (!rx_first_t) rx_first_t = t_recv;
+        rx_last_t = t_recv;
+        us.rx_pay_bytes += (uint64_t)p.plen;
+        if (us.dump && us.dump_bytes < us.dump_cap) {     /* --udp-dump 落盘 */
+            size_t w = (size_t)p.plen;
+            if (us.dump_bytes + w > us.dump_cap) w = (size_t)(us.dump_cap - us.dump_bytes);
+            fwrite(p.pay, 1, w, us.dump);
+            us.dump_bytes += w;
+        }
+        chk.check(p.pay, p.plen, cfg.udp_resync);
+        if (cfg.verbose && us.rx_frames <= 8)
+            printf("  [rx] %u.%u.%u.%u:%u -> :%u len=%d udp_len=%u\n",
+                   (p.src_ip >> 24) & 255, (p.src_ip >> 16) & 255,
+                   (p.src_ip >> 8) & 255, p.src_ip & 255, p.sport, p.dport,
+                   p.plen, p.udp_len);
+        return (uint64_t)p.plen;
+    }
+
+    /* ---------------- TX ---------------- */
+
+    void emit_frame(const uint8_t *payload, int plen, uint32_t off) {
+        uint8_t buf[ETH_HDR_LEN + 28 + 2048];
+        int send_len = udp_build(buf, flow, off, plen, payload);
+        if (cfg.tx_batch && txq) {
+            struct pcap_pkthdr h;
+            h.ts.tv_sec = 0; h.ts.tv_usec = 0;
+            h.caplen = h.len = (unsigned int)send_len;
+            if (pcap_sendqueue_queue(txq, &h, buf) != 0) {
+                flush_tx();                                  /* 队列满 */
+                if (pcap_sendqueue_queue(txq, &h, buf) != 0)
+                    fprintf(stderr, "pcap_sendqueue_queue failed (frame > queue?)\n");
+            }
+            queued_frames++;
+        } else {
+            uint64_t t0 = now_ticks();
+            if (pcap_sendpacket(pcap, buf, send_len) != 0)
+                fprintf(stderr, "pcap_sendpacket failed: %s\n", pcap_geterr(pcap));
+            us.tx_time_us += ticks_to_us(now_ticks() - t0);
+            us.tx_calls++;
+        }
+        (void)off;
+        us.tx_frames++;
+        us.tx_pay_bytes += (uint64_t)plen;
+        us.tx_wire_bytes += (uint64_t)send_len;
+        us.tx_words += (uint64_t)((send_len + 7) / 8);
+        lim_bytes += (uint64_t)send_len;
+    }
+
+    void flush_tx(void) {
+        if (!txq || txq->len == 0) return;
+        uint64_t t0 = now_ticks();
+        pcap_sendqueue_transmit(pcap, txq, cfg.tx_sync);
+        us.tx_time_us += ticks_to_us(now_ticks() - t0);
+        us.tx_calls++;
+        us.tx_flushes++;
+        queued_frames = 0;
+        txq->len = 0;
+    }
+
+    /* 线上帧长 (给定载荷长度, 用于限速预算) */
+    static uint64_t wire_len(int plen) {
+        uint64_t l = (uint64_t)(ETH_HDR_LEN + 28 + plen);
+        return l < (uint64_t)ETH_MIN_FRAME ? (uint64_t)ETH_MIN_FRAME : l;
+    }
+
+    /* 限速: 等到"自 t0 起的平均速率"允许再发 wire 字节。
+     * 板侧 app RX 消费是字节串行 (~15.6 MB/s @125MHz), 不限速会把板侧冲垮
+     * ⇒ 制造假失配。默认 50 Mbps = 6.25 MB/s, 有 2.5x 裕量。 */
+    void rate_wait(uint64_t wire) {
+        if (cfg.rate_mbps <= 0) return;
+        for (;;) {
+            double el_us   = ticks_to_us(now_ticks() - lim_t0);
+            double need_us = (double)(lim_bytes + wire) * 8.0 / cfg.rate_mbps;
+            if (el_us >= need_us) return;
+            double def = need_us - el_us;
+            if (def > 2000.0 || !cfg.udp_spin) {
+                if (rx_evt) WaitForSingleObject(rx_evt, 1);   /* 顺带服务 RX */
+                else Sleep(1);
+                drain_rx();
+            }
+            /* 亚毫秒: 自旋 (Windows 睡眠粒度 ~1-2 ms, 睡会变成 ~4 帧的突发;
+             * 自旋让流量平滑, 代价是发送期间占一个核) */
+        }
+    }
+
+    /* ---------------- 每秒速率日志 (风格对齐 TCP 版 log_tick) --------------- */
+
+    void log_tick(void) {
+        uint64_t t = now_ticks();
+        double el = ticks_to_us(t - t_start) / 1e6;
+        double dt = ticks_to_us(t - t_log_prev) / 1e6;
+        if (dt <= 1e-9) dt = 1e-9;
+        uint64_t dtx = us.tx_pay_bytes - log_tx_prev;
+        uint64_t drx = us.rx_pay_bytes - log_rx_prev;
+        printf("[t=%7.2fs] TX %8.1f Mbps (%8.1f MB/s) frames %llu | RX %8.1f Mbps "
+               "frames %llu | pat verified %llu mismatch %llu holes %llu\n",
+               el, dtx * 8.0 / dt / 1e6, dtx / dt / 1e6,
+               (unsigned long long)us.tx_frames,
+               drx * 8.0 / dt / 1e6, (unsigned long long)us.rx_frames,
+               (unsigned long long)chk.verified, (unsigned long long)chk.mismatch,
+               (unsigned long long)chk.holes);
+        fflush(stdout);
+        rate_samples.push_back(std::make_pair(el, us.tx_pay_bytes));
+        log_tx_prev = us.tx_pay_bytes;
+        log_rx_prev = us.rx_pay_bytes;
+        t_log_prev = t;
+    }
+
+    void tick_logs(void) {
+        if (cfg.stats_interval_ms > 0 && now_ticks() >= t_log_next) {
+            log_tick();
+            t_log_next = now_ticks() +
+                         (uint64_t)(cfg.stats_interval_ms * 1000.0 / g_us_per_tick);
+        }
+    }
+
+    /* ---------------- 发送模式 (--udp-send-pattern N) ---------------- */
+
+    int run_send(void) {
+        uint32_t target = cfg.udp_bytes;
+        int paylen = cfg.udp_paylen;
+        if (paylen < 0) paylen = 0;
+        if (paylen > 1472) paylen = 1472;          /* MTU 内 (1514 - 42) */
+        printf("[..] UDP 发送图案 %u 字节 (每帧 %d B 载荷, 限速 %s)\n",
+               target, paylen,
+               cfg.rate_mbps > 0 ? "on" : "OFF");
+        fflush(stdout);
+        /* 限速基准 = 传输起点 (不能沿用 init 以来累积的空闲时间, 否则前
+         * 几十 KB 会因为"欠账"被一次性放行, 限速形同虚设) */
+        lim_t0 = now_ticks();
+        lim_bytes = 0;
+        t_log_prev = lim_t0;
+        t_log_next = lim_t0 +
+                     (uint64_t)(cfg.stats_interval_ms * 1000.0 / g_us_per_tick);
+        t_send0 = now_ticks();
+        uint8_t paybuf[2048];
+        uint32_t sent = 0;
+        uint64_t last_evt = 0;
+        while (sent < target) {
+            us.iters++;
+            tick_logs();
+            /* 限速预算内能发几帧就发几帧 (按线上字节计) */
+            int nframe = 0;
+            while (sent < target) {
+                int plen = (int)std::min<uint32_t>((uint32_t)paylen, target - sent);
+                uint64_t wl = wire_len(plen);
+                if (cfg.rate_mbps > 0) {
+                    double el_us   = ticks_to_us(now_ticks() - lim_t0);
+                    double need_us = (double)(lim_bytes + wl) * 8.0 / cfg.rate_mbps;
+                    if (el_us < need_us) break;
+                }
+                uint32_t off = (uint32_t)gen.pos;   /* fill 之前取偏移 */
+                gen.fill(paybuf, plen);
+                emit_frame(paybuf, plen, off);
+                sent += (uint32_t)plen;
+                nframe++;
+                if (queued_frames >= (uint64_t)cfg.flush_frames) flush_tx();
+                drain_rx();
+                if (nframe >= 64) break;      /* 让 RX/日志有机会跑 */
+            }
+            flush_tx();
+            if (sent >= target) break;
+            uint64_t t = now_ticks();
+            if (t - last_evt > (uint64_t)(50000.0 / g_us_per_tick)) {  /* 50 ms */
+                last_evt = t;
+                if (cfg.verbose || cfg.stats_interval_ms > 0) {
+                    /* 进度行由 log_tick 负责; 这里只保证 rx 队列被排空 */
+                }
+            }
+            rate_wait(wire_len((int)std::min<uint32_t>((uint32_t)paylen, target - sent)));
+            drain_rx();
+            if (aborted) break;
+        }
+        t_send_end = now_ticks();
+        double send_sec = ticks_to_us(t_send_end - t_send0) / 1e6;
+        printf("[ok] 发送完成: %u 字节 / %llu 帧 / %.3f s (载荷 %.1f Mbps / 线上 %.1f Mbps)\n",
+               sent, (unsigned long long)us.tx_frames, send_sec,
+               send_sec > 0 ? (double)sent * 8.0 / send_sec / 1e6 : 0.0,
+               send_sec > 0 ? (double)us.tx_wire_bytes * 8.0 / send_sec / 1e6 : 0.0);
+        fflush(stdout);
+        flush_tx();
+        return (int)sent;
+    }
+
+    /* ---------------- 收模式 (--udp-rx-only [N]) ---------------- */
+
+    int run_rx_only(void) {
+        uint32_t target = cfg.udp_bytes;
+        printf("[..] UDP 只收+校验: 目标 %u 字节 (%s), 图案 = RTL xorshift64 自 offset 0\n",
+               target, target ? "定长" : "到 stall 为止");
+        uint64_t t_last_data = now_ticks();
+        for (;;) {
+            us.iters++;
+            uint64_t got = drain_rx();
+            if (got) t_last_data = now_ticks();
+            tick_logs();
+            if (aborted) { t_end = now_ticks(); return 1; }
+            if (target && us.rx_pay_bytes >= (uint64_t)target) {
+                printf("[ok] 收到 %llu 字节 (目标 %u)\n",
+                       (unsigned long long)us.rx_pay_bytes, target);
+                break;
+            }
+            if (ticks_to_us(now_ticks() - t_last_data) > (double)cfg.stall_ms * 1000.0) {
+                printf("[!!] stall: %d ms 无新数据 (收 %llu 字节, 期望 %u, 帧 %llu)\n",
+                       cfg.stall_ms, (unsigned long long)us.rx_pay_bytes, target,
+                       (unsigned long long)us.rx_frames);
+                t_end = now_ticks();
+                return 2;
+            }
+            if (rx_evt) WaitForSingleObject(rx_evt, 1);
+            else Sleep(1);
+        }
+        t_end = now_ticks();
+        return 0;
+    }
+
+    /* 发送模式收到回包时: 排空 + 判"回包是否齐了" */
+    void wait_echo(uint32_t target) {
+        uint64_t t_last_data = now_ticks();
+        uint64_t t0 = now_ticks();
+        /* 回包数够或静默 --stall-ms 就收工 */
+        while (us.rx_pay_bytes < (uint64_t)target) {
+            us.iters++;
+            uint64_t got = drain_rx();
+            if (got) t_last_data = now_ticks();
+            tick_logs();
+            if (aborted) break;
+            if (ticks_to_us(now_ticks() - t_last_data) > (double)cfg.stall_ms * 1000.0) break;
+            if (ticks_to_us(now_ticks() - t0) > (double)cfg.stall_ms * 4000.0) break;
+            if (rx_evt) WaitForSingleObject(rx_evt, 1);
+            else Sleep(1);
+        }
+    }
+
+    /* ---------------- 报告 ---------------- */
+
+    void report(const char *mode) {
+        if (!t_end) t_end = now_ticks();
+        double el = ticks_to_us(t_end - t_start) / 1e6;
+        double dsp = (rx_first_t && rx_last_t && rx_last_t > rx_first_t)
+                     ? ticks_to_us(rx_last_t - rx_first_t) / 1e6 : 0.0;
+        uint64_t missing = (us.tx_frames > us.rx_frames) ? us.tx_frames - us.rx_frames : 0;
+        double rx_mbps = dsp > 0 ? (double)us.rx_pay_bytes * 8.0 / dsp / 1e6 : 0.0;
+
+        printf("\n================ UDP RESULT ================\n");
+        printf("mode         : %s\n", mode);
+        printf("iface        : %s\n", cfg.iface.c_str());
+        printf("flow         : %u.%u.%u.%u:%u <-> %u.%u.%u.%u:%u (UDP)\n",
+               (flow.our_ip >> 24) & 255, (flow.our_ip >> 16) & 255,
+               (flow.our_ip >> 8) & 255, flow.our_ip & 255, flow.our_port,
+               (flow.peer_ip >> 24) & 255, (flow.peer_ip >> 16) & 255,
+               (flow.peer_ip >> 8) & 255, flow.peer_ip & 255, flow.peer_port);
+        printf("framing      : paylen=%d B, udp csum=%s, rate-limit=%s\n",
+               cfg.udp_paylen, cfg.udp_csum ? "on (RFC768)" : "zero",
+               cfg.rate_mbps > 0 ? "on" : "OFF");
+        printf("elapsed      : %.3f s (RX 数据窗口 %.3f s)\n", el, dsp);
+        printf("TX           : frames=%llu payload=%llu B wire=%llu B\n",
+               (unsigned long long)us.tx_frames, (unsigned long long)us.tx_pay_bytes,
+               (unsigned long long)us.tx_wire_bytes);
+        printf("TX wire words: %llu   (板侧 MW 应恰好前进这么多)\n",
+               (unsigned long long)us.tx_words);
+        if (t_send_end > t_send0) {
+            double sw = ticks_to_us(t_send_end - t_send0) / 1e6;
+            printf("TX send win  : %.3f s -> payload %6.2f Mbps / wire %6.2f Mbps, %.0f fps%s\n",
+                   sw, us.tx_pay_bytes * 8.0 / sw / 1e6,
+                   us.tx_wire_bytes * 8.0 / sw / 1e6, us.tx_frames / sw,
+                   cfg.rate_mbps > 0 ? " [限速]" : "");
+        }
+        if (el > 0)
+            printf("TX rate      : %.2f Mbps (%6.2f MB/s) payload, %.0f fps (整个运行期)\n",
+                   us.tx_pay_bytes * 8.0 / el / 1e6, us.tx_pay_bytes / el / 1e6,
+                   us.tx_frames / el);
+        printf("RX           : frames=%llu payload=%llu B (rejected=%llu junk=%llu bad_ipcsum=%llu zero_pay=%llu)\n",
+               (unsigned long long)us.rx_frames, (unsigned long long)us.rx_pay_bytes,
+               (unsigned long long)us.rx_rejected, (unsigned long long)us.rx_junk,
+               (unsigned long long)us.rx_bad_ipcsum, (unsigned long long)us.rx_zero_pay);
+        if (dsp > 0)
+            printf("RX rate      : %.2f Mbps (%6.2f MB/s) payload [数据窗口]\n",
+                   rx_mbps, rx_mbps / 8.0);
+        printf("pattern      : verified=%llu mismatch=%llu",
+               (unsigned long long)chk.verified, (unsigned long long)chk.mismatch);
+        if (chk.have_bad)
+            printf("  (first bad at offset %llu: got %02X want %02X)",
+                   (unsigned long long)chk.first_bad_off, chk.first_bad_got, chk.first_bad_exp);
+        printf("\n");
+        if (chk.have_bad && chk.dbg_n > 0) {
+            printf("  首失配处 24 字节对照 (got) : ");
+            for (int j = 0; j < chk.dbg_n; j++) printf("%02X ", chk.dbg_got[j]);
+            printf("\n  期望图案 (want)            : ");
+            for (int j = 0; j < chk.dbg_n; j++) printf("%02X ", chk.dbg_want[j]);
+            printf("\n");
+            /* 截断特征: 首失配恰在载荷偏移 996 且值为 0x00 = 板侧 HLS echo 的
+             * TX 载荷区上限 (TX_UDP 1024B - 28B 头), 不是本工具的构造问题 */
+            if (chk.first_bad_off == 996 && chk.first_bad_got == 0x00)
+                printf("  诊断        : 回包自载荷偏移 996 起为 0x00 —— 这是当前 HLS 慢\n"
+                       "                路径 echo 的 TX 载荷区上限; 用 --udp-paylen <= 996\n"
+                       "                复测 (P5e app 通路无此限制)。\n");
+        }
+        printf("resync       : holes=%llu bytes=%llu subst_events=%llu (searches=%llu ok=%llu)\n",
+               (unsigned long long)chk.holes, (unsigned long long)chk.hole_bytes,
+               (unsigned long long)chk.subst_events,
+               (unsigned long long)chk.searches, (unsigned long long)chk.searches_ok);
+        if (us.tx_frames)
+            printf("frame loss   : tx=%llu rx=%llu -> missing=%llu (%.3f%%)\n",
+                   (unsigned long long)us.tx_frames, (unsigned long long)us.rx_frames,
+                   (unsigned long long)missing,
+                   100.0 * (double)missing / (double)us.tx_frames);
+        /* 板级经验 (2026-09-20 实测, paylen=996/66 帧): 当前位流 UDP 走 HLS 慢
+         * 路径 echo —— >=30 Mbps 丢 ~2/3 帧 (20/25 Mbps 全收); 1~2 Mbps 偶发帧尾
+         * 若干字节被改写。这两条只影响"当前位流的验收", P5e app 通路另说。 */
+        if (cfg.udp_send && missing && 100.0 * (double)missing / (double)us.tx_frames > 5.0)
+            printf("  诊断        : 板侧丢帧 —— 当前位流的 UDP 走 HLS 慢路径 echo, 实测\n"
+                   "                >=30 Mbps 丢 ~2/3 帧 (20/25 Mbps 全收)。降 --rate-mbps\n"
+                   "                到 <=20 复测; P5e app 通路 (rtl/udp_rx.v) 无此瓶颈。\n");
+        if (cfg.udp_send && chk.mismatch && chk.mismatch <= 4096 && !chk.holes)
+            printf("  诊断        : 失配集中在帧尾少量字节 (相位未脱开) —— HLS 慢路径 echo\n"
+                   "                的时序相关帧尾 hazard, 与发送速率相关 (实测 20/10/5 Mbps\n"
+                   "                65536 B 逐字节干净)。先换 --rate-mbps 复测再判设计缺陷。\n");
+        if (el > 0) {
+            printf("I/O cost     : TX %llu calls %.2f us/call | RX %llu calls %.2f us/call\n",
+                   (unsigned long long)us.tx_calls,
+                   us.tx_calls ? us.tx_time_us / (double)us.tx_calls : 0.0,
+                   (unsigned long long)us.rx_calls,
+                   us.rx_calls ? us.rx_time_us / (double)us.rx_calls : 0.0);
+            FILETIME c, e2, k, u;
+            if (GetProcessTimes(GetCurrentProcess(), &c, &e2, &k, &u)) {
+                auto ft2s = [](const FILETIME &f) {
+                    return ((double)f.dwHighDateTime * 4294967296.0 +
+                            (double)f.dwLowDateTime) / 1e7;
+                };
+                us.cpu_user_s = ft2s(u);
+                us.cpu_sys_s  = ft2s(k);
+                printf("CPU          : user %.3f s sys %.3f s over %.3f s => %.2f cores\n",
+                       us.cpu_user_s, us.cpu_sys_s, el,
+                       (us.cpu_user_s + us.cpu_sys_s) / el);
+            }
+            us.h_ia.print("  h: rx inter-arrival");
+        }
+        printf("============================================\n");
+        fflush(stdout);
+    }
+
+    /* 判据: 发送模式 —— 回包(若有)逐字节一致且无失配; 收模式 —— 图案零失配。
+     * 板侧 app RX 不 echo 时发送模式退化为 TX-only (明确标注, 不判 FAIL)。 */
+    bool verdict(bool rx_mode, bool echo_seen) const {
+        if (aborted) return false;
+        if (chk.mismatch) return false;
+        if (rx_mode) return us.rx_pay_bytes > 0;
+        if (cfg.udp_bytes && echo_seen) return us.rx_pay_bytes >= (uint64_t)cfg.udp_bytes;
+        return true;                                  /* TX-only: 只看发送侧 */
+    }
+};
+
+/* =====================================================================
  * 6. CLI
  * ===================================================================== */
 
@@ -1789,6 +2595,30 @@ static void usage(void) {
 "  --expect-pattern <n> = --rx-only with a byte target (0/unset = until FIN)\n"
 "                       (alias --rx-bytes)\n"
 "  --pat-selftest       print+verify the pattern convention (no board needed)\n"
+"\n"
+"UDP mode (P5e; no connection state: no handshake/ACK/retransmit/window):\n"
+"  --udp                switch to UDP (bare form = --udp-send-pattern <--bytes>)\n"
+"  --udp-send-pattern <n>  send n bytes of the RTL pattern, framed at --udp-paylen;\n"
+"                       if the board echoes them back (current HLS slow path),\n"
+"                       the echo is verified byte-for-byte against the same stream\n"
+"                       (alias --udp-tx; target = --bytes when n omitted)\n"
+"  --udp-rx-only [<n>]  receive + verify the board's pattern stream against the RTL\n"
+"                       pattern from offset 0 (n optional; 0/absent = until stall)\n"
+"  --udp-paylen <n>     UDP payload bytes per frame (1..1472; default 1472 = MTU 1514-42)\n"
+"  --rate-mbps <n>      TX pacing on WIRE bytes (default 50; 0 = unlimited); the\n"
+"                       payload rate is ~97%% of it (42 B header per 1514 B frame)\n"
+"                       REQUIRED in practice: the board app RX consumes byte-serially\n"
+"                       (~15.6 MB/s), line-rate injection would overrun it\n"
+"  --udp-csum <0|1>     compute the UDP checksum (default 1 = RFC 768; 0 = zero field,\n"
+"                       which is what the board's own echo frames carry)\n"
+"  --udp-spin <0|1>     sub-ms spin for smooth pacing (default 1; 0 = 1 ms sleeps)\n"
+"  --udp-resync <n>     lost-frame resync search horizon in bytes (default 65536,\n"
+"                       0 = off): UDP has no sequence numbers, a hole is found by\n"
+"                       re-phasing the pattern LFSR (16-byte confirmation)\n"
+"  --udp-any-port       accept any ports on RX (default: strict peer_port<->our_port,\n"
+"                       which filters out the board's periodic HELLO 8080->8080)\n"
+"  --udp-no-echo        do not wait for / verify an echo (pure TX direction)\n"
+"  --udp-selftest       build->parse->pattern closed loop, no board needed\n"
 "  --mss <n>            segment size        (default 1460)\n"
 "  --rcv-wnd <n>        window we advertise in our segments (default 65535)\n"
 "                       (alias --rx-window; headroom: board ring is 64 KiB/conn)\n"
@@ -1937,6 +2767,254 @@ static int selftest_rx(void) {
     return bad ? 1 : 0;
 }
 
+/* UDP 无板自检: 构造 -> 解析 -> 图案校验 闭环 (--udp-selftest)。
+ * 覆盖: 帧构造字段/最小帧/校验和、解析与接受判定(镜像板侧门)、图案流逐字节、
+ * 失配与丢帧重同步, 以及 5 类负对照。全部不碰板子、不碰网卡。 */
+static int udp_selftest(void) {
+    int bad = 0;
+    printf("=== UDP self-test (无板: 构造->解析->图案校验 闭环) ===\n");
+    printf("pattern seed: 0x%016llX (xorshift64, 先取 s[31:24] 再推进)\n",
+           (unsigned long long)RPAT_SEED);
+
+    UdpFlow fl;
+    memset(&fl, 0, sizeof(fl));
+    memcpy(fl.our_mac, cfg.src_mac, 6);
+    memcpy(fl.peer_mac, cfg.dst_mac, 6);
+    fl.our_ip = cfg.src_ip;
+    fl.peer_ip = cfg.dst_ip;
+    fl.our_port = cfg.sport;
+    fl.peer_port = cfg.dport;
+    fl.csum_en = true;
+    UdpFlow rb = udp_flow_reverse(fl);      /* 板侧 -> 本端 (自检的"收到的帧") */
+
+    /* [1] 图案约定: RTL 期望前 16 字节 == LFSR 行走 == 64 KiB 查表 */
+    {
+        static const uint8_t exp[16] = {
+            0x7F, 0x0B, 0x02, 0xE5, 0x36, 0xA1, 0x4E, 0xD6,
+            0x1A, 0xB0, 0x49, 0xB8, 0x56, 0xAD, 0xD6, 0x3F };
+        uint64_t s = RPAT_SEED;
+        int e1 = 0, e2 = 0;
+        for (int i = 0; i < 16; i++) {
+            if ((uint8_t)(s >> 24) != exp[i]) e1++;
+            if (g_pat[i] != exp[i]) e2++;
+            s = xs_next64(s);
+        }
+        printf("[1] 图案约定      : LFSR %s / 64KiB 查表 %s (前 16 字节 vs rtl/app_pattern.v)\n",
+               e1 ? "MISMATCH" : "OK", e2 ? "MISMATCH" : "OK");
+        if (e1 || e2) bad++;
+    }
+    /* [1b] 查表 == LFSR 前 64 KiB: 两套发生器同一约定 ⇒ 前 64 KiB UDP 路径可互换 */
+    {
+        uint64_t s = RPAT_SEED;
+        int diff = 0;
+        for (int i = 0; i < PAY_PAT_LEN; i++) {
+            if (g_pat[i] != (uint8_t)(s >> 24)) diff++;
+            s = xs_next64(s);
+        }
+        printf("[1b] 表 vs LFSR   : 前 65536 字节有 %d 处不同 -> %s\n", diff, diff ? "FAIL" : "OK");
+        if (diff) bad++;
+    }
+
+    /* [2] 帧构造 -> 解析 字段回环 (扫载荷长度; 板侧 HLS echo 照抄 ip.totlen/udp_len,
+     *     所以"长度字段自洽"是被板子验证过的硬要求) */
+    {
+        static const int lens[] = {0, 1, 2, 6, 7, 17, 18, 42, 43, 100, 101, 1471, 1472};
+        const int n = (int)(sizeof(lens) / sizeof(lens[0]));
+        int fail = 0;
+        uint8_t buf[2048], payload[2048];
+        for (int i = 0; i < n; i++) {
+            int plen = lens[i];
+            uint32_t off = (uint32_t)(i * 1000);
+            for (int j = 0; j < plen; j++) payload[j] = pay_byte(off + (uint32_t)j);
+            int flen = udp_build(buf, rb, off, plen);
+            int expf = ETH_HDR_LEN + 20 + 8 + plen;
+            if (expf < ETH_MIN_FRAME) expf = ETH_MIN_FRAME;
+            UdpPkt p;
+            if (flen != expf) { fail++; continue; }
+            if (!udp_parse(buf, flen, &p)) { fail++; continue; }
+            bool ok = (p.sport == rb.our_port && p.dport == rb.peer_port &&
+                       p.src_ip == rb.our_ip && p.dst_ip == rb.peer_ip &&
+                       p.udp_len == (uint16_t)(8 + plen) && p.plen == plen &&
+                       p.ip_csum_ok && p.udp_len_ok && p.ihl5 &&
+                       udp_accept(p, fl, true));
+            if (ok && plen) ok = (memcmp(p.pay, payload, (size_t)plen) == 0);
+            if (!ok) {
+                printf("      (len=%d 回环不符: flen=%d/%d udp_len=%u plen=%d csum_ok=%d acc=%d)\n",
+                       plen, flen, expf, p.udp_len, p.plen, (int)p.ip_csum_ok,
+                       (int)udp_accept(p, fl, true));
+                fail++;
+            }
+        }
+        printf("[2] 帧<->解析回环: %d 个载荷长度 (0..1472, 含奇数/最小帧边界) -> %s\n",
+               n, fail ? "FAIL" : "OK");
+        if (fail) bad++;
+    }
+
+    /* [3] 完整闭环: 16 帧图案流 构造 -> 解析 -> 校验器逐字节 */
+    const int PAY = 1472, NFR = 16;
+    std::vector<uint8_t> rx_stream;
+    {
+        RtlPatGen g;
+        UdpStreamChecker ck;
+        uint8_t buf[2048], payload[2048];
+        int frames_ok = 0;
+        for (int f = 0; f < NFR; f++) {
+            uint32_t off = (uint32_t)g.pos;
+            g.fill(payload, PAY);
+            int flen = udp_build(buf, rb, off, PAY, payload);
+            UdpPkt p;
+            if (!udp_parse(buf, flen, &p) || !udp_accept(p, fl, true)) break;
+            rx_stream.insert(rx_stream.end(), p.pay, p.pay + p.plen);
+            frames_ok++;
+        }
+        ck.check(rx_stream.data(), (int)rx_stream.size(), 65536);
+        bool ok = (frames_ok == NFR && ck.verified == rx_stream.size() &&
+                   ck.mismatch == 0 && ck.holes == 0);
+        printf("[3] 闭环 16x1472B  : 帧 %d/%d verified=%llu mismatch=%llu holes=%llu -> %s\n",
+               frames_ok, NFR, (unsigned long long)ck.verified,
+               (unsigned long long)ck.mismatch, (unsigned long long)ck.holes,
+               ok ? "OK" : "FAIL");
+        if (!ok) bad++;
+    }
+
+    /* [4] 负对照: 翻转 1 字节 -> 必须恰好 1 个失配, 且位置正确 (kmax=0: 不重同步) */
+    if (rx_stream.size() != (size_t)NFR * PAY) {
+        printf("[4]/[5] 负对照   : 闭环数据不完整 (%llu B), 跳过 -> FAIL\n",
+               (unsigned long long)rx_stream.size());
+        bad++;
+    } else {
+    {
+        UdpStreamChecker ck;
+        std::vector<uint8_t> s2 = rx_stream;
+        s2[1000] ^= 0xFF;
+        ck.check(s2.data(), (int)s2.size(), 0);
+        bool ok = (ck.mismatch == 1 && ck.verified == s2.size() - 1 &&
+                   ck.have_bad && ck.first_bad_off == 1000);
+        printf("[4] 负对照 改1字节 : mismatch=%llu (first at %llu) verified=%llu -> %s\n",
+               (unsigned long long)ck.mismatch, (unsigned long long)ck.first_bad_off,
+               (unsigned long long)ck.verified, ok ? "OK (检出)" : "FAIL");
+        if (!ok) bad++;
+    }
+    /* [4b] 相位内替换 (kmax 开着也不能把 1 个坏字节当成"丢了 1 字节"):
+     *      这是板级最常见的形态 (帧尾若干字节被改写), 报错必须只算那几字节 */
+    {
+        UdpStreamChecker ck;
+        std::vector<uint8_t> s2 = rx_stream;
+        for (int j = 989; j <= 995; j++) s2[PAY + j] ^= 0xA5;   /* 第 2 帧尾 7 字节 */
+        ck.check(s2.data(), (int)s2.size(), 65536);
+        bool ok = (ck.mismatch == 7 && ck.holes == 0 && ck.subst_events >= 1 &&
+                   ck.verified == s2.size() - 7);
+        printf("[4b] 负对照 替换7字节: mismatch=%llu holes=%llu subst=%llu verified=%llu -> %s\n",
+               (unsigned long long)ck.mismatch, (unsigned long long)ck.holes,
+               (unsigned long long)ck.subst_events, (unsigned long long)ck.verified,
+               ok ? "OK (不脱相)" : "FAIL");
+        if (!ok) bad++;
+    }
+
+    /* [4c] 窗口末尾的坏字节: 剩余不足 W 时必须**禁止**重同步 —— 否则拿 1 字节去
+     *      撞 64K 个候选几乎必然撞上 ⇒ 相位凭空跳走 ⇒ 假失配洪水 (实测把帧尾
+     *      1 个坏字节报成 992 个失配, 这是板级最常见的形态)。 */
+    {
+        UdpStreamChecker ck;
+        std::vector<uint8_t> s2(rx_stream.begin(), rx_stream.begin() + PAY);
+        s2[PAY - 1] ^= 0x5A;
+        ck.check(s2.data(), PAY, 65536);
+        bool ok = (ck.mismatch == 1 && ck.holes == 0 && ck.searches == 0 &&
+                   ck.verified == (uint64_t)PAY - 1);
+        printf("[4c] 负对照 末字节坏: mismatch=%llu holes=%llu searches=%llu -> %s\n",
+               (unsigned long long)ck.mismatch, (unsigned long long)ck.holes,
+               (unsigned long long)ck.searches, ok ? "OK (不误重同步)" : "FAIL");
+        if (!ok) bad++;
+    }
+
+    /* [5] 负对照: 丢 1 整帧 -> 重同步找 k=1472, 记 1 个 hole, 后续零失配 */
+    {
+        UdpStreamChecker ck;
+        std::vector<uint8_t> s2;
+        s2.insert(s2.end(), rx_stream.begin(), rx_stream.begin() + PAY);
+        s2.insert(s2.end(), rx_stream.begin() + 2 * PAY, rx_stream.end());
+        ck.check(s2.data(), (int)s2.size(), 65536);
+        bool ok = (ck.mismatch == 0 && ck.holes == 1 &&
+                   ck.hole_bytes == (uint64_t)PAY && ck.searches_ok == 1 &&
+                   ck.verified == rx_stream.size() - PAY);
+        printf("[5] 负对照 丢1帧   : holes=%llu bytes=%llu verified=%llu mismatch=%llu -> %s\n",
+               (unsigned long long)ck.holes, (unsigned long long)ck.hole_bytes,
+               (unsigned long long)ck.verified, (unsigned long long)ck.mismatch,
+               ok ? "OK (重同步)" : "FAIL");
+        if (!ok) bad++;
+    }
+    }
+
+    /* [6] 负对照: 坏 IP 校验和 / 错端口 / udp_len<8 / 非 UDP —— 接受判定必须拒绝 */
+    {
+        uint8_t buf[2048];
+        int flen = udp_build(buf, rb, 0, 100);
+        UdpPkt p;
+        int fail = 0;
+        int ioff = ETH_HDR_LEN, uoff = ETH_HDR_LEN + 20;
+        uint8_t sv[4];
+        /* (a) 砸 IP 校验和 */
+        sv[0] = buf[ioff + 10]; buf[ioff + 10] ^= 0x01;
+        if (!udp_parse(buf, flen, &p)) fail++;
+        else if (p.ip_csum_ok || udp_accept(p, fl, true)) fail++;
+        buf[ioff + 10] = sv[0];
+        /* (b) dst 端口改成 0x1234 (板侧 echo 的严格配对必须挡掉) */
+        sv[0] = buf[uoff + 2]; sv[1] = buf[uoff + 3];
+        buf[uoff + 2] = 0x12; buf[uoff + 3] = 0x34;
+        if (!udp_parse(buf, flen, &p)) fail++;
+        else if (udp_accept(p, fl, true)) fail++;        /* 严格: 拒 */
+        else if (!udp_accept(p, fl, false)) fail++;      /* --udp-any-port: 收 */
+        buf[uoff + 2] = sv[0]; buf[uoff + 3] = sv[1];
+        /* (c) 目的 IP 改掉 */
+        sv[0] = buf[ioff + 19]; buf[ioff + 19] ^= 0x01;
+        if (!udp_parse(buf, flen, &p)) fail++;
+        else if (udp_accept(p, fl, false)) fail++;
+        buf[ioff + 19] = sv[0];
+        /* (d) udp_len = 7 (<8, rtl/udp_rx.v:135 会丢) */
+        sv[0] = buf[uoff + 4]; sv[1] = buf[uoff + 5];
+        buf[uoff + 4] = 0x00; buf[uoff + 5] = 0x07;
+        if (!udp_parse(buf, flen, &p)) fail++;
+        else if (p.udp_len_ok || udp_accept(p, fl, true)) fail++;
+        buf[uoff + 4] = sv[0]; buf[uoff + 5] = sv[1];
+        /* (e) proto 改成 6 (TCP) -> 根本不是 UDP */
+        sv[0] = buf[ioff + 9]; buf[ioff + 9] = 6;
+        if (udp_parse(buf, flen, &p)) fail++;
+        buf[ioff + 9] = sv[0];
+        /* (f) 恢复后必须重新接受 (确认以上都是"改动"造成的, 不是构造本身坏) */
+        if (!udp_parse(buf, flen, &p) || !udp_accept(p, fl, true)) fail++;
+        printf("[6] 负对照 过滤门  : 坏IPcsum/错端口/错IP/udp_len<8/非UDP 全部拒绝, 复原后接受 -> %s\n",
+               fail ? "FAIL" : "OK");
+        if (fail) bad++;
+    }
+
+    /* [7] UDP 校验和独立验算: 伪头 + UDP 头(含 csum 字段) + 载荷 折叠必须为 0 */
+    {
+        static const int lens[] = {101, 1472};
+        int fail = 0;
+        uint8_t buf[2048];
+        for (int i = 0; i < 2; i++) {
+            int plen = lens[i];
+            udp_build(buf, fl, 0, plen);            /* csum_en = true (发送方向) */
+            int ulen = 8 + plen;
+            uint32_t sum = csum_acc(0, buf + ETH_HDR_LEN + 12, 8);   /* src_ip + dst_ip */
+            uint8_t tail[4] = {0, IP_PROTO_UDP, (uint8_t)(ulen >> 8), (uint8_t)(ulen & 0xFF)};
+            sum = csum_acc(sum, tail, 4);
+            sum = csum_acc(sum, buf + ETH_HDR_LEN + 20, ulen);       /* UDP 头 + 载荷 */
+            if (csum_fold(sum) != 0) fail++;
+        }
+        /* csum_en=false 时字段必须恰好为 0 (板侧回包就是这个形态) */
+        UdpFlow f0 = fl; f0.csum_en = false;
+        udp_build(buf, f0, 0, 100);
+        if (buf[ETH_HDR_LEN + 20 + 6] != 0 || buf[ETH_HDR_LEN + 20 + 7] != 0) fail++;
+        printf("[7] UDP 校验和    : 独立验算(伪头+头+载荷折叠==0) 2 例 + 置零态 -> %s\n",
+               fail ? "FAIL" : "OK");
+        if (fail) bad++;
+    }
+
+    printf("UDP SELF-TEST VERDICT: %s\n", bad ? "FAIL" : "PASS");
+    return bad ? 1 : 0;
+}
+
 static void list_devices(void) {
     pcap_if_t *devs = 0;
     char err[256] = {0};
@@ -1974,6 +3052,108 @@ static const char *need_arg(int argc, char **argv, int &i) {
         exit(2);
     }
     return argv[++i];
+}
+
+/* ---- UDP 顶层驱动 (main 的 --udp 分支): BPF 过滤 + 跑 + 报告 ---- */
+static int udp_main(pcap_t *p) {
+    /* 收方向过滤下推到驱动 (与 TCP 版同理: 无关帧不拷到用户态)。
+     * 只按 UDP + 双向 host 过滤; 端口是否严格由 --udp-any-port 决定
+     * (严格 = 板侧 echo 的 src 8080 -> dst 本端端口, 顺带挡掉板侧周期 HELLO)。 */
+    if (cfg.use_filter) {
+        char flt[320];
+        snprintf(flt, sizeof(flt),
+                 "udp and src host %u.%u.%u.%u%s%d%s%d and dst host %u.%u.%u.%u",
+                 (cfg.dst_ip >> 24) & 255, (cfg.dst_ip >> 16) & 255,
+                 (cfg.dst_ip >> 8) & 255, cfg.dst_ip & 255,
+                 cfg.udp_strict_ports ? " and src port " : "",
+                 cfg.udp_strict_ports ? (int)cfg.dport : 0,
+                 cfg.udp_strict_ports ? " and dst port " : "",
+                 cfg.udp_strict_ports ? (int)cfg.sport : 0,
+                 (cfg.src_ip >> 24) & 255, (cfg.src_ip >> 16) & 255,
+                 (cfg.src_ip >> 8) & 255, cfg.src_ip & 255);
+        struct bpf_program fp;
+        if (pcap_compile(p, &fp, flt, 1, 0) == 0) {
+            if (pcap_setfilter(p, &fp) != 0)
+                fprintf(stderr, "note: pcap_setfilter failed: %s\n", pcap_geterr(p));
+            else
+                printf("capture filter: %s\n", flt);
+            pcap_freecode(&fp);
+        } else {
+            fprintf(stderr, "note: pcap_compile(%s) failed: %s\n", flt, pcap_geterr(p));
+        }
+    }
+
+    UdpPeer up;
+    up.init(p);
+    up.start_rx();
+
+    printf("=== synthetic UDP peer (P5e) ===%s\n",
+           cfg.udp_rx_only ? " [UDP RX-ONLY]" : " [UDP TX pattern]");
+    printf("iface %s\n", cfg.iface.c_str());
+    printf("udp payload %d B/frame, csum=%s, rate-limit=%s, resync horizon=%d B\n",
+           cfg.udp_paylen, cfg.udp_csum ? "RFC768" : "zero",
+           cfg.rate_mbps > 0 ? "on" : "OFF", cfg.udp_resync);
+    /* 板侧已知上限提示 (2026-09-20 实测): 当前位流的 UDP 由 HLS 慢路径 echo
+     * (rx_classify -> slow -> hls udp_echo), 其回包载荷区 = TX_UDP_BASE 起
+     * 1024 B - 28 B 头 = 996 B; 超过则回包在载荷偏移 996 处截断成 0x00
+     * (hls/src/eth_types.h TX_UDP_SIZE + udp_echo.cpp:200 的载荷拷贝)。 */
+    if (!cfg.udp_rx_only && cfg.udp_paylen > 996)
+        printf("[!!] 提示: --udp-paylen %d > 996 —— 当前 (P4/P5d) 位流的 UDP 走 HLS\n"
+               "     慢路径 echo, TX 载荷区只有 996 B (TX_UDP 1024B - 28B 头) ⇒ 回包会在\n"
+               "     载荷偏移 996 处被截断成 0x00 (不是本工具的构造问题)。P5e app 通路\n"
+               "     (rtl/udp_rx.v + app) 无此限制。要板级逐字节验证请配 --udp-paylen 996。\n",
+               cfg.udp_paylen);
+
+    int rc = 0;
+    bool ok = false;
+    bool echo_seen = false;
+    const char *mode = "";
+
+    if (cfg.udp_rx_only) {
+        int r = up.run_rx_only();          /* 0 = 达标; 2 = stall */
+        up.halt_rx();
+        up.drain_rx();
+        echo_seen = (us.rx_pay_bytes > 0);
+        /* UDP 没有 FIN: 未给字节目标时"收到过数据后静默"就是正常收尾 */
+        bool endok = (r == 0) || (r == 2 && cfg.udp_bytes == 0 && us.rx_pay_bytes > 0);
+        ok = endok && up.verdict(true, echo_seen);
+        mode = "rx-only (校验板侧图案流)";
+        printf("rx-only 退出码: %d (%s)\n", r,
+               r == 0 ? "达标" : (r == 2 ? "stall 收尾" : "abort"));
+        rc = ok ? 0 : 2;
+    } else {
+        up.run_send();
+        if (cfg.udp_echo_wait) {
+            /* 等回包: 板侧 echo (现状 HLS 慢路径) 会逐字节回同样的图案;
+             * P5e app RX 模式不 echo ⇒ stall 后按 TX-only 判定 */
+            up.wait_echo(cfg.udp_bytes);
+        }
+        up.halt_rx();
+        up.drain_rx();
+        echo_seen = (us.rx_frames > 0);
+        ok = up.verdict(false, echo_seen);
+        mode = echo_seen ? "send-pattern + echo-verify" : "send-pattern (TX-only)";
+        rc = ok ? 0 : 2;
+    }
+
+    up.t_end = now_ticks();
+    if (us.dump) {
+        fclose(us.dump);
+        us.dump = 0;
+        printf("dump         : %s (%llu 字节接收载荷流)\n",
+               cfg.udp_dump.c_str(), (unsigned long long)us.dump_bytes);
+    }
+    up.report(mode);
+    printf("VERDICT      : %s%s\n",
+           ok ? "PASS" : "FAIL",
+           (!cfg.udp_rx_only && !echo_seen)
+               ? "  (板侧未 echo: 只判发送方向 —— TX-only)"
+               : (ok ? "  (图案逐字节一致)" : ""));
+    if (up.aborted) printf("abort reason : %s\n", up.abort_reason.c_str());
+    printf("============================================\n");
+    fflush(stdout);
+    if (up.txq) pcap_sendqueue_destroy(up.txq);
+    return rc;
 }
 
 int main(int argc, char **argv) {
@@ -2026,6 +3206,30 @@ int main(int argc, char **argv) {
         }
         else if (a == "--pat-selftest") cfg.pat_selftest = true;
         else if (a == "--selftest-rx") cfg.selftest_rx = true;
+        /* ---- P5e: UDP 模式 ---- */
+        else if (a == "--udp") cfg.udp = true;
+        else if (a == "--udp-send-pattern" || a == "--udp-tx") {
+            cfg.udp = true; cfg.udp_send = true;
+            cfg.udp_bytes = (uint32_t)strtoul(need_arg(argc, argv, i), 0, 0);
+        }
+        else if (a == "--udp-rx-only") {
+            cfg.udp = true; cfg.udp_rx_only = true;
+            /* 可选值: 下一个参数不是 --xxx 就当作字节目标 */
+            if (i + 1 < argc && argv[i + 1][0] != '-')
+                cfg.udp_bytes = (uint32_t)strtoul(argv[++i], 0, 0);
+        }
+        else if (a == "--udp-paylen") cfg.udp_paylen = atoi(need_arg(argc, argv, i));
+        else if (a == "--rate-mbps") cfg.rate_mbps = atof(need_arg(argc, argv, i));
+        else if (a == "--udp-csum") cfg.udp_csum = atoi(need_arg(argc, argv, i)) != 0;
+        else if (a == "--udp-spin") cfg.udp_spin = atoi(need_arg(argc, argv, i)) != 0;
+        else if (a == "--udp-resync") cfg.udp_resync = atoi(need_arg(argc, argv, i));
+        else if (a == "--udp-any-port") cfg.udp_strict_ports = false;
+        else if (a == "--udp-no-echo") cfg.udp_echo_wait = false;
+        else if (a == "--udp-selftest") cfg.udp_selftest = true;
+        else if (a == "--udp-dump") {
+            cfg.udp = true;
+            cfg.udp_dump = need_arg(argc, argv, i);
+        }
         else if (a == "--tx-bench")
             cfg.tx_bench = (uint32_t)strtoul(need_arg(argc, argv, i), 0, 0);
         else if (a == "--no-fast-retx") cfg.fast_retx_dupacks = 0;
@@ -2047,10 +3251,34 @@ int main(int argc, char **argv) {
      * that the steady-state curve is built from. */
     if (cfg.rate_test && cfg.stats_interval_ms == 0) cfg.stats_interval_ms = 1000;
 
+    /* ---- UDP 模式语义归一 (--udp 与 TCP 风格的选项组合) ----
+     * 裸 --udp、或 --udp + --bytes 都当"发图案"; --expect-pattern/--rx-only
+     * 在 UDP 下都当"只收+校验"。两者同时给 = 用法错误。 */
+    if (cfg.udp) {
+        if (cfg.rx_only || cfg.expect_bytes) {
+            if (!cfg.udp_bytes) cfg.udp_bytes = cfg.expect_bytes;
+            cfg.udp_rx_only = true;
+            cfg.rx_only = false;
+            cfg.expect_bytes = 0;
+        }
+        if (!cfg.udp_send && !cfg.udp_rx_only) cfg.udp_send = true;   /* 裸 --udp */
+        if (cfg.udp_send && cfg.udp_rx_only) {
+            fprintf(stderr, "error: --udp-send-pattern 与 --udp-rx-only 不能同时用\n");
+            return 2;
+        }
+        if (cfg.udp_send && !cfg.udp_bytes) cfg.udp_bytes = cfg.bytes ? cfg.bytes : 1048576u;
+        if (cfg.udp_paylen < 1 || cfg.udp_paylen > 1472) {
+            /* 0 会让发送循环永远推不进 sent (死循环), 所以下限取 1 */
+            fprintf(stderr, "error: --udp-paylen 必须在 1..1472 (MTU 1514 - 42 头)\n");
+            return 2;
+        }
+    }
+
     pat_init();
 
     if (cfg.pat_selftest) return pat_selftest();
     if (cfg.selftest_rx) return selftest_rx();
+    if (cfg.udp_selftest) return udp_selftest();
 
     char errbuf[256] = {0};
     if (cfg.iface.empty()) {
@@ -2083,6 +3311,13 @@ int main(int argc, char **argv) {
 
     if (cfg.tx_bench) {
         int rc = tx_bench(p, cfg.tx_bench, cfg.mss + 54);
+        pcap_close(p);
+        return rc;
+    }
+
+    /* ---- P5e: UDP 模式 (无连接, 走独立驱动) ---- */
+    if (cfg.udp) {
+        int rc = udp_main(p);
         pcap_close(p);
         return rc;
     }

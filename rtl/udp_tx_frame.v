@@ -11,7 +11,18 @@
 //   w2 = total_len+id+0000+40+11; w3 = ip_csum+src_ip+dst_ip[31:24]
 //   w4 = dst_ip[23:0]+src_port+dst_port+udp_len; w5 = udp_csum+载荷[0..5]
 // 载荷相对帧头 2 字节偏移: 输出字 = {上一字低 2 字节, 当前字高 6 字节}。
-// 前导/FCS/pad/IFG 由 mac_tx_64 负责。载荷上限 1500B (app 契约, 不检查)。
+// 前导/FCS/pad/IFG 由 mac_tx_64 负责。
+//
+// P5e-T2 长度守卫 (app 契约: 一帧 = 一个 UDP 数据报 ≤1472B; 这里放到 1500 留
+// 余量): 帧内累计 > PLEN_MAX ⇒ **整帧中止** (不写 FIFO/不发帧/不加统计),
+// 残留字节原地冲洗 (flush_pend), stat_drop_len 计数。两个硬理由:
+//   ① >2048B 会**永久死锁** — 内部载荷 FIFO 只有 256 字 (2048B), 载满后
+//      s_axis_tready 恒 0 而 FSM 停在 S_RECV 等 tlast ⇒ 该帧永不收尾也永不放行。
+//   ② >1518B 会**上线巨帧** (mac_tx_64 不做长度截断), 对端/交换机丢弃或报警。
+// 上界必须 < FIFO 容量: 超限检出拍最多已写入 (PLEN_MAX+7)/8+1 = 189 字
+// (1500/8 = 187.5 -> 检出拍 = 第 188 拍), 结构性不满 256 ⇒ 无死锁路径。
+// 不加 FSM 状态 (P5a tcp_tx_frame 同款做法: len_bad/flush_pend 两个 flag),
+// 默认构建/P1 echo 路径的帧恒 ≤1500B ⇒ len_bad/flush_pend 恒 0, 逐位不变。
 module udp_tx_frame (
     input  wire        clk,
     input  wire        rst_n,
@@ -34,16 +45,37 @@ module udp_tx_frame (
     output reg         m_axis_tlast,
     // 统计
     output reg  [31:0] stat_frames,
-    output reg  [31:0] stat_bytes
+    output reg  [31:0] stat_bytes,
+    // P5e-T2 长度守卫: 超长帧帧内中止丢弃数 (app 契约违规兜底)。
+    // ⚠️ 新增输出口: 现有例化点 (tb_udp_tx / tb_udp_echo / wrapper_echo) 不接
+    // 本口 = 仅 unconnected 警告 (全部命名端口例化), P1 三门行为不变 (坑 12)。
+    output reg  [31:0] stat_drop_len,
+    // P5e-T2 cfg 稳定性握: 1 = 本模块非空闲 (帧在收/在发)。
+    // 用途: 上游 udp_tx_cfg 必须**冻结 cfg 直到本模块回到 S_RECV** —— 因为 cfg
+    // 在本模块里被两个不同时刻采样: init_val(帧首拍, 进 checksum16) 与帧头字节
+    // (S_HDR 拍)+ip_csum_calc(TLAST 拍)。若上游在"最后一拍已收完但帧头还没发"
+    // 的窗口里改 cfg, 帧头会用新值而校验和用旧值 (实测: 头=新 peer, csum=旧 peer)。
+    output wire        o_busy
 );
+
+    // P5e-T2 长度守卫上界: 默认 1500 = app 契约上限 (P1 门 tools/gen_stim_udp_tx.py
+    // 的 LENS 含 1500 用例 ⇒ 阈值必须 >=1500, 且必须 < FIFO 容量 2048B)。
+    // 风格同 tcp_tx_frame.PLEN_MAX: module body 内参数 (不能写成 #(...) 参数表 —
+    // 那会让 body 里的本参数不可被顶层覆盖)。
+    parameter [11:0] PLEN_MAX = 12'd1500;
 
     localparam [2:0] S_RECV = 3'd0, S_WAIT = 3'd1, S_HDR = 3'd2,
                      S_PAY  = 3'd3, S_TAIL = 3'd4, S_DONE = 3'd5;
 
     reg  [2:0]  state;
+    // P5e-T2 cfg 稳定性握手 (声明后置: 先声明后用, xvlog 要求)
+    assign o_busy = (state != S_RECV);
     reg         recv_first;
     reg  [11:0] plen;
     reg  [11:0] plen_r;
+    // P5e-T2 长度守卫: len_bad = 本帧已超 PLEN_MAX (下拍起写口全屏蔽);
+    // flush_pend = 中止后待冲洗 FIFO 里已写入的残留字 (S_RECV 排空才清)
+    reg         len_bad, flush_pend;
     reg  [15:0] udp_len_r, total_len_r, ip_csum_r, udp_csum_r;
     reg  [15:0] id_r, id_cap;
     reg  [1:0]  wait_cnt;
@@ -57,9 +89,14 @@ module udp_tx_frame (
     wire [72:0] fdin   = {s_axis_tlast, s_axis_tkeep, s_axis_tdata};
     wire [72:0] fdout;
     wire        fifo_full, fifo_empty;
-    wire        wr = accept && (s_axis_tkeep != 8'h00);
+    // P5e-T2 长度守卫: len_bad 后的字节不入 FIFO (中止帧的字节永不发送 —
+    // 也就不进校验和: csum_den 同步屏蔽)
+    wire        wr = accept && (s_axis_tkeep != 8'h00) && !len_bad;
     wire        pay_load = (state == S_PAY) && (m_axis_tready || !m_axis_tvalid);
-    wire        rd = pay_load && (plen_r != 12'd0) && !fifo_empty;
+    // 冲洗读口: 中止帧的残留字在 S_RECV 每拍弹 1 个 (<=188 拍排空);
+    // 与 S_PAY 读口互斥 (状态不同), 拼成同一条 rd
+    wire        flush_rd = (state == S_RECV) && flush_pend && !fifo_empty;
+    wire        rd = (pay_load && (plen_r != 12'd0) && !fifo_empty) || flush_rd;
 
     function [3:0] pop8;
         input [7:0] v;
@@ -102,19 +139,26 @@ module udp_tx_frame (
 
     // 帧长 (tlast 拍): recv_first 时 plen 还是上一帧残留值, 必须显式归零
     wire [11:0] plen_n  = (recv_first ? 12'd0 : plen) + {8'b0, pop8(s_axis_tkeep)};
+    // P5e-T2 长度守卫判据 (含本拍字节)。len_bad 是寄存器 (检出拍的下拍起屏蔽
+    // 写口), 检出拍本身那条字已写进 FIFO — 由中止拍的 flush 排空兜掉。
+    wire        len_over = (plen_n > PLEN_MAX);
     wire [15:0] tl_c    = plen_n + 12'd28;
     wire [15:0] id_now  = recv_first ? id_r : id_cap;
     wire [31:0] csum_init_val = {4'b0, cfg_src_ip[31:16]} + {4'b0, cfg_src_ip[15:0]} +
                                 {4'b0, cfg_dst_ip[31:16]} + {4'b0, cfg_dst_ip[15:0]} +
                                 32'h0011;
     wire        csum_init = (state == S_RECV) && accept && recv_first;
-    wire        csum_den  = (state == S_RECV) && accept && (s_axis_tkeep != 8'h00);
+    wire        csum_den  = (state == S_RECV) && accept &&
+                            (s_axis_tkeep != 8'h00) && !len_bad;
     wire        csum_aen  = (state == S_WAIT) && (wait_cnt == 2'd0);
     wire        csum_fin  = (state == S_WAIT) && (wait_cnt == 2'd1);
     wire [15:0] csum;
     wire        csum_valid;
 
-    assign s_axis_tready = (state == S_RECV) && !fifo_full;
+    // P5e-T2: 接受门与"能否启动/续收一帧"同门 (工程坑 10): 冲洗期间既不接受
+    // 也不启动 — 否则新帧首字会与待冲洗的残留字混在同一 FIFO 里, 排空指针会
+    // 吃掉新帧首字 (帧长错 8 字节)。
+    assign s_axis_tready = (state == S_RECV) && !fifo_full && !flush_pend;
 
     checksum16 u_csum (
         .clk(clk), .rst_n(rst_n),
@@ -139,6 +183,7 @@ module udp_tx_frame (
         if (!rst_n) begin
             state <= S_RECV; recv_first <= 1'b1;
             plen <= 0; plen_r <= 0;
+            len_bad <= 1'b0; flush_pend <= 1'b0; stat_drop_len <= 32'd0;
             udp_len_r <= 0; total_len_r <= 0; ip_csum_r <= 0; udp_csum_r <= 0;
             id_r <= 0; id_cap <= 0;
             wait_cnt <= 0; hcnt <= 0; hold16 <= 0; tail_d <= 0; tail_k <= 0;
@@ -148,6 +193,15 @@ module udp_tx_frame (
             if (m_axis_tready && m_axis_tvalid) m_axis_tvalid <= 1'b0;
             case (state)
                 S_RECV: begin
+                    // P5e-T2 超长帧冲洗收尾: 残留字排空 (rd 见 flush_rd) 后清标志。
+                    // len_bad 必须在此清 (而非留到下一帧首拍) — 否则下一帧首拍会被
+                    // accept 但 wr 仍被 len_bad 屏蔽: 计了字节而 FIFO 没写 = 整帧
+                    // 错位 (P5a tcp_tx_frame 实测踩过同坑)。flush_pend 期间
+                    // s_axis_tready 恒 0 ⇒ 与下面的帧首拍接收结构性不可能同拍。
+                    if (flush_pend && fifo_empty) begin
+                        flush_pend <= 1'b0;
+                        len_bad    <= 1'b0;
+                    end
                     if (accept) begin
                         if (recv_first) begin
                             recv_first <= 1'b0;
@@ -157,12 +211,23 @@ module udp_tx_frame (
                         end else begin
                             plen <= plen + {8'b0, pop8(s_axis_tkeep)};
                         end
+                        // 超限 ⇒ 置 len_bad (下拍起不写 FIFO/不进校验和)
+                        if (len_over) len_bad <= 1'b1;
                         if (s_axis_tlast) begin
-                            plen_r <= plen_n;
-                            udp_len_r <= plen_n + 12'd8;
-                            total_len_r <= tl_c;
-                            ip_csum_r <= ip_csum_calc(tl_c, id_now);
-                            state <= S_WAIT; wait_cnt <= 2'd0;
+                            if (len_over || len_bad) begin
+                                // 中止: 不回 S_WAIT (不组头/不发帧/不加 stat_frames
+                                // /不推进任何线上状态), 原地冲洗残留 + 计数。
+                                // 状态保持 S_RECV ⇒ 无新增 FSM 状态。
+                                recv_first    <= 1'b1;
+                                flush_pend    <= 1'b1;
+                                stat_drop_len <= stat_drop_len + 32'd1;
+                            end else begin
+                                plen_r <= plen_n;
+                                udp_len_r <= plen_n + 12'd8;
+                                total_len_r <= tl_c;
+                                ip_csum_r <= ip_csum_calc(tl_c, id_now);
+                                state <= S_WAIT; wait_cnt <= 2'd0;
+                            end
                         end
                     end
                 end

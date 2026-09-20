@@ -1375,17 +1375,131 @@ module wrapper_p4 (
     wire        stx_tvalid, stx_tready, stx_tlast;
     wire [31:0] stx_stat_frames, stx_stat_purge;
 
-    slow_rx_adp u_slow_rx (
+    // ---- P5e-T1: slow 路由出口 (classify.m_slow → slow_rx_adp) 重命名 ----
+    // 默认构建 (未定义 APP_MODE): srx_* 是 s_* 的纯线名别名, s_tready 直接来自
+    // u_slow_rx ⇒ 与 P4 逐位相同 (同 txin_* 的既有手法, 仅重命名)。
+    // APP_MODE: classify.slow → u_udp_split → ①透传口 → slow_rx_adp (非 app-UDP
+    // 帧逐字保真) ②帧缓冲 → app UDP RX 口。
+    wire [63:0] srx_tdata;
+    wire [7:0]  srx_tkeep;
+    wire        srx_tvalid, srx_tlast, srx_tuser, srx_tcrs, srx_terr;
+    wire        srx_tready;          // u_slow_rx 的 s_axis_tready (恒 1)
+    // app UDP RX 口 + 统计 (APP_MODE 才有消费者; 默认构建无引用)
+    wire [63:0] app_udp_rx_tdata;
+    wire [7:0]  app_udp_rx_tkeep;
+    wire        app_udp_rx_tvalid, app_udp_rx_tlast, app_udp_rx_sof;
+    wire [15:0] app_udp_rx_len, app_udp_rx_src_port;
+    wire [31:0] app_udp_rx_src_ip;
+    wire [31:0] app_udp_stat_frames, app_udp_stat_bytes, app_udp_stat_null,
+                app_udp_stat_drop_crc, app_udp_stat_drop_ovf,
+                app_udp_stat_drop_part, app_udp_stat_drop_excl,
+                app_udp_stat_hls_frames, app_udp_stat_hls_drop,
+                app_udp_stat_hls_split;
+`ifdef APP_MODE
+    // =====================================================================
+    // P5e-T1: UDP 分流 shim (接收侧)
+    // ---------------------------------------------------------------------
+    // 约束来源 (决定性实验 sim/p5e_pre): 慢口一停, 反压经 classify 打到
+    // mac_rx_64 的 8 字共享 FIFO ⇒ 连累 fast TCP 帧丢. 故本 shim 的
+    // s_axis_tready 结构性恒 1 (输入只进 16 深预取 FIFO; 装不下丢整帧不回压),
+    // 详见 rtl/udp_split.v 头注释 (缓冲选择 + 反压合同的完整论证)。
+    //
+    // 配置 (P5e-T3 起由 T1 的全哨兵改为**精确匹配 app 端口**):
+    //   cfg_dst_ip = 本板 IP (192.168.100.2, 与 udp_tx_cfg.cfg_my_ip 同源)
+    //   cfg_port0  = UDP_APP_PORT (8081); port1..3 保持 0xFFFF 未配置哨兵
+    //     (**不能用 0: 0 是合法端口**); cfg_port_any = 0 (不做全收)。
+    //   排他: HLS 的 udp_echo 端口 8080 由 udp_split.EXCL_PORT 参数排除 (且它不在
+    //   cfg_port0..3 里) ⇒ HLS 的 echo 帧永远留给慢路径。
+    //   未配置端口/未匹配 dst_ip 的 UDP 帧仍逐字走慢路径 (T1 的透明性性质)。
+    //   cfg_multi_en = 0: 只收单播到本板 IP 的帧 (组播行情是 10G 阶段的课题;
+    //   置 1 即额外放行 dst_ip[31:28]==E 的组播, 一行可切)。
+    // app_rx_tready = app_udp_rx_tready (P5e-T3: 真 app 消费者 = app_udp_pattern
+    //   的逐字节校验器)。它是**真反压** (每字 8 拍), 但上游是帧级 store-and-forward
+    //   + 4KB 帧缓冲 ⇒ 反压停在缓冲里, 永不到 mac_rx (T1 的"绝不反压"合同不破)。
+    // =====================================================================
+    // T3: RX 学习事件线束 (udp_split 的 meta 输出口 → udp_tx_cfg 的 peer 表写口)。
+    // 声明必须在两个例化点之前 (xvlog 先声明后用; 坑 8: 漏声明 = 隐式 1 位线 +
+    // 静默截断, multi/driv 检查抓不到 —— T2 已实测踩过)。
+    wire        udp_meta_valid;
+    wire [47:0] udp_meta_src_mac;
+    wire [31:0] udp_meta_src_ip;
+    wire [15:0] udp_meta_src_port, udp_meta_len;
+    wire        app_udp_rx_tready;   // app UDP RX 口反压 (→ udp_split.app_rx_tready)
+    // UDP app 端口 (8080 留给 HLS udp_echo — 见 udp_split.EXCL_PORT=8080 的排除)
+    // 声明在两个 APP_MODE 块之前: udp_split 例化与 udp_tx_cfg 例化都要用。
+    localparam [15:0] UDP_APP_PORT = 16'h1F91;   // 8081
+    udp_split u_udp_split (
         .clk            (gmii_clk),
         .rst_n          (reset_n),
         .s_axis_tdata   (s_tdata),
         .s_axis_tkeep   (s_tkeep),
         .s_axis_tvalid  (s_tvalid),
-        .s_axis_tready  (s_tready),
+        .s_axis_tready  (s_tready),      // → classify.m_slow_tready (恒 1)
         .s_axis_tlast   (s_tlast),
         .s_axis_tuser   (s_tuser),
         .s_axis_tcrs    (s_tcrs),
         .s_axis_terr    (s_terr),
+        .p_axis_tdata   (srx_tdata),
+        .p_axis_tkeep   (srx_tkeep),
+        .p_axis_tvalid  (srx_tvalid),
+        .p_axis_tready  (srx_tready),    // 来自 u_slow_rx (恒 1, 契约)
+        .p_axis_tlast   (srx_tlast),
+        .p_axis_tuser   (srx_tuser),
+        .p_axis_tcrs    (srx_tcrs),
+        .p_axis_terr    (srx_terr),
+        .app_rx_tdata   (app_udp_rx_tdata),
+        .app_rx_tkeep   (app_udp_rx_tkeep),
+        .app_rx_tvalid  (app_udp_rx_tvalid),
+        .app_rx_tready  (app_udp_rx_tready),  // ← app_udp_pattern 的校验器
+        .app_rx_tlast   (app_udp_rx_tlast),
+        .app_rx_sof     (app_udp_rx_sof),
+        .app_rx_len     (app_udp_rx_len),
+        .app_rx_src_ip  (app_udp_rx_src_ip),
+        .app_rx_src_port(app_udp_rx_src_port),
+        // P5e-T3: RX 学习事件 (learn-on-RX 的**唯一** peer 源; 见 udp_tx_cfg 段)
+        .meta_valid     (udp_meta_valid),
+        .meta_src_mac   (udp_meta_src_mac),
+        .meta_src_ip    (udp_meta_src_ip),
+        .meta_src_port  (udp_meta_src_port),
+        .meta_len       (udp_meta_len),
+        .cfg_dst_ip     (32'hC0A86402),  // 192.168.100.2 = 本板 IP
+        .cfg_multi_en   (1'b0),
+        .cfg_port0      (UDP_APP_PORT), .cfg_port1(16'hFFFF),
+        .cfg_port2      (16'hFFFF),     .cfg_port3(16'hFFFF),
+        .cfg_port_any   (1'b0),
+        .stat_app_frames(app_udp_stat_frames),
+        .stat_app_bytes (app_udp_stat_bytes),
+        .stat_app_null  (app_udp_stat_null),
+        .stat_drop_crc  (app_udp_stat_drop_crc),
+        .stat_drop_ovf  (app_udp_stat_drop_ovf),
+        .stat_drop_part (app_udp_stat_drop_part),
+        .stat_drop_excl (app_udp_stat_drop_excl),
+        .stat_hls_frames(app_udp_stat_hls_frames),
+        .stat_hls_drop  (app_udp_stat_hls_drop),
+        .stat_hls_split (app_udp_stat_hls_split)
+    );
+`else
+    assign srx_tdata = s_tdata;      // 纯别名 (默认构建逐位不变)
+    assign srx_tkeep = s_tkeep;
+    assign srx_tvalid= s_tvalid;
+    assign srx_tlast = s_tlast;
+    assign srx_tuser = s_tuser;
+    assign srx_tcrs  = s_tcrs;
+    assign srx_terr  = s_terr;
+    assign s_tready  = srx_tready;   // 原路径: classify 慢口 tready = slow_rx_adp
+`endif
+
+    slow_rx_adp u_slow_rx (
+        .clk            (gmii_clk),
+        .rst_n          (reset_n),
+        .s_axis_tdata   (srx_tdata),
+        .s_axis_tkeep   (srx_tkeep),
+        .s_axis_tvalid  (srx_tvalid),
+        .s_axis_tready  (srx_tready),
+        .s_axis_tlast   (srx_tlast),
+        .s_axis_tuser   (srx_tuser),
+        .s_axis_tcrs    (srx_tcrs),
+        .s_axis_terr    (srx_terr),
         .hls_rx_tdata   (hls_rx_tdata),
         .hls_rx_tvalid  (hls_rx_tvalid),
         .hls_rx_tready  (hls_rx_tready),
@@ -1435,7 +1549,205 @@ module wrapper_p4 (
         .stat_purge     (stx_stat_purge)
     );
 
-    // --- TX 仲裁: fast (TCP) 严格优先于 slow (HLS) ---
+    // =====================================================================
+    // P5e-T2: UDP app 接口**发送侧** (APP_MODE) — 目标锁存 shim + 帧器 + TX 合流
+    // ---------------------------------------------------------------------
+    // 优先级声明 (整链, 严格优先级): **TCP fast (u_tx_arb.s_fast) >
+    //   UDP app TX (本块 u_tx_udp_arb.s_fast) > HLS 慢路径 (slow_tx_adp)**
+    //   · u_tx_arb 原样不动 (它给 TCP 严格优先 = 既有硬约束)。
+    //   · 新合流器里 UDP app TX 压 HLS: app 数据面帧是**流式**发出的 (帧内每拍
+    //     都依赖下游推进, 载荷 FIFO 只有 256 字), 而 slow_tx_adp 是整帧缓冲
+    //     (frame_fifo 512 字, store-and-forward), 被让路不会丢字 —— 优先级给
+    //     低延迟者。两个 arb 都是"帧级锁定 + 帧末 1 拍重仲裁", 故 UDP 帧和 HLS
+    //     帧都不会被切断 (帧原子性由 arb 的 busy/TLAST 锁定保证)。
+    //   · 饿死风险: UDP app 帧 <=1500B (长度守卫), HLS 帧 <=1518B ⇒ 单帧有界,
+    //     互不无界阻塞。HLS 侧被压期间其 frame_fifo 若被 HLS 自己写满会走它既有
+    //     的 purge 语义 (stat_purge), 与 TCP 压它时同病同治, 不新增病理。
+    //
+    // **默认不发送 (零回归)**: T2 阶段 wrapper 内没有 app UDP TX 消费者 (T3 的
+    //   UDP app 演示才产生帧) ⇒ app_udp_tx_tvalid 恒 0。且即便有人推帧, shim 的
+    //   peer 表复位为无效 (o_ready=0) ⇒ 帧被拒在 udp_tx_frame 之前, 线上零新增
+    //   (见 rtl/udp_tx_cfg.v 头注释的论证)。两条独立保险。
+    //
+    // 默认构建 (未定义 APP_MODE, 走 `else 支): mrg_* 是 stx_* 的**纯线名别名**
+    //   (同 txin_*/srx_* 的既有手法) ⇒ 与 P4/P5a 逐位等价, 无新增逻辑/寄存器。
+    // =====================================================================
+    // ---- P5e-T2: TX 合流输出 (slow 口的上游 → u_tx_arb.s_slow_*) ----
+    // ⚠️ **必须显式声明** (坑 8 的教科书案例, 本项已实测踩到): 漏声明 ⇒ Verilog
+    // 隐式声明成 **1 位** 线 ⇒ 64/8 位连接**静默截断**, 高位 = Z (无驱动)。
+    // 症状: mac_tx 收到 Z 填充字 ⇒ cw_len = popc8(Z) = X ⇒ mac_tx 永卡 S_DATA
+    // (plen 一路涨), TX 全线死。子模块 TB 全绿、xelab 只有 unconnected 类警告
+    // ("implicitly declared" 不在多驱动/未驱动检查里!) ⇒ **只有真 wrapper 全链门
+    // (sim/p5e_t2/run_tb_p5e_t2_wrapper.bat) 能抓到**。
+    wire [63:0] mrg_tdata;
+    wire [7:0]  mrg_tkeep;
+    wire        mrg_tvalid, mrg_tready, mrg_tlast;
+`ifdef APP_MODE
+    // ---- app UDP TX 口 (P5e-T3: 由 app_udp_pattern 驱动; T2 时恒空) ----
+    wire [63:0] app_udp_tx_tdata;
+    wire [7:0]  app_udp_tx_tkeep;
+    wire        app_udp_tx_tvalid, app_udp_tx_tready, app_udp_tx_tlast;
+    wire        app_udp_tx_ready;    // 1 = peer 已学习 (app 可推帧)
+    // UDP app 演示的统计线束 (板级不可观测, 由 TB/将来状态行读; 不接 = 无消费者)
+    wire [31:0] udpapp_tx_bytes, udpapp_tx_frames, udpapp_rx_bytes, udpapp_rx_frames;
+    wire [31:0] udpapp_rx_null, udpapp_mismatch;
+    wire        udpapp_active, udpapp_done;
+    wire [3:0]  udpapp_led;
+
+    // shim → 帧器 → 合流器 内部线 + cfg 锁存线 + 统计
+    wire [63:0] utx_tdata, utx2_tdata;
+    wire [7:0]  utx_tkeep, utx2_tkeep;
+    wire        utx_tvalid, utx_tready, utx_tlast;
+    wire        utx2_tvalid, utx2_tready, utx2_tlast;
+    wire [47:0] utx_cfg_dst_mac, utx_cfg_src_mac;
+    wire [31:0] utx_cfg_dst_ip,  utx_cfg_src_ip;
+    wire [15:0] utx_cfg_dst_port, utx_cfg_src_port;
+    wire        utx_cfg_csum_en;
+    wire [31:0] utx_stat_frames, utx_stat_bytes, utx_stat_drop_len;
+    wire [31:0] utx_cfg_frames, utx_cfg_deny;
+    wire        utx_busy;            // 帧器非空闲 (cfg 冻结窗口的右边界)
+
+    // =====================================================================
+    // P5e-T3: UDP 演示 app (图案发生器 + 图案校验器) — 真消费者接上
+    // ---------------------------------------------------------------------
+    // TX 数据流: app_udp_pattern.m_* → u_udp_tx_cfg (peer 门 + cfg 锁存) →
+    //            u_udp_tx (长度守卫) → u_tx_udp_arb → u_tx_arb → mac_tx_64
+    // RX 数据流: mac_rx → classify.slow → u_udp_split.app_rx_* → 本模块校验
+    // i_paylen 恒 12'd1472 = app 契约上限 (1518 - 42); 超过由 udp_tx_frame 的
+    // PLEN_MAX=1500 守卫兜底 (stat_drop_len)。
+    // TX_GAP 默认 58000 拍 ⇒ ~24.7 Mbps payload (限速; 理由见 app_udp_pattern
+    // 头注释: 参考对端 peer.exe 在 20/25 Mbps 全收)。
+    // **默认不激活**: i_en=1 但 i_tx_ready = peer_v = 0 (没收到过对端帧) ⇒ 零帧。
+    // =====================================================================
+    app_udp_pattern #(.TX_BYTES(32'd0), .TX_GAP(16'd58000)) u_app_udp (
+        .clk            (gmii_clk),
+        .rst_n          (reset_n),
+        .i_en           (1'b1),              // 板级: 演示常使能 (TX 另受 peer 门)
+        .i_tx_ready     (app_udp_tx_ready),  // peer 表有效 (learn-on-RX 学到才发)
+        .i_paylen       (12'd1472),          // MTU 内最大 UDP 载荷
+        .m_tdata        (app_udp_tx_tdata),
+        .m_tkeep        (app_udp_tx_tkeep),
+        .m_tvalid       (app_udp_tx_tvalid),
+        .m_tready       (app_udp_tx_tready),
+        .m_tlast        (app_udp_tx_tlast),
+        .rx_tdata       (app_udp_rx_tdata),
+        .rx_tkeep       (app_udp_rx_tkeep),
+        .rx_tvalid      (app_udp_rx_tvalid),
+        .rx_tready      (app_udp_rx_tready),
+        .rx_tlast       (app_udp_rx_tlast),
+        .rx_sof         (app_udp_rx_sof),
+        .rx_len         (app_udp_rx_len),
+        .stat_tx_bytes  (udpapp_tx_bytes),
+        .stat_tx_frames (udpapp_tx_frames),
+        .stat_rx_bytes  (udpapp_rx_bytes),
+        .stat_rx_frames (udpapp_rx_frames),
+        .stat_rx_null   (udpapp_rx_null),
+        .stat_mismatch  (udpapp_mismatch),
+        .active         (udpapp_active),
+        .done           (udpapp_done),
+        .led            (udpapp_led)
+    );
+
+    udp_tx_cfg u_udp_tx_cfg (
+        .clk            (gmii_clk),
+        .rst_n          (reset_n),
+        // 帧器"非空闲"回授: cfg 锁存必须冻结到帧头真正发出 (见 udp_tx_cfg 头注释)
+        .frame_busy     (utx_busy),
+        // ---- peer 表写口 = **learn-on-RX** (P5e-T3 修复; TL 重新裁决) ----
+        // 源 = u_udp_split 的 meta 线束 (= udp_rx 的 meta_*, 匹配帧 w5 接受拍脉冲)。
+        // 【为什么换掉 T2 的 scfg_ev_up (慢路径 CONN_UP)】UDP **无连接** ⇒ 板上
+        //   永不产生 CONN_UP ⇒ 用 CONN_UP 当学习源等于 peer 表永远空 ⇒ UDP TX
+        //   永不激活 (T2 的"默认不发送"在板上退化成"永不发送")。meta_valid 则
+        //   在**收到对端任一 app-UDP 帧**时必脉冲 ⇒ 真正的 learn-on-RX。
+        // 【单一真值源不变】src_mac/ip 仍是从**收到的帧**里解析出来的 (udp_rx 的
+        //   w3/w4 拍寄存), 不新增解析器 (T1 的原则: 不重复实现 RX 判据)。
+        // 【端口语义】peer 表只学 MAC/IP; UDP 目标端口是**静态配置** (cfg_dst_port
+        //   = 8081) —— 对端的临时端口不是 UDP 语义, 见 udp_tx_cfg 头注释。
+        .peer_wr        (udp_meta_valid),
+        .peer_mac       (udp_meta_src_mac),
+        .peer_ip        (udp_meta_src_ip),
+        .cfg_my_mac     (48'h000A3501FEC0),   // P4 统一 MAC (同 tcp_tx_frame)
+        .cfg_my_ip      (32'hC0A86402),       // 192.168.100.2
+        .cfg_my_port    (UDP_APP_PORT),
+        .cfg_dst_port   (UDP_APP_PORT),
+        .cfg_csum_en    (1'b1),
+        .s_axis_tdata   (app_udp_tx_tdata),
+        .s_axis_tkeep   (app_udp_tx_tkeep),
+        .s_axis_tvalid  (app_udp_tx_tvalid),
+        .s_axis_tready  (app_udp_tx_tready),
+        .s_axis_tlast   (app_udp_tx_tlast),
+        .m_axis_tdata   (utx_tdata),
+        .m_axis_tkeep   (utx_tkeep),
+        .m_axis_tvalid  (utx_tvalid),
+        .m_axis_tready  (utx_tready),
+        .m_axis_tlast   (utx_tlast),
+        .o_dst_mac      (utx_cfg_dst_mac),
+        .o_dst_ip       (utx_cfg_dst_ip),
+        .o_dst_port     (utx_cfg_dst_port),
+        .o_src_mac      (utx_cfg_src_mac),
+        .o_src_ip       (utx_cfg_src_ip),
+        .o_src_port     (utx_cfg_src_port),
+        .o_csum_en      (utx_cfg_csum_en),
+        .o_ready        (app_udp_tx_ready),
+        .stat_frames    (utx_cfg_frames),
+        .stat_deny      (utx_cfg_deny)
+    );
+
+    udp_tx_frame u_udp_tx (
+        .clk            (gmii_clk),
+        .rst_n          (reset_n),
+        .s_axis_tdata   (utx_tdata),
+        .s_axis_tkeep   (utx_tkeep),
+        .s_axis_tvalid  (utx_tvalid),
+        .s_axis_tready  (utx_tready),
+        .s_axis_tlast   (utx_tlast),
+        .cfg_src_mac    (utx_cfg_src_mac),
+        .cfg_dst_mac    (utx_cfg_dst_mac),
+        .cfg_src_ip     (utx_cfg_src_ip),
+        .cfg_dst_ip     (utx_cfg_dst_ip),
+        .cfg_src_port   (utx_cfg_src_port),
+        .cfg_dst_port   (utx_cfg_dst_port),
+        .cfg_csum_en    (utx_cfg_csum_en),
+        .m_axis_tdata   (utx2_tdata),
+        .m_axis_tkeep   (utx2_tkeep),
+        .m_axis_tvalid  (utx2_tvalid),
+        .m_axis_tready  (utx2_tready),
+        .m_axis_tlast   (utx2_tlast),
+        .stat_frames    (utx_stat_frames),
+        .stat_bytes     (utx_stat_bytes),
+        .stat_drop_len  (utx_stat_drop_len),
+        .o_busy         (utx_busy)
+    );
+
+    tx_arb u_tx_udp_arb (
+        .clk            (gmii_clk),
+        .rst_n          (reset_n),
+        .s_fast_tdata   (utx2_tdata),
+        .s_fast_tkeep   (utx2_tkeep),
+        .s_fast_tvalid  (utx2_tvalid),
+        .s_fast_tready  (utx2_tready),
+        .s_fast_tlast   (utx2_tlast),
+        .s_slow_tdata   (stx_tdata),
+        .s_slow_tkeep   (stx_tkeep),
+        .s_slow_tvalid  (stx_tvalid),
+        .s_slow_tready  (stx_tready),
+        .s_slow_tlast   (stx_tlast),
+        .m_axis_tdata   (mrg_tdata),
+        .m_axis_tkeep   (mrg_tkeep),
+        .m_axis_tvalid  (mrg_tvalid),
+        .m_axis_tready  (mrg_tready),
+        .m_axis_tlast   (mrg_tlast)
+    );
+`else
+    // 默认构建: 合流 = 纯别名 (slow_tx_adp 直通 u_tx_arb.s_slow, 与 P4 逐位等价)
+    assign mrg_tdata  = stx_tdata;
+    assign mrg_tkeep  = stx_tkeep;
+    assign mrg_tvalid = stx_tvalid;
+    assign mrg_tlast  = stx_tlast;
+    assign stx_tready = mrg_tready;
+`endif
+
+    // --- TX 仲裁: fast (TCP) 严格优先于 slow ({UDP app TX, HLS} 合流) ---
     wire [63:0] m_tx_tdata;
     wire [7:0]  m_tx_tkeep;
     wire        m_tx_tvalid, m_tx_tready, m_tx_tlast;
@@ -1448,11 +1760,11 @@ module wrapper_p4 (
         .s_fast_tvalid  (tx_tvalid),
         .s_fast_tready  (tx_tready),
         .s_fast_tlast   (tx_tlast),
-        .s_slow_tdata   (stx_tdata),
-        .s_slow_tkeep   (stx_tkeep),
-        .s_slow_tvalid  (stx_tvalid),
-        .s_slow_tready  (stx_tready),
-        .s_slow_tlast   (stx_tlast),
+        .s_slow_tdata   (mrg_tdata),
+        .s_slow_tkeep   (mrg_tkeep),
+        .s_slow_tvalid  (mrg_tvalid),
+        .s_slow_tready  (mrg_tready),
+        .s_slow_tlast   (mrg_tlast),
         .m_axis_tdata   (m_tx_tdata),
         .m_axis_tkeep   (m_tx_tkeep),
         .m_axis_tvalid  (m_tx_tvalid),
@@ -1586,11 +1898,14 @@ module wrapper_p4 (
     // ---- LED mux: boot self-test > blink/latch readout > live probes ----
     // P5 APP_MODE: LED = app 演示指示灯 (app_pattern.led:
     //   d0 = CONN_UP 曾见 / d1 = 收发活动 / d2 = 失配粘滞 / d3 = 传输完成)
+    // P5e-T3: TCP app 与 UDP app **共用**这 4 个灯 (两条演示通路同性质):
+    //   d0 = TCP 曾建连 | UDP 曾学到 peer;  d1 = 任一方向有活动;
+    //   d2 = 任一方向有失配 (粘滞);        d3 = 传输完成 / UDP 会话在跑
 `ifdef APP_MODE
-    assign led_d0 = boot_act ? boot_on : app_led[0];
-    assign led_d1 = boot_act ? boot_on : app_led[1];
-    assign led_d2 = boot_act ? boot_on : app_led[2];
-    assign led_d3 = boot_act ? boot_on : app_led[3];
+    assign led_d0 = boot_act ? boot_on : (app_led[0] | udpapp_led[0]);
+    assign led_d1 = boot_act ? boot_on : (app_led[1] | udpapp_led[1]);
+    assign led_d2 = boot_act ? boot_on : (app_led[2] | udpapp_led[2]);
+    assign led_d3 = boot_act ? boot_on : (app_led[3] | udpapp_led[3]);
 `else
     assign led_d0 = boot_act ? boot_on
                             : (latched ? blk_on : tx_dbg_wnd_open);

@@ -36,9 +36,14 @@ import_files -norecurse ${root_dir}/rtl/crc32_8b.v \
                          ${root_dir}/rtl/slow_rx_adp.v \
                          ${root_dir}/rtl/slow_cfg_adp.v \
                          ${root_dir}/rtl/slow_tx_adp.v \
+                         ${root_dir}/rtl/udp_rx.v \
+                         ${root_dir}/rtl/udp_split.v \
+                         ${root_dir}/rtl/udp_tx_cfg.v \
+                         ${root_dir}/rtl/udp_tx_frame.v \
                          ${root_dir}/rtl/tx_arb.v \
                          ${root_dir}/rtl/app_ctrl.v \
                          ${root_dir}/rtl/app_pattern.v \
+                         ${root_dir}/rtl/app_udp_pattern.v \
                          ${root_dir}/rtl/app_status_uart.v
 import_files -norecurse ${script_dir}/wrapper_p4.v ${script_dir}/util_gmii_to_rgmii.v \
                          ${script_dir}/uart_dbg.v

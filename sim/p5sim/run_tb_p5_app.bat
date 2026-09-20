@@ -54,6 +54,8 @@ call %XV%\xvlog.bat -work xil_defaultlib ^
   %RTL%\rx_classify.v ^
   %RTL%\vlan_strip.v ^
   %RTL%\slow_cfg_adp.v ^
+  %RTL%\udp_rx.v %RTL%\udp_split.v ^
+  %RTL%\udp_tx_cfg.v %RTL%\udp_tx_frame.v ^
   %RTL%\tx_arb.v ^
   %RTL%\app_ctrl.v ^
   %RTL%\app_pattern.v ^
@@ -90,6 +92,8 @@ call %XV%\xvlog.bat -work xil_defaultlib -d P5_CLOSE -d APP_MODE ^
   %RTL%\rx_classify.v ^
   %RTL%\vlan_strip.v ^
   %RTL%\slow_cfg_adp.v ^
+  %RTL%\udp_split.v ^
+  %RTL%\udp_tx_cfg.v %RTL%\udp_tx_frame.v ^
   %RTL%\tx_arb.v ^
   %RTL%\app_ctrl.v ^
   %RTL%\app_pattern.v ^

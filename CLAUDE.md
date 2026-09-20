@@ -53,6 +53,25 @@
   默认构建与各默认 TB 显式传 `16'd0` ⇒ 逐位不变。端口名**保持大写** `ACC_MARGIN`
   是故意的: `tools/gen_stim_p5_adv.py` 的 `check_phys_margin` 按文本解析这一行。
 
+## UDP app 接口 (P5e, 10G-ready 行情通路先行)
+
+- **数据面分工**: RX 侧 `rx_classify.slow → udp_split` → ①透传口 → `slow_rx_adp` (HLS)
+  ②帧缓冲 → app UDP RX 口; TX 侧 app → `udp_tx_cfg` (peer 门 + cfg 锁存) →
+  `udp_tx_frame` (长度守卫 ≤1500) → `tx_arb` (UDP 压 HLS) → `tx_arb` (TCP 严格优先)。
+- **learn-on-RX (T3 闭合的 T2 缺口)**: peer 学习源 = `udp_split` 的 **meta 线束**
+  (`meta_valid/meta_src_mac/meta_src_ip/...` = `udp_rx.meta_*` 的纯线束引出),
+  接 `udp_tx_cfg.peer_wr`。**T2 的 CONN_UP 源已废弃** —— UDP 无连接, 板上永不产生
+  CONN_UP ⇒ peer 表永不填 ⇒ TX 永不激活。⚠️ 已知语义边界: meta 在 w5 (头字段收全)
+  脉冲而 FCS 到 TLAST 才知道 ⇒ **坏 FCS 帧也会被学入** (下一好帧覆盖; 门里有专项断言)。
+- **演示 app** `rtl/app_udp_pattern.v`: UDP 版图案发生器 + 校验器 (xorshift64 / 种子
+  `0x9E3779B97F4A7C15` / 先取后推进, 与 `peer.exe --udp-*` 逐字节一致)。
+  RX 校验 **1 字节/拍 II=1 无缝** (1 字前瞻寄存器) ⇒ 天花板 = 1G 线速 (125 MB/s @125MHz);
+  10G 需换 8 路并行 (8 步 xorshift/拍)。TX 限速 = 帧间 `TX_GAP` 拍 (默认 58000 ≈ 24.7 Mbps,
+  与 `peer --rate-mbps 20/25` 同量级), 超 `PLEN_MAX` 的帧冻结 LFSR 保住线上图案流连续。
+  **默认不激活**: 无 peer (`udp_tx_cfg.o_ready=0`) ⇒ 零帧; `i_en=0` ⇒ 不校验。
+- **配置** (wrapper): `udp_split.cfg_dst_ip` = 本板 IP / `cfg_port0` = 8081 (8080 由
+  `EXCL_PORT` 排除留给 HLS udp_echo) / `cfg_port_any=0` / `udp_tx_cfg.cfg_my|dst_port` = 8081。
+
 ## 目录
 
 | 路径 | 内容 |
@@ -92,6 +111,19 @@ cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5d_multi\run_tb_p5_multi.bat' known_idle_f
 cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5d_d1\run_tb_p5d_d1.bat'     # D1: abort 请求窗 (rst_req) + 残余 F 项 ESTAB 状态门 + 释放
 cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5e_win\run_tb_p5e_win.bat'   # 0 载荷 opener 窄窗 (pipe 残余字跨会话 ⇒ 零负载泄漏)
 cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5c_t3\run_tb_p5c_fence.bat'  # abort fence 单元门 (F1-F5; D1 后判据不变、激励按真链路修正)
+# P5e-T1 UDP 分流器单元门 + P5e-T3 UDP app 门 (自检式, 无 Python)
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5udp\run_tb_udp_split.bat'   # T1: 分流/反压/透传保真/坏帧整帧丢弃
+# P5e-T2 UDP app TX 单元门 + 真 wrapper 门
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5e_t2\run_tb_udp_tx_guard.bat'    # T2: peer 门 / PLEN_MAX 守卫 (+ 内置负对照)
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5e_t2\run_tb_p5e_t2_wrapper.bat'  # T2: 真 wrapper 全链 (含 implicit DRC 检查)
+# P5e-T3/T4/T5 UDP 演示 app 门 (独立目录; 4 个负对照 + 1 个"期望 FAIL"负对照)
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5e_udp\run_tb_app_udp.bat' pos        # 正例: 图案/学习/边界/突发 (exit 0)
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5e_udp\run_tb_app_udp.bat' splitoff   # 负: 拆分器关 ⇒ app 0 帧 + HLS 见 echo
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5e_udp\run_tb_app_udp.bat' portout    # 负: 端口过滤外 ⇒ 仍走 HLS
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5e_udp\run_tb_app_udp.bat' badcrc     # 负: 坏 FCS ⇒ 整帧丢 + stat_drop_crc
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5e_udp\run_tb_app_udp.bat' nopeer     # 负: peer 表空 ⇒ TX 零帧
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5e_udp\run_tb_app_udp.bat' neglearn   # 负对照 (**期望 exit 1**): 学习源钉 0
+cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5e_udp\run_tb_p5e_udp_wrapper.bat'    # T5: 真 wrapper 全链 UDP 收发 + DRC
 # 板级: 同四元组重连验收 (D6)
 C:/Users/zhxue/anaconda3/python.exe tools/pc_p5d_reconn_test.py --rounds 5 --gap 0.6   # 判别性轮间隔; 判据: 全部轮次建连+传输成功
 # 构建与烧录
@@ -184,3 +216,35 @@ tools/cpp_peer/peer.exe --iface '\Device\NPF_{...}' --rx-only --expect-pattern 1
    DEL→ADD 就被当新会话首帧首字收下 = 8B 旧载荷 + 整段图案偏移) ⇒ 用 **0 载荷 opener**
    (`tkeep=0`, 帧器只按 `pop8(keep)` 计长 ⇒ 不入 FIFO/不进 ring/不推进 seq) **结构性**根除,
    代价 1 拍/帧。**推论**: 硬化一条门之后必须重跑跨会话/换流场景, 别假设"门修好了就没事了"。
+21. **TB 里的以太网字节序/拍对齐错了, 症状会指向错误的模块 (P5e-T3 实测两条)**:
+   ① **IP 校验和是网络序 (大端)** 的 16 位字段 —— 写成小端 ⇒ `udp_rx` 判
+      `stat_drop_ipcsum`/nonmatch, 看起来像"拆分器过滤不匹配" (真根因在 TB 的 4 个字节);
+   ② 往 GMII 注入帧时**帧尾多挂 1 拍 `dv=1`** ⇒ 多算 1 字节 ⇒ FCS 残差不对
+      (`mac_rx.stat_crc_err=1`), 看起来像"FCS 算错"。
+   定位法 (两步定案): 先 **CRC 自检** (`crc32("123456789")==0xCBF43926`) 排除算法,
+   再看 `mac_rx.stat_bytes` 是否**恰等于** 帧长 (多/少 1 就是拍对齐; T2 期 1519 vs 1518)。
+22. **force 的层次名必须与 wrapper 里的线名逐字一致; TB 声明顺序同 RTL** (xvlog 先声明后用):
+   T2 的 wrapper 门改用 meta 线束时踩到 —— `udp_meta_smac`(顺手缩写) 与 wrapper 实际
+   `udp_meta_src_mac` 不一致 ⇒ xelab 报 "not declared under prefix"; TB 里被 task 引用的
+   `integer` 声明在 task 之后就编译不过 (与 RTL 同一个坑)。
+23. **被下游中止的帧必须冻结图案 LFSR**: app 侧"帧内中止"(如 >PLEN_MAX) 的字节若照常推进
+   LFSR, 线上图案流就留一个空洞 ⇒ 对端连续校验必然失配 (且失配点远离真因)。
+   `app_pattern.bad_frm` / `app_udp_pattern.pay_ok` 都是"冻结 + 常数填充"这同一手法。
+24. **"漏声明 = 隐式 1 位线"是传统检查抓不到的一类错 (坑 8 的第二种表现, P5e-T2 实测)**:
+   忘声明一根内部线 ⇒ Verilog 隐式 1 位网线 ⇒ 64/8 位连接**静默截断**, 高位 = Z ⇒
+   `mac_tx` 收到 Z 填充字 ⇒ `cw_len = popc8(Z) = X` ⇒ **永久卡 `S_DATA`**, TX 全线死。
+   `multi/driv/unconnected` 三类检查**都不报** ("implicitly declared" 不在它们的检查项里),
+   子模块 TB 也全绿 ⇒ **只有真 wrapper 全链门能抓到** (P5e-T2 就是这样抓到的)。
+   ⇒ 门里必须把 **`findstr implicit` 当硬失败** (P5e-T3/T5 的门已加, 4 个日志命中 0)。
+25. **"这东西从哪来"要单独测 (缺口逃逸的典型)**: P5e-T2 把 UDP TX 的 peer 学习源接在慢路径
+   `CONN_UP` 上 —— **UDP 无连接 ⇒ 板上永不产生 CONN_UP ⇒ peer 表永远空**: T2 的"默认不发送"
+   在板上退化成"**永不发送**"。而 T2 的单元门与 wrapper 门**都靠 `force` 灌 peer 事件才绿**
+   (两门都测"注入了 peer 之后会发", 没测"peer 从哪来") ⇒ 缺口从两条门里逃逸。
+   ⇒ 每次用事件/表项驱动一条通路, 必须**单独有一条门回答"生产者是谁、板上会不会产生"**
+   (P5e-T3 的 `neglearn` 就是这条: 学习源钉 0 ⇒ 正例判据必然不成立, **期望 exit 1**)。
+26. **近似时序门的绝对值不可跨流程比较 (P5e-T3)**: 私有 route 门
+   (`sim/p5e_udp/route_check.tcl`) 报 **WNS +0.123**, 官方 `launch_runs` 构建报 **+0.290** ——
+   差异**不是布局方差**, 而是**流程差异**: 该脚本 `set_property strategy` 之后**手动**
+   `opt_design/place_design/route_design`, **从未 `launch_runs impl_1`** ⇒ **strategy 未生效**,
+   且**缺 `phys_opt_design`**。⇒ 快门的族序/相对结论可用, **绝对值只能当参考**;
+   要绝对值就走 `launch_runs` 全流程 (否则会比官方口径**悲观 ~0.17ns**, 容易被误读成"改坏了")。

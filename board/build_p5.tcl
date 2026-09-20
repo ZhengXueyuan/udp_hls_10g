@@ -7,6 +7,7 @@
 # 与 build_p4.tcl 的差异 (逐项):
 #   ① project_name p4_prj -> p5_prj (独立工程, 不覆盖默认口径)
 #   ② 文件清单 += rtl/app_ctrl.v / rtl/app_pattern.v / rtl/app_status_uart.v
+#      (P5e-T3 再 += rtl/app_udp_pattern.v / rtl/udp_tx_cfg.v / rtl/udp_tx_frame.v)
 #   ③ verilog_define APP_MODE=1 (wrapper 的 APP_MODE 分支: app 数据面 +
 #      cfg_suppress_data_ack=0 + LED/状态行走 app 口径)
 #   build_p4.tcl 不动 (默认构建 = echo 数据面, 零风险)
@@ -38,9 +39,14 @@ import_files -norecurse ${root_dir}/rtl/crc32_8b.v \
                          ${root_dir}/rtl/slow_rx_adp.v \
                          ${root_dir}/rtl/slow_cfg_adp.v \
                          ${root_dir}/rtl/slow_tx_adp.v \
+                         ${root_dir}/rtl/udp_rx.v \
+                         ${root_dir}/rtl/udp_split.v \
+                         ${root_dir}/rtl/udp_tx_cfg.v \
+                         ${root_dir}/rtl/udp_tx_frame.v \
                          ${root_dir}/rtl/tx_arb.v \
                          ${root_dir}/rtl/app_ctrl.v \
                          ${root_dir}/rtl/app_pattern.v \
+                         ${root_dir}/rtl/app_udp_pattern.v \
                          ${root_dir}/rtl/app_status_uart.v
 import_files -norecurse ${script_dir}/wrapper_p4.v ${script_dir}/util_gmii_to_rgmii.v \
                          ${script_dir}/uart_dbg.v
