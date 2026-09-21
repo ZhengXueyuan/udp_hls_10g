@@ -763,10 +763,13 @@ def checkstatus(simdir):
     # P5b C9: 状态行 168 -> 220 字符 (行尾追加 AK/AD/TS/WQ/WM/WU/PO/PX)。
     # 判据仍是**逐字节全等** (未放宽): 前 156 字符与 P5a 逐字节相同, 行尾的
     # 10 个填充空格变成 P5b 字段段。字段值 = TB 预设的可辨识图案。
+    # P5f: 行 220 -> 304 字符 (行尾再追加 UDP app 段 URB/UMM/URF/UOV/UPC/UPA/UTB/UTF)。
     exp = ("P5B1 ST=1 NX=12345679 UA=12345678 RW=C000 RN=20000065 "
            "RX=00001234 TX=0056789A TF=0123 MM=0007 OC=1ABCD EV=0003 DP=0001 "
            "RY=8001 EC=02 DL=0003 FI=0001 RS=0000 "
            "AK=BEEF AD=00CD TS=5 WQ=C000 WM=6035 WU=0011 PO=1C0DE PX=0009"
+           " URB=00ABCDEF UMM=00000047 URF=05DC UOV=000A UPC=0002 UPA=0001"
+           " UTB=12345678 UTF=0BB8"
            + "\r\n")
     p = os.path.join(simdir, 'status_line.txt')
     if not os.path.exists(p):

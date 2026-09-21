@@ -24,11 +24,19 @@
 //   WQ = conn0 winq (接收配额) WM    = conn0 wu_mark (上次 wu 通告值)
 //   WU = 窗口更新 ACK 发出数    PO    = 信用池余额 (17 位)
 //   PX = 授予被池限制的连接数
+//   ---- P5f 追加 (UDP app 通路板级观测缺口: P5e 只接 LED 读不出) ----
+//   URB = app UDP 收字节       UMM   = app UDP 失配字节 (粘滞)
+//   URF = app UDP 收帧数       UOV   = udp_split 缓冲溢出丢帧
+//   UPC = udp_split 坏 FCS 丢帧 UPA  = udp_split 截断/残帧回卷
+//   UTB = app UDP 发字节       UTF   = app UDP 发帧数
 //
-// 行 = 220 字符 (末尾 CR/LF), 9600 下 ~230ms。**除设计标识外** (index 2 起 4 字符
+// 行 = 304 字符 (末尾 CR/LF), 9600 下 ~317ms。**除设计标识外** (index 2 起 4 字符
 // 由 "P5A1" 改 "P5B1"), 前 156 字符的 [0,156) 区间与 P5a 逐字节相同 (P4 板级读出
-// 依赖), P5b 字段一律**追加在行尾**。字段值在行首 (ci==0) 一次性锁存 — 行内自洽;
-// 行间 GAP 后重采。
+// 依赖), 后续字段一律**追加在行尾** (P5b C9 追加到 220, P5f 追加到 304 —— 既有
+// 字段的 ci 偏移**一律不动**, 只有行尾新增段需要算偏移)。字段值在行首 (ci==0)
+// 一次性锁存 — 行内自洽; 行间 GAP 后重采。
+// ⚠️ 追加字段必须**同步改** tb/tb_p5_status.v 与 tools/gen_stim_p5_app.py 的期望串
+// (status 门是整行逐字节比对; 漏同步 = 门红)。
 //=============================================================================
 module app_status_uart #(
     parameter [13:0] BIT_LAST  = 14'd13020,        // 每比特拍数-1 @125MHz/9600
@@ -64,9 +72,18 @@ module app_status_uart #(
     input  wire [15:0] stat_wu,
     input  wire [16:0] pool,
     input  wire [15:0] stat_pool_exh,
+    // P5f: UDP app 通路观测 (板级此前只能读 LED ⇒ 收发方向都读不出来)
+    input  wire [31:0] udp_rx_bytes,
+    input  wire [31:0] udp_mismatch,
+    input  wire [15:0] udp_rx_frames,
+    input  wire [15:0] udp_drop_ovf,
+    input  wire [15:0] udp_drop_crc,
+    input  wire [15:0] udp_drop_part,
+    input  wire [31:0] udp_tx_bytes,
+    input  wire [15:0] udp_tx_frames,
     output wire        txd
 );
-    localparam LINE_LEN = 8'd220;
+    localparam LINE_LEN = 9'd304;
 
     // 行模板 (固定文本; hex 位以 'x' 占位, 运行时由 lchar 覆盖)
     // 字节 i = TPL[8*(LINE_LEN-1) - 8*i +: 8] (首字符在最高字节)
@@ -74,11 +91,16 @@ module app_status_uart #(
     // 板级看不到 FIN 是否发出、坏帧是否被丢。
     // P5b C9: 行尾再追加 AK/AD/TS/WQ/WM/WU/PO/PX (前 156 字符逐字节不变) —
     // 板级病理 (对端停等/窗口不重开/池耗尽) 缺可观测量。
+    // P5f: 行尾再追加 UDP app 段 URB/UMM/URF/UOV/UPC/UPA/UTB/UTF
+    // (偏移: URB hex 223..230, UMM 236..243, URF 249..252, UOV 258..261,
+    //  UPC 267..270, UPA 276..279, UTB 285..292, UTF 298..301; CR=302 LF=303)。
     wire [8*LINE_LEN-1:0] TPL = {
         "P5B1 ST=x NX=xxxxxxxx UA=xxxxxxxx RW=xxxx RN=xxxxxxxx ",
         "RX=xxxxxxxx TX=xxxxxxxx TF=xxxx MM=xxxx OC=xxxxx EV=xxxx ",
         "DP=xxxx RY=xxxx EC=xx DL=xxxx FI=xxxx RS=xxxx",
         " AK=xxxx AD=xxxx TS=x WQ=xxxx WM=xxxx WU=xxxx PO=xxxxx PX=xxxx",
+        " URB=xxxxxxxx UMM=xxxxxxxx URF=xxxx UOV=xxxx UPC=xxxx UPA=xxxx",
+        " UTB=xxxxxxxx UTF=xxxx",
         8'h0D, 8'h0A
     };
 
@@ -117,8 +139,11 @@ module app_status_uart #(
     reg [15:0] sn_ak, sn_ad, sn_wq, sn_wm, sn_wu, sn_px;
     reg [2:0]  sn_ts;
     reg [16:0] sn_po;
+    // P5f 追加字段
+    reg [31:0] sn_urb, sn_umm, sn_utb;
+    reg [15:0] sn_urf, sn_uov, sn_upc, sn_upa, sn_utf;
 
-    reg [7:0]  ci;                       // 行内字符索引
+    reg [8:0]  ci;                       // 行内字符索引 (9 位: 行 304 字符)
     reg [27:0] gap;
     reg        sending;
 
@@ -154,8 +179,17 @@ module app_status_uart #(
         else if (ci >= 8'd197 && ci < 8'd201)       lc = hexd({sn_wu, 16'b0}, ci - 8'd197);
         // PO 17 位: 5 个 hex 数字 — 17 位值左对齐到 nibble 窗口需 12 位零扩
         // (同 OC 字段; 用 15 位扩会把值再左移 3 位, 实测显示 E06F0 而非 1C0DE)
-        else if (ci >= 8'd205 && ci < 8'd210)       lc = hexd({sn_po, 12'b0}, ci - 8'd205);
-        else if (ci >= 8'd214 && ci < 8'd218)       lc = hexd({sn_px, 16'b0}, ci - 8'd214);
+        else if (ci >= 9'd205 && ci < 9'd210)       lc = hexd({sn_po, 12'b0}, ci - 9'd205);
+        else if (ci >= 9'd214 && ci < 9'd218)       lc = hexd({sn_px, 16'b0}, ci - 9'd214);
+        // ---- P5f 追加段 (UDP app; 前 218 字符不动) ----
+        else if (ci >= 9'd223 && ci < 9'd231)       lc = hexd(sn_urb, ci - 9'd223);
+        else if (ci >= 9'd236 && ci < 9'd244)       lc = hexd(sn_umm, ci - 9'd236);
+        else if (ci >= 9'd249 && ci < 9'd253)       lc = hexd({sn_urf, 16'b0}, ci - 9'd249);
+        else if (ci >= 9'd258 && ci < 9'd262)       lc = hexd({sn_uov, 16'b0}, ci - 9'd258);
+        else if (ci >= 9'd267 && ci < 9'd271)       lc = hexd({sn_upc, 16'b0}, ci - 9'd267);
+        else if (ci >= 9'd276 && ci < 9'd280)       lc = hexd({sn_upa, 16'b0}, ci - 9'd276);
+        else if (ci >= 9'd285 && ci < 9'd293)       lc = hexd(sn_utb, ci - 9'd285);
+        else if (ci >= 9'd298 && ci < 9'd302)       lc = hexd({sn_utf, 16'b0}, ci - 9'd298);
     end
 
     wire uart_busy;
@@ -167,7 +201,7 @@ module app_status_uart #(
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            ci <= 8'd0; gap <= 28'd0; sending <= 1'b0;
+            ci <= 9'd0; gap <= 28'd0; sending <= 1'b0;
             sn_st <= 4'd0; sn_nx <= 32'd0; sn_ua <= 32'd0; sn_rn <= 32'd0;
             sn_rx <= 32'd0; sn_tx <= 32'd0; sn_rw <= 16'd0; sn_tf <= 16'd0;
             sn_mm <= 16'd0; sn_oc <= 17'd0; sn_ev <= 16'd0; sn_dp <= 16'd0;
@@ -175,6 +209,9 @@ module app_status_uart #(
             sn_dl <= 16'd0; sn_fi <= 16'd0; sn_rs <= 16'd0;
             sn_ak <= 16'd0; sn_ad <= 16'd0; sn_ts <= 3'd0; sn_wq <= 16'd0;
             sn_wm <= 16'd0; sn_wu <= 16'd0; sn_po <= 17'd0; sn_px <= 16'd0;
+            sn_urb <= 32'd0; sn_umm <= 32'd0; sn_utb <= 32'd0;
+            sn_urf <= 16'd0; sn_uov <= 16'd0; sn_upc <= 16'd0;
+            sn_upa <= 16'd0; sn_utf <= 16'd0;
         end else begin
             if (!sending) begin
                 // 行间间隔到 -> 锁存快照并开新行
@@ -189,19 +226,24 @@ module app_status_uart #(
                     sn_ak <= stat_ack;   sn_ad <= stat_ack_drop;
                     sn_ts <= fsm_state;  sn_wq <= winq0; sn_wm <= wu_mark0;
                     sn_wu <= stat_wu;    sn_po <= pool;  sn_px <= stat_pool_exh;
-                    ci       <= 8'd0;
+                    sn_urb <= udp_rx_bytes; sn_umm <= udp_mismatch;
+                    sn_utb <= udp_tx_bytes;
+                    sn_urf <= udp_rx_frames; sn_uov <= udp_drop_ovf;
+                    sn_upc <= udp_drop_crc;  sn_upa <= udp_drop_part;
+                    sn_utf <= udp_tx_frames;
+                    ci       <= 9'd0;
                     sending  <= 1'b1;
                 end else begin
                     gap <= gap - 28'd1;
                 end
             end else if (uart_go) begin
                 // 本拍发送 lc (ci 指向它), 推进索引
-                if (ci == (LINE_LEN - 8'd1)) begin
+                if (ci == (LINE_LEN - 9'd1)) begin
                     sending <= 1'b0;
                     gap     <= GAP_TICKS;
-                    ci      <= 8'd0;
+                    ci      <= 9'd0;
                 end else begin
-                    ci <= ci + 8'd1;
+                    ci <= ci + 9'd1;
                 end
             end
         end

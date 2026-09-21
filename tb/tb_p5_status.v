@@ -26,6 +26,10 @@ module tb_p5_status;
     reg [2:0]  fsm_state;
     reg [16:0] pool;
     reg [16:0] rx_occ;
+    // P5f: UDP app 观测字段源
+    reg [31:0] udp_rx_bytes, udp_mismatch, udp_tx_bytes;
+    reg [15:0] udp_rx_frames, udp_drop_ovf, udp_drop_crc, udp_drop_part,
+               udp_tx_frames;
     wire txd;
 
     integer fd;
@@ -47,6 +51,11 @@ module tb_p5_status;
         .stat_ack(stat_ack), .stat_ack_drop(stat_ack_drop), .fsm_state(fsm_state),
         .winq0(winq0), .wu_mark0(wu_mark0), .stat_wu(stat_wu), .pool(pool),
         .stat_pool_exh(stat_px),
+        // P5f: UDP app 字段
+        .udp_rx_bytes(udp_rx_bytes), .udp_mismatch(udp_mismatch),
+        .udp_rx_frames(udp_rx_frames), .udp_drop_ovf(udp_drop_ovf),
+        .udp_drop_crc(udp_drop_crc), .udp_drop_part(udp_drop_part),
+        .udp_tx_bytes(udp_tx_bytes), .udp_tx_frames(udp_tx_frames),
         .txd(txd)
     );
 
@@ -96,16 +105,22 @@ module tb_p5_status;
         stat_ack = 16'hBEEF; stat_ack_drop = 16'h00CD; fsm_state = 3'd5;
         winq0 = 16'hC000; wu_mark0 = 16'h6035; stat_wu = 16'h0011;
         pool = 17'h1C0DE; stat_px = 16'h0009;
+        // P5f 字段: 同样每个字段一个不同图案
+        udp_rx_bytes = 32'h00ABCDEF; udp_mismatch = 32'h00000047;
+        udp_tx_bytes = 32'h12345678;
+        udp_rx_frames = 16'h05DC; udp_drop_ovf = 16'h000A;
+        udp_drop_crc = 16'h0002;  udp_drop_part = 16'h0001;
+        udp_tx_frames = 16'h0BB8;
         fd = $fopen("status_line.txt", "wb");   // 二进制: 文本模式会把 0x0A 写成 0x0D0A
         #200; rst_n = 1;
         // 等首行开始 (txd 空闲高 -> start 沿)
         @(negedge txd);
-        // P5b: 行 168 -> 220 字符, 读循环上界跟着放宽 (原 200 会截尾)
-        for (ci = 0; ci < 240; ci = ci + 1) begin
+        // P5b: 行 168 -> 220 字符; P5f: 220 -> 304 字符, 读循环上界跟着放宽
+        for (ci = 0; ci < 330; ci = ci + 1) begin
             get_byte(dbyte);
             nchar = nchar + 1;
             $fwrite(fd, "%c", dbyte);
-            if (dbyte == 8'h0A) ci = 240;      // LF: 行结束 (上界一致)
+            if (dbyte == 8'h0A) ci = 330;      // LF: 行结束 (上界一致)
             else @(negedge txd);               // 下一字符 start 沿 (逐字符重对齐)
         end
         $fclose(fd);

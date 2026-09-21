@@ -131,6 +131,24 @@ sim/p5e_udp/*
 !sim/p5e_udp/*.py
 !sim/p5e_udp/*.sh
 
+# P5f 专题 (UDP app RX 字节损坏) 的仿真门与验证报告:
+# 见 ISSUE_RX_BYTE_CORRUPTION.md —— 只保留 TB/驱动源码与查询脚本/报告
+sim/udprx/*
+!sim/udprx/*.v
+!sim/udprx/*.bat
+!sim/udprx/*.tcl
+!sim/udprx/*.py
+sim/udprx_chain/*
+!sim/udprx_chain/*.v
+!sim/udprx_chain/*.bat
+!sim/udprx_chain/*.tcl
+!sim/udprx_chain/*.py
+p5f_verify/*
+!p5f_verify/*.rpt
+!p5f_verify/*.tcl
+!p5f_verify/*.py
+!p5f_verify/*.log
+
 # P5e-T1/T2 门目录 (sim/p5udp = T1 分流器单元门; sim/p5e_t2 = T2 目标锁存守卫 + 真 wrapper
 # 全链门): 只保留驱动 (bat/tcl/py/sh), 其余 (memh/wdb/xsim.dir/hls_files_w.f/日志/warn_*.txt) 是产物
 sim/p5udp/*
@@ -160,3 +178,8 @@ sim/*.txt
 
 # Python 字节码缓存 (工具/门目录下的 gen_stim/rank_cones 等)
 __pycache__/
+
+# P5f: app UDP TX 通路**线速**测量门 (app→udp_tx_cfg→udp_tx_frame→mac_tx_64,
+#      无 tx_arb): 帧周期/载荷 Mbps; 档位由 -d GAP*/PL* 选择 (见 .bat 头注释)
+sim/p5e_rate/*
+!sim/p5e_rate/run_tb_rate.bat

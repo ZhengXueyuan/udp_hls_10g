@@ -19,15 +19,27 @@
 //   · 每帧载荷 = `i_paylen` 字节 (板级 = 1472 = MTU 1518 - 42), 载荷 = 图案流的
 //     **连续前缀**, 跨帧连续 (与 peer --udp-rx-only 的"自 offset 0 连续校验"一致;
 //     跨会话不重置 —— UDP 无会话概念, 只有 i_en 的上升沿重启, 见下)。
-//   · 限速 = 帧间 `TX_GAP` 个空闲拍 (参数)。0 = 全速 (线上约 957 Mbps, 受
-//     mac_tx 线速限制); 默认 58000 ⇒ 帧周期 1538+58000 = 59538 拍 @125MHz
-//     ⇒ 1472*8/476.3us ≈ **24.7 Mbps payload (≈25.4 Mbps 线上)**。
-//     选 25 Mbps 的理由: T6 板级实测 (peer.cpp:2529 记录) —— 参考对端
-//     (peer.exe --udp-rx-only) 在 20/25 Mbps 全收, >=30 Mbps 丢 ~2/3 帧。
-//     板级验收用 `peer --rate-mbps 20` ⇒ 本默认与它同量级, 双向都稳。
+//   · 限速 = 生成流里帧间插入 `TX_GAP` 个空闲拍 (参数)。**默认 0 = 全速** ——
+//     理由见下"P5f 线速"段 (1G 线速就是本模块的验收口径)。
+//   · **生成与传输必须并行 (P5f 的核心改动)**: 生成器按 1 字节/拍 产生图案流,
+//     而下游 `udp_tx_frame` 是**帧级 store-and-forward** (UDP 校验和要覆盖全载荷
+//     ⇒ 必须整帧收完才发头) —— 它的 `s_axis_tready` 在**整个发帧窗口都是 0**。
+//     若生成器直接接帧器, "生成 1472 拍" 与 "线上 1538 拍" 就**串行**:
+//     帧周期 = 1840(生成) + ~1390(组帧输出) = **3231 拍 ⇒ 只有 455.6 Mbps 载荷**
+//     (P5f 前实测, 见 sim/p5e_rate) —— 比同一 RTL 在 TX_GAP=58000 下的
+//     24.6 Mbps 高不了多少, 远不是"全速"。
+//     ⇒ 本模块自带一个 256 x 73 的字 FIFO (tdata+tkeep+tlast): 生成器**只受
+//     FIFO 空间限制**, 在帧器发上一帧时继续把下一帧推入 FIFO ⇒ 生成与传输重叠,
+//     帧周期回到**线速口径** 1538 拍 ⇒ 957 Mbps 载荷 (P5f 实测见报告)。
+//     FIFO 深度 256 字 = 1.39 帧 @1472B; 稳态占用在 [184, 256] 字之间 (帧器读
+//     184 字/帧、生成器写 ~184 字/帧) ⇒ 结构性不欠载 (余量 72 字)。
 //   · `TX_BYTES != 0` = 一次会话发完即停 (done 粘滞); 0 (默认) = 连续不停。
-//   · AXIS 契约: m_* 是 pw_* 的**纯组合输出** (坑 4: 寄存器化 valid 会在消费拍后
-//     多挂一拍 ⇒ 同一 beat 被双采); tready=0 期间 pw_* 保持不变。
+//   · AXIS 契约: m_* 是 FWFT FIFO 的**纯组合输出** (坑 4: 寄存器化 valid 会在
+//     消费拍后多挂一拍 ⇒ 同一 beat 被双采); tready=0 期间 FIFO 头字保持不变。
+//   · **帧收尾 (frm_close) 判据 = 末字"推入 FIFO"拍** (P5f 从"末字被消费"改)。
+//     理由: 生成器跑在传输之前, 它看不到也不该等末字的线上消费。stat_tx_frames/
+//     stat_tx_bytes/TX_GAP 都记在**推送侧** ⇒ "app 已发" = "app 已交付", 与
+//     下游帧器计数 (udp_tx_frame.stat_frames) 在无丢帧时逐帧一致。
 //
 // 【RX】(← wrapper 的 app_udp_rx_* ← udp_split 帧缓冲播放器, 帧级 store-and-forward)
 //   · 载荷**逐字节**比对图案流, 失配计 stat_mismatch (字节数, 粘滞)。
@@ -66,8 +78,12 @@ module app_udp_pattern #(
     // 字节图案 (gap 语义: seg_len_n 见下), 便于 peer --udp-rx-only N 对账。
     parameter [31:0] TX_BYTES = 32'd0,
     parameter [63:0] SEED     = 64'h9E3779B97F4A7C15,
-    // 帧间空闲拍数 (限速; 0 = 全速)。默认 58000 ⇒ ~24.7 Mbps payload (见头注释)
-    parameter [15:0] TX_GAP   = 16'd58000,
+    // 生成流里帧间空闲拍数 (限速; 0 = 全速 = 线速口径, 见头注释)。
+    // P5f: 默认从 58000 (~24.6 Mbps) 改为 **0** —— 那个数字是 T6 按"HLS 慢路径
+    // 天花板 ~25 Mbps"标定的, 而 P5e 之后 app 通路**不经 HLS** (fast path),
+    // 该标定不适用 ⇒ 板上默认行为由"限速演示"变为"全速发流" (行为变更, 已记录)。
+    // 要恢复限速演示只需在例化处传参 (wrapper 一行), 不新增构建配置。
+    parameter [15:0] TX_GAP   = 16'd0,
     // 载荷长度守卫阈值 —— **必须镜像 rtl/udp_tx_frame.v 的 PLEN_MAX** (默认 1500):
     //   seg_len > PLEN_MAX 的帧会被 udp_tx_frame **帧内中止** (零字节上线),
     //   若本模块的 LFSR 照常推进, 线上图案流就出现一个空洞 (下游 peer 的连续
@@ -192,29 +208,38 @@ module app_udp_pattern #(
     reg  [1:0]  txs;
     reg  [63:0] tx_lfsr;
     reg  [11:0] seg_len;      // 本帧载荷长度 (帧起锁存 i_paylen)
-    reg  [11:0] seg_sent;     // 本帧已交付字节
+    reg  [11:0] seg_sent;     // 本帧已**推入 FIFO**的字节
     reg  [3:0]  bcnt;         // 当前字已凑字节数
     reg  [63:0] stg;          // 当前字累积 (低 bcnt 字节)
-    reg  [63:0] pw_data;      // 已呈交字 (tready=0 期间保持)
-    reg  [7:0]  pw_keep;
-    reg  [3:0]  pw_n;
-    reg         pw_last;
-    reg         pw_valid;
-    reg         nul_pend;     // 本帧 = 0 长数据报 (呈交 1 拍 tkeep=0 + tlast)
+    reg  [72:0] txf_in;       // 推送字 {tlast, tkeep, tdata}
+    reg         txf_wr;       // 推送请求 (与 !full 同门; 见下)
+    reg         nul_pend;     // 本帧 = 0 长数据报 (推 1 拍 tkeep=0 + tlast)
     reg  [15:0] gap_cnt;      // 帧间限速倒计时
     reg  [31:0] remain;       // TX_BYTES != 0 时的剩余字节
     reg         first_frm;    // 本会话首帧 (复位置 1, 首帧启动拍清)
 
-    // 呈交口 (纯组合; 坑 4)
-    assign m_tdata  = pw_data;
-    assign m_tkeep  = pw_keep;
-    assign m_tvalid = pw_valid;
-    assign m_tlast  = pw_last;
+    // ---- 字 FIFO: 生成器 → 帧器 (让"生成"与"线上传输"并行, 见头注释) ----
+    wire [72:0] txf_out;
+    wire        txf_empty, txf_full;
+    wire        txf_rd = m_tvalid && m_tready;     // 头字被下游消费
+    assign m_tdata  = txf_out[63:0];
+    assign m_tkeep  = txf_out[71:64];
+    assign m_tvalid = !txf_empty;
+    assign m_tlast  = txf_out[72];
+    fifo_sync #(.W(73), .D(256), .AW(8)) u_txf (
+        .clk(clk), .rst_n(rst_n),
+        .wr(txf_wr && !txf_full), .din(txf_in),
+        .rd(txf_rd), .dout(txf_out),
+        .empty(txf_empty), .full(txf_full),
+        .dbg_wptr(), .dbg_rptr(), .dbg_full(), .dbg_empty()
+    );
 
     wire [11:0] left = seg_len - seg_sent;                     // 本帧剩余字节
     wire [3:0]  need = (left >= 12'd8) ? 4'd8 : left[3:0];     // 本字字节数
+    // 本字是不是本帧末字 (tlast)
+    wire        last_b = ((seg_sent + {8'b0, need}) >= seg_len);
     wire [31:0] rem_n = (TX_BYTES == 32'd0) ? 32'd0 :
-                        ((remain >= {20'b0, pw_n}) ? (remain - {20'b0, pw_n}) : 32'd0);
+                        ((remain >= {20'b0, need}) ? (remain - {20'b0, need}) : 32'd0);
     // 下一帧长度: TX_BYTES=0 ⇒ 恒 i_paylen (连续模式); 非 0 ⇒ 末帧取余数
     // (逐字节精确: 线上恰好 TX_BYTES 字节)。
     // ⚠️ rem_eff 的存在理由: remain 是寄存器, 而"会话首帧"的启动拍与 remain<=TX_BYTES
@@ -227,9 +252,15 @@ module app_udp_pattern #(
     // 冻结 LFSR (载荷常数 0xA5) 保住"线上图案流连续" (见 PLEN_MAX 注释)
     wire        pay_ok  = (seg_len <= PLEN_MAX);
     wire [7:0]  gen_byte = pay_ok ? tx_lfsr[31:24] : 8'hA5;
-    wire        pass = pw_valid && m_tready;                   // 呈交被消费
-    // 帧收尾 (末字被消费) —— 帧计数/限速/done 判定的唯一落点
-    wire        frm_close = pass && pw_last;
+    // 生成本拍这一字节 (有空间且本帧还有字节没生成)
+    wire        gen_ok  = (txs == T_FRM) && !txf_full && !nul_pend &&
+                          (seg_sent < seg_len);
+    // 本拍产出的字节正好凑齐本字 ⇒ 同拍推入 FIFO (零气泡: 无独立"呈交"拍)
+    wire        push_now = gen_ok && ((bcnt + 4'd1) >= need);
+    // 帧收尾 (末字已推入 FIFO) —— 帧计数/限速/done 判定的唯一落点 (P5f: 推送侧)
+    wire        nul_push = (txs == T_FRM) && nul_pend && !txf_full;
+    wire        frm_close = push_now ? last_b : nul_push;
+    wire        push_any  = push_now || nul_push;
 
     //=========================================================================
     // RX 侧: 字节串行逐字节比对, 1 字前瞻寄存器 ⇒ 8 字节恰 8 拍 (II=1 无缝)
@@ -252,8 +283,8 @@ module app_udp_pattern #(
         if (!rst_n) begin
             txs <= T_IDLE; tx_lfsr <= SEED;
             seg_len <= 12'd0; seg_sent <= 12'd0; bcnt <= 4'd0; stg <= 64'd0;
-            pw_data <= 64'd0; pw_keep <= 8'h00; pw_n <= 4'd0; pw_last <= 1'b0;
-            pw_valid <= 1'b0; nul_pend <= 1'b0; gap_cnt <= 16'd0; remain <= 32'd0;
+            txf_in <= 73'd0; txf_wr <= 1'b0;
+            nul_pend <= 1'b0; gap_cnt <= 16'd0; remain <= 32'd0;
             first_frm <= 1'b1;
             stat_tx_bytes <= 32'd0; stat_tx_frames <= 32'd0;
             active <= 1'b0; done <= 1'b0;
@@ -268,6 +299,7 @@ module app_udp_pattern #(
             //=================================================================
             // TX FSM
             //=================================================================
+            txf_wr <= 1'b0;          // 脉冲型: 每拍默认清零 (坑 6)
             case (txs)
                 T_IDLE: begin
                     // 默认不激活: i_en=0 (未使能) 或 i_tx_ready=0 (peer 表空 =
@@ -285,39 +317,32 @@ module app_udp_pattern #(
                     end
                 end
                 T_FRM: begin
-                    if (!pw_valid) begin
-                        if (nul_pend) begin
-                            // 0 长数据报: 1 拍 {tkeep=0, tlast=1}
-                            // (udp_tx_frame 的 wr 只按 tkeep!=0 ⇒ plen=0 ⇒ 线上 42+8
-                            //  字节的合法空数据报; 与 peer --udp-paylen 0 语义一致)
-                            pw_data  <= 64'd0;
-                            pw_keep  <= 8'h00;
-                            pw_n     <= 4'd0;
-                            pw_last  <= 1'b1;
-                            pw_valid <= 1'b1;
-                        end else if (bcnt < need) begin
-                            // 产 1 字节 (先取后推进 —— 与 peer/app_pattern 同款;
-                            // 超长帧冻结 LFSR, 见 pay_ok)
-                            bcnt    <= bcnt + 4'd1;
-                            stg     <= {stg[55:0], gen_byte};
-                            if (pay_ok) tx_lfsr <= xs_next(tx_lfsr);
+                    // 0 长数据报: 推 1 拍 {tkeep=0, tlast=1}
+                    // (udp_tx_frame 的 wr 只按 tkeep!=0 ⇒ plen=0 ⇒ 线上 42+8
+                    //  字节的合法空数据报; 与 peer --udp-paylen 0 语义一致)
+                    if (nul_push) begin
+                        txf_wr <= 1'b1;
+                        txf_in <= {1'b1, 8'h00, 64'd0};
+                    end else if (gen_ok) begin
+                        // 产 1 字节 (先取后推进 —— 与 peer/app_pattern 同款;
+                        // 超长帧冻结 LFSR, 见 pay_ok)
+                        if (push_now) begin
+                            // 本字节凑齐本字 ⇒ **同拍推入** (无独立"呈交"拍)
+                            txf_wr        <= 1'b1;
+                            txf_in        <= {last_b, kmask8(need),
+                                              ljust8({stg[55:0], gen_byte}, need)};
+                            seg_sent      <= seg_sent + {8'b0, need};
+                            stat_tx_bytes <= stat_tx_bytes + {28'b0, need};
+                            remain        <= rem_n;
+                            bcnt          <= 4'd0;
+                            stg           <= 64'd0;
                         end else begin
-                            // 字凑齐 (bcnt == need != 0) ⇒ 呈交
-                            pw_data  <= ljust8(stg, need);
-                            pw_keep  <= kmask8(need);
-                            pw_n     <= need;
-                            pw_last  <= ((seg_sent + {8'b0, need}) >= seg_len);
-                            pw_valid <= 1'b1;
-                            bcnt     <= 4'd0;
-                            stg      <= 64'd0;
+                            bcnt <= bcnt + 4'd1;
+                            stg  <= {stg[55:0], gen_byte};
                         end
+                        if (pay_ok) tx_lfsr <= xs_next(tx_lfsr);
                     end
-                    if (pass) begin
-                        pw_valid      <= 1'b0;
-                        seg_sent      <= seg_sent + {8'b0, pw_n};
-                        stat_tx_bytes <= stat_tx_bytes + {28'b0, pw_n};
-                        remain        <= rem_n;
-                    end
+                    // 帧收尾: 计数/限速/done (推送侧, 见头注释)
                     if (frm_close) begin
                         stat_tx_frames <= stat_tx_frames + 32'd1;
                         gap_cnt        <= TX_GAP;
@@ -394,7 +419,7 @@ module app_udp_pattern #(
             //                    d3 = TX 会话在跑 / 已发完
             //=================================================================
             led[0] <= (led[0] || i_tx_ready);
-            led[1] <= (cmp_hit || pass);
+            led[1] <= (cmp_hit || txf_rd);
             if (stat_mismatch != 32'd0) led[2] <= 1'b1;
             led[3] <= (active || done);
         end

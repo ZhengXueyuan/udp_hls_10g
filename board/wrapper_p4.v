@@ -666,6 +666,21 @@ module wrapper_p4 (
     assign app_reg_wr    = 1'b0;
     assign app_reg_wdata = 32'd0;
 
+    // ---- P5f: app_status_uart 新增的 UDP app 观测输入源 ----
+    // 声明必须**先于**下面的例化: xvlog 先声明后用, 后声明会被判
+    // "already implicitly declared" 硬错 (坑 22 同族); 更坏的变体是静默 1 位
+    // 隐式线 (坑 24 —— 高位全 Z 且所有传统检查都不报)。
+    // 默认构建里这两组是"已声明未用" (零网表影响, 同原有 app_udp_stat_* 状态)。
+    wire [31:0] udpapp_tx_bytes, udpapp_tx_frames, udpapp_rx_bytes, udpapp_rx_frames;
+    wire [31:0] udpapp_rx_null, udpapp_mismatch;
+    wire        udpapp_active, udpapp_done;
+    wire [3:0]  udpapp_led;
+
+    wire [31:0] app_udp_stat_frames, app_udp_stat_bytes, app_udp_stat_null,
+                app_udp_stat_drop_crc, app_udp_stat_drop_ovf,
+                app_udp_stat_drop_part, app_udp_stat_drop_excl,
+                app_udp_stat_hls_frames, app_udp_stat_hls_drop,
+                app_udp_stat_hls_split;
     app_status_uart u_app_status (
         .clk            (gmii_clk),
         .rst_n          (reset_n),
@@ -696,6 +711,28 @@ module wrapper_p4 (
         .stat_wu        (app_stat_wu[15:0]),
         .pool           (app_pool),
         .stat_pool_exh  (app_stat_pool_exh[15:0]),
+        // P5f: UDP app 通路板级观测 (P5e 缺口: 这 8 根线此前只接 LED 或悬空,
+        // PC→板 方向的校验结果与全部丢帧计数在板上**读不出来**)。
+        // 默认构建 (无 APP_MODE) 恒接常数 ⇒ 与 P4 逐位等价 (新增端口常量)。
+`ifdef APP_MODE
+        .udp_rx_bytes   (udpapp_rx_bytes),
+        .udp_mismatch   (udpapp_mismatch),
+        .udp_rx_frames  (udpapp_rx_frames[15:0]),
+        .udp_drop_ovf   (app_udp_stat_drop_ovf[15:0]),
+        .udp_drop_crc   (app_udp_stat_drop_crc[15:0]),
+        .udp_drop_part  (app_udp_stat_drop_part[15:0]),
+        .udp_tx_bytes   (udpapp_tx_bytes),
+        .udp_tx_frames  (udpapp_tx_frames[15:0]),
+`else
+        .udp_rx_bytes   (32'd0),
+        .udp_mismatch   (32'd0),
+        .udp_rx_frames  (16'd0),
+        .udp_drop_ovf   (16'd0),
+        .udp_drop_crc   (16'd0),
+        .udp_drop_part  (16'd0),
+        .udp_tx_bytes   (32'd0),
+        .udp_tx_frames  (16'd0),
+`endif
         .txd            (app_uart_txd)
     );
 `else
@@ -1390,11 +1427,6 @@ module wrapper_p4 (
     wire        app_udp_rx_tvalid, app_udp_rx_tlast, app_udp_rx_sof;
     wire [15:0] app_udp_rx_len, app_udp_rx_src_port;
     wire [31:0] app_udp_rx_src_ip;
-    wire [31:0] app_udp_stat_frames, app_udp_stat_bytes, app_udp_stat_null,
-                app_udp_stat_drop_crc, app_udp_stat_drop_ovf,
-                app_udp_stat_drop_part, app_udp_stat_drop_excl,
-                app_udp_stat_hls_frames, app_udp_stat_hls_drop,
-                app_udp_stat_hls_split;
 `ifdef APP_MODE
     // =====================================================================
     // P5e-T1: UDP 分流 shim (接收侧)
@@ -1589,10 +1621,6 @@ module wrapper_p4 (
     wire        app_udp_tx_tvalid, app_udp_tx_tready, app_udp_tx_tlast;
     wire        app_udp_tx_ready;    // 1 = peer 已学习 (app 可推帧)
     // UDP app 演示的统计线束 (板级不可观测, 由 TB/将来状态行读; 不接 = 无消费者)
-    wire [31:0] udpapp_tx_bytes, udpapp_tx_frames, udpapp_rx_bytes, udpapp_rx_frames;
-    wire [31:0] udpapp_rx_null, udpapp_mismatch;
-    wire        udpapp_active, udpapp_done;
-    wire [3:0]  udpapp_led;
 
     // shim → 帧器 → 合流器 内部线 + cfg 锁存线 + 统计
     wire [63:0] utx_tdata, utx2_tdata;
@@ -1615,11 +1643,15 @@ module wrapper_p4 (
     // RX 数据流: mac_rx → classify.slow → u_udp_split.app_rx_* → 本模块校验
     // i_paylen 恒 12'd1472 = app 契约上限 (1518 - 42); 超过由 udp_tx_frame 的
     // PLEN_MAX=1500 守卫兜底 (stat_drop_len)。
-    // TX_GAP 默认 58000 拍 ⇒ ~24.7 Mbps payload (限速; 理由见 app_udp_pattern
-    // 头注释: 参考对端 peer.exe 在 20/25 Mbps 全收)。
+    // TX_GAP = **0 (全速)** —— P5f 线速验收口径。原 58000 拍 (~24.7 Mbps) 是按
+    // T6 在旧位流上测的"HLS 慢路径天花板 ~25 Mbps"标定的, 而 P5e 之后 app 通路
+    // **走 fast path 不经 HLS** ⇒ 该标定不适用 (默认值偏保守)。
+    // **行为变更 (已记录)**: 板上默认从"限速演示"变为"学到 peer 后全速发流"
+    // (~929 Mbps 载荷 @1472B/帧)。要恢复限速演示只需把本行改回 16'd58000 ——
+    // **不新增构建配置** (单参数, 不引入 ifdef)。
     // **默认不激活**: i_en=1 但 i_tx_ready = peer_v = 0 (没收到过对端帧) ⇒ 零帧。
     // =====================================================================
-    app_udp_pattern #(.TX_BYTES(32'd0), .TX_GAP(16'd58000)) u_app_udp (
+    app_udp_pattern #(.TX_BYTES(32'd0), .TX_GAP(16'd0)) u_app_udp (
         .clk            (gmii_clk),
         .rst_n          (reset_n),
         .i_en           (1'b1),              // 板级: 演示常使能 (TX 另受 peer 门)

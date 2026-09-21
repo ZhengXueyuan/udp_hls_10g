@@ -358,8 +358,15 @@ module tb_p5e_udp_wrapper;
         chk(fold32(csum_acc) === 16'hFFFF, "④ UDP 校验和正确 (伪头+头+载荷)");
         for (i = 0; i < PLEN; i = i + 1)
             chk(uf[42+i] === pay[i], "④ 载荷逐字节 = 图案 (TX 自 SEED 起)");
-        chk(u_dut.u_udp_tx_cfg.stat_frames == 32'd1, "④ shim 放行 1 帧");
-        chk(u_dut.u_udp_tx.stat_frames == 32'd1,     "④ 帧器发出 1 帧");
+        // P5f: 默认 TX_GAP 由 58000 改 0 (板级线速口径) ⇒ 学到 peer 后 app 自由跑,
+        // 本窗口内会有多帧上线 ⇒ **帧数判据从 `==1` 放宽为 `>=1`** (逐字节内容判据
+        // 一字未动: uf[] 存的仍是**第一帧**, 上面 15 项逐字段校验就是链路正确性的
+        // 硬证据)。"恰一帧"这条性质现在由限速参数与 sim/p5e_rate 的量速门负责。
+        chk(u_dut.u_udp_tx_cfg.stat_frames >= 32'd1, "④ shim 放行 >=1 帧");
+        chk(u_dut.u_udp_tx.stat_frames >= 32'd1,     "④ 帧器发出 >=1 帧");
+        // 链路口径自洽: 帧器发出的帧数 <= shim 放行的帧数 (后者不可能少记)
+        chk(u_dut.u_udp_tx.stat_frames <= u_dut.u_udp_tx_cfg.stat_frames,
+                                                     "④ 帧器帧数 <= shim 放行帧数");
         chk(u_dut.u_udp_tx.stat_drop_len == 32'd0,   "④ 无长度丢弃");
 
         // ================= ⑤ 与 TCP fast 路径共存 =================
