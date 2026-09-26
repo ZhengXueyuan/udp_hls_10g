@@ -1338,3 +1338,44 @@ P10 真正补上的是**直接的正存在性证明** (同一帧位置上 SW 与
 |---|---|
 | 长跑原始读数 | `p5diag_verify/v3_long{1,2}.line` |
 | 摘要工具 (**新, 把 §16.10 判据固化为可重跑检查**) | `tools/rxp_digest.py` (`--window` 全搜 + 整字精确匹配 + 桶剖面比对) |
+
+---
+
+## 16.12 提交与回归 (2026-09-27 凌晨)
+
+### 提交
+
+**`1c8ca6b` "P5f: UDP app RX 字节损坏专题 …"** —— 38 files, +7111/−11。
+先在分支 `p5f-rx-corruption` 上提交,再 **`--ff-only` 快进到 `master`**(历史线性,零冲突)。
+⚠️ **只在本机** —— merge 后 `master` 是 `ahead 1 of origin/master`,**未 push**。
+
+**不含**(都有理由): `p5diag_verify/keep/*.bit`(4×11 MB, 项目全局忽略 `*.bit`;留盘上, md5 见 §16.8)·
+`sim/rxpdiag/_mutbak/`(变异测试的 RTL 备份脚手架 —— 进库会让同名 RTL 出现两份, 且文档未引用)·
+`xsim.dir/`·`*.wdb`·`hs_err_*.dmp`·`dfx_runtime.txt`(产物)· 历史杂物(pcapng/FPGA/etl 等)。
+`.gitignore` 按既有风格补了 `sim/rxpdiag/` 与 `p5diag_verify/` 两段规则。
+
+**git 身份**:本机原先**未配置**任何 `user.name/email` ⇒ 首次提交被拒 (`Author identity unknown`)。
+已按仓库既有提交的署名设为**全局** `ZhengXueyuan <zh.xue.yuan@hotmail.com>` (用户授权) + 本仓库 local 同值。
+
+### 回归 (默认路径无影响的**动态**证据)
+
+| 门 | 结果 |
+|---|---|
+| **`sim/p4sim/run_matrix_p4dfix.sh` —— P4 全矩阵 16 门** | **16/16 `EXIT=0`** |
+| `sim/p5sim/run_tb_p5_status.bat` (默认状态行) | `P5 STATUS OK` |
+| `sim/p5udp/run_tb_udp_split.bat` (udp_split 单元) | `P5 UDP SPLIT UNIT GATE PASS` |
+| `sim/p5sim/run_tb_p5_wrapper.bat` (真 wrapper APP_MODE 全链) | `P5 WRAPPER OK` |
+| `sim/p5e_udp/run_tb_app_udp.bat pos` (UDP app 正例) | `P5E UDP APP GATE: OK` |
+| 四份日志 `implicitly declared` 计数 (坑 24 硬失败项) | **全 0** |
+
+⇒ 与 §16 的结构性论证 (三个 RTL 的新增全在 `ifdef APP_MODE`/`RXP_DIAG` 内, 且
+`udp_split`/`app_udp_pattern` 的例化本身就在 `wrapper_p4.v` 的 `APP_MODE` 块中) **一致**:
+**默认 (P4) 构建的回归不受本次改动影响**。
+
+### 本轮新踩的坑 (已并入 memory)
+
+**双引号 + `$(...)` 拼路径调用 .bat ⇒ 退出码 255、日志里一行判据都没有。**
+我用 `cmd //c "D:\...\$(basename $g)"` 想批量跑门 ⇒ cmd 报
+`'D:\repo\ECO\udp_hls_10g$' 不是内部或外部命令`。**危害是它看起来像门失败** ——
+若不看日志内容就会误判成"改动把门弄红了"。**正解: 单引号 + 写死的全路径, 一门一行, 不要拼路径。**
+(这是 memory 里已记的"双引号触发 MSYS2 路径转换"的**复发**, 新子形态是叠加了命令替换。)
