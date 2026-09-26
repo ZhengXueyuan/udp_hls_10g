@@ -133,6 +133,26 @@ sim/p5e_udp/*
 
 # P5f 专题 (UDP app RX 字节损坏) 的仿真门与验证报告:
 # 见 ISSUE_RX_BYTE_CORRUPTION.md —— 只保留 TB/驱动源码与查询脚本/报告
+
+# v1/v2/v3 插桩门的独立工作目录 (sim/rxpdiag): 只保留 TB 源码/驱动/检查脚本 + 少量文本证据;
+# _mutbak/ (变异测试的 RTL 备份, 是脚手架不是源码 —— 留着它会让同名 RTL 出现两份)、
+# xsim.dir/、*.wdb、hs_err_*.dmp、dfx_runtime.txt 全是产物
+sim/rxpdiag/*
+!sim/rxpdiag/*.v
+!sim/rxpdiag/*.bat
+!sim/rxpdiag/*.py
+!sim/rxpdiag/*.txt
+sim/rxpdiag/dfx_runtime.txt
+
+# 诊断位流验证目录 (p5diag_verify): 只保留**读数与报告** (.line 状态行 / samples*.txt 原始读数 /
+# *.rpt 时序与 DRC), 其余 (.tmp/g*.txt/p8_run.txt/日志) 是临时产物。
+# ⚠️ 位流本身 (**keep/*.bit, 每个 11 MB**) 靠全局 `*.bit` 规则排除 —— 项目既定策略是不跟踪位流;
+# 它们是板级复现的留档, 留在盘上, md5 记在 ISSUE §16.8 / §15.5。
+p5diag_verify/*
+!p5diag_verify/*.line
+!p5diag_verify/samples*.txt
+!p5diag_verify/*.rpt
+
 sim/udprx/*
 !sim/udprx/*.v
 !sim/udprx/*.bat

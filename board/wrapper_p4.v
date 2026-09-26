@@ -676,6 +676,33 @@ module wrapper_p4 (
     wire        udpapp_active, udpapp_done;
     wire [3:0]  udpapp_led;
 
+`ifdef RXP_DIAG
+    // ---- RXP_DIAG (ISSUE_RX_BYTE_CORRUPTION 专题): app_udp_pattern 首失配快照 ----
+    // 只在 RXP_DIAG + APP_MODE 构建里存在 (诊断位流专用); 声明必须先于下面的
+    // app_status_uart 例化 (坑 22/24: 先声明后用, 防隐式 1 位线静默截断)。
+    wire [31:0] ds_idx_w, ds_b1_w, ds_b2_w, ds_bg_w, ds_dup_w;
+    wire [7:0]  ds_got_w, ds_exp_w, ds_prev_w;
+    // v2 (2026-09-26): 首失配整字 (收/期望) + 帧内偏移桶
+    wire [63:0] ds_gw_w, ds_ew_w;
+    wire [31:0] ds_oz_w, ds_ol_w, ds_om_w, ds_oh_w;
+    // ---- RXP_DIAG v3 (2026-09-26): 帧边界记账 (udp_split 快照 → app_status_uart) ----
+    // 声明必须先于 udp_split (下面 ~1490 行) 的例化 —— 且 ds_cap_w 是**唯一**新增的
+    // 跨模块连线 (app_udp_pattern.ds_cap → udp_split.ds_cap)。
+    wire        ds_cap_w;
+    wire [63:0] v3_sw_w;
+    wire [8:0]  v3_sf_w;
+    wire        v3_sm_w;
+    wire [7:0]  v3_wd_w;
+    wire [9:0]  v3_fr_w, v3_fw_w, v3_fo_w, v3_fh_w;
+    wire [1:0]  v3_fs_w;
+    wire [15:0] v3_fn_w;
+    wire [9:0]  v3_pr_w, v3_pw_w, v3_ph_w;
+    wire [9:0]  v3_lr_w, v3_lw_w, v3_lo_w, v3_lh_w;
+    wire [15:0] v3_rc_w, v3_vc_w;
+    wire [9:0]  v3_vx_w, v3_vs_w, v3_vr_w;
+    wire [15:0] v3_vn_w;
+`endif
+
     wire [31:0] app_udp_stat_frames, app_udp_stat_bytes, app_udp_stat_null,
                 app_udp_stat_drop_crc, app_udp_stat_drop_ovf,
                 app_udp_stat_drop_part, app_udp_stat_drop_excl,
@@ -721,6 +748,30 @@ module wrapper_p4 (
         .udp_drop_ovf   (app_udp_stat_drop_ovf[15:0]),
         .udp_drop_crc   (app_udp_stat_drop_crc[15:0]),
         .udp_drop_part  (app_udp_stat_drop_part[15:0]),
+`ifdef RXP_DIAG
+        // RXP_DIAG 隐含 APP_MODE (build_p5_diag.tcl 同时定义两个宏); 上一行已有
+        // 尾逗号, 故此处端口列表**不带前导逗号** (带前导 = 双逗号语法错)。
+        .ds_idx (ds_idx_w),
+        .ds_b1  (ds_b1_w),  .ds_b2  (ds_b2_w),  .ds_bg  (ds_bg_w),
+        .ds_dup (ds_dup_w),
+        .ds_got (ds_got_w), .ds_exp (ds_exp_w), .ds_prev (ds_prev_w),
+        .ds_gw  (ds_gw_w),  .ds_ew  (ds_ew_w),
+        .ds_oz  (ds_oz_w),  .ds_ol  (ds_ol_w),
+        .ds_om  (ds_om_w),  .ds_oh  (ds_oh_w),
+        // v3 (2026-09-26): 帧边界记账 (udp_split 快照)
+        .v3_sw  (v3_sw_w),  .v3_sf  (v3_sf_w),
+        .v3_sm  (v3_sm_w),  .v3_wd  (v3_wd_w),
+        .v3_fr  (v3_fr_w),  .v3_fw  (v3_fw_w),
+        .v3_fo  (v3_fo_w),  .v3_fh  (v3_fh_w),
+        .v3_fs  (v3_fs_w),  .v3_fn  (v3_fn_w),
+        .v3_pr  (v3_pr_w),  .v3_pw  (v3_pw_w),
+        .v3_ph  (v3_ph_w),
+        .v3_lr  (v3_lr_w),  .v3_lw  (v3_lw_w),
+        .v3_lo  (v3_lo_w),  .v3_lh  (v3_lh_w),
+        .v3_rc  (v3_rc_w),  .v3_vc  (v3_vc_w),
+        .v3_vx  (v3_vx_w),  .v3_vs  (v3_vs_w),
+        .v3_vr  (v3_vr_w),  .v3_vn  (v3_vn_w),
+`endif
         .udp_tx_bytes   (udpapp_tx_bytes),
         .udp_tx_frames  (udpapp_tx_frames[15:0]),
 `else
@@ -1509,6 +1560,34 @@ module wrapper_p4 (
         .stat_hls_frames(app_udp_stat_hls_frames),
         .stat_hls_drop  (app_udp_stat_hls_drop),
         .stat_hls_split (app_udp_stat_hls_split)
+`ifdef RXP_DIAG
+        // v3 (2026-09-26): 帧边界记账快照。ds_cap 是本仪器**唯一**新增的跨模块
+        // 信号 (app_udp_pattern 是"首失配"的唯一判定者, 见 udp_split.v 的 v3 段)。
+        , .ds_cap       (ds_cap_w)
+        , .v3_sw        (v3_sw_w)
+        , .v3_sf        (v3_sf_w)
+        , .v3_sm        (v3_sm_w)
+        , .v3_wd        (v3_wd_w)
+        , .v3_fr        (v3_fr_w)
+        , .v3_fw        (v3_fw_w)
+        , .v3_fo        (v3_fo_w)
+        , .v3_fh        (v3_fh_w)
+        , .v3_fs        (v3_fs_w)
+        , .v3_fn        (v3_fn_w)
+        , .v3_pr        (v3_pr_w)
+        , .v3_pw        (v3_pw_w)
+        , .v3_ph        (v3_ph_w)
+        , .v3_lr        (v3_lr_w)
+        , .v3_lw        (v3_lw_w)
+        , .v3_lo        (v3_lo_w)
+        , .v3_lh        (v3_lh_w)
+        , .v3_rc        (v3_rc_w)
+        , .v3_vc        (v3_vc_w)
+        , .v3_vx        (v3_vx_w)
+        , .v3_vs        (v3_vs_w)
+        , .v3_vr        (v3_vr_w)
+        , .v3_vn        (v3_vn_w)
+`endif
     );
 `else
     assign srx_tdata = s_tdata;      // 纯别名 (默认构建逐位不变)
@@ -1678,6 +1757,18 @@ module wrapper_p4 (
         .active         (udpapp_active),
         .done           (udpapp_done),
         .led            (udpapp_led)
+`ifdef RXP_DIAG
+        , .ds_idx (ds_idx_w)
+        , .ds_b1  (ds_b1_w),  .ds_b2  (ds_b2_w),  .ds_bg  (ds_bg_w)
+        , .ds_dup (ds_dup_w)
+        , .ds_got (ds_got_w), .ds_exp (ds_exp_w), .ds_prev (ds_prev_w)
+        , .ds_v   ()
+        , .ds_gw  (ds_gw_w),  .ds_ew  (ds_ew_w)
+        , .ds_oz  (ds_oz_w),  .ds_ol  (ds_ol_w)
+        , .ds_om  (ds_om_w),  .ds_oh  (ds_oh_w)
+        // v3: 首失配触发脉冲 → udp_split (帧边界记账快照的唯一触发源)
+        , .ds_cap (ds_cap_w)
+`endif
     );
 
     udp_tx_cfg u_udp_tx_cfg (

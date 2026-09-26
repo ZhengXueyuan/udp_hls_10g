@@ -221,6 +221,36 @@ module udp_split #(
     output reg  [31:0] stat_drop_crc, stat_drop_ovf, stat_drop_part,
     output reg  [31:0] stat_drop_excl,
     output reg  [31:0] stat_hls_frames, stat_hls_drop, stat_hls_split
+`ifdef RXP_DIAG
+    //=========================================================================
+    // RXP_DIAG v3 (2026-09-26): 帧边界记账可见化 (ISSUE_RX_BYTE_CORRUPTION §13)
+    //=========================================================================
+    // 端口**一律追加在端口表末尾** (既有例化点按名连接 ⇒ 不接只是 unconnected
+    // 警告; 插在中间则任何按位置例化的调用点会静默接错)。除 ds_cap 外全部是
+    // 输出 (纯观测), 且整段只在 `RXP_DIAG 下达: 默认/P5 构建端口表逐位不变。
+    // 各字段的语义/宽度/偏移见 rtl/app_status_uart.v 的 v3 段注释 (真值源在那)。
+    //
+    // v3 输入: 首失配触发脉冲 (来自 app_udp_pattern.ds_cap, 与 v2 整字快照同拍)
+    , input  wire               ds_cap
+    // v3 输出 ①: 写侧指纹 —— "播放器正在播的这帧, 它的第一个数据字写进口是什么"
+    , output reg  [63:0]        v3_sw        // = SW
+    , output reg  [UDP_AW-1:0]  v3_sf        // = SF (该字写入的槽址; 与 FR 低 9 位对账)
+    , output reg                v3_sm        // = SM (1 = 命中/有效)
+    , output reg  [7:0]         v3_wd        // = WD (帧首拍写侧领先帧数)
+    // v3 输出 ②: 帧首记录 (current) / 上一帧 (prev) —— 均为 ds_cap 拍锁存值
+    , output reg  [UDP_AW:0]    v3_fr, v3_fw, v3_fo, v3_fh
+    , output reg  [1:0]         v3_fs
+    , output reg  [15:0]        v3_fn
+    , output reg  [UDP_AW:0]    v3_pr, v3_pw, v3_ph
+    // v3 输出 ③: 首失配当拍的**活值**
+    , output reg  [UDP_AW:0]    v3_lr, v3_lw, v3_lo, v3_lh
+    // v3 输出 ④: 回卷一致性 (回卷是否吃掉已提交未读数据)
+    , output reg  [15:0]        v3_rc, v3_vc        // 回卷次数 / 违例次数
+    , output reg  [UDP_AW:0]    v3_vx              // 违例时: (wptr-wsnap)-hold_rem
+    , output reg  [UDP_AW:0]    v3_vs              // 违例时: wsnap
+    , output reg  [UDP_AW:0]    v3_vr              // 违例时: uf_rptr
+    , output reg  [15:0]        v3_vn              // 违例时: 写侧提交序号
+`endif
 );
 
     //=========================================================================
@@ -642,5 +672,164 @@ module udp_split #(
     assign meta_src_ip   = u_meta_src_ip;
     assign meta_src_port = u_meta_src_port;
     assign meta_len      = u_meta_len;
+
+`ifdef RXP_DIAG
+    //=========================================================================
+    // RXP_DIAG v3: 帧边界记账可见化 (全部逻辑只在 `RXP_DIAG 下存在)
+    //=========================================================================
+    // 【为什么需要它】板级 v2 读数 (ISSUE_RX_BYTE_CORRUPTION §13): 5,699 帧里 9 帧
+    //   (0.158%) 被**整帧换成下一帧的内容** —— 字数/帧数/FCS 全精确, 四桶密度相同
+    //   ⇒ 内容被整体替换。本段把"坏帧开始时"的三类量锁出来:
+    //     ① 读侧帧首记账 (FR/FW/FO/FH + 上一帧 PR/PW/PH) 与首失配当拍活值
+    //        (LR/LW/LO/LH) ⇒ 指针/占用偏没偏、读者有没有跳过/重读一帧;
+    //     ② 写侧: 播放器当前这帧的**第一个数据字**在 u_uf 写口是什么 (SW/SF/SM/WD)
+    //        ⇒ "坏数据在写进缓冲时就已坏"(上游 mac_rx/udp_rx/FCS 盲区) vs
+    //          "写对了、读错或被覆写";
+    //     ③ 回卷一致性: 回卷丢弃字数必须恰 = 在收帧字数 (wptr-wsnap == hold_rem_u);
+    //        超出 ⇒ 回卷**吃掉了已提交未读**的数据 ⇒ 写指针越过读者 ⇒ 读者随后
+    //        读到的是**更晚那帧的内容**, 而字数/帧边界 (走边存) 不变 —— 与签名同形。
+    //
+    // 【"帧首"的精确含义】v3_fs_evt = app_rx_sof && app_rx_tvalid && app_rx_tready
+    //   = 播放器**收下本帧第一拍**的那一拍 (每帧恰一次)。为什么必须带 tready:
+    //   裸 app_rx_sof 在 tready=0 时持续为高 (R_NULL 态更是整个状态都高) ⇒ 会在
+    //   同一帧内重复触发, 把真正的"上一帧"记录冲掉 (那正是本仪器要保的量)。
+    // 【"首失配当拍"的精确含义】ds_cap 那一拍 (与 v2 的 ds_gw/ds_ew 写入同拍,
+    //   见 app_udp_pattern.v: assign ds_cap = wr_end && (cap_pend || rx_bad&&!ds_v_r))。
+    //   ⚠️ 已知滞后 (判读必读): app 的 RX 引擎 1 字前瞻 + 逐字节比对 ⇒ 失配字被
+    //   **收下**到 ds_cap 相隔 9 拍 (稳态: 收下 -> +2 收下下一字 -> +9 该字末 lane)。
+    //   若本帧在这 9 拍内已吐完并起了下一帧, 则 v3_f*/v3_fn 记的是**下一帧**的帧首
+    //   (v3_fn 会比 `II/paylen` 大 1 ⇒ 离线一眼可辨); v2 的 GW/EW/桶不受影响
+    //   (它们跟的是被比对的那个字, 走 cmp_sf 管线, 不是播放器状态)。
+    wire        v3_fs_evt = app_rx_sof && app_rx_tvalid && app_rx_tready;
+
+    // ---- 帧首记录 (活体; 在 v3_fs_evt 拍整体平移: current -> prev) ----
+    reg  [UDP_AW:0] fs_rptr, fs_wptr, fs_occ, fs_hold;
+    reg  [1:0]      fs_st;
+    reg  [15:0]     fp_rptr, fp_wptr, fp_hold;
+    reg  [15:0]     fs_cnt;               // 已发生的帧首次数 (= 交付帧序号 0 起)
+
+    // ---- 写侧: 每帧第一个数据字 (定址 = 提交序号 mod 8) ----
+    // 为什么要按**提交序号**定址而不是按槽址: 一帧 184 字而缓冲只有 512 字 ⇒ 槽址
+    //   2.78 帧就绕回一次, 按槽址匹配会同值多义; 而"播放器交付的第 m 帧 == 第 m 次
+    //   提交"(描述符 FIFO 一帧一条, 先入先出) ⇒ 按序号是一次无歧义的定址。
+    //   写侧领先播放器 <= 512/184 = 2.78 帧 (受 full 约束) ⇒ mod 8 一定命中;
+    //   越界由 WD 暴露 (WD>=8 ⇒ 表项已过期, 不可用)。
+    // 8x74 的 distributed RAM (ram_style 强制; 组合读与写口分离)。
+    (* ram_style = "distributed" *) reg [63:0]       wh_word [0:7];
+    (* ram_style = "distributed" *) reg [UDP_AW-1:0] wh_slot [0:7];
+    reg              wr_seen_r;           // 本帧第一个数据字已写
+    reg  [15:0]      w_commit_cnt;        // 已提交帧数 (播放器帧序的真值源)
+    reg  [63:0]      ww_r;                // 帧首拍锁存: 该帧第一个数据字
+    reg  [UDP_AW-1:0] ws_r;               // 帧首拍锁存: 该字写入的槽址
+    reg  [7:0]       wd_r;                // 帧首拍锁存: 写侧领先帧数
+    reg              wm_r;                // 帧首拍锁存: 表项有效
+
+    // ---- 回卷一致性 ----
+    reg  [UDP_AW:0]  v3_wsnap_r;          // 影子 wsnap (与 frame_fifo 内部逐拍同值)
+    reg              v3_rv_v;             // 已记录首个违例
+    wire [UDP_AW:0]  v3_rb_dist = uf_wptr - v3_wsnap_r;   // 回卷将丢弃的字数
+    wire             v3_rb_viol = uf_rollbk && (v3_rb_dist != hold_rem_u);
+    wire [UDP_AW:0]  v3_rb_exc  = v3_rb_dist - hold_rem_u;
+    wire [15:0]      v3_wdelta  = w_commit_cnt - fs_cnt;  // 帧首拍: 写侧领先帧数
+
+    // 写侧第一个数据字取样: 帧首 (meta/nul) 之后的第一次真正写入。
+    // 优先"清" ⇒ 与 meta_valid 同拍不可能有载荷字 (udp_rx 载荷首字在 w6, 比 w5
+    // 的 meta_valid 晚一拍), 故优先序不影响正确性, 只是防御性写法。
+    wire v3_first_wr = uf_wr && !wr_seen_r;
+    always @(posedge clk) begin
+        if (v3_first_wr) begin
+            wh_word[w_commit_cnt[2:0]] <= u_m_d;
+            wh_slot[w_commit_cnt[2:0]] <= uf_wptr[UDP_AW-1:0];
+        end
+    end
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)            wr_seen_r <= 1'b0;
+        else if (u_meta_valid || u_nul_cyc) wr_seen_r <= 1'b0;
+        else if (uf_wr)                     wr_seen_r <= 1'b1;
+    end
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)               w_commit_cnt <= 16'd0;
+        else if (u_commit_ok)     w_commit_cnt <= w_commit_cnt + 16'd1;
+    end
+
+    // 影子 wsnap: frame_fifo 在 snap 拍做 wsnap <= wptr (同一拍同一值), 故本影子与
+    // 其内部 wsnap **逐拍逐位相同**, 不需要动 frame_fifo (它不在本次改动范围内)。
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)       v3_wsnap_r <= {(UDP_AW+1){1'b0}};
+        else if (uf_snap) v3_wsnap_r <= uf_wptr;
+    end
+
+    // ---- 帧首记录更新 ----
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            fs_rptr <= 0; fs_wptr <= 0; fs_occ <= 0; fs_hold <= 0;
+            fs_st <= 2'd0; fp_rptr <= 0; fp_wptr <= 0; fp_hold <= 0; fs_cnt <= 16'd0;
+            ww_r <= 64'd0; ws_r <= 0; wd_r <= 8'd0; wm_r <= 1'b0;
+        end else if (v3_fs_evt) begin
+            fp_rptr <= fs_rptr; fp_wptr <= fs_wptr; fp_hold <= fs_hold;
+            fs_rptr <= uf_rptr; fs_wptr <= uf_wptr; fs_occ <= uf_occ;
+            fs_hold <= hold_rem_u; fs_st <= rstate;
+            // 写侧指纹 (按本帧序号定址; 见上面 mod 8 的论证)
+            ww_r    <= wh_word[fs_cnt[2:0]];
+            ws_r    <= wh_slot[fs_cnt[2:0]];
+            wd_r    <= v3_wdelta[7:0];
+            wm_r    <= (v3_wdelta >= 16'd1) && (v3_wdelta <= 16'd7);
+            fs_cnt  <= fs_cnt + 16'd1;
+        end
+    end
+
+    // ---- ds_cap 拍: 锁 current / prev / 活值 / 写侧指纹 ----
+    // ⚠️ **v3_fs_evt 与 ds_cap 可以同拍** —— 独立审查实测证伪了早先"结构上不可能"的
+    //    断言: 帧长 1472 (184 字) 时, 首个失配落在该帧第 ~178..181 字, 就会让
+    //    ds_cap (收下+9) 恰好落在下一帧的帧首拍上。
+    //    那时**失配字属于上一帧**, 而帧首寄存器在本拍仍是上一帧的记录 (沿后才更新)
+    //    ⇒ **一律用"更新前"的记录就是正确的那一份**。
+    //    早先那组 `v3_fs_evt ? ...` 同拍 mux 只加在 v3_fn/pr/pw/ph/sw/sf/sm/wd 上,
+    //    而 v3_fr/fw/fo/fh/fs 没有 ⇒ 同拍时记录**自相矛盾** (FR 是上一帧、FN 却是
+    //    新帧) ⇒ 板级会读出 FR-PR = 0 并被判成"读者跳帧/重读帧"的**假指针级缺陷**。
+    //    ⇒ 删除全部同拍 mux。
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            v3_fr <= 0; v3_fw <= 0; v3_fo <= 0; v3_fh <= 0; v3_fs <= 2'd0;
+            v3_fn <= 16'd0;
+            v3_pr <= 0; v3_pw <= 0; v3_ph <= 0;
+            v3_lr <= 0; v3_lw <= 0; v3_lo <= 0; v3_lh <= 0;
+            v3_sw <= 64'd0; v3_sf <= 0; v3_sm <= 1'b0; v3_wd <= 8'd0;
+        end else if (ds_cap) begin
+            v3_fr <= fs_rptr;  v3_fw <= fs_wptr;  v3_fo <= fs_occ;
+            v3_fh <= fs_hold;  v3_fs <= fs_st;
+            // 序号: 恒取"更新前"的当前播放帧序号 (同拍帧首时它正是失配字所属帧)
+            v3_fn <= fs_cnt - 16'd1;
+            v3_pr <= fp_rptr;
+            v3_pw <= fp_wptr;
+            v3_ph <= fp_hold;
+            v3_lr <= uf_rptr;  v3_lw <= uf_wptr;
+            v3_lo <= uf_occ;   v3_lh <= hold_rem_u;
+            // 写侧指纹: 恒取已登记的表项 (与 v3_fr/v3_fn 同属"更新前"的那一帧)
+            v3_sw <= ww_r;   v3_sf <= ws_r;
+            v3_sm <= wm_r;   v3_wd <= wd_r;
+        end
+    end
+
+    // ---- 回卷一致性计数与首违例快照 ----
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            v3_rc <= 16'd0; v3_vc <= 16'd0; v3_rv_v <= 1'b0;
+            v3_vx <= 0; v3_vs <= 0; v3_vr <= 0; v3_vn <= 16'd0;
+        end else begin
+            if (uf_rollbk) v3_rc <= v3_rc + 16'd1;
+            if (v3_rb_viol) begin
+                v3_vc <= v3_vc + 16'd1;
+                if (!v3_rv_v) begin
+                    v3_rv_v  <= 1'b1;
+                    v3_vx    <= v3_rb_exc;
+                    v3_vs    <= v3_wsnap_r;
+                    v3_vr    <= uf_rptr;
+                    v3_vn    <= w_commit_cnt;
+                end
+            end
+        end
+    end
+`endif
 
 endmodule

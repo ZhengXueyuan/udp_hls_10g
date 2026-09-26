@@ -121,7 +121,73 @@ module app_udp_pattern #(
     output reg  [31:0] stat_mismatch,    // 失配字节数 (粘滞)
     output reg         active,           // TX: 正在发帧 或 在帧间限速间隙里
     output reg         done,             // TX_BYTES 已发完 (粘滞, TX_BYTES!=0 才有意义)
-    output reg  [3:0]  led
+    output reg  [3:0]  led,
+    // ---- RXP_DIAG (ISSUE_RX_BYTE_CORRUPTION 专题): 首失配快照 ----
+    // 只在 `RXP_DIAG 构建里驱动; 默认构建恒 0 (端口常量化, 与 P4/P5 逐位无影响)。
+    // 判读法: ds_idx = 该坏字节的**全局收字节号** (= 图案流偏移, 因为 RX LFSR 从
+    // reset 起按 SEED 逐字节推进), ds_got/ds_exp 是收到的值与期望值。据此可离线
+    // 对 LFSR 序列任意偏移求值, 判定坏值来自哪个位置:
+    //   got == exp[idx-1472] => 上一帧同偏移的陈旧字 (帧缓冲 BRAM 写/读)
+    //   got == exp[idx-8]    => 陈旧/重复一个整字 (字级搬移)
+    //   got == exp[idx-1]    => 重复一个字节 (字节级发射搬移)
+    //   popcount(got^exp)==1 => 单比特翻转 (寄存器位级)
+    output wire [31:0] ds_idx,           // 首失配时的 stat_rx_bytes (本字节的序号)
+    // ⚠️ 快照里的**帧内偏移 / 帧号**仍不做成字段: 板级帧长恒 1472 ⇒ 离线按
+    //    off = ds_idx % 1472, frm = ds_idx / 1472 精确导出, 而硬件侧用
+    //    "rx_ld && rx_sof 清零 + cmp_hit 累加"的活计数器会因 1 字前瞻流水
+    //    产生**固定滞后**(仪器自检门 tb_rxp_diag 实测滞后 7 字节, 报 43 而真值 36)
+    //    ⇒ 那样的字段会把人带偏, 不如不给。
+    //    (v2 的 OZ/OL/OM/OH 是**聚合桶计数**而不是快照, 且驱动器是"逐比对字节
+    //     计数 + 帧首字节拍复位" —— 逐字节量, 与前瞻拍数无关, 故没有那个滞后。)
+    output wire [31:0] ds_b1,            // 失配字节数: popcount(got^exp)==1
+    output wire [31:0] ds_b2,            // 失配字节数: popcount(got^exp)==2
+    output wire [31:0] ds_bg,            // 失配字节数: popcount(got^exp)>=3
+    output wire [31:0] ds_dup,           // 失配字节数: got == 前一拍的期望字节 (重复)
+    output wire [7:0]  ds_got, ds_exp, ds_prev,
+    output wire        ds_v,             // 已捕获首失配 (粘滞)
+    // ---- RXP_DIAG v2 (2026-09-26): 首失配**整字**指纹 + 帧内偏移桶计数 ----
+    // 【为什么加整字】单字节值在图案流 ±9000 字节窗口内约 86 次重复 ⇒ 无法回答
+    //   "这块坏数据是从哪读来的"; 8 字节连续值在该窗口里唯一。板级实测首失配恒在
+    //   帧首字且坏值与期望值统计独立 ⇒ 需要"搬移 vs 位级损坏"的判别力。
+    // 【对齐 (关键, 别读错)】失配**可以发生在字中** (板级观测是 lane 0, 但一般
+    //   lane = ds_idx 在该 64 位字内的偏移)。ds_gw/ds_ew 一律按**收到字的字边界**
+    //   对齐 (lane 0 = tdata[63:56], 与 byte_at() 同约定): ds_ew 的 lane k = 图案流
+    //   在全局字节 (base+k) 处的期望值, base = ds_idx - lane = 该收字 lane0 的
+    //   全局字节号 (cmp_d 是"本拍正在逐字节比对的那个收字")。
+    //   ⇒ **禁止**把 ds_ew 理解成"从 ds_idx 起的 8 个期望字节": 那等于把期望字整体
+    //     平移出该字, 与 ds_gw 错位 —— 指纹会误导 (这正是本字段唯一容易搞错的地方)。
+    //   ds_gw/ds_ew 的无效 lane (lane >= popcount(tkeep), 只可能是帧末字) 一律为 0
+    //   ⇒ ds_gw^ds_ew 的非零 lane 恰好是"比过且不相等的 lane"。
+    // 【与 v1 字段的关系】ds_gw^ds_ew 的**最低非零 lane** = 首失配 lane, 且该 lane
+    //   的 ds_gw/ds_ew 字节逐位等于 ds_got/ds_exp (门里有这条自洽断言)。
+    output wire [63:0] ds_gw,            // 首失配所在**收字** (lane 对齐见上)
+    output wire [63:0] ds_ew,            // **同一边界**的期望字 (逐 lane 对齐 ds_gw)
+    // 【帧内偏移桶】每个失配字节按帧内偏移 (mod i_paylen) **恰进一桶** ⇒ 恒等式
+    //   OZ+OL+OM+OH == stat_mismatch 结构性成立 (门里有断言)。这是"损坏集中在帧首字"
+    //   与"首失配恰好落在帧首字"的区分手段。
+    //   偏移计数器 = 逐**比对字节**计数 (与 stat_rx_bytes 同一事件、同一拍) + 在
+    //   **帧首字节比对拍复位** (SOF 位与数据同走 1 字前瞻管线, 见 nx_sf/cmp_sf)
+    //   ⇒ 不再有 v1 那个"活计数器滞后 7 字节"的病 (v1 因此删掉了该字段, 见 ds_idx
+    //   旁注释)。帧长 > i_paylen 时按 mod i_paylen 环绕 (板级不会发生: udp_split
+    //   交给 app 的帧 <= i_paylen = 1472; 该环绕语义由门的相 6 判别性用例钉死)。
+    //   ⚠️ i_paylen <= 64 时 OH 结构性恒 0 (取模之后到不了 64)。
+    output wire [31:0] ds_oz,            // 偏移 == 0            (帧首字节)
+    output wire [31:0] ds_ol,            // 偏移 1..7
+    output wire [31:0] ds_om,            // 偏移 8..63
+    output wire [31:0] ds_oh             // 偏移 >= 64
+`ifdef RXP_DIAG
+    // ---- RXP_DIAG v3 (2026-09-26): 首失配**触发脉冲** (本仪器唯一新增的跨模块信号) ----
+    // 为什么必须由本模块产生: "首失配"的**唯一判定者**在这里; udp_split 的帧边界
+    // 记账只有拿到这一拍才知道"什么时候算首失配" (否则它只能自己重算一遍校验,
+    // 那就违反了 T1 的"单一真值源"原则)。合同:
+    //   · 恰在取 v2 整字快照的**那一拍**为高 (= 失配所在字的末 lane 比对拍 wr_end),
+    //     故 udp_split 在**同一拍**锁到的 uf_rptr/uf_wptr/uf_occ/hold_rem_u 就是
+    //     "该失配字节正在被比对"时的活值 (同域 gmii_clk, 无 CDC);
+    //   · 全程**恰一次** (ds_v_r 粘滞 + cap_pend 单次置位 ⇒ 与 ds_gw/ds_ew 严格同源);
+    //   · 端口**只在 `RXP_DIAG 下存在**: 默认/P5 构建的端口表与接线逐位不变
+    //     (本工程铁律: 新增端口在默认路径上不得改变任何东西)。
+    , output wire       ds_cap
+`endif
 );
     // ---------------- 图案函数 (与 app_pattern.v / peer.cpp 同款) ----------------
     function [63:0] xs_next;
@@ -269,6 +335,36 @@ module app_udp_pattern #(
     reg  [63:0] cmp_d;   reg [7:0] cmp_k;  reg [3:0] cmp_n, cmp_i;  reg cmp_busy;
     reg  [63:0] nx_d;    reg [7:0] nx_k;   reg [3:0] nx_n;          reg nx_v;
 
+`ifdef RXP_DIAG
+    // 首失配快照的内部状态 (端口是 output wire, 这里驱动)
+    reg  [31:0] ds_idx_r, ds_b1_r, ds_b2_r, ds_bg_r, ds_dup_r;
+    reg  [7:0]  ds_got_r, ds_exp_r, ds_prev_r;
+    reg         ds_v_r;
+    reg  [7:0]  ds_prev_exp;             // 上一拍比对的期望字节
+    // ---- v2 (2026-09-26): 整字指纹 + 帧内偏移桶 ----
+    reg  [63:0] ds_gw_r, ds_ew_r;        // 首失配所在整字 (收/期望, 同一边界)
+    reg  [31:0] ds_oz_r, ds_ol_r, ds_om_r, ds_oh_r;
+    reg  [63:0] wr_e_r;                  // 本收字的期望字节累加 (按 lane 固定位置写)
+    reg  [11:0] off_cnt;                 // 帧内偏移 (mod i_paylen); 语义见下 off_eff
+    reg         nx_sf, cmp_sf;           // SOF 与数据**同管线**的伴随位 (1 字前瞻)
+    reg         cap_pend;                // 本字含首失配 ⇒ 字尾取整字快照
+    assign ds_idx = ds_idx_r;
+    assign ds_b1  = ds_b1_r;   assign ds_b2   = ds_b2_r;   assign ds_bg  = ds_bg_r;
+    assign ds_dup = ds_dup_r;  assign ds_got  = ds_got_r;  assign ds_exp = ds_exp_r;
+    assign ds_prev= ds_prev_r; assign ds_v    = ds_v_r;
+    assign ds_gw  = ds_gw_r;   assign ds_ew   = ds_ew_r;
+    assign ds_oz  = ds_oz_r;   assign ds_ol   = ds_ol_r;
+    assign ds_om  = ds_om_r;   assign ds_oh   = ds_oh_r;
+`else
+    assign ds_idx = 32'd0;
+    assign ds_b1  = 32'd0; assign ds_b2  = 32'd0; assign ds_bg  = 32'd0;
+    assign ds_dup = 32'd0; assign ds_got = 8'd0;  assign ds_exp = 8'd0;
+    assign ds_prev= 8'd0;  assign ds_v   = 1'b0;
+    assign ds_gw  = 64'd0; assign ds_ew  = 64'd0;
+    assign ds_oz  = 32'd0; assign ds_ol  = 32'd0;
+    assign ds_om  = 32'd0; assign ds_oh  = 32'd0;
+`endif
+
     // 前瞻空即收: 引擎比对 8 拍期间恰好等下一次装载 ⇒ 稳态 1 字节/拍
     assign rx_tready = !nx_v;
 
@@ -278,6 +374,85 @@ module app_udp_pattern #(
     wire       cmp_end = (cmp_i + 4'd1 >= cmp_n);              // 本拍比的是本字末字节
     wire       rx_bad  = cmp_hit && i_en && (rx_got !== rx_exp);
     wire       rx_ld   = rx_tvalid && rx_tready;               // 前瞻装载
+
+`ifdef RXP_DIAG
+    // popcount(got^exp) 形状分类 (声明必须在 rx_got/rx_exp 之后 —— 坑 22:
+    // xvlog 先声明后用, 放前面会报 "identifier is used before its declaration")
+    function [3:0] pc8;
+        input [7:0] v;
+        integer i;
+        reg [3:0] c;
+        begin
+            c = 4'd0;
+            for (i = 0; i < 8; i = i + 1) c = c + {3'b0, v[i]};
+            pc8 = c;
+        end
+    endfunction
+    wire [3:0] ds_pcn = pc8(rx_got ^ rx_exp);
+
+    // ---- v2: 整字指纹 + 帧内偏移桶 (纯组合部分; 全部只在 RXP_DIAG 里存在) ----
+    // 把 8 位字节放到 lane i (lane0 = [63:56], 同 byte_at()); 其余 lane 为 0。
+    // 用来补上"本拍正在比对的 lane"—— 该 lane 本拍还没写进 wr_e_r 寄存器。
+    function [63:0] put8_0;
+        input [3:0] i;
+        input [7:0] b;
+        begin
+            case (i)
+                4'd0: put8_0 = {b,    56'd0};
+                4'd1: put8_0 = {8'd0,  b, 48'd0};
+                4'd2: put8_0 = {16'd0, b, 40'd0};
+                4'd3: put8_0 = {24'd0, b, 32'd0};
+                4'd4: put8_0 = {32'd0, b, 24'd0};
+                4'd5: put8_0 = {40'd0, b, 16'd0};
+                4'd6: put8_0 = {48'd0, b, 8'd0};
+                default: put8_0 = {56'd0, b};
+            endcase
+        end
+    endfunction
+
+    // lane 掩码: 低 n 个 lane (lane0 在 [63:56]) 全 1, 其余 0。
+    // 用 cmp_n (而非 tkeep) 与引擎的比对口径**逐位一致** (引擎按 popcount 比对)。
+    function [63:0] bm64;
+        input [3:0] n;
+        begin
+            case (n)
+                4'd0: bm64 = 64'h0000_0000_0000_0000;
+                4'd1: bm64 = 64'hFF00_0000_0000_0000;
+                4'd2: bm64 = 64'hFFFF_0000_0000_0000;
+                4'd3: bm64 = 64'hFFFF_FF00_0000_0000;
+                4'd4: bm64 = 64'hFFFF_FFFF_0000_0000;
+                4'd5: bm64 = 64'hFFFF_FFFF_FF00_0000;
+                4'd6: bm64 = 64'hFFFF_FFFF_FFFF_0000;
+                4'd7: bm64 = 64'hFFFF_FFFF_FFFF_FF00;
+                default: bm64 = 64'hFFFF_FFFF_FFFF_FFFF;
+            endcase
+        end
+    endfunction
+
+    // 前瞻寄存器 nx_* → 比对寄存器 cmp_* 的**装载拍** (与下面 always 里那三处
+    // 装载分支逐一对应: 空闲装载 / 空拍装载 / 字末装载)。rx_ld 与 cmp_ld 结构上
+    // 互斥 (rx_ld 要求 !nx_v, 而 cmp_ld 三支都要求 nx_v)。
+    wire        cmp_ld  = nx_v && (!cmp_busy || (cmp_n == 4'd0) || cmp_end);
+    wire        wr_end  = cmp_hit && cmp_end;              // 本字最后一个字节的比对拍
+    // 本拍比的是**帧首字节** (SOF 与数据同管线, 故 cmp_sf 就是"本字含帧首字节")
+    wire        off_rst = cmp_hit && cmp_sf && (cmp_i == 4'd0);
+    // 本拍字节的帧内偏移 = 计数器当前值; 帧首字节拍**组合地**取 0 —— 寄存器要到
+    // 本拍才被复位, 直接读 off_cnt 会把上一帧末尾的值 (如 1471) 当成本字节的偏移。
+    wire [11:0] off_eff = off_rst ? 12'd0 : off_cnt;
+    // 本字期望整字: 累加器 + 本拍 lane (OR 安全 —— 本 lane 在字内尚未被写过, 恒 0)
+    wire [63:0] ds_wr_e_now = wr_e_r | put8_0(cmp_i, rx_exp);
+
+    // 帧内偏移桶 (if/else-if 链 ⇒ 每次失配恰进一桶 ⇒ OZ+OL+OM+OH == UMM 恒成立)。
+    // 第 4 桶 = 兜底 (off_eff >= paylen-1 且 >= 64 的一切情形), 边界: 0 / 1..7 /
+    // 8..63 / >=64。
+    wire        ds_bo0 = (off_eff == 12'd0);
+    wire        ds_bo1 = (off_eff >= 12'd1)  && (off_eff <= 12'd7);
+    wire        ds_bo2 = (off_eff >= 12'd8)  && (off_eff <= 12'd63);
+
+    // v3: 首失配触发脉冲 —— 与下面 always 里取整字快照的那个 if 条件**逐字相同**
+    // (所以"ds_cap 那一拍"与"ds_gw/ds_ew 被写入的那一拍"定义上就是同一拍)。
+    assign ds_cap = wr_end && (cap_pend || (rx_bad && !ds_v_r));
+`endif
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -295,6 +470,16 @@ module app_udp_pattern #(
             stat_rx_bytes <= 32'd0; stat_rx_frames <= 32'd0;
             stat_rx_null <= 32'd0; stat_mismatch <= 32'd0;
             led <= 4'd0;
+`ifdef RXP_DIAG
+            ds_idx_r <= 32'd0;
+            ds_b1_r <= 32'd0; ds_b2_r <= 32'd0; ds_bg_r <= 32'd0; ds_dup_r <= 32'd0;
+            ds_got_r <= 8'd0; ds_exp_r <= 8'd0; ds_prev_r <= 8'd0;
+            ds_v_r <= 1'b0; ds_prev_exp <= 8'd0;
+            ds_gw_r <= 64'd0; ds_ew_r <= 64'd0; wr_e_r <= 64'd0;
+            ds_oz_r <= 32'd0; ds_ol_r <= 32'd0;
+            ds_om_r <= 32'd0; ds_oh_r <= 32'd0;
+            off_cnt <= 12'd0; nx_sf <= 1'b0; cmp_sf <= 1'b0; cap_pend <= 1'b0;
+`endif
         end else begin
             //=================================================================
             // TX FSM
@@ -411,6 +596,85 @@ module app_udp_pattern #(
                 stat_rx_frames <= stat_rx_frames + 32'd1;
                 if (rx_len == 16'd0) stat_rx_null <= stat_rx_null + 32'd1;
             end
+
+`ifdef RXP_DIAG
+            // ---- 首失配快照 + 形状分类 (RXP_DIAG) ----
+            // ds_prev_exp 必须**只在真比对了一字节的拍跟拍** (cmp_hit 同门)。
+            // 若无条件跟拍, 则 RX 引擎在帧间/空拍停顿后 (cmp_busy 掉 → 下一帧
+            // 首字节) 读到的 ds_prev 会等于 ds_exp 而不是上一个字节 —— 而
+            // udp_split 的播放器是**帧级 store-and-forward** (帧间 tvalid 必低)
+            // ⇒ **每帧首字节必然踩这个洞**, 而"每帧首字节"恰恰是 u_uf 陈旧写
+            // 假设最看重的字节。独立审查 agent 用隔帧 TB 实测复现:
+            // 隔帧时 prev=exp (错), 背靠背时 prev=上一字节 (对)。
+            if (cmp_hit) ds_prev_exp <= rx_exp;
+            if (rx_bad) begin
+                if (!ds_v_r) begin
+                    // stat_rx_bytes 本拍尚未 +1 ⇒ 正是本字节的全局序号 (= 图案流偏移)
+                    ds_v_r   <= 1'b1;
+                    ds_idx_r <= stat_rx_bytes;
+                    ds_got_r <= rx_got;
+                    ds_exp_r <= rx_exp;
+                    ds_prev_r<= ds_prev_exp;
+                    cap_pend <= 1'b1;      // v2: 首失配落在本字 ⇒ 字尾取整字
+                end
+                if      (ds_pcn == 4'd1) ds_b1_r <= ds_b1_r + 32'd1;
+                else if (ds_pcn == 4'd2) ds_b2_r <= ds_b2_r + 32'd1;
+                else                     ds_bg_r <= ds_bg_r + 32'd1;
+                if (rx_got == ds_prev_exp) ds_dup_r <= ds_dup_r + 32'd1;
+                // ---- v2: 帧内偏移桶 (每次失配恰进一桶; 与 stat_mismatch 同门) ----
+                if      (ds_bo0) ds_oz_r <= ds_oz_r + 32'd1;
+                else if (ds_bo1) ds_ol_r <= ds_ol_r + 32'd1;
+                else if (ds_bo2) ds_om_r <= ds_om_r + 32'd1;
+                else             ds_oh_r <= ds_oh_r + 32'd1;
+            end
+
+            // ---- v2: SOF 与数据同 1 字前瞻管线 (nx_sf → cmp_sf) ----
+            // 帧首字节的判据必须是 cmp_sf (跟着**数据**走的那一位), 不能用 rx_ld 拍
+            // 的 rx_sof —— 那正是 v1 活计数器滞后 7 字节的病因 (rx_ld 比该字被比对
+            // 早 1 字还多)。
+            if (rx_ld)  nx_sf  <= rx_sof;
+            if (cmp_ld) cmp_sf <= nx_sf;
+
+            // ---- v2: 帧内偏移计数 (mod i_paylen) ----
+            // 与 stat_rx_bytes 同一个事件 (cmp_hit)、同一拍推进 ⇒ off_eff 恒等于
+            // "本拍字节的全局序号 mod i_paylen"; 再叠加**帧首字节拍复位** (off_rst)
+            // ⇒ 帧长 != i_paylen 时给出的仍是真正的帧内偏移 (门的相 5 判别性用例:
+            // 帧长 40 / i_paylen 64, 全局取模会把帧首字节判成 OM, 本实现判成 OZ)。
+            // 帧长 > i_paylen ⇒ mod i_paylen 环绕 (由门的相 6 钉死)。
+            if (cmp_hit) begin
+                if (off_eff == (i_paylen - 12'd1)) off_cnt <= 12'd0;
+                else                               off_cnt <= off_eff + 12'd1;
+            end
+
+            // ---- v2: 期望字节累加 (lane 固定位置写; cmp_i 在字内单调递增) ----
+            // 字装载拍清零 ⇒ 帧末字 (cmp_n<8) 的无效 lane 恒 0, 与 ds_gw 的掩码同口径。
+            if (cmp_ld) wr_e_r <= 64'd0;
+            else if (cmp_hit) begin
+                case (cmp_i)
+                    4'd0: wr_e_r[63:56] <= rx_exp;
+                    4'd1: wr_e_r[55:48] <= rx_exp;
+                    4'd2: wr_e_r[47:40] <= rx_exp;
+                    4'd3: wr_e_r[39:32] <= rx_exp;
+                    4'd4: wr_e_r[31:24] <= rx_exp;
+                    4'd5: wr_e_r[23:16] <= rx_exp;
+                    4'd6: wr_e_r[15:8]  <= rx_exp;
+                    default: wr_e_r[7:0] <= rx_exp;
+                endcase
+            end
+
+            // ---- v2: 字尾整字快照 (只对"含首失配的那个字"取一次) ----
+            // cap_now 必须**组合地**带上"本拍才刚判出首失配"(失配就在本字末 lane 的
+            // 情形): 那时 cap_pend 寄存器还是 0, 只读寄存器会漏掉这个字。
+            // cmp_d 在本拍仍是本字 (下一字要到本拍沿上才装载);
+            // ds_ew 用 ds_wr_e_now (累加器 + 本拍 lane 的组合补齐)。
+            // cap_pend 的清位写在**后面** ⇒ 与同一拍的置位冲突时以清位为准 (该拍
+            // 已按 cap_now 取过快照, 正是要清)。两个分支的先后顺序不能调。
+            if (wr_end && (cap_pend || (rx_bad && !ds_v_r))) begin
+                ds_gw_r  <= cmp_d & bm64(cmp_n);
+                ds_ew_r  <= ds_wr_e_now;
+                cap_pend <= 1'b0;
+            end
+`endif
 
             //=================================================================
             // LED (板级可观测): d0 = 曾见 peer (i_tx_ready 锁存)
