@@ -75,6 +75,40 @@ def main():
                      "**最可能是没复位 / 图案相位丢了** —— 相位丢时 UMM 会接近送出字节数 %d, "
                      "且每轮 II 相同)" % (UMM, umm_lo, umm_hi, sent_b))
 
+    # ---- P4 (仅 v4 行): 新仪器的内部自洽 ----
+    # NE 与 OZ 由同一表达式驱动 ⇒ 必须相等; 不等说明仪器坏了, 而不是机制变了。
+    # EN/EO 口径: 记录数 EN 应 == min(事件数, 8); 若 EN < NE 而 EO=0, 那是静默丢弃。
+    if "NE" in d:
+        ne, nr, mr = g("NE"), g("NR"), g("MR")
+        oz = g("OZ")
+        if None not in (ne, oz) and ne != oz:
+            fails.append("P4 NE=%s != OZ=%s (同一表达式驱动, 不等 ⇒ **仪器坏了**, 别解读机制)"
+                         % (ne, oz))
+        if None not in (ne, nr) and nr > ne:
+            fails.append("P4 NR=%s > NE=%s (段数不可能多于事件数 ⇒ 仪器坏了)" % (nr, ne))
+        if None not in (nr, mr) and mr > ne:
+            fails.append("P4 MR=%s > NE=%s (最长段不可能长于事件数 ⇒ 仪器坏了)" % (mr, ne))
+        en, eo = g("EN"), g("EO")
+        if None not in (en, eo, ne):
+            if en != min(ne, 8):
+                fails.append("P4 EN=%s != min(NE=%s, 8)=%d (记录条数口径不符 ⇒ 仪器坏了)"
+                             % (en, ne, min(ne, 8)))
+            if en < ne and eo == 0:
+                fails.append("P4 EN=%s < NE=%s 但 EO=0 ⇒ **有事件被静默丢弃** (溢出标志没置)"
+                             % (en, ne))
+        # 回卷/丢字会污染**整组**帧级字段 (app 的 LFSR 断流后每帧首字节都失配) ⇒ 显式降级提示。
+        # ⚠️ 审查曾建议把作废条件扩到 UPC/UOV/UPA。**实测后确认那条是冗余的**: P2 已经对
+        #    UPC/UOV/UPA 硬失败 (见上), 所以**过闸的轮次必然三者全 0、且 URB/URF 精确**
+        #    ⇒ 丢帧/断流在过闸轮次里不可能发生。下面仍带上它们, 只是**防御性**写法,
+        #    真正的把关在 P2。别再把它当成"补上了一个缺口"。
+        rb = [k for k in ("CN", "RD", "WF", "RL") if g(k)]
+        dr = [n for n, v in (("UPC", UPC), ("UOV", UOV), ("UPA", UPA)) if v]
+        if rb or dr:
+            why = "/".join(rb + dr)
+            print("  ⚠️ P4 作废提示: %s 非 0 ⇒ app 的 LFSR 流已断/有回卷 ⇒ "
+                  "**NE/OZ/QA..QH 与 NR/MR 全体不可用于结论**, §17.7 的环相位判据同时作废。"
+                  % why)
+
     print("读数: URB=%s UMM=%s URF=%s UPC/OV/PA=%s/%s/%s II=%s" % (
         URB, UMM, URF, UPC, UOV, UPA, d.get("II")))
     print("闸: 期望 UMM ∈ [%d, %d] (按送出 %d 字节 / 参考 %d 放缩)" % (umm_lo, umm_hi, sent_b, ref_b))

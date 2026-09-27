@@ -250,6 +250,56 @@ module udp_split #(
     , output reg  [UDP_AW:0]    v3_vs              // 违例时: wsnap
     , output reg  [UDP_AW:0]    v3_vr              // 违例时: uf_rptr
     , output reg  [15:0]        v3_vn              // 违例时: 写侧提交序号
+    // ---- RXP_DIAG v4 (2026-09-27): 异常帧路径计数器 (ISSUE_RX_BYTE_CORRUPTION §16.7) ----
+    // 目的: §16.1 判死"坏字在写进 u_uf 时就已经是坏的", 但**这些分叉有没有在触发**
+    //   一直是空白 —— 本组计数器把每条"载荷已写、帧未提交/帧归属异常"的路径变成
+    //   可观测量。判据: 某个计数器的本轮值 == 该轮的 n (受损帧数) ⇒ 它就是根因。
+    // 语义/口径见 body 末尾的 v4 段 (真值源在那里); 键名 CN/RD/NC/NP/WF/RL/WC
+    // (与既有键全部不撞, 由 sim/rxpdiag/gen_offsets.py 做正则级遮蔽检查)。
+    , output reg  [15:0]        v4_cn       // CN: 描述符 FIFO 满 ⇒ 本帧回卷 (u_commit_no)
+    , output reg  [15:0]        v4_rd       // RD: 残帧边界回卷 (u_residue)
+    , output reg  [15:0]        v4_nc       // NC: 0 长数据报事件 (u_nul_cyc)
+    , output reg  [15:0]        v4_np       // NP: 0 长数据报提交 (u_nul_commit)
+    , output reg  [15:0]        v4_wf       // WF: uf_ovf 拍数 (= 因满被吞的载荷**字数**)
+    , output reg  [15:0]        v4_rl       // RL: uf_rollbk 拍数 (= 回卷次数, 与 v3 的 RC 同源)
+    , output reg  [15:0]        v4_wc       // WC: 字数一致性违例 (提交拍 写字数 != ceil(len/8))
+    // ---- RXP_DIAG v5 (2026-09-27): **写数据口 (din) 上的第二个 LFSR 校验器** ----
+    // (ISSUE_RX_BYTE_CORRUPTION §14.6/§18.8; 目的见 body 末尾的 v5 段 —— 真值源在那里)
+    // 与 app 的校验器**机制不同**: app 用 `wh_word[w_commit_cnt[2:0]]` 按**帧号索引**
+    //   定址 (v3 的 SW), 而本组靠**纯字节计数**推进 —— 这正是它能**证伪** SW 归因假设
+    //   的地方 (SW 的采集依赖"载荷字不与 meta_valid 同拍"这条无法从 TB 构造的假设)。
+    // 键名 DV/DG/DE/DO/DM/VZ (A 部) 与 PS/NM/IC/DC/SB (B 部); 与既有全部键不撞,
+    //   由 sim/rxpdiag/gen_offsets.py 做正则级遮蔽检查 (该脚本的断言是硬失败)。
+    , output wire [31:0]        v5_dv_idx   // DV: 首个失配处的**累计字节序号** (纯计数锚)
+    , output wire [7:0]         v5_dv_got   // DG: 该处收到的字节
+    , output wire [7:0]         v5_dv_exp   // DE: 该处期望的字节 (LFSR)
+    , output wire [15:0]        v5_dv_off   // DO: 该失配在本帧内的字节偏移
+    , output wire [31:0]        v5_dv_mm    // DM: 失配字节总数 (整轮累计)
+    , output wire               v5_dv_v     // VZ: 快照有效 (粘滞, 只记首个)
+    // ---- RXP_DIAG v5 B 部: 解析器 (udp_rx) 的**已声明但从未显示**的计数器 ----
+    // 零新逻辑: 它们本来就在本模块里 (内部悬空未用), 这里只是**接线到端口**。
+    // 判据: PS (stat_pass) vs app 的 URF —— 不等 ⇒ 解析器与 app 之间有丢帧/重帧。
+    , output wire [31:0]        v5_up_pass  // PS: udp_rx.stat_pass      (匹配且 FCS 好)
+    , output wire [31:0]        v5_up_nm    // NM: udp_rx.stat_drop_nonmatch
+    , output wire [31:0]        v5_up_ipc   // IC: udp_rx.stat_drop_ipcsum
+    , output wire [31:0]        v5_up_crc   // DC: udp_rx.stat_drop_crc
+    , output wire [31:0]        v5_up_bytes // SB: udp_rx.stat_bytes     (匹配帧的载荷字节)
+    // ---- RXP_DIAG v6 (2026-09-27): **u_pre 输入侧** (s_axis) 的第三个 LFSR 校验器 ----
+    // (ISSUE_RX_BYTE_CORRUPTION §18.9/§18.10; 目的/口径见 body 末尾的 v6 段 —— 真值源在那里)
+    // 这是 §18.9 那个"三者不能同时为真"矛盾的裁决点: u_pre 的输入是整条链上**唯一
+    //   还没插桩的流**。与 v5 (din = u_m_d, 写侧) 与 app (读侧) 都不同源:
+    //     · v6 在**进 u_pre 之前** (s_axis), 即 u_uf 的三个上游模块 (mac_rx_64 的 8 字
+    //       FIFO / rx_classify 的 6 字 skid / vlan_strip 直通) 之下游、u_pre 之上游。
+    //   键名 CV/CG/CE/CO/CM/CZ/CS —— 与既有全部键不撞 (由 sim/rxpdiag/gen_offsets.py
+    //   做正则级遮蔽检查, 断言是硬失败)。
+    , output wire [31:0]        v6_dv_idx   // CV: 首个失配处的**累计载荷字节序号** (纯计数锚)
+    , output wire [7:0]         v6_dv_got   // CG: 该处收到的字节
+    , output wire [7:0]         v6_dv_exp   // CE: 该处期望的字节 (LFSR)
+    , output wire [15:0]        v6_dv_off   // CO: 该失配的**帧内**字节偏移 (= 帧内序号 - 42)
+    , output wire [31:0]        v6_dv_mm    // CM: 失配字节总数 (整轮累计)
+    , output wire               v6_dv_v     // CZ: 快照有效 (粘滞, 只记首个)
+    , output wire [7:0]         v6_dv_sk    // CS: 因输入 skid 满而**被丢掉的字数** (非 0 = 本
+                                            //     轮 v6 读数不可用; 输入侧不能反压 ⇒ 只能丢)
 `endif
 );
 
@@ -830,6 +880,467 @@ module udp_split #(
             end
         end
     end
+
+    //=========================================================================
+    // RXP_DIAG v4 (2026-09-27): 异常帧路径计数器 (ISSUE_RX_BYTE_CORRUPTION §16.7)
+    //=========================================================================
+    // 【要回答的问题】v3 把损坏钉在"写进 u_uf 时就已经坏了"(§16.1), 但**本模块内
+    //   的几条"载荷已写、帧未提交 / 帧归属异常"分支从来没有被观测过** —— 只知道
+    //   它们在源码里存在。本组把每一条变成"本轮累计计数", 判据是:
+    //     某计数器 == 该轮的 n (受损帧数, 由 OZ 与 UMM/(p×255/256) 定出)
+    //   ⇒ 那条路径就是根因 (它是"整帧内容被换掉"的搬运工)。
+    //
+    // 【计数口径 (必须读)】每个计数器都在**其条件为高的那一拍** +1 (非阻塞赋值,
+    //   与条件同沿; 即"该拍被计入"), 因此:
+    //     · CN/RD/NC/NP 的条件都是**单拍脉冲**:
+    //         u_commit_no  = u_commit_evt && desc_full   (u_commit_evt 由 u_end/fend
+    //                        单拍脉冲驱动 ⇒ 单拍)
+    //         u_residue    = u_meta_valid && u_open_r     (u_meta_valid = w5 拍, 单拍)
+    //         u_nul_cyc    = u_fend && (u_meta_len == 0)  (u_fend = udp_rx 的判定拍, 单拍)
+    //         u_nul_commit = u_nul_cyc && !u_ferr         (同上)
+    //       ⇒ 拍数 == 事件数, 不漏拍不重计。**这四个是"帧数"口径**。
+    //     · WF 的条件 uf_ovf = u_word && uf_full 是**电平不是脉冲**: 缓冲满期间每个
+    //       载荷字都为高 ⇒ WF 是**被吞掉的载荷字数**, 不是帧数 (一帧可贡献多个)。
+    //       判读: WF>0 就是"发生过满"; 不要拿 WF 直接与 n 比。
+    //     · RL 的条件 uf_rollbk 在一条回卷请求上恰高 1 拍 (与写字同拍时顺延到下一拍,
+    //       由 u_rollpend_r 兜住) ⇒ RL == 回卷次数 == v3 的 RC (同一根线, 冗余但便于
+    //       与 CN/RD 对账: RL 是"回卷总数"的上界包络, 三条路径各占多少看 CN/RD 与
+    //       差值里的"坏帧尾回卷")。
+    //-------------------------------------------------------------------------
+    // v4: **载荷流与帧归属一致性的直接探针** (§16.7 要求的"最便宜的一刀")
+    //-------------------------------------------------------------------------
+    // 每帧提交时, 比较:
+    //   · 该帧**实际写进 u_uf 的字数** = hold_rem_u 在提交拍的"更新前值" **+ 1**
+    //     ⚠️ 那个 +1 不是修饰: 提交拍的条件是 u_end, 而 hold_rem_u 的更新式里
+    //        `u_end && !uf_roll_req` 走的是**清零**分支 ⇒ **本拍这个末字不参与
+    //        +1 累加**(它被清零语句吞掉) ⇒ 更新前的值 = N-1, N = 本帧写字总数。
+    //        照字面用"更新前值 == ceil(len/8)"会**每帧都命中**(恒差 1) —— 那不是
+    //        探针坏, 是口径少算了本拍的字。门里有正/负两相把这一点钉死 (干净流
+    //        WC 必须恒 0; 把 u_meta_len 强偏 8 字节 ⇒ 每帧恰 1 次 WC)。
+    //   · 该帧**声明的载荷长度应占的字数** = (u_meta_len + 7) >> 3
+    //     (u_meta_len = udp_rx 的 meta_len, 整帧内保持有效, 提交拍仍有效 —— 描述符
+    //      就是在同一拍用它的)
+    // 不相等 = **该帧写的字数与它声明的长度对不上** ⇒ 载荷流与帧归属不一致
+    //   (这正是"下一帧的载荷被算成本帧的"那一类错误的直接签名)。
+    // 只在**载荷字提交路径** (uf_commit_word) 上判: 被回卷的帧不交付, 其字数无意义;
+    //   0 长数据报没有载荷字 (0 == 0 恒成立), 判了也不会响。
+    // ⚠️ 声明顺序: 三条 wire 必须在下面那个 always 之前 (xvlog 先声明后用 —— 坑 22)。
+    wire [15:0] v4_wnum  = hold_rem_u + 16'd1;
+    wire [15:0] v4_wdecl = (u_meta_len + 16'd7) >> 3;
+    wire        v4_wc_bad = uf_commit_word && (v4_wnum != v4_wdecl);
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            v4_cn <= 16'd0; v4_rd <= 16'd0; v4_nc <= 16'd0; v4_np <= 16'd0;
+            v4_wf <= 16'd0; v4_rl <= 16'd0; v4_wc <= 16'd0;
+        end else begin
+            if (u_commit_no)  v4_cn <= v4_cn + 16'd1;
+            if (u_residue)    v4_rd <= v4_rd + 16'd1;
+            if (u_nul_cyc)    v4_nc <= v4_nc + 16'd1;
+            if (u_nul_commit) v4_np <= v4_np + 16'd1;
+            if (uf_ovf)       v4_wf <= v4_wf + 16'd1;
+            if (uf_rollbk)    v4_rl <= v4_rl + 16'd1;
+            if (v4_wc_bad)    v4_wc <= v4_wc + 16'd1;
+        end
+    end
+
+    //=========================================================================
+    // RXP_DIAG v5 (2026-09-27): 写数据口 (din = u_m_d) 上的**第二个 LFSR 校验器**
+    //=========================================================================
+    // 【它证伪的是哪条假设 (§14.6 第一条)】v3 的写侧指纹 SW 由 `wh_word[w_commit_cnt
+    //   [2:0]]`(按**提交序号 mod 8** 定址)在 `v3_fs_evt`(帧首被收下那一拍)采出, 而
+    //   `wr_seen_r` 在 meta_valid/nul_cyc 拍清、在首个 uf_wr 拍置 ⇒ 整个采集**依赖
+    //   "该帧的载荷字不与 meta_valid 同拍"**(依赖 udp_rx 的载荷首字在 w6, 比 w5 的
+    //   meta_valid 晚一拍)。这条依赖**无法从 TB 侧构造**, 所以"SW 采到的就是 din 上的
+    //   字"这一归因从未被独立验证。⇒ 本组是一个**机制完全不同**的探针: 不按帧号定址,
+    //   只按**字节计数**推进; 期望序列 = 与 app 的 RX 校验器**逐字节同约定**的 xorshift64。
+    //
+    // 【为什么"纯计数"有判别力】两个校验器若都看同一条流, 必然同时看到同一个坏字节
+    //   ⇒ `DV == II`(app 的 ds_idx) 且 `DM == UMM`(app 的 stat_mismatch)。反过来,
+    //   若 SW 的归因有假 (取错了拍/取错了帧), app 的 II 仍指向真实失配, 而 SW/GW 会
+    //   给出与之**互相矛盾**的组合 —— 分辨力正来自"两个不同机制的锚"。
+    //
+    // 【口径 (判读必读)】
+    //   ① 本校验器统计**写进 u_uf 的字节流** (uf_wr 拍, 按 popcount(u_m_k) 计), 期望值
+    //      取"按**累计字节序号**索引的图案流"。两个精度不同的口径必须分开说
+    //      (2026-09-27 修正, 门里 W7 是这条的判别实验):
+    //      · **内容**口径: 回卷(`RL`)只把写指针退回去, **不改写流内容** (下一帧仍在
+    //        同一地址写自己的字节) ⇒ 写流仍是图案流的前缀 ⇒ 回卷**不**让内容校验失真。
+    //        只有**满吞** `WF` 会在写流里挖洞 ⇒ `WF != 0` 时内容口径也失效。
+    //      · **序号**口径: app 的字节序号只数**交付**的字节, 回卷掉的整帧被跳过 ⇒
+    //        `DV == II` / `DM == UMM` 这两条跨机制对照要求 `RL == 0` **且** `WF == 0`。
+    //      板级 8/8 轮 `RL = WF = 0` (§18.2/§18.5) ⇒ 两个口径在板级同时成立。
+    //   ② `DV/DM` 与 app 的 `II/UMM` 严格可比 (同一全局字节序号、同一失配定义);
+    //      `DO` 与 app 的 `II % paylen` 可比 (帧内偏移, 由 uf_snap 帧边界复位)。
+    //   ③ 推进步数 = **popcount(u_m_k)** 而不是恒 8 —— 与 app 的 `cmp_n = pop8(rx_tkeep)`
+    //      逐位同口径 (帧末部分字只推进几个字节)。
+    //   ④ 快照 (DV/DG/DE/DO/VZ) 只记**首个**失配 (粘滞); DM 记**全部**失配字节。
+    //   ⑤ 复位后 LFSR 从 SEED 起 —— 与 app 的 `rx_lfsr` 同源; 板级 app 的 i_en 恒 1
+    //      (wrapper_p4.v:1767), 且两者共用同一 rst_n。
+    //   ⑥ 本段**全部**在 `ifdef RXP_DIAG 内 ⇒ 默认构建端口表/网表逐位不变。
+    //-------------------------------------------------------------------------
+    // ---- B 部: 解析器计数器引出 (零新逻辑 —— 它们本来就在本模块里, 只是无人引用) ----
+    // 判据: PS (stat_pass) vs app 的 URF(交付帧数) —— 不等 ⇒ 解析器与 app 之间有丢帧/重帧。
+    // 口径: PS = 匹配且 FCS 好的帧数; SB = 这些帧的载荷字节数; NM/IC/DC = 三个丢弃计数
+    //       (非匹配 / IP 校验和 / FCS 坏), 四者互斥 (见 rtl/udp_rx.v 的 stat 段)。
+    assign v5_up_pass  = u_stat_pass;
+    assign v5_up_nm    = u_stat_nm;
+    assign v5_up_ipc   = u_stat_ipc;
+    assign v5_up_crc   = u_stat_crc;
+    assign v5_up_bytes = u_stat_bytes;
+
+    // ---- 与 app_udp_pattern.xs_next **逐位同款**的一步 (同一组常数移位) ----
+    // (函数声明必须在用之前 —— xvlog 先声明后用, 坑 22)
+    function [63:0] v5_xs;
+        input [63:0] s;
+        reg   [63:0] t;
+        begin
+            t = s ^ (s << 13);
+            t = t ^ (t >> 7);
+            t = t ^ (t << 17);
+            v5_xs = t;
+        end
+    endfunction
+
+    function [3:0] v5_pop8;
+        input [7:0] v;
+        integer i;
+        reg [3:0] c;
+        begin
+            c = 4'd0;
+            for (i = 0; i < 8; i = i + 1) c = c + {3'b0, v[i]};
+            v5_pop8 = c;
+        end
+    endfunction
+
+    reg  [63:0] v5_lfsr;                 // 期望序列状态 (先取后推进)
+    reg  [31:0] v5_cnt;                  // 累计字节序号 (纯计数锚)
+    reg  [15:0] v5_fo;                   // 帧内字节偏移 (uf_snap 复位)
+    reg         v5_v_r;                  // 快照有效 (粘滞)
+    reg  [31:0] v5_idx_r, v5_mm_r;
+    reg  [7:0]  v5_got_r, v5_exp_r;
+    reg  [15:0] v5_off_r;
+
+    wire [3:0]  v5_nb  = v5_pop8(u_m_k); // 本字有效字节数 (与 app 的 cmp_n 同口径)
+    wire        v5_cyc = uf_wr;          // 本拍真的写进了 u_uf
+
+    // 链: s0 = 当前状态; s_{i+1} = xs(s_i)。lane i 的期望字节 = s_i[31:24] (lane0 =
+    // tdata[63:56], 与 app 的 byte_at()/put8_0() 同序)。
+    wire [63:0] v5_s1 = v5_xs(v5_lfsr);
+    wire [63:0] v5_s2 = v5_xs(v5_s1);
+    wire [63:0] v5_s3 = v5_xs(v5_s2);
+    wire [63:0] v5_s4 = v5_xs(v5_s3);
+    wire [63:0] v5_s5 = v5_xs(v5_s4);
+    wire [63:0] v5_s6 = v5_xs(v5_s5);
+    wire [63:0] v5_s7 = v5_xs(v5_s6);
+    wire [63:0] v5_s8 = v5_xs(v5_s7);
+    // **先取后推进**: lane0 的期望值取的是**推进前**的状态 (与 app 的
+    // `wire [7:0] rx_exp = rx_lfsr[31:24]` + `rx_lfsr <= xs_next(rx_lfsr)` 逐位同款)
+    wire [7:0]  v5_e0 = v5_lfsr[31:24];
+    wire [7:0]  v5_e1 = v5_s1[31:24];
+    wire [7:0]  v5_e2 = v5_s2[31:24];
+    wire [7:0]  v5_e3 = v5_s3[31:24];
+    wire [7:0]  v5_e4 = v5_s4[31:24];
+    wire [7:0]  v5_e5 = v5_s5[31:24];
+    wire [7:0]  v5_e6 = v5_s6[31:24];
+    wire [7:0]  v5_e7 = v5_s7[31:24];
+    // 推进后的状态 = s_{nb} (nb ∈ 0..8 ⇒ 9 选 1)
+    reg  [63:0] v5_ns;
+    always @(*) begin
+        case (v5_nb)
+            4'd0:    v5_ns = v5_lfsr;
+            4'd1:    v5_ns = v5_s1;
+            4'd2:    v5_ns = v5_s2;
+            4'd3:    v5_ns = v5_s3;
+            4'd4:    v5_ns = v5_s4;
+            4'd5:    v5_ns = v5_s5;
+            4'd6:    v5_ns = v5_s6;
+            4'd7:    v5_ns = v5_s7;
+            default: v5_ns = v5_s8;      // nb==8 (满字, 全场绝大多数)
+        endcase
+    end
+    wire [7:0]  v5_g0 = u_m_d[63:56];
+    wire [7:0]  v5_g1 = u_m_d[55:48];
+    wire [7:0]  v5_g2 = u_m_d[47:40];
+    wire [7:0]  v5_g3 = u_m_d[39:32];
+    wire [7:0]  v5_g4 = u_m_d[31:24];
+    wire [7:0]  v5_g5 = u_m_d[23:16];
+    wire [7:0]  v5_g6 = u_m_d[15:8];
+    wire [7:0]  v5_g7 = u_m_d[7:0];
+    // 逐 lane 失配 (只对**有效 lane** 判: i < nb)
+    wire        v5_b0 = (4'd0 < v5_nb) && (v5_g0 != v5_e0);
+    wire        v5_b1 = (4'd1 < v5_nb) && (v5_g1 != v5_e1);
+    wire        v5_b2 = (4'd2 < v5_nb) && (v5_g2 != v5_e2);
+    wire        v5_b3 = (4'd3 < v5_nb) && (v5_g3 != v5_e3);
+    wire        v5_b4 = (4'd4 < v5_nb) && (v5_g4 != v5_e4);
+    wire        v5_b5 = (4'd5 < v5_nb) && (v5_g5 != v5_e5);
+    wire        v5_b6 = (4'd6 < v5_nb) && (v5_g6 != v5_e6);
+    wire        v5_b7 = (4'd7 < v5_nb) && (v5_g7 != v5_e7);
+    wire [3:0]  v5_nbad = {3'b0, v5_b0} + {3'b0, v5_b1} + {3'b0, v5_b2} + {3'b0, v5_b3}
+                        + {3'b0, v5_b4} + {3'b0, v5_b5} + {3'b0, v5_b6} + {3'b0, v5_b7};
+    wire        v5_any = |{v5_b7, v5_b6, v5_b5, v5_b4, v5_b3, v5_b2, v5_b1, v5_b0};
+    // 首个坏 lane (lane0 优先; 只在 v5_any 时有意义)
+    wire [3:0]  v5_fb = v5_b0 ? 4'd0 : v5_b1 ? 4'd1 : v5_b2 ? 4'd2 : v5_b3 ? 4'd3 :
+                        v5_b4 ? 4'd4 : v5_b5 ? 4'd5 : v5_b6 ? 4'd6 : 4'd7;
+    reg  [7:0]  v5_gsel, v5_esel;
+    always @(*) begin
+        case (v5_fb)
+            4'd0:    begin v5_gsel = v5_g0; v5_esel = v5_e0; end
+            4'd1:    begin v5_gsel = v5_g1; v5_esel = v5_e1; end
+            4'd2:    begin v5_gsel = v5_g2; v5_esel = v5_e2; end
+            4'd3:    begin v5_gsel = v5_g3; v5_esel = v5_e3; end
+            4'd4:    begin v5_gsel = v5_g4; v5_esel = v5_e4; end
+            4'd5:    begin v5_gsel = v5_g5; v5_esel = v5_e5; end
+            4'd6:    begin v5_gsel = v5_g6; v5_esel = v5_e6; end
+            default: begin v5_gsel = v5_g7; v5_esel = v5_e7; end
+        endcase
+    end
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            v5_lfsr  <= 64'h9E3779B97F4A7C15;   // = app_udp_pattern.SEED
+            v5_cnt   <= 32'd0;  v5_fo  <= 16'd0;  v5_v_r <= 1'b0;
+            v5_idx_r <= 32'd0;  v5_mm_r <= 32'd0;
+            v5_got_r <= 8'd0;   v5_exp_r <= 8'd0; v5_off_r <= 16'd0;
+        end else begin
+            // 帧内偏移: 帧边界 (uf_snap = 载荷首字节**前**的那一拍) 复位。
+            // 与写字同拍时按"本字即本帧首字"处理 (结构上不会发生: 载荷首字在
+            // uf_snap 的下一拍; 这里只是防御性写法, 不让两种口径产生分歧)。
+            if (uf_snap && !v5_cyc) v5_fo <= 16'd0;
+            else if (v5_cyc)        v5_fo <= (uf_snap ? 16'd0 : v5_fo) + {12'b0, v5_nb};
+            if (v5_cyc) begin
+                v5_lfsr <= v5_ns;
+                v5_cnt  <= v5_cnt + {28'b0, v5_nb};
+                v5_mm_r <= v5_mm_r + {28'b0, v5_nbad};
+                if (v5_any && !v5_v_r) begin
+                    v5_v_r   <= 1'b1;
+                    v5_idx_r <= v5_cnt + {28'b0, v5_fb};
+                    v5_got_r <= v5_gsel;
+                    v5_exp_r <= v5_esel;
+                    v5_off_r <= (uf_snap ? 16'd0 : v5_fo) + {12'b0, v5_fb};
+                end
+            end
+        end
+    end
+
+    assign v5_dv_idx = v5_idx_r;
+    assign v5_dv_got = v5_got_r;
+    assign v5_dv_exp = v5_exp_r;
+    assign v5_dv_off = v5_off_r;
+    assign v5_dv_mm  = v5_mm_r;
+    assign v5_dv_v   = v5_v_r;
+
+    //=========================================================================
+    // RXP_DIAG v6 (2026-09-27): **u_pre 输入侧** (s_axis) 上的第三个 LFSR 校验器
+    //=========================================================================
+    // 【要回答的问题 (§18.9 的矛盾)】板级已定案: 载荷被**窗口内循环旋转**; 而逐个
+    //   结构排查说 `din` (= u_uf 写口) 之前**没有任何能装下整帧的存储**。v5 用
+    //   **机制不同**的探针 (纯字节计数 vs SW 的帧号定址) 证明 `din` 上确实已经损坏。
+    //   ⇒ 三者不能同时为真; 唯一还没插桩的点就是 **u_pre 的输入** (= 本段)。
+    //   裁决表 (v6 上板后):
+    //     · v6 干净 (CZ=0) 而 v5 损坏 ⇒ 重排在 **u_pre 或 udp_rx 内部**;
+    //     · v6 也损坏 ⇒ 在 **mac_rx_64 / rx_classify / vlan_strip** ⇒ 必须带着这个
+    //       反例重查"无帧级存储"的论证。
+    //
+    // 【为什么不需要解析表头】载荷起点是**常量 42 字节** (14 以太 + 20 IP + 8 UDP;
+    //   本设计无 VLAN、无 IP 选项 —— 见 udp_rx.v 头注释), FCS 已在 mac_rx_64 剥离
+    //   (它的 4 字节前瞻延迟线让帧尾 4 字节自然不打包)。⇒ 输入侧只做三件事:
+    //     ① SOP (s_axis_tuser) 复位"帧内字节计数"; ② 帧内序号 < 42 的字节跳过;
+    //     ③ 从第 42 字节起逐字节喂 LFSR 并比对, 直到帧末。
+    //   ⚠️ 已知边界 (判读必读): 本段**不判 FCS/IP 头是否合法**, 也**不判该帧会不会被
+    //     udp_rx 接受** —— 所有进入 udp_split 的字都计入 (含被 udp_rx 丢弃的非匹配帧
+    //     与后续被回卷的坏 FCS 帧)。所以 `CV == app 的 II` 只在"**所有** UDP 帧都被
+    //     app 交付"时成立 (板级 8/8 轮 RL=WF=0 且全匹配, 满足)。
+    //
+    // 【LFSR 约定 (必须与 v5 侧和 app 三方一致)】xorshift64, seed 0x9E3779B97F4A7C15,
+    //   **先取后推进**, byte = state[31:24]。本段直接**复用 v5 段的 v5_xs 函数**
+    //   (不另写一份 —— 两份实现迟早会漂移)。三个校验器的等价性由门里**动态断言**
+    //   钉死: 同一次注入上 `CV == app 的 ds_idx` 且 `CM == app 的 stat_mismatch`
+    //   且 `CV == v5 的 DV`, 任一 LFSR 有 1 字节相位差这些断言必然变红。
+    //
+    // 【推进步数 = popcount(tkeep)**】而不是恒 8 —— 与 v5 侧和 app 的 `cmp_n` 逐位同
+    //   口径 (帧末部分字只推进几个字节)。
+    //
+    //-------------------------------------------------------------------------
+    // 【时序: 为什么本段**不是**又一个 8 步组合链】(v5 已把 WNS 压到 0.07ns)
+    //   输入侧 1 字/拍**上限**、且帧内只有 ~184 字载荷 (1G 下线速 = 1 字/8 拍),
+    //   空闲很多 ⇒ 多拍计算是免费的。本段用一个 **2 拍/字** 的引擎 + 深 4 的输入
+    //   skid: 每拍只做 **≤4 步** xorshift (≈12 级 LUT, v5 是一条 8 步 ≈24 级的链),
+    //   吞吐 = 1 字/2 拍 = 1G 线速的 **4 倍余量**。
+    //   ⚠️ 结构上限 (写清, 不藏): 本引擎**跟不上持续背靠背** (1 字/拍) 的输入 ——
+    //     输入侧不能反压 (s_axis_tready = !pre_full, 而 pre_full 结构性几乎不出现),
+    //     所以 skid 满时只能**丢字**, 并计入 `CS`。板级 1G 与真 wrapper 全链 (经
+    //     mac_rx_64 的 8 字 FIFO) 都是 1 字/8 拍 ⇒ 余量 4 倍, `CS` 恒 0;
+    //     `CS != 0` ⇒ **本轮 v6 读数不可用** (被丢的字让 LFSR 与字节流错位)。
+    //     门里有一条**过速相**专门证明 `CS` 会动 (不是死 0)。
+    //-------------------------------------------------------------------------
+    // 载荷起点常量 (14 以太 + 20 IP + 8 UDP)。**不要**改成参数: gen_offsets.py 与
+    //   门里的 41/42/43 边界相都按 42 写死, 变异测试 M-V1 就是把它改成 41。
+    localparam [15:0] V6_HDR = 16'd42;
+
+    // ---- 输入侧: 帧内字节序号 + 本字载荷字节数 ----
+    // v6_fidx = 下一个被接受的字的**首字节**在帧内的序号 (SOP 字 = 0)。
+    //   ⚠️ 它在**每次 s_acc** 推进 (与 skid 是否满无关) ⇒ 即使有丢字, 后续字的
+    //     帧内序号仍然正确 (被丢的字只影响 LFSR 的字节计数, 不影响 fidx)。
+    reg  [15:0] v6_fidx;
+    wire [3:0]  v6_nbw  = v5_pop8(s_axis_tkeep);          // 本字有效字节数 (与 v5 同口径)
+    wire        v6_sopw = s_acc && s_axis_tuser;          // SOP 字被接受
+    wire [15:0] v6_fin  = v6_sopw ? 16'd0 : v6_fidx;      // 本字首字节的帧内序号
+    wire [15:0] v6_end  = v6_fin + {12'b0, v6_nbw};       // 本字末字节之后的序号
+    wire [15:0] v6_bs   = (v6_fin < V6_HDR) ? V6_HDR : v6_fin;  // 本字内首个载荷字节的序号
+    wire [15:0] v6_np16 = (v6_end > v6_bs) ? (v6_end - v6_bs) : 16'd0;
+    wire [3:0]  v6_np   = v6_np16[3:0];                   // 本字的载荷字节数 (0..8)
+    // 载荷字节 = 本字的**尾部** np 个字节 (因为 42 不是 8 的倍数: 只有第 6 个字
+    //   (帧内序号 40..47) 的前 2 字节是头, 其余整字要么全头要么全载荷)。
+    wire [3:0]  v6_skip = v6_nbw - v6_np;                 // 本字**头部跳过**的字节数 (0..8)
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)            v6_fidx <= 16'd0;
+        else if (s_acc)        v6_fidx <= v6_end;
+    end
+
+    // ---- 输入 skid: 深 4 的字 FIFO (写口 = s_acc; 满则丢并计入 CS) ----
+    // 条目 = {tdata[63:0], skip[3:0], fidx[15:0], np[3:0]} = 88 位 (tkeep 不存: np 已够)。
+    reg  [87:0] v6_mem [0:3];
+    reg  [1:0]  v6_wp, v6_rp;
+    reg  [2:0]  v6_oc;                                    // 占用 0..4
+    wire        v6_full  = (v6_oc == 3'd4);
+    wire        v6_empty = (v6_oc == 3'd0);
+    wire        v6_put   = s_acc && !v6_full;
+    wire        v6_ovf   = s_acc &&  v6_full;             // 丢字 (计入 CS)
+
+    // ---- 引擎: 2 拍/字 ----
+    //   ph=0 (start): 比对载荷字节 0..3; ph=1: 比对载荷字节 4..7。
+    //   v6_lfsr 在**每个处理拍**按"本拍消费的字节数"推进一次 (0..4 步) ⇒ 状态在
+    //   ph=1 拍开始时恰是"载荷第 4 字节"的状态 (A 拍已推进)。这是本引擎唯一的
+    //   跨拍反馈, 而每拍的组合深度只有 ≤4 步。
+    reg         v6_busy, v6_ph;
+    reg  [87:0] v6_w;
+    wire        v6_start = !v6_busy && !v6_empty;         // 本拍处理 skid 头字 (ph=0)
+    wire        v6_cyc1  = v6_busy && v6_ph;              // 本拍处理上一个字的 ph=1
+    wire        v6_pop   = v6_start;
+    wire        v6_cyc   = v6_start || v6_cyc1;           // 本拍真的比了 ≤4 个字节
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            v6_wp <= 2'd0; v6_rp <= 2'd0; v6_oc <= 3'd0;
+            v6_busy <= 1'b0; v6_ph <= 1'b0; v6_w <= 88'd0;
+        end else begin
+            if (v6_put) v6_mem[v6_wp] <= {s_axis_tdata, v6_skip, v6_fin, v6_np};
+            if (v6_put) v6_wp <= v6_wp + 2'd1;
+            if (v6_pop) v6_rp <= v6_rp + 2'd1;
+            v6_oc <= v6_oc + {2'b0, v6_put} - {2'b0, v6_pop};
+            if (v6_start)      begin v6_busy <= 1'b1; v6_ph <= 1'b1; v6_w <= v6_mem[v6_rp]; end
+            else if (v6_cyc1)  begin v6_busy <= 1'b0; v6_ph <= 1'b0; end
+        end
+    end
+
+    // 当前处理字的字段 (ph=1 取寄存器副本, ph=0 组合读 skid 头)
+    wire [87:0] v6_cw   = v6_cyc1 ? v6_w : v6_mem[v6_rp];
+    wire [63:0] v6_cd   = v6_cw[87:24];
+    wire [3:0]  v6_csk  = v6_cw[23:20];
+    wire [15:0] v6_cfi  = v6_cw[19:4];
+    wire [3:0]  v6_cnp  = v6_cw[3:0];
+
+    // 本拍消费的载荷字节数: ph=0 取 min(np,4), ph=1 取 np-4 (np>4 时)
+    wire [3:0]  v6_n0   = (v6_cnp > 4'd4) ? 4'd4 : v6_cnp;
+    wire [3:0]  v6_n1   = (v6_cnp > 4'd4) ? (v6_cnp - 4'd4) : 4'd0;
+    wire [3:0]  v6_n    = v6_cyc1 ? v6_n1 : v6_n0;
+    wire [3:0]  v6_base = v6_cyc1 ? 4'd4 : 4'd0;          // 本拍首个载荷字节在字内的序号
+
+    // ---- 状态寄存器 (声明必须在用之前 —— xvlog 先声明后用, 坑 22) ----
+    reg  [63:0] v6_lfsr;                                 // 期望序列状态 (先取后推进)
+    reg  [31:0] v6_cnt;                                  // 累计**比对**的载荷字节数 (活计数器)
+    reg  [31:0] v6_mm;                                   // 失配字节总数 (整轮)
+    reg  [31:0] v6_cv;  reg [7:0] v6_cg, v6_ce;
+    reg  [15:0] v6_co;  reg v6_v;  reg [7:0] v6_cs;
+
+    // ---- 期望字节: 从当前状态起 ≤3 步 (lane p = xs^p(state)[31:24], 先取后推进) ----
+    wire [63:0] v6_s1 = v5_xs(v6_lfsr);
+    wire [63:0] v6_s2 = v5_xs(v6_s1);
+    wire [63:0] v6_s3 = v5_xs(v6_s2);
+    wire [63:0] v6_s4 = v5_xs(v6_s3);
+    wire [7:0]  v6_x0 = v6_lfsr[31:24];
+    wire [7:0]  v6_x1 = v6_s1[31:24];
+    wire [7:0]  v6_x2 = v6_s2[31:24];
+    wire [7:0]  v6_x3 = v6_s3[31:24];
+    // 推进后的状态 = xs^v6_n (n ∈ 0..4 ⇒ 5 选 1)
+    reg  [63:0] v6_ns;
+    always @(*) begin
+        case (v6_n)
+            4'd0:    v6_ns = v6_lfsr;
+            4'd1:    v6_ns = v6_s1;
+            4'd2:    v6_ns = v6_s2;
+            4'd3:    v6_ns = v6_s3;
+            default: v6_ns = v6_s4;                      // n==4
+        endcase
+    end
+
+    // ---- 收到的字节: 把本字的载荷字节**左对齐打包**到 v6_pw (payload lane p = v6_pw 第 p 个字节)
+    //   载荷 = 尾部 np 字节 ⇒ 左移 skip*8 位即可 (skip=8 ⇒ 全移出 ⇒ 恒 0, 而那 n=0 不比)
+    wire [63:0] v6_pw = v6_cd << {v6_csk, 3'b0};
+    // ph=0 比 payload lane 0..3 (= v6_pw[63:32]), ph=1 比 payload lane 4..7 (= v6_pw[31:0])
+    wire [31:0] v6_gw = v6_cyc1 ? v6_pw[31:0] : v6_pw[63:32];
+    wire [7:0]  v6_g0 = v6_gw[31:24];
+    wire [7:0]  v6_g1 = v6_gw[23:16];
+    wire [7:0]  v6_g2 = v6_gw[15:8];
+    wire [7:0]  v6_g3 = v6_gw[7:0];
+    // 逐 lane 失配 (只对有效 lane 判: p < n)
+    wire        v6_b0 = (4'd0 < v6_n) && (v6_g0 != v6_x0);
+    wire        v6_b1 = (4'd1 < v6_n) && (v6_g1 != v6_x1);
+    wire        v6_b2 = (4'd2 < v6_n) && (v6_g2 != v6_x2);
+    wire        v6_b3 = (4'd3 < v6_n) && (v6_g3 != v6_x3);
+    wire [3:0]  v6_nbad = {3'b0, v6_b0} + {3'b0, v6_b1} + {3'b0, v6_b2} + {3'b0, v6_b3};
+    wire        v6_any  = |{v6_b3, v6_b2, v6_b1, v6_b0};
+    wire [3:0]  v6_fb   = v6_b0 ? 4'd0 : v6_b1 ? 4'd1 : v6_b2 ? 4'd2 : 4'd3;
+    reg  [7:0]  v6_gsel, v6_esel;
+    always @(*) begin
+        case (v6_fb)
+            4'd0:    begin v6_gsel = v6_g0; v6_esel = v6_x0; end
+            4'd1:    begin v6_gsel = v6_g1; v6_esel = v6_x1; end
+            4'd2:    begin v6_gsel = v6_g2; v6_esel = v6_x2; end
+            default: begin v6_gsel = v6_g3; v6_esel = v6_x3; end
+        endcase
+    end
+
+    // ---- 状态更新 (LFSR + 计数 + 粘滞快照) ----
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            v6_lfsr <= 64'h9E3779B97F4A7C15;             // = v5_lfsr / app SEED
+            v6_cnt <= 32'd0;  v6_mm <= 32'd0;
+            v6_cv  <= 32'd0;  v6_cg <= 8'd0;  v6_ce <= 8'd0;  v6_co <= 16'd0;
+            v6_v   <= 1'b0;   v6_cs <= 8'd0;
+        end else begin
+            if (v6_ovf) v6_cs <= v6_cs + 8'd1;
+            if (v6_cyc) begin
+                v6_lfsr <= v6_ns;
+                v6_cnt  <= v6_cnt + {28'b0, v6_n};
+                v6_mm   <= v6_mm + {28'b0, v6_nbad};
+                if (v6_any && !v6_v) begin
+                    v6_v  <= 1'b1;
+                    // CV = 本拍之前的累计字节数 + **本拍内**的 lane 号。
+                    // ⚠️ 这里**不能**再加 v6_base: v6_cnt 在本拍开始前已经计入了
+                    //    本字 ph=0 拍消费的那 4 个字节 ⇒ 它已经是"本拍第一个字节"
+                    //    的全局序号 (ph=1 拍加 v6_base 会把那 4 字节算两遍 ——
+                    //    v6 门 V1 实测 CV 恰好多 4, 就是这条)。
+                    v6_cv <= v6_cnt + {28'b0, v6_fb};
+                    v6_cg <= v6_gsel;
+                    v6_ce <= v6_esel;
+                    // CO = 该字节的**帧内**序号 - 42
+                    v6_co <= v6_cfi + {12'b0, v6_csk} + {12'b0, v6_base}
+                             + {12'b0, v6_fb} - V6_HDR;
+                end
+            end
+        end
+    end
+
+    assign v6_dv_idx = v6_cv;
+    assign v6_dv_got = v6_cg;
+    assign v6_dv_exp = v6_ce;
+    assign v6_dv_off = v6_co;
+    assign v6_dv_mm  = v6_mm;
+    assign v6_dv_v   = v6_v;
+    assign v6_dv_sk  = v6_cs;
 `endif
 
 endmodule

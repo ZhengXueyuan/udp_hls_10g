@@ -152,6 +152,14 @@ p5diag_verify/*
 !p5diag_verify/*.line
 !p5diag_verify/samples*.txt
 !p5diag_verify/*.rpt
+# 逐仪器代次的读数在子目录里 (p5diag_verify/v4|v5|v6/*.line) —— 上面的放行只匹配一层,
+# 所以必须单独放行。⚠️ **gitignore 的经典陷阱: 父目录被排除时无法放行其内容**
+# (git 根本不下降进被忽略的目录) ⇒ 必须先把子目录本身放行, 再重新排除其内容, 再逐类放行。
+# 2026-09-27 实测: 只写 `!p5diag_verify/*/*.line` 时 `git add p5diag_verify/v5` 静默无效果。
+!p5diag_verify/*/
+p5diag_verify/*/*
+!p5diag_verify/*/*.line
+!p5diag_verify/*/*.sm
 
 sim/udprx/*
 !sim/udprx/*.v

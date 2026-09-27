@@ -31,11 +31,18 @@
 //      (位置划分)。它们把"漏计/重复计"变成一条硬判据。
 //   相 7  **状态行格式门**: RXP_DIAG 的**字符布局** (ci 窗口) 是整套仪器里唯一
 //     靠算偏移得来、又不会被任何功能仿真自然覆盖的部分 —— 9600 波特下一行要
-//      142ms, 而全链门只跑 ~10ms ⇒ 板级之前发出去的整行**从没被仿真逐字符验证过**。
+//      ~170ms, 而全链门只跑 ~10ms ⇒ 板级之前发出去的整行**从没被仿真逐字符验证过**。
 //      这里用短位周期 (7 拍/位) 让 app_status_uart 真发完一行, 逐字符解码后断言:
-//      ① 行恰 470 字符 (CR/LF 在 468/469); ② v1 既有字段在**发布偏移**上仍然正确
-//      (前 382 字符不动); ③ v2 新字段 GW/EW/OZ/OL/OM/OH 的偏移与宽度正确 ——
-//      6 个输入值取互相可区分的图案 ⇒ 字段串位/串宽/漏字符必然红。
+//      ① 行恰 971 字符 (CR/LF 在 969/970; v1/v2 时是 470 / 468·469, v3 时是
+//         637 / 635·636, v4 时是 807 / 805·806, v5 时是 916 / 914·915 ——
+//         沿革见 rtl/app_status_uart.v 的 TPL 段注释);
+//      ② v1/v2/v3/v4/v5 既有字段在**发布偏移**上仍然正确 (前 916 字符不动);
+//      ③ v2 新字段 GW/EW/OZ/OL/OM/OH、v3 新字段 SW..VN、**v4 新字段 CN..QH**、
+//         **v5 新字段 DV..SB**、**v6 新字段 CV..CS** 的偏移与宽度正确 —— 每个
+//         字段的输入值取互相可区分的图案 ⇒ 字段串位/串宽/漏字符必然红。
+//      ⚠️ v4 段的 20 个字段全部逐值断言 (偏移由 sim/rxpdiag/gen_offsets.py
+//        拼接 TPL 串算出, 该脚本还会**直接读 rtl/app_status_uart.v** 解码窗口
+//        逐条对账; 本相则是"实跑出来的那一行"的独立复核)。
 //
 // 运行: sim/rxpdiag/run_tb_rxp_diag.bat (独立目录, 防 xsim.dir 文件锁 — 坑 7)
 //=============================================================================
@@ -192,6 +199,26 @@ module tb_rxp_diag;
     reg [15:0] st_rc, st_vc;
     reg [9:0]  st_vx, st_vs, st_vr;
     reg [15:0] st_vn;
+    // v4 (phase 7): exception-path counters + run structure / event FIFO
+    // (constant inputs, mutually distinguishable -> a shifted or mis-widthed
+    //  field cannot decode back to the expected value)
+    reg [15:0] st_cn, st_rd, st_nc, st_np, st_wf, st_rl, st_wc;
+    reg [15:0] st_ne, st_nr, st_mr;
+    reg [3:0]  st_en;
+    reg        st_eo;
+    reg [23:0] st_qa, st_qb, st_qc, st_qd, st_qe, st_qf, st_qg, st_qh;
+    // v5 (phase 7): write-side LFSR checker (udp_split) + parser counters (udp_rx)
+    // (constant inputs, mutually distinguishable -> a shifted or mis-widthed
+    //  field cannot decode back to the expected value)
+    reg [31:0] st_dv, st_dm, st_ps, st_nm, st_ic, st_dc, st_sb;
+    reg [7:0]  st_dg, st_de;
+    reg [15:0] st_do;
+    reg        st_vz;
+    // v6 (phase 7): u_pre INPUT-PORT-SIDE LFSR checker (udp_split v6_*)
+    reg [31:0] st_cv, st_cm;
+    reg [7:0]  st_cg, st_ce, st_cs;
+    reg [15:0] st_co;
+    reg        st_cz;
 
     // 状态行 DUT 的复位与主 DUT **独立** (不然每相复位都会重发行, 解码器要跟着
     // 重对齐); 位周期 7 拍 (BIT_LAST=6) 只为把 470 字符的行在 ~263us 内跑完。
@@ -225,6 +252,19 @@ module tb_rxp_diag;
         .v3_lr(st_lr), .v3_lw(st_lw), .v3_lo(st_lo), .v3_lh(st_lh),
         .v3_rc(st_rc), .v3_vc(st_vc),
         .v3_vx(st_vx), .v3_vs(st_vs), .v3_vr(st_vr), .v3_vn(st_vn),
+        .v4_cn(st_cn), .v4_rd(st_rd), .v4_nc(st_nc), .v4_np(st_np),
+        .v4_wf(st_wf), .v4_rl(st_rl), .v4_wc(st_wc),
+        .v4_ne(st_ne), .v4_nr(st_nr), .v4_mr(st_mr),
+        .v4_en(st_en), .v4_eo(st_eo),
+        .v4_qa(st_qa), .v4_qb(st_qb), .v4_qc(st_qc), .v4_qd(st_qd),
+        .v4_qe(st_qe), .v4_qf(st_qf), .v4_qg(st_qg), .v4_qh(st_qh),
+        .v5_dv_idx(st_dv), .v5_dv_got(st_dg), .v5_dv_exp(st_de),
+        .v5_dv_off(st_do), .v5_dv_mm(st_dm), .v5_dv_v(st_vz),
+        .v5_up_pass(st_ps), .v5_up_nm(st_nm), .v5_up_ipc(st_ic),
+        .v5_up_crc(st_dc), .v5_up_bytes(st_sb),
+        .v6_dv_idx(st_cv), .v6_dv_got(st_cg), .v6_dv_exp(st_ce),
+        .v6_dv_off(st_co), .v6_dv_mm(st_cm), .v6_dv_v(st_cz),
+        .v6_dv_sk(st_cs),
         .txd(st_txd)
     );
 
@@ -261,7 +301,33 @@ module tb_rxp_diag;
         st_lr = 10'h0BF; st_lw = 10'h1F3; st_lo = 10'h134; st_lh = 10'h07A;
         st_rc = 16'h0009; st_vc = 16'h0001;
         st_vx = 10'h0B8; st_vs = 10'h04F; st_vr = 10'h0BF; st_vn = 16'h0123;
+        // v4: every field gets a DIFFERENT value (a shifted / mis-widthed window
+        // cannot decode back to it). 16-bit fields: 4 hex each; EN: 1 hex;
+        // EO: 1 hex; QA..QH: 6 hex each (= 24 bits).
+        st_cn = 16'h0055; st_rd = 16'h00AA; st_nc = 16'h00F0; st_np = 16'h000F;
+        st_wf = 16'h1234; st_rl = 16'h4321; st_wc = 16'h00C3;
+        st_ne = 16'h0BEE; st_nr = 16'h0CAF; st_mr = 16'h0999;
+        st_en = 4'h8;     st_eo = 1'b1;
+        st_qa = 24'h0001C5; st_qb = 24'h0002D6; st_qc = 24'h0003E7;
+        st_qd = 24'h0004F8; st_qe = 24'h000509; st_qf = 24'h00061A;
+        st_qg = 24'h00072B; st_qh = 24'h00083C;
+        // v5: 11 fields, all values pairwise distinct and != every v4 value
+        // (DV/DM/PS/NM/IC/DC/SB: 8 hex; DG/DE: 2 hex; DO: 4 hex; VZ: 1 hex)
+        st_dv = 32'h0A0B0C0D; st_dg = 8'hD3; st_de = 8'h7E; st_do = 16'h0F5A;
+        st_dm = 32'h00C0FFEE; st_vz = 1'b1;
+        st_ps = 32'h00123456; st_nm = 32'h00ABCDEF; st_ic = 32'h0000BEEF;
+        st_dc = 32'h0ADD1E55; st_sb = 32'hCAFEF00D;
+        // v6: 7 fields, all values pairwise distinct and != every v4/v5 value
+        // (CV/CM: 8 hex; CG/CE/CS: 2 hex; CO: 4 hex; CZ: 1 hex)
+        st_cv = 32'h0F1E2D3C; st_cg = 8'hB7; st_ce = 8'h4E; st_co = 16'h3A5C;
+        st_cm = 32'h00FACADE; st_cz = 1'b1;  st_cs = 8'h6B;
     end
+
+    // v4 观测口 (A 部在 udp_split 里, 本 TB 不例化它; B 部在这里)
+    wire [15:0] v4_ne, v4_nr, v4_mr;
+    wire [3:0]  v4_en;
+    wire        v4_eo;
+    wire [23:0] v4_qa, v4_qb, v4_qc, v4_qd, v4_qe, v4_qf, v4_qg, v4_qh;
 
     app_udp_pattern #(.TX_BYTES(32'd0), .TX_GAP(16'd0), .SEED(64'h9E3779B97F4A7C15)) u_dut (
         .clk(clk), .rst_n(rst_n),
@@ -277,6 +343,12 @@ module tb_rxp_diag;
         .ds_got(ds_got), .ds_exp(ds_exp), .ds_prev(ds_prev), .ds_v(ds_v),
         .ds_gw(ds_gw), .ds_ew(ds_ew),
         .ds_oz(ds_oz), .ds_ol(ds_ol), .ds_om(ds_om), .ds_oh(ds_oh)
+`ifdef RXP_DIAG
+        , .v4_ne(v4_ne), .v4_nr(v4_nr), .v4_mr(v4_mr),
+        .v4_en(v4_en), .v4_eo(v4_eo),
+        .v4_ea(v4_qa), .v4_eb(v4_qb), .v4_ec(v4_qc), .v4_ed(v4_qd),
+        .v4_ee(v4_qe), .v4_ef(v4_qf), .v4_eg(v4_qg), .v4_eh(v4_qh)
+`endif
     );
 
     // 复位: **只在 negedge 翻转 rst_n** (0 延迟竞争 —— 坑 17 同族)。若在任意时刻翻转,
@@ -406,7 +478,7 @@ module tb_rxp_diag;
 
     // ===================== 相 7: 状态行逐字符解码 =====================
     // (这三个状态声明必须在 task 之前 —— xvlog 先声明后用, 坑 22)
-    reg [7:0] line [0:1023];              // v3: line is 637 chars (> 512)
+    reg [7:0] line [0:1023];              // v6: line is 971 chars (> 512)
     integer   nchar;
     integer   dec_i;
     integer   jj;
@@ -502,6 +574,12 @@ module tb_rxp_diag;
         chk(ds_b1 == 0 && ds_b2 == 0 && ds_bg == 0 && ds_dup == 0, "P1 四个形状计数全 0");
         chk(ds_gw == 64'd0 && ds_ew == 64'd0, "P1 整字字段未被写入 (恒 0)");
         chk_bk(16'd1, 32'd0, 32'd0, 32'd0, 32'd0);
+        // v4 B 部: 干净流上运行结构/事件 FIFO 必须全 0 (也证明这些口真的被驱动,
+        // 不是悬空 x —— 悬空时这几条会因 X 而红)
+        chk(v4_ne === 16'd0 && v4_nr === 16'd0 && v4_mr === 16'd0,
+            "P1 v4 NE/NR/MR zero or X");
+        chk(v4_en === 4'd0 && v4_eo === 1'b0, "P1 v4 EN/EO zero or X");
+        chk(v4_qa === 24'd0 && v4_qh === 24'd0, "P1 v4 QA/QH zero or X");
 
         // ================= 相 2: 两处注入, 背靠背 =================
         // CA1=100: 帧 1 (64..127) 帧内偏移 36, 字 96..103 的 **lane 4** (字中!)
@@ -656,12 +734,70 @@ module tb_rxp_diag;
         chk(ds_b1 + ds_b2 + ds_bg == st_mismatch, "P8 popcount 分桶覆盖");
         chk(ds_oz + ds_ol + ds_om + ds_oh == st_mismatch, "P8 偏移分桶覆盖");
 
-        $display("RXPDIAG P7 行长=%0d (期望 637) 末两字符=%02X %02X", nchar, line[635], line[636]);
+        $display("RXPDIAG P7 行长=%0d (期望 971) 末两字符=%02X %02X", nchar, line[969], line[970]);
         $write("RXPDIAG P7 LINE: ");              // 实收整行 (不含 CR/LF) —— 板级读数长这样
-        for (jj = 0; jj < 635; jj = jj + 1) $write("%c", line[jj]);
+        for (jj = 0; jj < 969; jj = jj + 1) $write("%c", line[jj]);
         $write("%c", 8'h0A);                 // 行尾 (不写字面反斜杠, 免转义坑)
-        chk(nchar == 637, "P7 行长 = 637 字符 (v3)");
-        chk(line[635] == 8'h0D && line[636] == 8'h0A, "P7 CR/LF 落在 635/636");
+        chk(nchar == 971, "P7 行长 = 971 字符 (v6)");
+        chk(line[969] == 8'h0D && line[970] == 8'h0A, "P7 CR/LF 落在 969/970");
+        // ---- v6 新字段 (偏移全部由 sim/rxpdiag/gen_offsets.py 拼接 TPL 串算出) ----
+        // 7 个字段各取**互不相同且非 0**的常量 ⇒ 窗口串位/少一字符/多一字符/
+        // 左对齐错 (8 位值误写成"补到 32 位") 都会让解码值变红。
+        chk_hex(16'd7, 16'd918, 16'd8, 64'h000000000F1E2D3C, "CV");
+        chk_hex(16'd7, 16'd930, 16'd2, 64'h00000000000000B7, "CG");
+        chk_hex(16'd7, 16'd936, 16'd2, 64'h000000000000004E, "CE");
+        chk_hex(16'd7, 16'd942, 16'd4, 64'h0000000000003A5C, "CO");
+        chk_hex(16'd7, 16'd950, 16'd8, 64'h0000000000FACADE, "CM");
+        chk_hex(16'd7, 16'd962, 16'd1, 64'h0000000000000001, "CZ");
+        chk_hex(16'd7, 16'd967, 16'd2, 64'h000000000000006B, "CS");
+        // 追加性: ' CV=' 必须紧跟在 SB 值的 8 个 hex 之后 (前 916 字符未被推动)
+        chk(line[914] == 8'h20 && line[915] == 8'h43 && line[916] == 8'h56
+            && line[917] == 8'h3D, "P7 CV 字段紧接 SB 值 (v5 前缀未被推动)");
+        // 追加性: ' DV=' 必须紧跟在 QH 值的 6 个 hex 之后 (前 805 字符未被推动)
+        // ---- v5 新字段 (偏移全部由 sim/rxpdiag/gen_offsets.py 拼接 TPL 串算出) ----
+        // 11 个字段各取**互不相同且非 0**的常量 ⇒ 窗口串位/少一字符/多一字符/
+        // 左对齐错 (8 位值误写成"补到 32 位") 都会让解码值变红。
+        chk_hex(16'd7, 16'd809, 16'd8, 64'h000000000A0B0C0D, "DV");
+        chk_hex(16'd7, 16'd821, 16'd2, 64'h00000000000000D3, "DG");
+        chk_hex(16'd7, 16'd827, 16'd2, 64'h000000000000007E, "DE");
+        chk_hex(16'd7, 16'd833, 16'd4, 64'h0000000000000F5A, "DO");
+        chk_hex(16'd7, 16'd841, 16'd8, 64'h0000000000C0FFEE, "DM");
+        chk_hex(16'd7, 16'd853, 16'd1, 64'h0000000000000001, "VZ");
+        chk_hex(16'd7, 16'd858, 16'd8, 64'h0000000000123456, "PS");
+        chk_hex(16'd7, 16'd870, 16'd8, 64'h0000000000ABCDEF, "NM");
+        chk_hex(16'd7, 16'd882, 16'd8, 64'h000000000000BEEF, "IC");
+        chk_hex(16'd7, 16'd894, 16'd8, 64'h000000000ADD1E55, "DC");
+        chk_hex(16'd7, 16'd906, 16'd8, 64'h00000000CAFEF00D, "SB");
+        // 追加性: ' DV=' 必须紧跟在 QH 值的 6 个 hex 之后 (前 805 字符未被推动)
+        chk(line[805] == 8'h20 && line[806] == 8'h44 && line[807] == 8'h56
+            && line[808] == 8'h3D, "P7 DV 字段紧接 QH 值 (v4 前缀未被推动)");
+        // ---- v4 新字段 (偏移全部由 sim/rxpdiag/gen_offsets.py 拼接 TPL 串算出) ----
+        // 20 个字段各取互相可区分的常量 ⇒ 窗口串位/少一字符/左对齐错必红。
+        // EN/EO 是 1 字符窗口 (hexc 天然右对齐); QA..QH 是 24 位值在 6 字符窗口
+        // (hexd 左对齐 {v, 8'b0}) —— 这两类是最容易写错的地方, 故取值也刻意错开。
+        chk_hex(16'd7, 16'd639, 16'd4, 64'h0000000000000055, "CN");
+        chk_hex(16'd7, 16'd647, 16'd4, 64'h00000000000000AA, "RD");
+        chk_hex(16'd7, 16'd655, 16'd4, 64'h00000000000000F0, "NC");
+        chk_hex(16'd7, 16'd663, 16'd4, 64'h000000000000000F, "NP");
+        chk_hex(16'd7, 16'd671, 16'd4, 64'h0000000000001234, "WF");
+        chk_hex(16'd7, 16'd679, 16'd4, 64'h0000000000004321, "RL");
+        chk_hex(16'd7, 16'd687, 16'd4, 64'h00000000000000C3, "WC");
+        chk_hex(16'd7, 16'd695, 16'd4, 64'h0000000000000BEE, "NE");
+        chk_hex(16'd7, 16'd703, 16'd4, 64'h0000000000000CAF, "NR");
+        chk_hex(16'd7, 16'd711, 16'd4, 64'h0000000000000999, "MR");
+        chk_hex(16'd7, 16'd719, 16'd1, 64'h0000000000000008, "EN");
+        chk_hex(16'd7, 16'd724, 16'd1, 64'h0000000000000001, "EO");
+        chk_hex(16'd7, 16'd729, 16'd6, 64'h000000000001C5, "QA");
+        chk_hex(16'd7, 16'd739, 16'd6, 64'h000000000002D6, "QB");
+        chk_hex(16'd7, 16'd749, 16'd6, 64'h000000000003E7, "QC");
+        chk_hex(16'd7, 16'd759, 16'd6, 64'h000000000004F8, "QD");
+        chk_hex(16'd7, 16'd769, 16'd6, 64'h00000000000509, "QE");
+        chk_hex(16'd7, 16'd779, 16'd6, 64'h0000000000061A, "QF");
+        chk_hex(16'd7, 16'd789, 16'd6, 64'h0000000000072B, "QG");
+        chk_hex(16'd7, 16'd799, 16'd6, 64'h0000000000083C, "QH");
+        // 追加性: ' CN=' 必须紧跟在 VN 值的 4 个 hex 之后 (前 635 字符未被推动)
+        chk(line[635] == 8'h20 && line[636] == 8'h43 && line[637] == 8'h4E
+            && line[638] == 8'h3D, "P7 CN 字段紧接 VN 值 (v3 前缀未被推动)");
         // ---- v3 新字段 (偏移全部由 sim/rxpdiag/gen_offsets.py 拼接 TPL 串算出) ----
         // 断言每个字段的**窗口与值**: 值互不相同、非 0、非全同 ⇒ 字段串位/窗口
         // 少一字符/多一字符/左对齐错 都会让解码值变红。

@@ -187,6 +187,26 @@ module app_udp_pattern #(
     //   · 端口**只在 `RXP_DIAG 下存在**: 默认/P5 构建的端口表与接线逐位不变
     //     (本工程铁律: 新增端口在默认路径上不得改变任何东西)。
     , output wire       ds_cap
+    // ---- RXP_DIAG v4 (2026-09-27): 受损帧的**运行结构** + **事件 FIFO** ----
+    // (ISSUE_RX_BYTE_CORRUPTION §16.7 "下一刀": 帧序号轨迹)
+    // 判据 (协调方写死):
+    //   · n_run == n_ev ⇒ 受损帧**全部孤立**; n_run < n_ev ⇒ **存在连续段**
+    //     (相邻帧号差 1 视为同一段; 连续段 = 帧边界整体位移的签名)。
+    //   · 事件 FIFO 前 8 条 {帧号, 该处 rx_got 字节} ⇒ 位移符号从"每轮 1 个样本"
+    //     扩到"每轮最多 8 个", 并暴露帧号的模结构 (聚集在某个 mod 值 ⇒ 环形缓冲/
+    //     定址类根因)。满了之后**只计数不再入队**, 由 EO 明示"有事件未记录"。
+    // 字段 (键 / 位宽):
+    //   NE = 偏移 0 失配事件总数 (与 v2 的 OZ 同门 ⇒ 两条独立路径互证, 门里有断言)
+    //   NR = 极大连续段数   MR = 最长连续段长度
+    //   EN = 已入队条目数 (0..8)   EO = 1 ⇒ FIFO 曾满, 后续事件**未记录** (粘滞)
+    //   EA..EH = 条目 0..7, 每条 24 位 = {帧号[15:0], 该事件处的 rx_got[7:0]}
+    , output reg  [15:0] v4_ne
+    , output reg  [15:0] v4_nr
+    , output reg  [15:0] v4_mr
+    , output reg  [3:0]  v4_en
+    , output reg         v4_eo
+    , output wire [23:0] v4_ea, v4_eb, v4_ec, v4_ed
+    , output wire [23:0] v4_ee, v4_ef, v4_eg, v4_eh
 `endif
 );
     // ---------------- 图案函数 (与 app_pattern.v / peer.cpp 同款) ----------------
@@ -452,6 +472,21 @@ module app_udp_pattern #(
     // v3: 首失配触发脉冲 —— 与下面 always 里取整字快照的那个 if 条件**逐字相同**
     // (所以"ds_cap 那一拍"与"ds_gw/ds_ew 被写入的那一拍"定义上就是同一拍)。
     assign ds_cap = wr_end && (cap_pend || (rx_bad && !ds_v_r));
+
+    // ---- v4: 运行结构 + 事件 FIFO 的状态 (声明必须先于下面那个 always —— 坑 22) ----
+    reg  [15:0] fi_cnt;          // 已开始的帧数 (= 下一个帧号); 帧首字装载拍 +1
+    reg  [15:0] nx_fi, cmp_fi;   // 随数据走 1 字前瞻管线的帧号 (装载拍 / 比对拍)
+    reg  [15:0] fi_last;         // 上一个受损帧的帧号 (连续段判据)
+    reg  [15:0] cur_run;         // 当前连续段长度
+    reg         ev_seen;         // 已发生过至少一个事件
+    reg  [23:0] ev_f [0:7];      // 事件 FIFO: {帧号[23:8], got[7:0]}, 只入不出
+    integer     v4_i;            // ev_f 复位用
+    // 事件 = 偏移 0 的失配字节 (与 v2 的 OZ 桶条件 ds_bo0 逐字相同 ⇒ NE == OZ)
+    wire        v4_evt = rx_bad && ds_bo0;
+    assign v4_ea = ev_f[0];  assign v4_eb = ev_f[1];
+    assign v4_ec = ev_f[2];  assign v4_ed = ev_f[3];
+    assign v4_ee = ev_f[4];  assign v4_ef = ev_f[5];
+    assign v4_eg = ev_f[6];  assign v4_eh = ev_f[7];
 `endif
 
     always @(posedge clk or negedge rst_n) begin
@@ -479,6 +514,12 @@ module app_udp_pattern #(
             ds_oz_r <= 32'd0; ds_ol_r <= 32'd0;
             ds_om_r <= 32'd0; ds_oh_r <= 32'd0;
             off_cnt <= 12'd0; nx_sf <= 1'b0; cmp_sf <= 1'b0; cap_pend <= 1'b0;
+            // v4: 运行结构 + 事件 FIFO (未用条目恒 0 —— FIFO 只入不出, 不回绕)
+            v4_ne <= 16'd0; v4_nr <= 16'd0; v4_mr <= 16'd0;
+            v4_en <= 4'd0;  v4_eo <= 1'b0;
+            fi_cnt <= 16'd0; nx_fi <= 16'd0; cmp_fi <= 16'd0;
+            fi_last <= 16'd0; cur_run <= 16'd0; ev_seen <= 1'b0;
+            for (v4_i = 0; v4_i < 8; v4_i = v4_i + 1) ev_f[v4_i] <= 24'd0;
 `endif
         end else begin
             //=================================================================
@@ -673,6 +714,49 @@ module app_udp_pattern #(
                 ds_gw_r  <= cmp_d & bm64(cmp_n);
                 ds_ew_r  <= ds_wr_e_now;
                 cap_pend <= 1'b0;
+            end
+
+            //-----------------------------------------------------------------
+            // v4: 受损帧**运行结构** (n_run / max_run) + **事件 FIFO** (前 8 条)
+            //-----------------------------------------------------------------
+            // 【事件定义】= "首失配落在帧内偏移 0" 的那一拍:
+            //     v4_evt = rx_bad && (off_eff == 0)
+            //   off_eff 与 v2 的 OZ 桶条件是**同一个表达式** ⇒ 每个 OZ 计数的字节
+            //   恰是本仪器的一个事件 ⇒ 门里断言 NE == OZ (两条独立路径互证)。
+            //   (整帧被替换时, 每帧只有字节 0 落在偏移 0 ⇒ 每受损帧恰 1 个事件。)
+            // 【帧号】与数据同 1 字前瞻管线: fi_cnt 在**帧首字装载拍** +1, 而
+            //   nx_fi 在同一拍取 +1 **之前**的值 ⇒ 该字携带的正是它所属的帧号;
+            //   cmp_fi 再跟一拍到比对寄存器。故事件拍读到的 cmp_fi = 该字节的帧号。
+            //   帧号从 0 起 (与 II/paylen 离线对账)。
+            // 【运行结构】相邻事件帧号差 1 ⇒ 同一极大连续段 (cur_run++), 否则新段
+            //   (n_run++); max_run 取所有段的长度上界。
+            // 【FIFO】8 深, 每条 {帧号[15:0], got[7:0]} = 24 位。**满了之后只计数
+            //   不再入队**, 并把 EO 置 1 (粘滞) 明示"有事件未记录" —— 不静默丢弃。
+            //   未使用的条目恒 0 (靠复位, 运行中不回绕)。
+            if (rx_ld)           nx_fi  <= fi_cnt;
+            if (cmp_ld)          cmp_fi <= nx_fi;
+            if (rx_ld && rx_sof) fi_cnt  <= fi_cnt + 16'd1;
+            if (v4_evt) begin
+                v4_ne <= v4_ne + 16'd1;
+                if (v4_en != 4'd8) begin
+                    ev_f[v4_en] <= {cmp_fi, rx_got};
+                    v4_en <= v4_en + 4'd1;
+                end else begin
+                    v4_eo <= 1'b1;
+                end
+                if (!ev_seen) begin
+                    ev_seen <= 1'b1;
+                    v4_nr   <= 16'd1;
+                    cur_run <= 16'd1;
+                    v4_mr   <= 16'd1;
+                end else if (cmp_fi == (fi_last + 16'd1)) begin
+                    cur_run <= cur_run + 16'd1;
+                    if ((cur_run + 16'd1) > v4_mr) v4_mr <= cur_run + 16'd1;
+                end else begin
+                    v4_nr   <= v4_nr + 16'd1;
+                    cur_run <= 16'd1;
+                end
+                fi_last <= cmp_fi;
             end
 `endif
 

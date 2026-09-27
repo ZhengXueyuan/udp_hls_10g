@@ -701,6 +701,43 @@ module wrapper_p4 (
     wire [15:0] v3_rc_w, v3_vc_w;
     wire [9:0]  v3_vx_w, v3_vs_w, v3_vr_w;
     wire [15:0] v3_vn_w;
+    // ---- RXP_DIAG v4 (2026-09-27): 异常帧路径计数 + 受损帧运行结构/事件 FIFO ----
+    // 来源: udp_split (CN/RD/NC/NP/WF/RL/WC) 与 app_udp_pattern (NE/NR/MR/EN/EO/QA..QH)
+    // → app_status_uart 的 v4 字段。与 v3 同款: **声明必须前置于两个来源例化点**
+    // (app_status_uart 在下面 ~711 行, udp_split/app_udp_pattern 在 ~1514/~1733 行) —
+    // 坑 22/24: 先声明后用, 防隐式 1 位线把 16/24 位连接静默截断。
+    // 整段只在 `RXP_DIAG 下达 ⇒ 默认构建 (无宏) 的端口表/线网/逻辑逐位不变
+    // (这些 wire 在默认构建里根本不存在)。
+    wire [15:0] v4_cn_w, v4_rd_w, v4_nc_w, v4_np_w, v4_wf_w, v4_rl_w, v4_wc_w;
+    wire [15:0] v4_ne_w, v4_nr_w, v4_mr_w;
+    wire [3:0]  v4_en_w;
+    wire        v4_eo_w;
+    wire [23:0] v4_qa_w, v4_qb_w, v4_qc_w, v4_qd_w;
+    wire [23:0] v4_qe_w, v4_qf_w, v4_qg_w, v4_qh_w;
+    // ---- RXP_DIAG v5 (2026-09-27): 写数据口 (din) 的第二个 LFSR 校验器 + 解析器计数 ----
+    // 来源 = udp_split 的 v5_dv_* (A 部) 与 v5_up_* (B 部) → app_status_uart 的 v5 字段。
+    // A 部意义: v3 的 SW 按**帧号**定址, v5 的 DV/DM 按**纯字节计数**定址 ⇒ 两个机制
+    //   不同的锚, 用来裁决 §14.6 那条"SW 采集依赖载荷字不与 meta_valid 同拍"的假设。
+    // B 部意义: udp_rx 的 stat_pass 等在 udp_split 内部**一直悬空未用**, 现在零逻辑引出
+    //   (判据: PS vs app 的 URF, 不等 ⇒ 解析器与 app 之间有丢帧/重帧)。
+    // ⚠️ 同 v4 的教训 (§17.5): **未接 = 综合钳 0 = 假 0**, 与"从未触发"不可区分 ⇒
+    //   本段接线由 tb_p5e_udp_wrapper.v 相 8 做正的存在性证明 (直取状态行模块入口)。
+    wire [31:0] v5_dv_w, v5_dm_w;
+    wire [7:0]  v5_dg_w, v5_de_w;
+    wire [15:0] v5_do_w;
+    wire        v5_vz_w;
+    wire [31:0] v5_ps_w, v5_nm_w, v5_ic_w, v5_dc_w, v5_sb_w;
+    // ---- RXP_DIAG v6 (2026-09-27): u_pre **输入侧** (s_axis) 的第三个 LFSR 校验器 ----
+    // 来源 = udp_split 的 v6_dv_* → app_status_uart 的 v6 字段 (CV/CG/CE/CO/CM/CZ/CS)。
+    // 意义 (§18.9/§18.10 的裁决点): v6 在 udp_split 的**输入端口侧** (进 u_pre 之前),
+    //   ⇒ "v6 干净而 v5 损坏" = 重排在 u_pre/udp_rx 内部; "v6 也损坏" = 在
+    //   mac_rx_64 / rx_classify / vlan_strip。
+    // ⚠️ 同 v4/v5 的教训 (§17.5): **未接 = 综合钳 0 = 假 0**, 与"从未触发"不可区分 ⇒
+    //   本段接线由 tb_p5e_udp_wrapper.v 相 9 做正的存在性证明 (直取状态行模块入口)。
+    wire [31:0] v6_dv_w, v6_cm_w;
+    wire [7:0]  v6_dg_w, v6_de_w, v6_cs_w;
+    wire [15:0] v6_co_w;
+    wire        v6_cz_w;
 `endif
 
     wire [31:0] app_udp_stat_frames, app_udp_stat_bytes, app_udp_stat_null,
@@ -771,6 +808,28 @@ module wrapper_p4 (
         .v3_rc  (v3_rc_w),  .v3_vc  (v3_vc_w),
         .v3_vx  (v3_vx_w),  .v3_vs  (v3_vs_w),
         .v3_vr  (v3_vr_w),  .v3_vn  (v3_vn_w),
+        // v4 (2026-09-27): 异常帧路径计数 + 受损帧运行结构/事件 FIFO
+        // (端口/键名/口径见 rtl/app_status_uart.v 的 v4 段; 20 个字段)
+        .v4_cn  (v4_cn_w),  .v4_rd  (v4_rd_w),  .v4_nc  (v4_nc_w),
+        .v4_np  (v4_np_w),  .v4_wf  (v4_wf_w),  .v4_rl  (v4_rl_w),
+        .v4_wc  (v4_wc_w),
+        .v4_ne  (v4_ne_w),  .v4_nr  (v4_nr_w),  .v4_mr  (v4_mr_w),
+        .v4_en  (v4_en_w),  .v4_eo  (v4_eo_w),
+        // v5 (2026-09-27): 写数据口 (din) 的第二个 LFSR 校验器 + 解析器计数
+        // (A 部 = udp_split.v5_dv_* → DV/DG/DE/DO/DM/VZ; B 部 = udp_split.v5_up_*
+        //  → PS/NM/IC/DC/SB; 端口/键名/口径见 rtl/udp_split.v 与 app_status_uart.v 的 v5 段)
+        .v5_dv_idx (v5_dv_w), .v5_dv_got (v5_dg_w), .v5_dv_exp (v5_de_w),
+        .v5_dv_off (v5_do_w), .v5_dv_mm (v5_dm_w), .v5_dv_v (v5_vz_w),
+        .v5_up_pass (v5_ps_w), .v5_up_nm (v5_nm_w), .v5_up_ipc (v5_ic_w),
+        .v5_up_crc (v5_dc_w), .v5_up_bytes (v5_sb_w),
+        // v6 (2026-09-27): u_pre 输入侧 (udp_split 的 s_axis) 的第三个 LFSR 校验器
+        // (端口/键名/口径见 rtl/udp_split.v 与 rtl/app_status_uart.v 的 v6 段)
+        .v6_dv_idx (v6_dv_w), .v6_dv_got (v6_dg_w), .v6_dv_exp (v6_de_w),
+        .v6_dv_off (v6_co_w), .v6_dv_mm (v6_cm_w), .v6_dv_v (v6_cz_w),
+        .v6_dv_sk (v6_cs_w),
+        .v4_qa  (v4_qa_w),  .v4_qb  (v4_qb_w),  .v4_qc  (v4_qc_w),
+        .v4_qd  (v4_qd_w),  .v4_qe  (v4_qe_w),  .v4_qf  (v4_qf_w),
+        .v4_qg  (v4_qg_w),  .v4_qh  (v4_qh_w),
 `endif
         .udp_tx_bytes   (udpapp_tx_bytes),
         .udp_tx_frames  (udpapp_tx_frames[15:0]),
@@ -1587,6 +1646,36 @@ module wrapper_p4 (
         , .v3_vs        (v3_vs_w)
         , .v3_vr        (v3_vr_w)
         , .v3_vn        (v3_vn_w)
+        // v4 (2026-09-27): 异常帧路径计数器 (CN/RD/NC/NP/WF/RL/WC, 全部输出)
+        , .v4_cn        (v4_cn_w)
+        , .v4_rd        (v4_rd_w)
+        , .v4_nc        (v4_nc_w)
+        , .v4_np        (v4_np_w)
+        , .v4_wf        (v4_wf_w)
+        , .v4_rl        (v4_rl_w)
+        , .v4_wc        (v4_wc_w)
+        // v5 (2026-09-27): 写数据口 (din) 的第二个 LFSR 校验器 + 解析器计数
+        // (A 部 udp_split.v5_dv_* → DV/DG/DE/DO/DM/VZ; B 部 udp_split.v5_up_* → PS/NM/IC/DC/SB)
+        , .v5_dv_idx    (v5_dv_w)
+        , .v5_dv_got    (v5_dg_w)
+        , .v5_dv_exp    (v5_de_w)
+        , .v5_dv_off    (v5_do_w)
+        , .v5_dv_mm     (v5_dm_w)
+        , .v5_dv_v      (v5_vz_w)
+        , .v5_up_pass   (v5_ps_w)
+        , .v5_up_nm     (v5_nm_w)
+        , .v5_up_ipc    (v5_ic_w)
+        , .v5_up_crc    (v5_dc_w)
+        , .v5_up_bytes  (v5_sb_w)
+        // v6 (2026-09-27): u_pre 输入侧 (s_axis) 的第三个 LFSR 校验器
+        // (CV/CG/CE/CO/CM/CZ/CS; 见 rtl/udp_split.v / rtl/app_status_uart.v 的 v6 段)
+        , .v6_dv_idx    (v6_dv_w)
+        , .v6_dv_got    (v6_dg_w)
+        , .v6_dv_exp    (v6_de_w)
+        , .v6_dv_off    (v6_co_w)
+        , .v6_dv_mm     (v6_cm_w)
+        , .v6_dv_v      (v6_cz_w)
+        , .v6_dv_sk     (v6_cs_w)
 `endif
     );
 `else
@@ -1768,6 +1857,11 @@ module wrapper_p4 (
         , .ds_om  (ds_om_w),  .ds_oh  (ds_oh_w)
         // v3: 首失配触发脉冲 → udp_split (帧边界记账快照的唯一触发源)
         , .ds_cap (ds_cap_w)
+        // v4 (2026-09-27): 受损帧运行结构 + 事件 FIFO (NE/NR/MR/EN/EO/QA..QH)
+        , .v4_ne (v4_ne_w), .v4_nr (v4_nr_w), .v4_mr (v4_mr_w)
+        , .v4_en (v4_en_w), .v4_eo (v4_eo_w)
+        , .v4_ea (v4_qa_w), .v4_eb (v4_qb_w), .v4_ec (v4_qc_w), .v4_ed (v4_qd_w)
+        , .v4_ee (v4_qe_w), .v4_ef (v4_qf_w), .v4_eg (v4_qg_w), .v4_eh (v4_qh_w)
 `endif
     );
 
