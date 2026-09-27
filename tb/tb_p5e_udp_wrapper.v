@@ -96,6 +96,9 @@ module tb_p5e_udp_wrapper;
     integer     v5_dm0, v5_ps0, v5_sb0, v5_nm0, v5_ic0, v5_dc0, v5_uf0, v5_mm0;
     integer     v5_c0, v5_c1;
     integer     v6_cm0, v6_c0, v6_c1, v6_uf0;   // phase 9 (RXP_DIAG v6)
+    // phase 10 (RXP_DIAG v7): IP-id sequence baselines + the non-UDP byte counter
+    integer     v7_iv0, v7_is0, v7_iw0, v7_nb0, v7_cm0, v7_cnt0;
+    integer     v7_nm0, v7_ic0;
     // v5-⑧ 的**冻结期望值** = 本 wrapper 跑量里**第一个**失配 (相 ⑥ 造成):
     //   帧 2 载荷 = 图案流续流 (bf_base=1472), 只把载荷第 0 字节翻 0x40 (FCS 之前翻)
     //   ⇒ 写入口序号 1472 / 帧内偏移 0 / DG = pattern[1472]^0x40 = 0xA8 / DE = pattern[1472] = 0xE8
@@ -155,6 +158,10 @@ module tb_p5e_udp_wrapper;
     reg [7:0]  bf_mask;               // 上述翻转用的掩码 (默认 0x40 = ⑥ 相)
     reg [11:0] bf_coff;               // v5 相 (⑧): 翻转的**载荷内偏移** (默认 0 = 既有行为)
     reg        bf_badfcs;             // 1 = 算完 FCS 后再翻它一字节 (造坏 FCS)
+    // v7 相 (⑩) 用: IP identification + IP protocol 两个头字段的旋钮。
+    // **默认值 = 既有行为逐位不变** (0x1234 / 0x11 = 前面 ①..⑨ 相一直用的常量)。
+    reg [15:0] bf_id;                 // IP id (网络序读数, 与 tshark 的 ip.id 同域)
+    reg [7:0]  bf_proto;              // IP protocol (0x11 = UDP; 1 = ICMP)
     reg [15:0] bf_rlen;               // 本次注入的总字节数 (前导 8 + 帧 + FCS 4)
     integer    ri;
     task build_rx_frame;
@@ -182,9 +189,9 @@ module tb_p5e_udp_wrapper;
             rbuf[8+14] = 8'h45; rbuf[8+15] = 8'h00;            // ver/ihl, dscp
             rbuf[8+16] = ((bf_plen+28) >> 8) & 8'hFF;
             rbuf[8+17] = (bf_plen+28) & 8'hFF;
-            rbuf[8+18] = 8'h12; rbuf[8+19] = 8'h34;            // id
+            rbuf[8+18] = bf_id[15:8]; rbuf[8+19] = bf_id[7:0]; // id (默认 0x1234)
             rbuf[8+20] = 8'h40; rbuf[8+21] = 8'h00;            // flags/frag
-            rbuf[8+22] = 8'd64;  rbuf[8+23] = 8'h11;           // ttl, proto=UDP
+            rbuf[8+22] = 8'd64;  rbuf[8+23] = bf_proto;        // ttl, proto=UDP
             rbuf[8+24] = 8'h00;  rbuf[8+25] = 8'h00;           // ip csum 占位
             rbuf[8+26] = PEER_IP[31:24];  rbuf[8+27] = PEER_IP[23:16];
             rbuf[8+28] = PEER_IP[15:8];   rbuf[8+29] = PEER_IP[7:0];
@@ -328,6 +335,7 @@ module tb_p5e_udp_wrapper;
         // 第 1 帧: 自 SEED 起的干净图案, 长度/长度字段/FCS 全默认
         bf_base = 32'd0; bf_corrupt = 1'b0; bf_mask = 8'h40; bf_coff = 12'd0;
         bf_plen = PLEN[31:0]; bf_udplen_ex = 32'd0; bf_badfcs = 1'b0;
+        bf_id = 16'h1234; bf_proto = 8'h11;      // v7: 既有行为 (①..⑨ 相的常量)
         build_rx_frame;
         // ---- CRC 自检 (标准 check 值: crc32("123456789") = 0xCBF43926) ----
         crc_chk = 32'hFFFFFFFF;
@@ -892,6 +900,90 @@ module tb_p5e_udp_wrapper;
             "9: CM delta != 1 (anchor or LFSR wrong?)");
         // ★ CS = 输入 skid 丢字计数: 真链路上是 1 字/8 拍, 必须恒 0 (非 0 = 读数不可用)
         chk(u_dut.u_app_status.v6_dv_sk === 8'd0, "9: CS != 0 (skid overflowed)");
+
+        // ================= ⑩ RXP_DIAG v7: 新字段的**正的存在性证明** ==========
+        // 【为什么必须有这一相】与 ⑥/⑧/⑨ 同一条铁律 (§17.5): v7 的 6 个字段若在
+        //   wrapper 里没接, 综合把未连接输入**钳成常数 0** ⇒ 状态行上的"全 0"与
+        //   "该路径从未触发"在读数上**不可区分**。⇒ 必须有一个**非 0 且可独立复算**
+        //   的读数穿过 wrapper 走到**状态行模块的字段入口** (`u_dut.u_app_status.v7_*`)。
+        // 【本相注入 4 帧 (全部经真链路: GMII -> mac_rx -> rx_classify -> vlan_strip
+        //   -> udp_split -> udp_rx)】
+        //   A: id=0xAAAA · UDP/8081 · 载荷 = v6 累计序号的**续流** (v6 看是干净的)
+        //   B: id=0xAAAB · UDP/8081 · 载荷 = 续流 (+1472)
+        //   N: id=0xAAAC · **ICMP (proto=1)** · 载荷 = 图案 (任意, 因为**不该被比**)
+        //   C: id=0xB000 · UDP/8081 · 载荷 = 续流 (+2944, 跨过 N 不推进)
+        // 【可独立复算的期望值】
+        //   dIS = 3   (只有 A/B/C 过匹配门; ICMP 在 udp_rx 的 hdr_ok2 就被丢)
+        //   dIV = 2   (A 相对**上一帧**必然是跳变 —— 前面各相注入的 id 都是 0x1234
+        //              ⇒ 0xAAAA != 0x1234+1; 再一个 = C: 0xB000 != 0xAAAB+1)
+        //   dIW = 0   (两次都是**正向**跳跃: 0xB000 > 0xAAAB ⇒ 不是重排签名)
+        //   dNB = PLEN (ICMP 帧的载荷字节数 = 1514-42 —— 被 v6 门跳过)
+        //   dCM = 0   (★ 既证明 ICMP 没被当载荷比对, 又证明它**没有把 LFSR 推错位**:
+        //              C 的载荷按"跳过 N 之后"的序号续流 ⇒ 仍然干净)
+        //   dNM = 1   (解析器把 ICMP 记为 stat_drop_nonmatch), dIC = 0
+        //   dURF = 3  (ICMP 不交付给 app)
+        // ⚠️ 断言直取**状态行模块入口** (`===` 写成确定值 ⇒ 未接 = z = 变红)。
+        v7_iv0 = u_dut.u_app_status.v7_id_viol;
+        v7_is0 = u_dut.u_app_status.v7_id_seen;
+        v7_iw0 = u_dut.u_app_status.v7_id_back;
+        v7_nb0 = u_dut.u_app_status.v7_nb;
+        v7_cm0 = u_dut.u_app_status.v6_dv_mm;
+        v7_nm0 = u_dut.u_app_status.v5_up_nm;
+        v7_ic0 = u_dut.u_app_status.v5_up_ipc;
+        v6_uf0 = u_dut.u_app_udp.stat_rx_frames;
+        v6_c0  = u_dut.u_udp_split.v6_cnt;
+        repeat (2000) @(posedge u_dut.gmii_clk);
+        v6_c1  = u_dut.u_udp_split.v6_cnt;
+        chk(v6_c0 === v6_c1, "10: v6_cnt still moving (DUT not idle, anchor unsafe)");
+        v7_cnt0 = v6_c0;
+        // A / B: UDP 续流 (v6 自己的累计序号做图案基)
+        bf_proto = 8'h11; bf_corrupt = 1'b0; bf_udplen_ex = 32'd0; bf_badfcs = 1'b0;
+        bf_plen = PLEN[31:0];
+        bf_id = 16'hAAAA; bf_base = v7_cnt0;
+        build_rx_frame; inj_frame;
+        repeat (30000) @(posedge u_dut.gmii_clk);
+        bf_id = 16'hAAAB; bf_base = v7_cnt0 + PLEN;
+        build_rx_frame; inj_frame;
+        repeat (30000) @(posedge u_dut.gmii_clk);
+        // N: ICMP 帧 (proto=1) —— 载荷故意与图案不符 (若门失效 ⇒ dCM != 0 ⇒ 变红)
+        bf_proto = 8'h01; bf_id = 16'hAAAC;
+        bf_base = 32'd0; bf_corrupt = 1'b1; bf_mask = 8'h40; bf_coff = 12'd0;
+        build_rx_frame; inj_frame;
+        repeat (30000) @(posedge u_dut.gmii_clk);
+        // C: 再一帧 UDP 续流 —— 跨过 N 之后 v6 的期望序列**没有**被推错位
+        bf_proto = 8'h11; bf_corrupt = 1'b0; bf_coff = 12'd0;
+        bf_id = 16'hB000; bf_base = v7_cnt0 + 2*PLEN;
+        build_rx_frame; inj_frame;
+        repeat (30000) @(posedge u_dut.gmii_clk);
+        bf_base = 32'd0; bf_id = 16'h1234; bf_proto = 8'h11;   // 复位默认 (无后续相)
+        $display("P5E-T5 UDP WRAPPER V7: IV=%0d IS=%0d IA=%04X IB=%04X IW=%0d NB=%0d (模块入口)",
+                 u_dut.u_app_status.v7_id_viol, u_dut.u_app_status.v7_id_seen,
+                 u_dut.u_app_status.v7_id_cur, u_dut.u_app_status.v7_id_prev,
+                 u_dut.u_app_status.v7_id_back, u_dut.u_app_status.v7_nb);
+        $display("P5E-T5 UDP WRAPPER V7 delta: dIV=%0d dIS=%0d dIW=%0d dNB=%0d dCM=%0d dNM=%0d dIC=%0d dURF=%0d (期望 2/3/0/%0d/0/1/0/3)",
+                 u_dut.u_app_status.v7_id_viol - v7_iv0,
+                 u_dut.u_app_status.v7_id_seen - v7_is0,
+                 u_dut.u_app_status.v7_id_back - v7_iw0,
+                 u_dut.u_app_status.v7_nb - v7_nb0,
+                 u_dut.u_app_status.v6_dv_mm - v7_cm0,
+                 u_dut.u_app_status.v5_up_nm - v7_nm0,
+                 u_dut.u_app_status.v5_up_ipc - v7_ic0,
+                 u_dut.u_app_udp.stat_rx_frames - v6_uf0, PLEN);
+        chk(u_dut.u_app_status.v7_id_seen - v7_is0 === 3, "10: dIS != 3 (IP-id checker not wired?)");
+        chk(u_dut.u_app_status.v7_id_viol - v7_iv0 === 2, "10: dIV != 2 (A and C are both jumps)");
+        chk(u_dut.u_app_status.v7_id_back - v7_iw0 === 0, "10: dIW != 0 (both jumps are forward)");
+        chk(u_dut.u_app_status.v7_nb - v7_nb0 === PLEN, "10: dNB != PLEN (non-UDP bytes not skipped)");
+        chk(u_dut.u_app_status.v6_dv_mm - v7_cm0 === 32'd0,
+            "10: dCM != 0 (the ICMP frame was compared or pushed the LFSR!)");
+        chk(u_dut.u_app_status.v5_up_nm - v7_nm0 === 32'd1, "10: dNM != 1 (ICMP not dropped?)");
+        chk(u_dut.u_app_status.v5_up_ipc - v7_ic0 === 32'd0, "10: dIC != 0");
+        chk(u_dut.u_app_udp.stat_rx_frames - v6_uf0 === 32'd3,
+            "10: dURF != 3 (only the three UDP frames may be delivered)");
+        // 字段互相可区分 (任意两字段接同一根线必被抓到)
+        chk(u_dut.u_app_status.v7_id_viol !== u_dut.u_app_status.v7_id_seen,
+            "10: IV == IS (same wire?)");
+        chk(u_dut.u_app_status.v7_nb !== u_dut.u_app_status.v7_id_cur,
+            "10: NB == IA (same wire?)");
 `endif
 
         if (errs == 0) $display("P5E-T5 UDP WRAPPER GATE: OK");

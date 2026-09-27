@@ -170,6 +170,28 @@ module app_status_uart #(
     , input  wire [31:0] v6_dv_mm   // CM: 失配字节总数 (整轮累计)
     , input  wire        v6_dv_v    // CZ: 快照有效 (粘滞, 只记首个)
     , input  wire [7:0]  v6_dv_sk   // CS: 输入 skid 满而丢掉的**字数** (0 = 本轮读数可用)
+    // ---- RXP_DIAG v7 (2026-09-27): IP ID 序列检查 + v6 的非 UDP 帧口径修正 ----
+    // 来源: udp_rx 的 IP ID 序列检查器 (IV/IS/IA/IB/IW, 纯线束由 udp_split 引出)
+    //   与 udp_split v6 段的 NB (被跳过的非 UDP 帧载荷字节数)。
+    //   目的 (ISSUE_RX_BYTE_CORRUPTION §18.15/§18.16): 事件形状已被定死为"整帧置换"
+    //   且发送方抓包干净 ⇒ 只剩两条假设 —— **PC 侧 NIC/驱动 TX 路径打乱帧序** vs
+    //   **PHY/GMII 接收裕量 (IFG/前导码)**。IP ID 逐帧 +1 是"到达顺序"的直接度量:
+    //     · IW > 0 (反向跳跃, id < prev) ⇒ **到达顺序被打乱** ⇒ 板子被洗清;
+    //     · IV == IS == 0 ⇒ 线上帧序完好 ⇒ 必须解释"为什么只在高速率下"。
+    //   NB 则把 v6 的修正变成可观测量 (100 Mbps 轮预期 `NB == 560 && CM == 0`)。
+    // ⚠️ 同 v4/v5/v6 的"未接 = 假 0"铁律: 端口没接 ⇒ 综合钳 0 ⇒ 读数全 0 与"从未
+    //   触发"不可区分。v7 的接线已落在 board/wrapper_p4.v 的 `ifdef RXP_DIAG 段内,
+    //   且由真 wrapper 全链门 (tb/tb_p5e_udp_wrapper.v 相 10) 做**正的存在性证明**。
+    // 键名 IV IS IA IB IW NB —— 与既有全部键不撞 (特别注意: IC 已被
+    //   stat_drop_ipcsum 占用; gen_offsets.py 的正则遮蔽检查是硬断言)。
+    // 口径/判据 (字节布局、匹配门口径、首帧不比较) 见 rtl/udp_rx.v 与 rtl/udp_split.v
+    //   的 v7 段注释 (真值源在那里)。
+    , input  wire [15:0] v7_id_viol // IV: id != prev+1 的次数 (总违例)
+    , input  wire [15:0] v7_id_seen // IS: 参与比较的帧数 (自证不是死 0)
+    , input  wire [15:0] v7_id_cur  // IA: 首个违例的本帧 ID
+    , input  wire [15:0] v7_id_prev // IB: 首个违例的上一帧 ID
+    , input  wire [15:0] v7_id_back // IW: 其中反向跳跃数 (id < prev)
+    , input  wire [15:0] v7_nb      // NB: v6 引擎跳过的非 UDP 帧载荷字节数
 `endif
 `endif
 );
@@ -190,7 +212,13 @@ module app_status_uart #(
     // v6: 916 -> **971** (再追加 7 个键 = +55 字符; 见下 TPL 的 v6 段)。
     //   971 <= 1023 ⇒ ci 仍是 10 位。偏移由 gen_offsets.py 拼接 TPL 串算出
     //   (该脚本先复现 v2/v3/v4/v5 四组发布偏移与 RTL 解码窗口才继续)。
-    localparam LINE_LEN = 10'd971;
+    // v7: 971 -> **1019** (再追加 6 个键 = +48 字符; 见下 TPL 的 v7 段)。
+    //   1019 <= 1023 ⇒ ci 仍是 10 位 —— **这是 10 位 ci 的极限附近** (只剩 4 字符),
+    //   再加字段就必须把 ci 加宽 (而 ci 在最长组合链头部, 见下面的时序注释) 或
+    //   缩既有字段 ⇒ 事先说明: 本行已是设计上的容量上限。
+    //   偏移由 gen_offsets.py 拼接 TPL 串算出 (该脚本先复现 v2..v6 五组发布偏移与
+    //   RTL 解码窗口才继续)。
+    localparam LINE_LEN = 10'd1019;
 `else
     localparam LINE_LEN = 9'd304;
 `endif
@@ -325,6 +353,24 @@ module app_status_uart #(
     //     CZ 962, CS 967..968。
     //     ⚠️ 上表是**脚本输出 + 实跑行逐字符核对**的结果 (见 tb_rxp_diag 相 7 的 v6
     //        断言); 实现时任何一位改动都必须重跑 gen_offsets.py 与格式门。
+    //   【v7 段】ISSUE_RX_BYTE_CORRUPTION §18.15/§18.16 的判决字段。
+    //     IV = `id != prev+1` 的次数 (口径: 只比**通过匹配门**的帧, 第一个过门帧
+    //          不参与比较 ⇒ IS 是分母; 详见 rtl/udp_rx.v 的 v7 段)
+    //     IS = 进入检查器的**过门帧数** (比较次数 = IS-1; 板级自洽式
+    //          `IS == PS + DC` ⇒ 既自证"IV==0 不是死 0", 又给口径/接线上保险)
+    //     IA = 首个违例的**本帧** ID · IB = 首个违例的**上一帧** ID
+    //          (判读: IB+1 != IA; 若 IA < IB ⇒ 反向跳跃 = 顺序被打乱的签名)
+    //     IW = **反向**跳跃 (id < prev) 的次数 —— IV 里"确凿是重排"的那一部分;
+    //          IV - IW 是正向跳跃 (≥2), 也可能是**别的 IP 帧插进来消耗了 ID**
+    //          (板级每轮都有若干非数据帧) ⇒ 这一栏就是给这条歧义留的分辨率。
+    //     NB = v6 引擎因"本帧不是 IPv4/UDP"而跳过的**载荷字节数** (§18.16 的尾伪影
+    //          修正: 100 Mbps 轮预期 `NB == 560 && CM == 0` ⇒ 修正本身可被反证;
+    //          同时 `NB>0 && CM==0` 证明门是活的)。
+    //   偏移 (gen_offsets.py 拼接 TPL 串算出; CR=1017 LF=1018):
+    //     IV 973..977, IS 981..985, IA 989..993, IB 997..1001, IW 1005..1009,
+    //     NB 1013..1017。
+    //     ⚠️ 前 971 字符与 v6 逐字节相同 (既有字段偏移一律不动);
+    //        上表是脚本输出 + 实跑行逐字符核对的结果 (见 tb_rxp_diag 相 8)。
 `ifdef RXP_DIAG
 `ifdef APP_MODE
     wire [8*LINE_LEN-1:0] TPL = {
@@ -350,6 +396,7 @@ module app_status_uart #(
         " DV=xxxxxxxx DG=xx DE=xx DO=xxxx DM=xxxxxxxx VZ=x",
         " PS=xxxxxxxx NM=xxxxxxxx IC=xxxxxxxx DC=xxxxxxxx SB=xxxxxxxx",
         " CV=xxxxxxxx CG=xx CE=xx CO=xxxx CM=xxxxxxxx CZ=x CS=xx",
+        " IV=xxxx IS=xxxx IA=xxxx IB=xxxx IW=xxxx NB=xxxx",
         8'h0D, 8'h0A
     };
 `else
@@ -481,10 +528,12 @@ module app_status_uart #(
     reg [7:0]  sn_cg, sn_ce, sn_cs;
     reg [15:0] sn_co;
     reg        sn_cz;
+    // RXP_DIAG v7 追加字段 (IP ID 序列 + v6 跳过的非 UDP 字节; 见 TPL 段的 v7 注释)
+    reg [15:0] sn_iv, sn_is, sn_ia, sn_ib, sn_iw, sn_nb;
 `endif
 `endif
 
-    reg [9:0]  ci;                       // 行内字符索引 (10 位: 最长行 637 = RXP_DIAG v3;
+    reg [9:0]  ci;                       // 行内字符索引 (10 位: 最长行 1019 = RXP_DIAG v7;
                                          // v2 时是 9 位/470 —— 470 > 512 边界由
                                          // gen_offsets.py 的 LINE_LEN<=1023 断言守住)
     reg [27:0] gap;
@@ -537,8 +586,10 @@ module app_status_uart #(
     //   按位 OR 仍旧恰等于原来的优先级 mux, 见上面"为什么逐字节不变"的论证)。
     // v6: 100 -> **107** 条分支 (再追加 7 个 v6 字段; 互斥性不变 —— CZ 是单点
     //   (`ci == 962`), 其余是互不重叠的半开区间)。
-    reg  [106:0] sel_r;
-    reg  [7:0]  ch_r [0:106];
+    // v7: 107 -> **113** 条分支 (再追加 6 个 v7 字段; 6 个都是互不重叠的半开区间
+    //   ⇒ 互斥性不变, stage-2 的按位 OR 仍恰等于原来的优先级 mux)。
+    reg  [112:0] sel_r;
+    reg  [7:0]  ch_r [0:112];
     integer     chi;
     wire [7:0] lc = (|sel_r) ? (ch_r[0] | ch_r[1] | ch_r[2] | ch_r[3] | ch_r[4] | ch_r[5] | ch_r[6] | ch_r[7] |
                                 ch_r[8] | ch_r[9] | ch_r[10] | ch_r[11] | ch_r[12] | ch_r[13] | ch_r[14] | ch_r[15] |
@@ -553,15 +604,17 @@ module app_status_uart #(
                                 ch_r[80] | ch_r[81] | ch_r[82] | ch_r[83] | ch_r[84] | ch_r[85] | ch_r[86] | ch_r[87] |
                                 ch_r[88] | ch_r[89] | ch_r[90] | ch_r[91] | ch_r[92] | ch_r[93] | ch_r[94] | ch_r[95] |
                                 ch_r[96] | ch_r[97] | ch_r[98] | ch_r[99] | ch_r[100] | ch_r[101] | ch_r[102] |
-                                ch_r[103] | ch_r[104] | ch_r[105] | ch_r[106]) : fix_r;
+                                ch_r[103] | ch_r[104] | ch_r[105] | ch_r[106] |
+                                ch_r[107] | ch_r[108] | ch_r[109] |
+                                ch_r[110] | ch_r[111] | ch_r[112]) : fix_r;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) fix_r <= TPL[8*(LINE_LEN-1) +: 8];   // = ci==0 的模板字符
         else        fix_r <= fixed_c;
     end
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            sel_r <= 107'd0;
-            for (chi = 0; chi < 107; chi = chi + 1) ch_r[chi] <= 8'h00;
+            sel_r <= 113'd0;
+            for (chi = 0; chi < 113; chi = chi + 1) ch_r[chi] <= 8'h00;
         end else begin
         sel_r[0] <= (ci == 8'd8);
         ch_r[0]  <= (ci == 8'd8) ? (hexc(sn_st)) : 8'h00;
@@ -816,6 +869,24 @@ module app_status_uart #(
         ch_r[105]  <= (ci == 10'd962) ? (hexc({3'b0, sn_cz})) : 8'h00;
         sel_r[106] <= (ci >= 10'd967 && ci < 10'd969);
         ch_r[106]  <= (ci >= 10'd967 && ci < 10'd969) ? (hexd({sn_cs, 24'b0}, ci - 10'd967)) : 8'h00;
+        // ---- RXP_DIAG v7 追加段 (偏移由 sim/rxpdiag/gen_offsets.py 拼接 TPL 串算出) ----
+        // 6 个字段全部是 16 位值 → 4 个 hex: `{sn_xx, 16'b0}` 让值**左对齐**在 32 位里
+        //   (hexd 从 [31:28] 起取; 同 v3 的 RC/VC、v4 的 CN..WC 手法)。
+        //   ⚠️ 不是"补到 32 位"({sn_xx, 16'b0} 恰是 16 位零扩 = 32-16)。
+        // ⚠️ 每个字段的**窗口末尾必须紧跟下一个字段的前导空格** —— 窗口串位/多一
+        //    字符都会让 tb_rxp_diag 相 8 的逐值断言变红 (值刻意互不相同)。
+        sel_r[107] <= (ci >= 10'd973 && ci < 10'd977);
+        ch_r[107]  <= (ci >= 10'd973 && ci < 10'd977) ? (hexd({sn_iv, 16'b0}, ci - 10'd973)) : 8'h00;
+        sel_r[108] <= (ci >= 10'd981 && ci < 10'd985);
+        ch_r[108]  <= (ci >= 10'd981 && ci < 10'd985) ? (hexd({sn_is, 16'b0}, ci - 10'd981)) : 8'h00;
+        sel_r[109] <= (ci >= 10'd989 && ci < 10'd993);
+        ch_r[109]  <= (ci >= 10'd989 && ci < 10'd993) ? (hexd({sn_ia, 16'b0}, ci - 10'd989)) : 8'h00;
+        sel_r[110] <= (ci >= 10'd997 && ci < 10'd1001);
+        ch_r[110]  <= (ci >= 10'd997 && ci < 10'd1001) ? (hexd({sn_ib, 16'b0}, ci - 10'd997)) : 8'h00;
+        sel_r[111] <= (ci >= 10'd1005 && ci < 10'd1009);
+        ch_r[111]  <= (ci >= 10'd1005 && ci < 10'd1009) ? (hexd({sn_iw, 16'b0}, ci - 10'd1005)) : 8'h00;
+        sel_r[112] <= (ci >= 10'd1013 && ci < 10'd1017);
+        ch_r[112]  <= (ci >= 10'd1013 && ci < 10'd1017) ? (hexd({sn_nb, 16'b0}, ci - 10'd1013)) : 8'h00;
 `endif
 `endif
         end
@@ -864,6 +935,8 @@ module app_status_uart #(
             sn_cv <= 32'd0; sn_cm <= 32'd0;
             sn_cg <= 8'd0;  sn_ce <= 8'd0;  sn_cs <= 8'd0;
             sn_co <= 16'd0; sn_cz <= 1'b0;
+            sn_iv <= 16'd0; sn_is <= 16'd0; sn_ia <= 16'd0;
+            sn_ib <= 16'd0; sn_iw <= 16'd0; sn_nb <= 16'd0;
 `endif
 `endif
         end else begin
@@ -922,6 +995,10 @@ module app_status_uart #(
                     sn_cv <= v6_dv_idx; sn_cg <= v6_dv_got; sn_ce <= v6_dv_exp;
                     sn_co <= v6_dv_off; sn_cm <= v6_dv_mm;  sn_cz <= v6_dv_v;
                     sn_cs <= v6_dv_sk;
+                    // v7: IP ID 序列 (udp_rx) + v6 跳过的非 UDP 字节数 (udp_split)
+                    sn_iv <= v7_id_viol; sn_is <= v7_id_seen;
+                    sn_ia <= v7_id_cur;  sn_ib <= v7_id_prev;
+                    sn_iw <= v7_id_back; sn_nb <= v7_nb;
 `endif
 `endif
                     ci       <= 10'd0;

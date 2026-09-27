@@ -116,6 +116,25 @@ PUB_V6 = {
 }
 PUB_V6_CR, PUB_V6_LF, PUB_V6_LINE = 969, 970, 971
 
+# ---------------------------------------------------------------------------
+# v7 TPL block: APPENDED after the v6 block (before CR/LF).  Must stay
+# byte-identical in rtl/app_status_uart.v.
+#   6 fields, all 16-bit values shown as 4 hex characters
+#   (16-bit counters are honest: no silent truncation of a wider counter).
+# ---------------------------------------------------------------------------
+TPL_V7 = [
+    " IV=xxxx IS=xxxx IA=xxxx IB=xxxx IW=xxxx NB=xxxx",
+]
+FIELDS_V7 = [
+    ("IV", 4), ("IS", 4), ("IA", 4), ("IB", 4), ("IW", 4), ("NB", 4),
+]
+# published v7 offsets (session 2026-09-27); this IS the calibration record
+PUB_V7 = {
+    "IV": (973, 977), "IS": (981, 985), "IA": (989, 993), "IB": (997, 1001),
+    "IW": (1005, 1009), "NB": (1013, 1017),
+}
+PUB_V7_CR, PUB_V7_LF, PUB_V7_LINE = 1017, 1018, 1019
+
 # field key -> hex width (characters of the value)
 FIELDS_V2 = [
     ("ST", 1), ("NX", 8), ("UA", 8), ("RW", 4), ("RN", 8), ("RX", 8),
@@ -609,6 +628,107 @@ def main():
         raise SystemExit("FATAL: v5 decoder windows broken by the v6 edit")
     print("RTL-CHECK OK (v5 regression): every v5 decoder window still matches "
           "its published offset")
+
+    # ---------------------------------------------------------------
+    # v7 line: v7 literals appended after the v6 block
+    #   RXP_DIAG v7 (2026-09-27): IP-identification sequence checker (udp_rx) +
+    #   the non-UDP byte counter of the v6 checker (udp_split).
+    # ---------------------------------------------------------------
+    v7_body = "".join(TPL_V7)
+    line7 = v2[:-2] + v3_body + v4_body + v5_body + v6_body + v7_body + "\r\n"
+    report("v7 (v2+v3+v4+v5+v6 prefix byte-identical + appended block)", line7,
+           FIELDS_V7)
+    assert line7[:len(line6) - 2] == line6[:-2], "prefix changed!"
+    print("PREFIX CHECK OK (v7): first %d chars byte-identical to v6"
+          % (len(line6) - 2))
+    assert len(line7) <= 1023, "LINE_LEN %d exceeds the 10-bit ci window" % len(line7)
+    print("LINE LIMIT OK (v7): LINE_LEN %d <= 1023 (10-bit ci)" % len(line7))
+    for key, w in FIELDS_V7:
+        value_window(line7, key, w)
+    print("WINDOW CHECK OK (v7): all %d v7 fields have exactly the declared "
+          "'x' placeholder count" % len(FIELDS_V7))
+
+    km7 = _regex_keymap(line7)
+    shadow = 0
+    for key, w in FIELDS_V7:
+        s, e = value_window(line7, key, w)
+        occ = km7.get(key, [])
+        if len(occ) != 1 or occ[0] != s:
+            print("SHADOW: key %s: literal at %d but reader sees regex hits at %s"
+                  % (key, s, occ))
+            shadow += 1
+    print("KEY SHADOW CHECK (v7): %d of %d v7 keys read unambiguously (%s)"
+          % (len(FIELDS_V7) - shadow, len(FIELDS_V7),
+             "OK" if shadow == 0 else "COLLISION"))
+    if shadow:
+        raise SystemExit("FATAL: a v7 key is shadowed by another key in the line")
+    # a v7 key must not steal an existing key either (reader: last match wins)
+    km6_pre = _regex_keymap(line6)
+    stolen = sorted(k for k in km7
+                    if k in km6_pre and len(km7[k]) > len(km6_pre[k]))
+    print("NOTE v7 keys that add a NEW regex hit for an existing key: %s"
+          % (stolen or "none"))
+    if stolen:
+        raise SystemExit("FATAL: v7 key(s) %s add regex hits -- the board reader "
+                         "would overwrite an existing field" % stolen)
+
+    print("\nRTL must use: localparam LINE_LEN = 10'd%d;" % len(line7))
+    print("RTL decoder windows (ci >= X && ci < Y) for the v7 fields:")
+    rtl_win7 = {}
+    for key, w in FIELDS_V7:
+        s, e = value_window(line7, key, w)
+        rtl_win7[key] = (s, e)
+        print("  %-3s : ci >= 10'd%d && ci < 10'd%d"
+              % (key, s, e))
+
+    bad = 0
+    for key, (a, b) in sorted(PUB_V7.items()):
+        s, e = value_window(line7, key, b - a)
+        if (s, e) != (a, b):
+            print("SELFCHECK FAIL (v7): %s at %d..%d, published %d..%d"
+                  % (key, s, e, a, b))
+            bad += 1
+    if len(line7) != PUB_V7_LINE:
+        print("SELFCHECK FAIL (v7): LINE_LEN %d (published %d)"
+              % (len(line7), PUB_V7_LINE))
+        bad += 1
+    if (len(line7) - 2, len(line7) - 1) != (PUB_V7_CR, PUB_V7_LF):
+        print("SELFCHECK FAIL (v7): CR/LF at %d/%d, published %d/%d"
+              % (len(line7) - 2, len(line7) - 1), PUB_V7_CR, PUB_V7_LF)
+        bad += 1
+    if bad:
+        raise SystemExit("FATAL: published v7 offsets not reproduced")
+    print("\nSELFCHECK OK (v7): published offsets reproduced "
+          "(IV 973 ... NB 1013, CR 1017, LF 1018, LINE_LEN 1019)\n")
+
+    # ...RTL cross-check for the v7 decoder windows (same parser as v5/v6)
+    bad = 0
+    for key, (s, e) in rtl_win7.items():
+        got = seen.get(key)
+        if got is None or got[0] != s or got[1] != e or got[2] != s:
+            print("RTL-CHECK FAIL (v7): %s RTL (start,end,base)=%s, computed %d..%d"
+                  % (key, got, s, e))
+            bad += 1
+    if bad:
+        raise SystemExit("FATAL: RTL decoder windows do not match the computed "
+                         "v7 offsets -> fix rtl/app_status_uart.v")
+    print("RTL-CHECK OK (v7): every v7 decoder window in rtl/app_status_uart.v "
+          "matches the computed offset (start/end/base)")
+    # ...and the v6/v5/v4/v3 windows must still be intact after the v7 edit
+    for keys, name, line_cur in ((FIELDS_V6, "v6", line6), (FIELDS_V5, "v5", line5),
+                                 (FIELDS_V4, "v4", line4), (FIELDS_V3, "v3", line3)):
+        bad = 0
+        for key, w in keys:
+            s, e = value_window(line_cur, key, w)
+            got = seen.get(key)
+            if got is None or got[0] != s or got[2] != s:
+                print("RTL-CHECK FAIL (%s regression): %s RTL %s, computed start %d"
+                      % (name, key, got, s))
+                bad += 1
+        if bad:
+            raise SystemExit("FATAL: %s decoder windows broken by the v7 edit" % name)
+    print("RTL-CHECK OK (v3/v4/v5/v6 regression): every earlier decoder window "
+          "still matches its published offset")
 
 
 if __name__ == "__main__":

@@ -738,6 +738,17 @@ module wrapper_p4 (
     wire [7:0]  v6_dg_w, v6_de_w, v6_cs_w;
     wire [15:0] v6_co_w;
     wire        v6_cz_w;
+    // ---- RXP_DIAG v7 (2026-09-27): IP ID 序列检查 + v6 的非 UDP 帧口径修正 ----
+    // 来源 = udp_split 的 v7_id_* (再往上游是 udp_rx 的 ip_id_* 检查器) + v7_nb
+    //   (udp_split v6 段新增的"跳过的非 UDP 字节数") → app_status_uart 的 v7 字段。
+    // 意义 (§18.15/§18.16): 事件形状已定死为整帧置换、发送方抓包干净 ⇒ 只剩
+    //   "PC 侧 NIC/驱动 TX 打乱帧序" vs "PHY/GMII 接收裕量" 两条; IP ID 的
+    //   到达顺序是这个判决的直接量 (IW>0 = 顺序确凿被打乱)。
+    // ⚠️ 同 v4/v5/v6 的教训 (§17.5): **未接 = 综合钳 0 = 假 0**, 与"从未触发"
+    //   不可区分 ⇒ 本段接线由 tb_p5e_udp_wrapper.v 相 10 做正的存在性证明
+    //   (直取状态行模块入口 u_app_status.v7_*)。
+    wire [15:0] v7_id_viol_w, v7_id_seen_w, v7_id_cur_w;
+    wire [15:0] v7_id_prev_w, v7_id_back_w, v7_nb_w;
 `endif
 
     wire [31:0] app_udp_stat_frames, app_udp_stat_bytes, app_udp_stat_null,
@@ -827,6 +838,11 @@ module wrapper_p4 (
         .v6_dv_idx (v6_dv_w), .v6_dv_got (v6_dg_w), .v6_dv_exp (v6_de_w),
         .v6_dv_off (v6_co_w), .v6_dv_mm (v6_cm_w), .v6_dv_v (v6_cz_w),
         .v6_dv_sk (v6_cs_w),
+        // v7 (2026-09-27): IP ID 序列检查 (IV/IS/IA/IB/IW) + v6 跳过的非 UDP 字节数 (NB)
+        // (端口/键名/口径见 rtl/udp_rx.v · rtl/udp_split.v · rtl/app_status_uart.v 的 v7 段)
+        .v7_id_viol (v7_id_viol_w), .v7_id_seen (v7_id_seen_w),
+        .v7_id_cur  (v7_id_cur_w),  .v7_id_prev (v7_id_prev_w),
+        .v7_id_back (v7_id_back_w), .v7_nb      (v7_nb_w),
         .v4_qa  (v4_qa_w),  .v4_qb  (v4_qb_w),  .v4_qc  (v4_qc_w),
         .v4_qd  (v4_qd_w),  .v4_qe  (v4_qe_w),  .v4_qf  (v4_qf_w),
         .v4_qg  (v4_qg_w),  .v4_qh  (v4_qh_w),
@@ -1676,6 +1692,15 @@ module wrapper_p4 (
         , .v6_dv_mm     (v6_cm_w)
         , .v6_dv_v      (v6_cz_w)
         , .v6_dv_sk     (v6_cs_w)
+        // v7 (2026-09-27): IP ID 序列检查 (IV/IS/IA/IB/IW, 上游 = udp_rx 的 ip_id_*)
+        // + NB (v6 段修掉 §18.16 尾伪影后, 被跳过的非 UDP 帧载荷字节数)
+        // (见 rtl/udp_rx.v / rtl/udp_split.v / rtl/app_status_uart.v 的 v7 段)
+        , .v7_id_viol   (v7_id_viol_w)
+        , .v7_id_seen   (v7_id_seen_w)
+        , .v7_id_cur    (v7_id_cur_w)
+        , .v7_id_prev   (v7_id_prev_w)
+        , .v7_id_back   (v7_id_back_w)
+        , .v7_nb        (v7_nb_w)
 `endif
     );
 `else

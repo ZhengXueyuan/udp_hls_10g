@@ -33,12 +33,12 @@
 //     靠算偏移得来、又不会被任何功能仿真自然覆盖的部分 —— 9600 波特下一行要
 //      ~170ms, 而全链门只跑 ~10ms ⇒ 板级之前发出去的整行**从没被仿真逐字符验证过**。
 //      这里用短位周期 (7 拍/位) 让 app_status_uart 真发完一行, 逐字符解码后断言:
-//      ① 行恰 971 字符 (CR/LF 在 969/970; v1/v2 时是 470 / 468·469, v3 时是
-//         637 / 635·636, v4 时是 807 / 805·806, v5 时是 916 / 914·915 ——
+//      ① 行恰 1019 字符 (CR/LF 在 1017/1018; v1/v2 时是 470 / 468·469, v3 时是
+//         637 / 635·636, v4 时是 807 / 805·806, v5 时是 916 / 914·915, v6 时是 971 / 969·970 ——
 //         沿革见 rtl/app_status_uart.v 的 TPL 段注释);
-//      ② v1/v2/v3/v4/v5 既有字段在**发布偏移**上仍然正确 (前 916 字符不动);
+//      ② v1/v2/v3/v4/v5/v6 既有字段在**发布偏移**上仍然正确 (前 971 字符不动);
 //      ③ v2 新字段 GW/EW/OZ/OL/OM/OH、v3 新字段 SW..VN、**v4 新字段 CN..QH**、
-//         **v5 新字段 DV..SB**、**v6 新字段 CV..CS** 的偏移与宽度正确 —— 每个
+//         **v5 新字段 DV..SB**、**v6 新字段 CV..CS**、**v7 新字段 IV..NB** 的偏移与宽度正确 —— 每个
 //         字段的输入值取互相可区分的图案 ⇒ 字段串位/串宽/漏字符必然红。
 //      ⚠️ v4 段的 20 个字段全部逐值断言 (偏移由 sim/rxpdiag/gen_offsets.py
 //        拼接 TPL 串算出, 该脚本还会**直接读 rtl/app_status_uart.v** 解码窗口
@@ -219,6 +219,10 @@ module tb_rxp_diag;
     reg [7:0]  st_cg, st_ce, st_cs;
     reg [15:0] st_co;
     reg        st_cz;
+    // v7 (phase 8): IP-id sequence checker (udp_rx) + skipped non-UDP bytes
+    // (constant inputs, pairwise distinct -> a shifted or mis-widthed field
+    //  cannot decode back to the expected value)
+    reg [15:0] st_iv, st_is, st_ia, st_ib, st_iw, st_nb;
 
     // 状态行 DUT 的复位与主 DUT **独立** (不然每相复位都会重发行, 解码器要跟着
     // 重对齐); 位周期 7 拍 (BIT_LAST=6) 只为把 470 字符的行在 ~263us 内跑完。
@@ -265,6 +269,8 @@ module tb_rxp_diag;
         .v6_dv_idx(st_cv), .v6_dv_got(st_cg), .v6_dv_exp(st_ce),
         .v6_dv_off(st_co), .v6_dv_mm(st_cm), .v6_dv_v(st_cz),
         .v6_dv_sk(st_cs),
+        .v7_id_viol(st_iv), .v7_id_seen(st_is), .v7_id_cur(st_ia),
+        .v7_id_prev(st_ib), .v7_id_back(st_iw), .v7_nb(st_nb),
         .txd(st_txd)
     );
 
@@ -321,6 +327,10 @@ module tb_rxp_diag;
         // (CV/CM: 8 hex; CG/CE/CS: 2 hex; CO: 4 hex; CZ: 1 hex)
         st_cv = 32'h0F1E2D3C; st_cg = 8'hB7; st_ce = 8'h4E; st_co = 16'h3A5C;
         st_cm = 32'h00FACADE; st_cz = 1'b1;  st_cs = 8'h6B;
+        // v7: 6 fields, 4 hex each (16-bit), pairwise distinct and != every
+        // earlier value -> any shifted / mis-widthed / mis-sequenced window fails
+        st_iv = 16'h00A1; st_is = 16'h11B2; st_ia = 16'h22C3;
+        st_ib = 16'h33D4; st_iw = 16'h44E5; st_nb = 16'h55F6;
     end
 
     // v4 观测口 (A 部在 udp_split 里, 本 TB 不例化它; B 部在这里)
@@ -478,7 +488,7 @@ module tb_rxp_diag;
 
     // ===================== 相 7: 状态行逐字符解码 =====================
     // (这三个状态声明必须在 task 之前 —— xvlog 先声明后用, 坑 22)
-    reg [7:0] line [0:1023];              // v6: line is 971 chars (> 512)
+    reg [7:0] line [0:1023];              // v7: line is 1019 chars (> 512)
     integer   nchar;
     integer   dec_i;
     integer   jj;
@@ -734,12 +744,24 @@ module tb_rxp_diag;
         chk(ds_b1 + ds_b2 + ds_bg == st_mismatch, "P8 popcount 分桶覆盖");
         chk(ds_oz + ds_ol + ds_om + ds_oh == st_mismatch, "P8 偏移分桶覆盖");
 
-        $display("RXPDIAG P7 行长=%0d (期望 971) 末两字符=%02X %02X", nchar, line[969], line[970]);
+        $display("RXPDIAG P7 行长=%0d (期望 1019) 末两字符=%02X %02X", nchar, line[1017], line[1018]);
         $write("RXPDIAG P7 LINE: ");              // 实收整行 (不含 CR/LF) —— 板级读数长这样
-        for (jj = 0; jj < 969; jj = jj + 1) $write("%c", line[jj]);
+        for (jj = 0; jj < 1017; jj = jj + 1) $write("%c", line[jj]);
         $write("%c", 8'h0A);                 // 行尾 (不写字面反斜杠, 免转义坑)
-        chk(nchar == 971, "P7 行长 = 971 字符 (v6)");
-        chk(line[969] == 8'h0D && line[970] == 8'h0A, "P7 CR/LF 落在 969/970");
+        chk(nchar == 1019, "P7 行长 = 1019 字符 (v7)");
+        chk(line[1017] == 8'h0D && line[1018] == 8'h0A, "P7 CR/LF 落在 1017/1018");
+        // ---- v7 新字段 (偏移全部由 sim/rxpdiag/gen_offsets.py 拼接 TPL 串算出) ----
+        // 6 个 16 位值在 4 字符窗口里 (hexd 左对齐 {v, 16'b0}) —— 取值互不相同且非 0
+        // ⇒ 窗口串位/少一字符/多一字符/左对齐错 ("补到 32 位") 都会让解码值变红。
+        chk_hex(16'd8, 16'd973,  16'd4, 64'h00000000000000A1, "IV");
+        chk_hex(16'd8, 16'd981,  16'd4, 64'h00000000000011B2, "IS");
+        chk_hex(16'd8, 16'd989,  16'd4, 64'h00000000000022C3, "IA");
+        chk_hex(16'd8, 16'd997,  16'd4, 64'h00000000000033D4, "IB");
+        chk_hex(16'd8, 16'd1005, 16'd4, 64'h00000000000044E5, "IW");
+        chk_hex(16'd8, 16'd1013, 16'd4, 64'h00000000000055F6, "NB");
+        // 追加性: ' IV=' 必须紧跟在 CS 值的 2 个 hex 之后 (前 971 字符未被推动)
+        chk(line[969] == 8'h20 && line[970] == 8'h49 && line[971] == 8'h56
+            && line[972] == 8'h3D, "P7 IV 字段紧接 CS 值 (v6 前缀未被推动)");
         // ---- v6 新字段 (偏移全部由 sim/rxpdiag/gen_offsets.py 拼接 TPL 串算出) ----
         // 7 个字段各取**互不相同且非 0**的常量 ⇒ 窗口串位/少一字符/多一字符/
         // 左对齐错 (8 位值误写成"补到 32 位") 都会让解码值变红。

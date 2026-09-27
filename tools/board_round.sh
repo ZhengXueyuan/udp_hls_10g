@@ -45,7 +45,7 @@ echo "    ok (PROGRAM_OK)"
 echo "=== [2/5] load pattern: $BYTES B / paylen $PAYLEN = $FRAMES frames ==="
 ./tools/cpp_peer/peer.exe --iface "$IFACE" --src-mac "$SRC_MAC" \
     --sport 8081 --dport 8081 \
-    --udp-send-pattern "$BYTES" --udp-paylen "$PAYLEN" --rate-mbps 0 \
+    --udp-send-pattern "$BYTES" --udp-paylen "$PAYLEN" --rate-mbps "${RATE:-0}" \
     >/tmp/round_peer.out 2>&1
 grep -E "^VERDICT|^TX  |^RX  " /tmp/round_peer.out | sed 's/^/    /'
 

@@ -300,6 +300,23 @@ module udp_split #(
     , output wire               v6_dv_v     // CZ: 快照有效 (粘滞, 只记首个)
     , output wire [7:0]         v6_dv_sk    // CS: 因输入 skid 满而**被丢掉的字数** (非 0 = 本
                                             //     轮 v6 读数不可用; 输入侧不能反压 ⇒ 只能丢)
+    // ---- RXP_DIAG v7 (2026-09-27): IP ID 序列检查 + v6 的非 UDP 帧口径修正 ----
+    // (ISSUE_RX_BYTE_CORRUPTION §18.15/§18.16; 目的/口径见 body 末尾的 v7 段)
+    // A 部 (来自 u_udp_rx 的新端口, 零新增逻辑 —— 纯线束引出, 同 v5 B 部手法):
+    //   IV/IS/IA/IB/IW = IP ID 序列的违例数/参与比较帧数/首个违例的 {本帧, 上帧}
+    //   ID/反向跳跃数。判据: `IW > 0` ⇒ **到达顺序被打乱**(确凿); `IV==IW==0` ⇒
+    //   线缆帧序完好 (⇒ 必须解释"只在高速率下"⇒ 指向 IFG/前导码接收裕量)。
+    // B 部 (本模块 v6 段新增): NB = v6 引擎因"本帧不是 IPv4/UDP"而**跳过的字节数**
+    //   —— 修掉 §18.16 的尾伪影 (v6 把整轮之后的非 UDP 帧当载荷比对, CM==560 而
+    //   app/v5 都是 0) 之后, 那 560 字节的去向必须**可见**: 100 Mbps 轮里
+    //   `NB == 560 && CM == 0` 就是这次修正的正面证据。
+    // 键名 IV/IS/IA/IB/IW/NB —— 与既有全部键不撞 (gen_offsets.py 的遮蔽检查是硬断言)。
+    , output wire [15:0]        v7_id_viol  // IV: id != prev+1 的次数 (总违例)
+    , output wire [15:0]        v7_id_seen  // IS: 过门帧数 (比较次数 = IS-1; 与 PS+DC 对账)
+    , output wire [15:0]        v7_id_cur   // IA: 首个违例的本帧 ID
+    , output wire [15:0]        v7_id_prev  // IB: 首个违例的上一帧 ID
+    , output wire [15:0]        v7_id_back  // IW: 其中反向跳跃数 (id < prev)
+    , output wire [15:0]        v7_nb       // NB: v6 引擎跳过的非 UDP 帧载荷字节数
 `endif
 );
 
@@ -433,6 +450,14 @@ module udp_split #(
         .stat_pass(u_stat_pass), .stat_drop_nonmatch(u_stat_nm),
         .stat_drop_ipcsum(u_stat_ipc), .stat_drop_crc(u_stat_crc),
         .stat_bytes(u_stat_bytes)
+`ifdef RXP_DIAG
+        // RXP_DIAG v7: 纯线束引出 (u_udp_rx 内部寄存器 → 本模块输出口, 零新增逻辑)
+        , .ip_id_viol (v7_id_viol)
+        , .ip_id_seen (v7_id_seen)
+        , .ip_id_cur  (v7_id_cur)
+        , .ip_id_prev (v7_id_prev)
+        , .ip_id_back (v7_id_back)
+`endif
     );
 
     // ---- 载荷帧缓冲 (frame_fifo: RAMB36 主存 + LUTRAM 边存, 含 snap/回卷) ----
@@ -1142,6 +1167,30 @@ module udp_split #(
     //     · v6 也损坏 ⇒ 在 **mac_rx_64 / rx_classify / vlan_strip** ⇒ 必须带着这个
     //       反例重查"无帧级存储"的论证。
     //
+    // 【★ v7 补齐 (2026-09-27): 只比 UDP 帧 —— 修掉 §18.16 的"非 UDP 帧尾伪影"】
+    //   板级现象 (100 Mbps 轮, v6 位流): `CZ=1 CM=560` 而 **app 与 v5 都是 0**;
+    //   且 `CV == 8388608` 恰等于整轮载荷字节数 ⇒ **首个"失配"落在整轮数据之后**:
+    //   整轮结束后仍有非 UDP 帧 (PC 内核发往 8081 的 ICMP 不可达等) 到达本模块的
+    //   输入, 而本段是"按常量 42 跳过表头"的**纯字节**校验器 ⇒ 把它们当载荷比了
+    //   560 字节。这不是被测现象, 是**仪器口径**的缺陷。
+    //   修法选择 (**取 (a)**, 理由如下):
+    //     (a) **只比 IPv4/UDP 帧** —— 仪器本身就不该把非 UDP 帧当载荷;
+    //     (b) 不改逻辑, 只在判读工具里把 `CV >= 整轮载荷字节数` 标成"尾伪影"。
+    //   (a) 是**结构性**的: 非 UDP 帧 (含 ICMP/ARP/其他 proto) 既不比对、**也不推进
+    //   LFSR** ⇒ 期望序列始终只跟"UDP 载荷字节"对齐 (与 app/v5 的口径一致 ——
+    //   它们本来也只看 UDP 帧)。选 (b) 的话, 伪影一旦出现在**轮中** (板级 r02 就
+    //   出现过 `NM=1` 的非匹配帧) 就会把整条期望序列推错位, 后面每一帧都报失配
+    //   ⇒ 判读工具再怎么过滤也救不回来。
+    //   ⚠️ 对既有相位的影响 = **零**: 门里注入的帧全部是 IPv4/UDP (ver/ihl=0x45,
+    //     proto=0x11) ⇒ 新门恒 1 ⇒ 行为逐位不变 (v6 门 V1..V7 必须仍然全绿)。
+    //   ⚠️ 已知语义边界 (如实记录): 本段仍**不判**帧会不会被 udp_rx 接受 (非匹配
+    //     端口/坏 IP 校验和的 **UDP** 帧照样计入), 这条与 §18.13 的口径一致, 没有改。
+    //   ⚠️ 哨兵: 新增 `NB` (被跳过的非 UDP 帧载荷字节数) 把"哪些字节被排除"变成
+    //     可观测量 ⇒ 修正本身**可被板级反证**: 100 Mbps 轮里应看到
+    //     `NB == 560 && CM == 0` (560 就是从 CM 搬过来的那批字节)。
+    //     同时 `NB > 0 && CM == 0` 也顺带证明门是活的 (若门恒 1 ⇒ NB==0 而 CM 仍会 560;
+    //     若门恒 0 ⇒ NB 会等于整轮载荷字节数)。
+    //
     // 【为什么不需要解析表头】载荷起点是**常量 42 字节** (14 以太 + 20 IP + 8 UDP;
     //   本设计无 VLAN、无 IP 选项 —— 见 udp_rx.v 头注释), FCS 已在 mac_rx_64 剥离
     //   (它的 4 字节前瞻延迟线让帧尾 4 字节自然不打包)。⇒ 输入侧只做三件事:
@@ -1199,9 +1248,32 @@ module udp_split #(
         else if (s_acc)        v6_fidx <= v6_end;
     end
 
+    // ---- v7: 本帧是不是 IPv4/UDP (逐字定案, 随字进 skid) ----
+    // 表头在第 1 个字 (byte8..15: ethertype @ byte12-13, ver/ihl @ byte14) 与第 2 个字
+    //   (byte16..23: proto @ byte23) 上就能定案, 而**载荷字最早在第 5 个字** (byte40 起,
+    //   载荷从 byte42 开始) ⇒ 任何载荷字被比对时, 本寄存器已经是本帧的值。
+    // 写边 (s_acc) 而不是读边 (pw_cnt): 这个标志要**跟着字一起进 skid** (引擎落后 0..4
+    //   字, 用"当前帧"的值去比对在途字会在帧交界处错一帧 —— 结构性错误, 不是概率问题)。
+    // 取哪个字节: 与 udp_rx 的 hdr_ok1/hdr_ok2 同一组判据 (ethertype==0x0800 且
+    //   ver/ihl==0x45 且 proto==17), 只是位置按**帧内字节序号** v6_fin 索引
+    //   (word k 的首字节序号 = 8k ⇒ w1 ⇔ v6_fin==8, w2 ⇔ v6_fin==16)。
+    reg  v6_udpf;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)                 v6_udpf <= 1'b0;
+        else if (s_acc) begin
+            if (v6_sopw)            v6_udpf <= 1'b0;      // 新帧: 默认"不是 UDP"
+            else if (v6_fin == 16'd8)
+                v6_udpf <= (s_axis_tdata[31:16] == 16'h0800) &&
+                           (s_axis_tdata[15:8]  == 8'h45);
+            else if (v6_fin == 16'd16)
+                v6_udpf <= v6_udpf && (s_axis_tdata[7:0] == 8'h11);
+        end
+    end
+
     // ---- 输入 skid: 深 4 的字 FIFO (写口 = s_acc; 满则丢并计入 CS) ----
-    // 条目 = {tdata[63:0], skip[3:0], fidx[15:0], np[3:0]} = 88 位 (tkeep 不存: np 已够)。
-    reg  [87:0] v6_mem [0:3];
+    // 条目 = {udpf, tdata[63:0], skip[3:0], fidx[15:0], np[3:0]} = **89** 位
+    //   (tkeep 不存: np 已够; v7 追加 1 位 = "本字属于 IPv4/UDP 帧")。
+    reg  [88:0] v6_mem [0:3];
     reg  [1:0]  v6_wp, v6_rp;
     reg  [2:0]  v6_oc;                                    // 占用 0..4
     wire        v6_full  = (v6_oc == 3'd4);
@@ -1215,7 +1287,7 @@ module udp_split #(
     //   ph=1 拍开始时恰是"载荷第 4 字节"的状态 (A 拍已推进)。这是本引擎唯一的
     //   跨拍反馈, 而每拍的组合深度只有 ≤4 步。
     reg         v6_busy, v6_ph;
-    reg  [87:0] v6_w;
+    reg  [88:0] v6_w;
     wire        v6_start = !v6_busy && !v6_empty;         // 本拍处理 skid 头字 (ph=0)
     wire        v6_cyc1  = v6_busy && v6_ph;              // 本拍处理上一个字的 ph=1
     wire        v6_pop   = v6_start;
@@ -1224,9 +1296,9 @@ module udp_split #(
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             v6_wp <= 2'd0; v6_rp <= 2'd0; v6_oc <= 3'd0;
-            v6_busy <= 1'b0; v6_ph <= 1'b0; v6_w <= 88'd0;
+            v6_busy <= 1'b0; v6_ph <= 1'b0; v6_w <= 89'd0;
         end else begin
-            if (v6_put) v6_mem[v6_wp] <= {s_axis_tdata, v6_skip, v6_fin, v6_np};
+            if (v6_put) v6_mem[v6_wp] <= {v6_udpf, s_axis_tdata, v6_skip, v6_fin, v6_np};
             if (v6_put) v6_wp <= v6_wp + 2'd1;
             if (v6_pop) v6_rp <= v6_rp + 2'd1;
             v6_oc <= v6_oc + {2'b0, v6_put} - {2'b0, v6_pop};
@@ -1236,7 +1308,8 @@ module udp_split #(
     end
 
     // 当前处理字的字段 (ph=1 取寄存器副本, ph=0 组合读 skid 头)
-    wire [87:0] v6_cw   = v6_cyc1 ? v6_w : v6_mem[v6_rp];
+    wire [88:0] v6_cw   = v6_cyc1 ? v6_w : v6_mem[v6_rp];
+    wire        v6_cen  = v6_cw[88];                      // v7: 本字属于 IPv4/UDP 帧
     wire [63:0] v6_cd   = v6_cw[87:24];
     wire [3:0]  v6_csk  = v6_cw[23:20];
     wire [15:0] v6_cfi  = v6_cw[19:4];
@@ -1254,6 +1327,7 @@ module udp_split #(
     reg  [31:0] v6_mm;                                   // 失配字节总数 (整轮)
     reg  [31:0] v6_cv;  reg [7:0] v6_cg, v6_ce;
     reg  [15:0] v6_co;  reg v6_v;  reg [7:0] v6_cs;
+    reg  [15:0] v6_nb;                                   // v7: 跳过的非 UDP 帧载荷字节数
 
     // ---- 期望字节: 从当前状态起 ≤3 步 (lane p = xs^p(state)[31:24], 先取后推进) ----
     wire [63:0] v6_s1 = v5_xs(v6_lfsr);
@@ -1309,26 +1383,33 @@ module udp_split #(
             v6_lfsr <= 64'h9E3779B97F4A7C15;             // = v5_lfsr / app SEED
             v6_cnt <= 32'd0;  v6_mm <= 32'd0;
             v6_cv  <= 32'd0;  v6_cg <= 8'd0;  v6_ce <= 8'd0;  v6_co <= 16'd0;
-            v6_v   <= 1'b0;   v6_cs <= 8'd0;
+            v6_v   <= 1'b0;   v6_cs <= 8'd0;  v6_nb <= 16'd0;
         end else begin
             if (v6_ovf) v6_cs <= v6_cs + 8'd1;
             if (v6_cyc) begin
-                v6_lfsr <= v6_ns;
-                v6_cnt  <= v6_cnt + {28'b0, v6_n};
-                v6_mm   <= v6_mm + {28'b0, v6_nbad};
-                if (v6_any && !v6_v) begin
-                    v6_v  <= 1'b1;
-                    // CV = 本拍之前的累计字节数 + **本拍内**的 lane 号。
-                    // ⚠️ 这里**不能**再加 v6_base: v6_cnt 在本拍开始前已经计入了
-                    //    本字 ph=0 拍消费的那 4 个字节 ⇒ 它已经是"本拍第一个字节"
-                    //    的全局序号 (ph=1 拍加 v6_base 会把那 4 字节算两遍 ——
-                    //    v6 门 V1 实测 CV 恰好多 4, 就是这条)。
-                    v6_cv <= v6_cnt + {28'b0, v6_fb};
-                    v6_cg <= v6_gsel;
-                    v6_ce <= v6_esel;
-                    // CO = 该字节的**帧内**序号 - 42
-                    v6_co <= v6_cfi + {12'b0, v6_csk} + {12'b0, v6_base}
-                             + {12'b0, v6_fb} - V6_HDR;
+                // v7: **只比 IPv4/UDP 帧** —— 非 UDP 帧既不比对也**不推进 LFSR**
+                // (否则期望序列会被"非 UDP 帧的字节"推错位: 修掉 §18.16 尾伪影的
+                //  同时保住与 app/v5 的相位一致)。被跳过的字节数计入 NB (v7_nb)。
+                if (v6_cen) begin
+                    v6_lfsr <= v6_ns;
+                    v6_cnt  <= v6_cnt + {28'b0, v6_n};
+                    v6_mm   <= v6_mm + {28'b0, v6_nbad};
+                    if (v6_any && !v6_v) begin
+                        v6_v  <= 1'b1;
+                        // CV = 本拍之前的累计字节数 + **本拍内**的 lane 号。
+                        // ⚠️ 这里**不能**再加 v6_base: v6_cnt 在本拍开始前已经计入了
+                        //    本字 ph=0 拍消费的那 4 个字节 ⇒ 它已经是"本拍第一个字节"
+                        //    的全局序号 (ph=1 拍加 v6_base 会把那 4 字节算两遍 ——
+                        //    v6 门 V1 实测 CV 恰好多 4, 就是这条)。
+                        v6_cv <= v6_cnt + {28'b0, v6_fb};
+                        v6_cg <= v6_gsel;
+                        v6_ce <= v6_esel;
+                        // CO = 该字节的**帧内**序号 - 42
+                        v6_co <= v6_cfi + {12'b0, v6_csk} + {12'b0, v6_base}
+                                 + {12'b0, v6_fb} - V6_HDR;
+                    end
+                end else begin
+                    v6_nb <= v6_nb + {12'b0, v6_n};    // v7 NB: 跳过的字节数
                 end
             end
         end
@@ -1341,6 +1422,7 @@ module udp_split #(
     assign v6_dv_mm  = v6_mm;
     assign v6_dv_v   = v6_v;
     assign v6_dv_sk  = v6_cs;
+    assign v7_nb     = v6_nb;        // v7: 修掉尾伪影之后, 被排除的字节数 (可反证修正)
 `endif
 
 endmodule

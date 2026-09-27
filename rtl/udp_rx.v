@@ -50,6 +50,58 @@ module udp_rx (
     output reg  [31:0] stat_drop_ipcsum,   // IP 头校验和错
     output reg  [31:0] stat_drop_crc,      // 匹配但 FCS 坏 (帧交付, 末拍标记)
     output reg  [31:0] stat_bytes          // 匹配且 FCS 好的载荷字节
+`ifdef RXP_DIAG
+    //=========================================================================
+    // RXP_DIAG v7 (2026-09-27): IP identification (16 位) 序列检查
+    //   = "线缆上到达的帧顺序本身是否被打乱" 的**直接度量**
+    //   (ISSUE_RX_BYTE_CORRUPTION §18.15 / §18.16)
+    //=========================================================================
+    // 【为什么用 IP ID】peer 每发一帧 `ip.id` 逐帧 +1 —— 抓包实测 (§18.15:
+    //   5699 帧按 ip.id 逐帧比对图案, 0 失配)。ID 是**帧的一部分**: 如果帧级顺序
+    //   被换过 (整帧置换), 那么**到达顺序**上的 ID 序列就不再是 +1。这正是
+    //   §18.15 收窄后的两条假设 (PC 侧 NIC/驱动 TX 路径 vs PHY/GMII 接收裕量)
+    //   的判决量, 而且不需要板上任何缓冲就能测 —— 与 §18.9 那个"装不下整帧"
+    //   的结构矛盾不冲突。
+    // 【口径 (三条必须说清)】
+    //   ① 比的是**线上到达顺序**, 不是发送顺序 —— 到达顺序就是被测对象。
+    //   ② 只比**通过匹配门的帧** (= 会走到 meta_valid 的那些: ip 校验和 +
+    //      ip_match + port_match + udp_len_ok 全过)。混进 ICMP/别的端口/坏校验和
+    //      的帧只会污染判据 (板级每轮都有若干非数据帧: §18.16 的 100 Mbps 轮)。
+    //      ⚠️ 代价如实记录: 数据帧之间若插进了别的 IP 帧 (ICMP 等), 它们的 ID 也
+    //      在 peer 的 ID 空间里前进 ⇒ 序列会出现**正向跳变** (delta >= 2), 这类
+    //      违例**不能**直接判成重排。故除 IV (总违例) 外另给 IW (**反向**跳跃数):
+    //      `id < prev` (mod 2^16 递减) 才是"顺序被打乱"的确凿签名 ⇒ 判据用
+    //      IW (确凿) / IV-IW (正向, 混杂) 两条分别读, 而不是只看 IV。
+    //      另一种口径 (比**所有**帧) 被否掉的理由: 未过门的帧里既有 ICMP (消费 ID)
+    //      也有坏校验和/非 UDP 帧 (不消费), 两者混在一起后 IV 的分布无法解释;
+    //      而"过门帧"集合恰好等于 app 真正看到的数据帧集合 (PS/SB 已逐位对账)。
+    //   ③ **第一个**通过门的帧不参与比较 (它没有上一帧) ⇒ 只在 IS!=0 时比,
+    //      且它照样写入 prev。⇒ **IS = 进入本检查器的"过门帧"数** (含第一帧),
+    //      实际比较次数 = IS-1 ⇒ IS 是判据的分母 (自证"IV==0 不是死 0")。
+    //      ★ 板级自洽式: **IS == PS + DC** (PS = stat_pass = 匹配且 FCS 好,
+    //        DC = stat_drop_crc = 匹配但 FCS 坏; 两者之和恰是过门帧数) ——
+    //        差一帧就说明口径/接线有问题, 这是一条不需要额外字段的交叉核对。
+    // 【字节布局 (逐字核对本文件头注释的 w0..w5 布局)】
+    //   w2 = total_len + id + flags/frag + ttl + proto (帧 byte16..23)
+    //     → total_len = w2[63:48] (byte16-17), **id = w2[47:32] (byte18-19)**,
+    //       flags/frag = w2[31:16] (byte20-21), ttl = w2[15:8] (byte22),
+    //       proto = w2[7:0] (byte23) —— 与 hdr_ok2 判 `s_axis_tdata[7:0]==8'h11`
+    //       (wcnt==2) 的位置互为印证。
+    //   id 是**网络序**字段 (byte18 在 bit[47:40]); peer 的 +1 是"网络序读数 +1"
+    //   (同 tshark 显示的 ip.id) ⇒ 必须**原样**比较 w2_r[47:32], **不能**做字节
+    //   交换 (交换后 +1 关系不成立)。
+    //   取字段位置/字节序由门相 P3 实测钉死: 两个 ID 取**互为字节交换**的值
+    //   (0xA5C3 / 0x3C5A) ⇒ 取错字节序或取错偏移都不可能解出构造值。
+    // 【时序】每帧**一次**: 16 位比较 + 计数器增量, 路径 = w2_r/prev_r → 比较器 →
+    //   计数器 D (无 xorshift 那类 8 步链)。
+    // 【端口】一律追加在端口表末尾; 整段只在 `RXP_DIAG 下达 ⇒ 默认构建
+    //   (build_p4) 的端口表/逻辑/时序逐位不变。
+    , output reg  [15:0] ip_id_viol    // IV: id != prev+1 的次数 (总违例)
+    , output reg  [15:0] ip_id_seen    // IS: 过门帧数 (比较次数 = IS-1; 自证不是死 0)
+    , output reg  [15:0] ip_id_cur     // IA: 首个违例的**本帧** ID
+    , output reg  [15:0] ip_id_prev    // IB: 首个违例的**上一帧** ID
+    , output reg  [15:0] ip_id_back    // IW: 其中**反向**跳跃数 (id < prev; 重排签名)
+`endif
 );
 
     localparam [1:0] S_HDR = 2'd0, S_PAY = 2'd1, S_DROP = 2'd2, S_TAIL = 2'd3;
@@ -369,4 +421,43 @@ module udp_rx (
             endcase
         end
     end
+
+`ifdef RXP_DIAG
+    //=========================================================================
+    // RXP_DIAG v7: IP ID 序列检查 (口径/布局/判据见端口段的 v7 注释 —— 真值源那里)
+    //=========================================================================
+    reg  [15:0] v7_prev_r;      // 上一**通过匹配门**帧的 ID
+    // 参与比较的判定 = meta_valid 的条件 (wcnt==5 且 matched 的接受拍)。w2_r 在本
+    // 帧 wcnt==2 拍锁存、到 w5 拍仍稳定 ⇒ 直接用 w2_r[47:32], 不新增 ID 寄存器。
+    wire        v7_cyc  = (state == S_HDR) && accept && (wcnt == 6'd5) && matched;
+    wire [15:0] v7_id   = w2_r[47:32];              // = 帧 byte18-19 (网络序)
+    wire        v7_bad  = (v7_id != (v7_prev_r + 16'd1));  // 期望 +1
+    wire        v7_bwd  = (v7_id < v7_prev_r);      // 反向跳跃 (mod 2^16 递减)
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            v7_prev_r   <= 16'd0;
+            ip_id_viol  <= 16'd0;
+            ip_id_seen  <= 16'd0;
+            ip_id_cur   <= 16'd0;
+            ip_id_prev  <= 16'd0;
+            ip_id_back  <= 16'd0;
+        end else if (v7_cyc) begin
+            if (ip_id_seen != 16'd0) begin          // 第一帧没有"上一帧" ⇒ 不比
+                if (v7_bad) begin
+                    ip_id_viol <= ip_id_viol + 16'd1;
+                    // 首个违例: 用 IV==0 当"首次"条件 (结构性保证: IV>0 ⇔ 锁存有效)
+                    if (ip_id_viol == 16'd0) begin
+                        ip_id_cur  <= v7_id;
+                        ip_id_prev <= v7_prev_r;
+                    end
+                    if (v7_bwd) ip_id_back <= ip_id_back + 16'd1;
+                end
+            end
+            v7_prev_r  <= v7_id;
+            ip_id_seen <= ip_id_seen + 16'd1;
+        end
+    end
+`endif
+
 endmodule

@@ -48,7 +48,11 @@ def main():
     ref_b  = int(opt("--bytes-ref", "8388608"))
     UMM, URB, URF = g("MM"), g("RB"), g("RF")
     UPC, UOV, UPA = g("PC"), g("OV"), g("PA")
-    umm_lo = int(opt("--umm-lo", str(int(1000   * sent_b / ref_b))))
+    # 下界 = 0 (2026-09-27 修正): 原为 1000, 但 **UMM=0 是合法的"无损坏"读数**
+    # —— 实测 100 Mbps 那轮 UMM=0 且 URB/URF 精确、UPC/OV/PA=0、II=0 ⇒ 自证有效。
+    # 原下界的存在理由是"抓没复位", 但那个模态是 UMM ≈ 送出字节数, 由**上界**抓;
+    # 而 URB/URF 精确 (P2) 已保证这一轮真的跑过 ⇒ 下界冗余, 且会否掉真实的零。
+    umm_lo = int(opt("--umm-lo", str(int(0 * sent_b / ref_b))))
     umm_hi = int(opt("--umm-hi", str(int(150000 * sent_b / ref_b))))
 
     fails = []
