@@ -3970,3 +3970,30 @@ report_clock_interaction + 时序/资源, 全只读)。
 **方法论收获 (对抗 agent 自己踩的)**: 复位会污染任何"按边沿计数"的外部监视器 —— 被复位打断的
 飞行请求会把 `toggle_a` 异步清 0, 这次**寄存器变化被数成一次请求翻转** ⇒ 假 FAIL (160 vs 319)。
 修法 = 按**受理条件** (`req_p && !busy_p`) 计数; 改后逐数吻合: 受理 240 = 完成 160 + 打断 80。
+
+## 2026-09-29 P6e 首次上板: user BAR 全回 0xffffffff —— 判据侧的两条教训
+
+**现象**: 烧完 P6e 位流 (JTAG, `End of startup status: HIGH`), 未重启主机就跑验收 ⇒
+**所有寄存器 (含 MAGIC) 都读回 0xffffffff**。
+
+**教训 1: 0xffffffff 是"这次读没成功", 不是数据。** XDMA 的 AXI-Lite 主机把 SLVERR 的
+响应数据填成 0xffffffff ⇒ 任何"按位判断"的判据都会**假通过**:
+- 判据 2.1 (`done` 位 = `s & 2`) 在 `s = 0xffffffff` 时**恒真** ⇒ 通道全坏却报 PASS;
+- "8 字冻结"也会因两次都读到同一个 ffffffff 而"通过"。
+⇒ 验收脚本已加 **0.3 总闸**: MAGIC 读出 0xffffffff 就判"通道没应答"并**立刻退出**
+(不让后面的判据在坏通道上产生假结论)。这与审查 agent 抓到的"判据 5 只练检查器没练 DUT"
+是**同一类错**: 判据必须只有"真的通了"才成立。
+
+**教训 2: `lspci` / config 空间读得出 → 不能当"设备活着"的证据。**
+我一开始拿 `xxd /sys/.../config` 读出 `ee10 3490` + `current_link_speed 5.0 GT/s x4` 当作
+"端点还活着, 不用重启" ⇒ **结论错了** (接着就发现 BAR 全 ffffffff)。
+那些是**主机侧/可能被缓存**的状态; 唯一靠得住的是"**BAR 打得动**"。
+⚠️ 本条修正了我在这一轮中途给出的建议 —— 记下来是因为它正是本工程反复强调的
+"判据要选只有修复后才成立的量"。
+
+**判别器 (已落成脚本 `_proj_pcie/p6e_precheck.sh`)**: XDMA 有**两个** BAR ——
+`xdma0_control` (XDMA 自己) 与 `xdma0_user` (我们的)。读数组合能直接分开两种原因:
+- 只有 user 坏 ⇒ **设计侧**没应答 (axi_aresetn 没释放/接线/地址), 重启救不了;
+- **两个都坏** ⇒ 整个通路没起来 ⇒ **重启主机** (烧录在 POST 之后)。
+实测 = 两个都 `0xffffffff` (`config` 也是) + dmesg 显示 boot 时 probe 正常
+(`2 BARs: config 1, user 0`, BAR1 length=65536) ⇒ 判为"该重启"。

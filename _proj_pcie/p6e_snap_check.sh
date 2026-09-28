@@ -57,6 +57,26 @@ ls /dev/xdma0_* | tr '\n' ' '; echo
 if [ -e $DEV ]; then echo "  [PASS] 0.2 user BAR 节点存在 ($DEV)"; PASS=$((PASS+1));
 else echo "  [FAIL] 0.2 没有 $DEV"; FAIL=$((FAIL+1)); exit 1; fi
 
+echo; echo "===== 0.3 通道活性总闸 (0xffffffff 一律当"没应答", 不当数据) ====="
+# ⚠️ 用法坑 (实测踩到, 2026-09-29): reg_rw **不因 SLVERR 报错** —— XDMA 的 AXI-Lite 主机把
+#    错误响应的数据填成 0xffffffff 交回用户态 ⇒ 0xffffffff **不是数据, 是"这次读没成功"**。
+#    一旦这样, 后面所有"按位判断"的判据都会**假通过** (例: done 位测 `s & 2`, 而
+#    0xffffffff & 2 != 0 恒真; "8 字冻结"也会因两次都读到同一个 ffffffff 而"通过")。
+#    ⇒ 先把这道总闸立起来, 拦住整类假通过。
+#    ⚠️ 注意: `lspci` 看到端点、甚至 config 空间读得出 10ee:9034, **都不能**当"设备活着"的
+#       证据 (可能是主机侧/缓存状态)。唯一靠得住的是"BAR 读得动"。
+M0=$(rd 0x00)
+if [ "$M0" = "0xffffffff" ]; then
+  echo "  [FAIL] 0.3 user BAR 全部读回 0xffffffff (SLVERR) ⇒ 观测通道没在应答, 后面判据无意义"
+  echo "        先查 (按可能性排序):"
+  echo "          1) **烧录后主机还没重启** -- PCIe 端点只认 FPGA 配置先于主机 POST"
+  echo "             (项目纪律: 烧完必重启; 四种主机侧补救实测全无效)"
+  echo "          2) 端点只是 lspci 里的陈旧条目 (config 空间可能来自主机缓存)"
+  echo "          3) 设计侧 axi_aresetn 没释放 / axi_regs 没接上 => AXI-Lite 从不应答"
+  exit 1
+fi
+echo "  [PASS] 0.3 通道在应答 (MAGIC = $M0)"; PASS=$((PASS+1))
+
 echo; echo "===== 1. 身份 (前置闸: 认位流) ====="
 chk "1.1 MAGIC (0x00)"  "$(rd 0x00)" "0x50360001"
 chk "1.2 BUILD_ID (0x04) = 合体版" "$(rd 0x04)" "$EXPECT_BID"
