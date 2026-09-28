@@ -27,13 +27,10 @@ set_property PACKAGE_PIN AB2 [get_ports {pcie_rxp[0]}]
 
 # --- 说明: axi_aclk / axi_aresetn 等由 XDMA IP 自带的 XDC 约束, 不在此重复 ---
 
-# --- 跨时钟域: gmii_clk (来自 phy1_rxc, PHY 的 25MHz 晶振) 与 axi_aclk (来自金手指的
-#     100MHz 参考钟, XDMA 内部生成) **不同源** ⇒ 它们之间是真正的异步关系。
-#     这两个域之间**只有一处连接**: snap_cdc 的握手 (多比特数据 hold_b 靠握手保证稳定,
-#     同步器链已打 ASYNC_REG)。切异步组, 别让工具去"凑"它们之间的时序。
-#     ⚠️ XDC 里不能写 if/foreach (Designutils 20-1307), 用 get_clocks -quiet 兜住找不到的情况;
-#        实测核对: 实现后的 timing 报告的 Clock Summary 必须同时列出 phy1_rxc/gmii_clk 与 axi_aclk
-#        (若这里名字写错 ⇒ 组为空 ⇒ 会在日志里报 CRITICAL WARNING, 一眼可见而不是静默)。
-set_clock_groups -asynchronous \
-    -group [get_clocks -quiet -include_generated_clocks phy1_rxc] \
-    -group [get_clocks -quiet -include_generated_clocks axi_aclk]
+# --- 跨时钟域约束 (set_clock_groups) **不在本文件**: 见 ku5p_p6e_cdc.xdc ---
+#   原因 (2026-09-29 实测踩到): XDC 是在**综合前**解析的, 那一刻 create_clock 还没生效、
+#   XDMA 也还是黑盒 ⇒ 本文件里的 get_clocks 拿到空对象 ⇒ Vivado 报
+#   `CRITICAL WARNING [Vivado 12-4739] set_clock_groups: No valid object(s) found`
+#   并**静默丢弃**该约束 (构建照样过, 但 report_clock_interaction 里两个域仍是
+#   "Timed (unsafe)")。修法 = 把它单独放一个文件并标 used_in_synthesis=false (只在实际实现阶段
+#   应用, 那时两个时钟都已存在)。

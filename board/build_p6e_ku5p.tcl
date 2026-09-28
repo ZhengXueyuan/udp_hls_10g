@@ -89,6 +89,11 @@ generate_target all $ip
 # ---- 约束: P6a 基线 (原样复用) + PCIe 增量 (分开两个文件, 避免分叉) ----
 add_files -fileset constrs_1 ${script_dir}/ku5p_p6a_t8p0.xdc
 add_files -fileset constrs_1 ${script_dir}/ku5p_p6e_pcie.xdc
+# 跨时钟域约束单独一个文件, **且只在实现阶段应用**: 综合前解析时 create_clock 还没生效
+# (XDMA 也还是黑盒) ⇒ 里面的 get_clocks 拿到空对象 ⇒ Vivado 会报 CRITICAL WARNING 并
+# **静默丢弃** (实测: BUILD_ID=2 那版就是这样, 两个域仍是 "Timed (unsafe)")。
+add_files -fileset constrs_1 ${script_dir}/ku5p_p6e_cdc.xdc
+set_property used_in_synthesis false [get_files ${script_dir}/ku5p_p6e_cdc.xdc]
 
 set_property verilog_define {APP_MODE=1 DEV_USP=1 PCIE_OBS=1} [current_fileset]
 set_property top $top_module [current_fileset]
