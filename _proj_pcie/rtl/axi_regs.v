@@ -14,12 +14,32 @@
 //   0x10 RO  HW_STATUS = 设计侧状态位束 (本最小版 = {link_up, msi_enable, 0...})
 //   0x14 RO  MARKER    = 0xDEADBEEF  (地址译码正确性检查: 读错地址不会恰好是它)
 //
+//   ---- P6e 合体新增: 数据面快照窗口 (跨 gmii_clk → axi_aclk 的相干快照) ----
+//   0x18 WO  SNAP_CTRL  = 写 bit0=1 ⇒ **触发一次**新快照 (同时清 done); 读回 0
+//   0x1C RO  SNAP_STATUS= bit0 busy (CDC 还在飞) / bit1 done (sticky, 触发时清)
+//                         bit2 seen (复位后完成过至少一次) / [31:16] gen (完成次数)
+//   0x20 RO  SNAP_W0    = 快照字 0 (数据面 gmii 域)
+//   0x24 RO  SNAP_W1    ... 一直到 0x3C SNAP_W7 (共 8 字)
+//
+// ⚠️ **为什么用"显式触发"而不是"自动周期刷新" (设计取舍, 别改成自动的)**:
+//   主机读 8 个字要走 8 笔独立 PCIe 事务 (几十 µs), 而自动刷新的周期只要短于这个窗口,
+//   读出来的 8 个字就会**跨越两代快照** (CDC 再相干也没用 —— 撕裂发生在寄存器文件这一层)。
+//   显式触发把"快照"与"读"解耦: 触发后 8 个字**冻结**到下一次触发为止 ⇒ 读窗口天然原子,
+//   主机不需要 seqlock/重试, 也不需要在主机侧维护任何状态。
+//   ⚠️ 代价: 快照是"上次触发时刻"的值, 不是"此刻"的值 —— 读计数类信号完全够用。
+//   主机协议: 写 SNAP_CTRL.bit0=1 → 轮询 SNAP_STATUS.done==1 (带上限超时) → 读 8 个字。
+//   ⚠️ done 是 sticky 的: 即使快照在第一次轮询之前就完成了也不会漏 (busy 只可能被漏看)。
+//   ⚠️ busy 一直不落 = gmii 时钟没在跑 (snap_cdc 的行为, 见其头注释) ⇒ 这本身就是诊断信息:
+//      计数不动是"数据面死了"还是"观测通道没时钟", 用这个位分开。
+//
 // 写法要点 (AXI4-Lite 最小正确实现):
 //   - AW/W 两通道**独立**握手 (AXI-Lite 允许任意到达顺序), 两者都到才落寄存器并回 B;
 //     B 被接收后才重新拉高 awready/wready (每笔一笔, 不复用握手中的地址)。
 //   - 读通道 1 拍延迟 (锁存地址 -> 下一拍给数据), rvalid 保持到 rready。
-//   - 只写 SCRATCH: 按字节选通 wstrb 合并, 其余地址写返回 SLVERR (安全: 不静默丢写)。
+//   - 只写 SCRATCH / SNAP_CTRL: 按字节选通 wstrb 合并, 其余地址写返回 SLVERR (不静默丢写)。
 //   - 无复位寄存器数组; 计数器复位清 0 (便于"刚上电"判断)。
+//   - **快照字只有一个驱动块** (触发清零与 valid 捕获在同一 always 里, 靠 snap_clr 选路),
+//     避免"两个 always 块写同一个寄存器" ⇒ 综合报多驱动/仿真出 X。
 //=============================================================================
 module axi_regs #(
     parameter [31:0] MAGIC_V    = 32'h50360001,
@@ -51,7 +71,12 @@ module axi_regs #(
     input  wire [31:0] hw_status,      // 只读状态 (0x10)
     output reg  [31:0] scratch,        // 读写寄存器 (0x08)
     output reg  [31:0] wr_count,       // 成功写入笔数 (调试/活体)
-    output wire        decode_err      // 命中未实现地址 (读或写) 的脉冲
+    output wire        decode_err,     // 命中未实现地址 (读或写) 的脉冲
+    // ---- 数据面快照接口 (接 snap_cdc: b 域 = 数据面 gmii_clk) ----
+    output wire        snap_req,       // 1 拍脉冲: 请求一次快照
+    input  wire        snap_busy,      // 来自 snap_cdc.busy_a (高 = 上一次还在飞)
+    input  wire        snap_valid,     // 1 拍脉冲: 快照完成 (随 dout 有效)
+    input  wire [255:0] snap_din       // 来自 snap_cdc.dout_a (8 字 × 32 位)
 );
 
     // ---------------- 自由计数器 (0x0C) ----------------
@@ -91,6 +116,8 @@ module axi_regs #(
                     if (wstrb_r[2]) scratch[23:16] <= wdata_r[23:16];
                     if (wstrb_r[3]) scratch[31:24] <= wdata_r[31:24];
                     s_axil_bresp <= 2'b00;
+                end else if (w_word == 6'd6) begin               // 0x18 SNAP_CTRL (写侧触发)
+                    s_axil_bresp <= 2'b00;                       // 数据位在 snap_clr 里用掉
                 end else begin                                   // 其余地址: 非法写
                     s_axil_bresp <= 2'b10;                       // SLVERR
                 end
@@ -108,6 +135,34 @@ module axi_regs #(
     wire [5:0] ar_word = s_axil_araddr[7:2];
     reg        decode_err_r;
 
+    // ---------------- 数据面快照寄存器 (0x18-0x3C) ----------------
+    // ⚠️ 本块必须放在**写/读通道的 wire 声明之后** (wr_go / w_word / r_word): xvlog 先声明后用 (工程坑 22)
+    // 单驱动块: "触发清零" 与 "valid 捕获" 都在同一个 always 里 (避免两个 always 写同一寄存器)
+    reg [255:0] snap_words_r;
+    reg         snap_done_r, snap_seen_r;
+    reg [15:0]  snap_gen_r;
+
+    wire        snap_clr = wr_go && (w_word == 6'd6);      // 对 0x18 的一次成功写
+    assign      snap_req = snap_clr;                       // wr_go 恰好 1 拍宽 ⇒ 天然是脉冲
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            snap_words_r <= 256'd0; snap_done_r <= 1'b0;
+            snap_seen_r  <= 1'b0;   snap_gen_r  <= 16'd0;
+        end else if (snap_valid) begin
+            snap_words_r <= snap_din;
+            snap_done_r  <= 1'b1;
+            snap_seen_r  <= 1'b1;
+            snap_gen_r   <= snap_gen_r + 16'd1;
+        end else if (snap_clr) begin
+            snap_done_r  <= 1'b0;
+        end
+    end
+
+    // 读侧译码: 8 个字 = word 8..15 = 0x20..0x3C
+    wire [7:0]  snap_base   = {r_word[2:0], 5'b0};
+    wire [31:0] snap_status = {snap_gen_r, 13'd0, snap_seen_r, snap_done_r, snap_busy};
+
     reg [31:0] rdata_mux;
     always @* begin
         case (r_word)
@@ -117,6 +172,10 @@ module axi_regs #(
             6'd3:    rdata_mux = freecnt;
             6'd4:    rdata_mux = hw_status;
             6'd5:    rdata_mux = 32'hDEADBEEF;
+            6'd6:    rdata_mux = 32'd0;                        // 0x18 写口, 读回 0
+            6'd7:    rdata_mux = snap_status;                  // 0x1C
+            6'd8, 6'd9, 6'd10, 6'd11,
+            6'd12, 6'd13, 6'd14, 6'd15: rdata_mux = snap_words_r[snap_base +: 32];
             default: rdata_mux = 32'h00000000;
         endcase
     end
@@ -133,8 +192,8 @@ module axi_regs #(
             end
             if (!s_axil_arready && !s_axil_rvalid) begin
                 s_axil_rdata <= rdata_mux;
-                s_axil_rresp <= (r_word <= 6'd5) ? 2'b00 : 2'b10;   // 未实现 -> SLVERR
-                decode_err_r <= (r_word > 6'd5);
+                s_axil_rresp <= (r_word <= 6'd15) ? 2'b00 : 2'b10;  // 未实现 -> SLVERR
+                decode_err_r <= (r_word > 6'd15);
                 s_axil_rvalid <= 1'b1;
             end
             if (s_axil_rvalid && s_axil_rready) begin

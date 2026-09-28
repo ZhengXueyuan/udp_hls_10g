@@ -153,6 +153,19 @@ module wrapper_p4 (
     output          led_d3,
     // P4b-7-P6 冻结态 UART 全精度读出 (板载 CH340E 串口 → PC, 9600-8N1)
     output          uart_txd
+`ifdef PCIE_OBS
+    ,
+    // ---- P6e: PCIe/XDMA 观测通道 (仅 KU5P 板可用; K7 板没有金手指) ----
+    //   ⚠️ 全部包在 `ifdef PCIE_OBS 内: 默认构建 (K7 各档 + P6a) 的端口表/逻辑**逐位不变**。
+    //   ⚠️ 复位**不另开端口**: 本板 reset_n 就接在 PCIe 槽的 PERST# (J9) 上 (见 ku5p_p6a_*.xdc),
+    //      与 xdma.sys_rst_n 是同一个物理信号 —— 厂商 BD 也是这么接的 (pcieReset → sys_rst_n)。
+    input           pcie_sys_clk_p,      // AB7 (MGTREFCLK0_224, 金手指 100MHz 差分)
+    input           pcie_sys_clk_n,      // AB6
+    output [3:0]    pcie_txp,            // AF7 AE9 AD7 AC5
+    output [3:0]    pcie_txn,
+    input  [3:0]    pcie_rxp,            // AF2 AE4 AD2 AB2
+    input  [3:0]    pcie_rxn
+`endif
 );
 
     // --- P5 app 接口构建开关 (默认关 = 现状 echo 数据面, 逐位不变) -------------
@@ -2283,5 +2296,182 @@ module wrapper_p4 (
     // assign led_d1 = rx_stat_pass[0];       // TCP 匹配且 FCS 好
     // assign led_d2 = srx_stat_commit[0];    // 提交给 HLS 的慢帧 (ARP/ICMP 活动)
     // assign led_d3 = stx_stat_frames[0];    // HLS 发出帧 (应答/自发行文)
+
+`ifdef PCIE_OBS
+    //=========================================================================
+    // P6e: PCIe/XDMA 观测通道 + 数据面快照 (板级可读的"寄存器窗口")
+    //-------------------------------------------------------------------------
+    // 为什么需要它: 这块 KU5P 板上**没有 UART** (见 XCKU5PMini/CLAUDE.md), 传统 printf 式
+    //   调试在这块板上不存在。PCIe 是唯一的高带宽观测通道: 主机 `reg_rw /dev/xdma0_user`
+    //   直接读寄存器 ⇒ 不用 ILA、不用 JTAG 交互、可脚本化判定。
+    //
+    // 结构 (自下而上):
+    //   ⑧个数据面计数 → ⑥snap_cdc (gmii_clk → axi_aclk 相干快照, 一次性锁存整束)
+    //   → ⑤axi_regs (我们的 AXI4-Lite 寄存器块) → ④xdma_0 (user BAR) → 金手指 → 主机
+    //
+    // ⚠️ 跨时钟域是这里唯一的技术难点: 数据面在 PHY 回送的 gmii_clk(125MHz), 寄存器块在
+    //   XDMA 的 axi_aclk(250MHz)。多比特计数**不能**用两级同步器直接跨 (各比特到达时刻不同
+    //   ⇒ 读出来的是"位混"的假值, 而且看起来像数据面疯了) ⇒ 走 snap_cdc 的 toggle 握手,
+    //   由它保证"整束来自同一个 gmii 沿"。
+    // ⚠️ 快照**只在主机写 SNAP_CTRL 时更新**, 不自动刷新 —— 理由是主机读 8 个字要走 8 笔
+    //   独立 PCIe 事务, 自动刷新会让读出来的 8 个字跨越两代快照 (寄存器文件这一层撕裂,
+    //   CDC 再相干也救不了)。详见 _proj_pcie/rtl/axi_regs.v 头注释。
+    // ⚠️ 复位复用 reset_n (板上就是 PCIe 槽的 PERST#, J9) —— 与厂商 BD 的接法一致。
+    //=========================================================================
+
+    // ---- 0. 线网声明先行 (xvlog 先声明后用; 也防隐式 1 位线 —— 工程坑 24) ----
+    wire         pcie_clk_gt, pcie_clk;
+    wire         pcie_axi_aclk, pcie_axi_aresetn;
+    wire         pcie_lnk_up, pcie_msi_enable;
+    wire [2:0]   pcie_msi_vec_w;
+    wire [0:0]   pcie_irq_ack;
+    wire [31:0]  pcie_awaddr, pcie_wdata, pcie_araddr;
+    wire [2:0]   pcie_awprot, pcie_arprot;
+    wire [3:0]   pcie_wstrb;
+    wire         pcie_awvalid, pcie_awready, pcie_wvalid, pcie_wready;
+    wire [1:0]   pcie_bresp;
+    wire         pcie_bvalid, pcie_bready, pcie_arvalid, pcie_arready;
+    wire [31:0]  pcie_rdata;
+    wire [1:0]   pcie_rresp;
+    wire         pcie_rvalid, pcie_rready;
+    wire         snap_req, snap_busy, snap_valid;
+    wire [255:0] snap_dout;
+    wire [31:0]  pcie_hw_status, pcie_scratch, pcie_wr_cnt;
+    wire         pcie_decode_err;
+    wire [255:0] snap_src;
+    reg  [31:0]  gmii_free;
+
+    // ---- 1. 参考钟: 与厂商 BD 逐条同构 (O→sys_clk_gt, ODIV2→sys_clk, 不加 BUFG_GT) ----
+    IBUFDS_GTE4 #(
+        .REFCLK_EN_TX_PATH (1'b0),
+        .REFCLK_HROW_CK_SEL(2'b00),
+        .REFCLK_ICNTL_RX   (2'b00)          // ⚠️ 2025.2 的参数名是 ICNTL_RX (不是 TX), 2 位
+    ) u_pcie_refclk (
+        .O    (pcie_clk_gt),
+        .ODIV2(pcie_clk),
+        .I    (pcie_sys_clk_p),
+        .IB   (pcie_sys_clk_n),
+        .CEB  (1'b0)
+    );
+
+    // ---- 2. 快照数据源 (gmii_clk 域; 全部是寄存器输出 ⇒ 只在 gmii 沿变化, 满足 CDC 前提) ----
+    // 8 个字按"ping 不通时该看哪一步"排序 (这也是 P6a 板级首测要回答的问题):
+    //   W0 线上有帧吗 → W1 多少字节 → W2 那一帧有多长 (66 vs 1518) → W3 FCS 干净吗
+    //   → W4 被丢了吗 → W5 gmii 时钟在跑吗 → W6 慢路径收下了吗 (ARP/ICMP) → W7 HLS 回了吗
+    // ⚠️ 恰好 8 项 = 8×32 位: 多一项会被静默截断/位宽告警 (门里 findstr 位宽当硬失败)
+    always @(posedge gmii_clk or negedge reset_n) begin
+        if (!reset_n) gmii_free <= 32'd0;
+        else          gmii_free <= gmii_free + 32'd1;
+    end
+
+    assign snap_src = {stx_stat_frames,     // W7  HLS 慢路径发出的帧 (ping 的回包)
+                       srx_stat_commit,     // W6  提交给 HLS 的慢帧 (ARP/ICMP 会涨)
+                       gmii_free,           // W5  gmii 时钟自由计数 (活性锚点 + 频率反解)
+                       rx_stat_drop,        // W4  MAC 丢弃
+                       rx_stat_crc_err,     // W3  FCS 错
+                       {16'd0, wl_last},    // W2  最近一帧的线上字节数 (66 vs 1518 判别器)
+                       rx_stat_bytes,       // W1  MAC 收字节
+                       rx_stat_frames};     // W0  MAC 收帧
+
+    // ---- 3. 相干快照 CDC (gmii_clk → axi_aclk) ----
+    snap_cdc #(.W(32), .NW(8)) u_snap (
+        .clk_a      (pcie_axi_aclk),
+        .rst_n      (pcie_axi_aresetn),
+        .req_a      (snap_req),
+        .busy_a     (snap_busy),
+        .dout_a     (snap_dout),
+        .valid_a    (snap_valid),
+        .clk_b      (gmii_clk),
+        .din_b      (snap_src)
+    );
+
+    // ---- 4. XDMA (配置 = 厂商那份实测跑通的值的复制 + user BAR) ----
+    xdma_0 u_pcie_xdma (
+        .sys_clk        (pcie_clk),
+        .sys_clk_gt     (pcie_clk_gt),
+        .sys_rst_n      (reset_n),          // = 板上 PERST# (J9), 直连无反相器
+        .pci_exp_txp    (pcie_txp),
+        .pci_exp_txn    (pcie_txn),
+        .pci_exp_rxp    (pcie_rxp),
+        .pci_exp_rxn    (pcie_rxn),
+        .user_lnk_up    (pcie_lnk_up),
+        .axi_aclk       (pcie_axi_aclk),
+        .axi_aresetn    (pcie_axi_aresetn),
+        .usr_irq_req    (1'b0),
+        .usr_irq_ack    (pcie_irq_ack),
+        .msi_enable     (pcie_msi_enable),
+        .msi_vector_width(pcie_msi_vec_w),
+        // ---- DMA (m_axi) 通道本设计**不用**: 全回"永不应答" (只走寄存器窗口) ----
+        .m_axi_awready  (1'b0),
+        .m_axi_wready   (1'b0),
+        .m_axi_bid      (4'd0),
+        .m_axi_bresp    (2'd0),
+        .m_axi_bvalid   (1'b0),
+        .m_axi_arready  (1'b0),
+        .m_axi_rid      (4'd0),
+        .m_axi_rdata    (128'd0),
+        .m_axi_rresp    (2'd0),
+        .m_axi_rlast    (1'b0),
+        .m_axi_rvalid   (1'b0),
+        .m_axi_bready   (),          // 输出, 不用
+        .m_axi_awid     (), .m_axi_awaddr(), .m_axi_awlen(), .m_axi_awsize(),
+        .m_axi_awburst  (), .m_axi_awprot(), .m_axi_awvalid(), .m_axi_awlock(),
+        .m_axi_awcache  (), .m_axi_wdata(), .m_axi_wstrb(), .m_axi_wlast(),
+        .m_axi_wvalid   (), .m_axi_arid(), .m_axi_araddr(), .m_axi_arlen(),
+        .m_axi_arsize   (), .m_axi_arburst(), .m_axi_arprot(), .m_axi_arvalid(),
+        .m_axi_arlock   (), .m_axi_arcache(), .m_axi_rready(),
+        // ---- user BAR (AXI4-Lite master) -> 我们的寄存器块 ----
+        .m_axil_awaddr  (pcie_awaddr), .m_axil_awprot (pcie_awprot),
+        .m_axil_awvalid (pcie_awvalid), .m_axil_awready(pcie_awready),
+        .m_axil_wdata   (pcie_wdata),  .m_axil_wstrb  (pcie_wstrb),
+        .m_axil_wvalid  (pcie_wvalid), .m_axil_wready (pcie_wready),
+        .m_axil_bvalid  (pcie_bvalid), .m_axil_bresp  (pcie_bresp),
+        .m_axil_bready  (pcie_bready),
+        .m_axil_araddr  (pcie_araddr), .m_axil_arprot (pcie_arprot),
+        .m_axil_arvalid (pcie_arvalid), .m_axil_arready(pcie_arready),
+        .m_axil_rdata   (pcie_rdata),  .m_axil_rresp  (pcie_rresp),
+        .m_axil_rvalid  (pcie_rvalid), .m_axil_rready (pcie_rready),
+        // ---- 配置管理接口: 不实现 (输入 tie 0 / 输出悬空) ----
+        .cfg_mgmt_addr      (19'd0),
+        .cfg_mgmt_write     (1'b0),
+        .cfg_mgmt_write_data(32'd0),
+        .cfg_mgmt_byte_enable(4'd0),
+        .cfg_mgmt_read      (1'b0),
+        .cfg_mgmt_read_data (),
+        .cfg_mgmt_read_write_done()
+    );
+
+    // ---- 5. 寄存器块 ----
+    // HW_STATUS 字段 (低 8 位): [7:5]=msi_vector_width [4]=msi_enable [3]=user_lnk_up [2:0]=0
+    // ⚠️ 拼接必须**恰好 32 位** (24+3+1+1+3): 旧版写 26'd0 ⇒ 34 位 ⇒ 高 2 位被静默截掉
+    //    (低 32 位不变, 所以功能没错, 但那是"靠截断碰巧对"——不留这种账)
+    assign pcie_hw_status = {24'd0, pcie_msi_vec_w, pcie_msi_enable, pcie_lnk_up, 3'd0};
+
+    axi_regs #(
+        .MAGIC_V    (32'h50360001),
+        .BUILD_ID_V (32'h00000002)      // ⚠️ 每次改动自增 (前置闸读这一项认位流)
+    ) u_pcie_regs (
+        .clk            (pcie_axi_aclk),
+        .rst_n          (pcie_axi_aresetn),
+        .s_axil_awaddr  (pcie_awaddr), .s_axil_awprot (pcie_awprot),
+        .s_axil_awvalid (pcie_awvalid),.s_axil_awready(pcie_awready),
+        .s_axil_wdata   (pcie_wdata),  .s_axil_wstrb  (pcie_wstrb),
+        .s_axil_wvalid  (pcie_wvalid), .s_axil_wready (pcie_wready),
+        .s_axil_bresp   (pcie_bresp),  .s_axil_bvalid (pcie_bvalid),
+        .s_axil_bready  (pcie_bready),
+        .s_axil_araddr  (pcie_araddr), .s_axil_arprot (pcie_arprot),
+        .s_axil_arvalid (pcie_arvalid),.s_axil_arready(pcie_arready),
+        .s_axil_rdata   (pcie_rdata),  .s_axil_rresp  (pcie_rresp),
+        .s_axil_rvalid  (pcie_rvalid), .s_axil_rready (pcie_rready),
+        .hw_status      (pcie_hw_status),
+        .scratch        (pcie_scratch),
+        .wr_count       (pcie_wr_cnt),
+        .decode_err     (pcie_decode_err),
+        .snap_req       (snap_req),
+        .snap_busy      (snap_busy),
+        .snap_valid     (snap_valid),
+        .snap_din       (snap_dout)
+    );
+`endif
 
 endmodule

@@ -1,0 +1,98 @@
+# P6e 合体版: 数据面 + PCIe/XDMA 观测通道
+
+> **一句话**: 一个比特流里既有 1G 数据面, 又有我们自己的 **PCIe 寄存器窗口** —— 主机用
+> `reg_rw /dev/xdma0_user` 就能读到数据面的计数快照。**这块板没有 UART**, PCIe 是我们唯一的
+> 高带宽观测通道 (见 `../XCKU5PMini/CLAUDE.md`「板上没有 UART」一节)。
+
+| | |
+|---|---|
+| 构建 | `board/run_lint_p6e.bat` (秒级预检) → `board/run_build_p6e_ku5p.bat` (~30 min) |
+| 产物 | `vivado_prj/p6e_ku5p_prj.runs/impl_1/wrapper_p4.bit` |
+| 烧录 | `_proj_pcie/run_program_p6e.bat` (JTAG 1MHz; **绝不写 QSPI**) |
+| ⚠️ 烧完 | **必须重启主机** —— PCIe 端点只认"FPGA 配置先于主机 POST" (四组对照实验见 `_pcie/README.md`) |
+| 验收 | 对端机 `sudo bash /home/a/xdma_test/p6e_snap_check.sh` (日志 `/tmp/p6e_snap_check.log`) |
+| 构建开关 | `APP_MODE=1 DEV_USP=1 **PCIE_OBS=1**` —— 所有 PCIe 内容都在 `ifdef PCIE_OBS` 内, 其余构建逐位不变 |
+
+## 一、寄存器表 (主机侧唯一要看的表)
+
+`reg_rw /dev/xdma0_user <字节地址> w [值]` (带值 = 写, 不带 = 读)
+
+| 地址 | 属性 | 内容 |
+|---|---|---|
+| `0x00` | RO | `MAGIC` = `0x50360001` —— 证明"读的是我们自己的逻辑" |
+| `0x04` | RO | `BUILD_ID` —— **前置闸**: 合体版 = **`0x00000002`** (最小版是 1) |
+| `0x08` | RW | `SCRATCH` (读写回环 + wstrb 字节选通测试) |
+| `0x0C` | RO | `FREECNT` (axi_aclk 自由计数 ⇒ 反解 AXI 时钟频率 + 证明 AXI 域活着) |
+| `0x10` | RO | `HW_STATUS` = `[7:5]msi_vector_width [4]msi_enable [3]user_lnk_up [2:0]0` |
+| `0x14` | RO | `MARKER` = `0xDEADBEEF` (地址译码检查) |
+| `0x18` | WO | `SNAP_CTRL` —— 写 `bit0=1` ⇒ **触发一次快照** |
+| `0x1C` | RO | `SNAP_STATUS` = `[31:16]gen [2]seen [1]done [0]busy` |
+| `0x20` | RO | `SNAP_W0` = `rx_stat_frames` (MAC 收帧数) |
+| `0x24` | RO | `SNAP_W1` = `rx_stat_bytes` (MAC 收字节) |
+| `0x28` | RO | `SNAP_W2` = `{16'd0, wl_last}` (**最近一帧的线上字节数**) |
+| `0x2C` | RO | `SNAP_W3` = `rx_stat_crc_err` (FCS 错帧数) |
+| `0x30` | RO | `SNAP_W4` = `rx_stat_drop` (MAC 丢弃) |
+| `0x34` | RO | `SNAP_W5` = `gmii_free` (**gmii_clk 域自由计数** = 数据面时钟活性) |
+| `0x38` | RO | `SNAP_W6` = `srx_stat_commit` (提交给 HLS 慢路径的帧: ARP/ICMP 会涨) |
+| `0x3C` | RO | `SNAP_W7` = `stx_stat_frames` (**HLS 发出去的帧**: 应答/自发行文) |
+| 其它 | — | 读回 `0xFFFFFFFF`、写被拒 (SLVERR) —— 见下"用法坑" |
+
+### 主机读快照的协议 (三步)
+
+```sh
+reg_rw /dev/xdma0_user 0x18 w 0x1          # ① 触发
+# ② 轮询 0x1C 直到 bit1(done)=1
+reg_rw /dev/xdma0_user 0x20 w              # ③ 读 8 个字 (0x20..0x3C)
+```
+
+⚠️ **为什么是"显式触发"而不是自动刷新** (改之前先读这段): 主机读 8 个字要走 8 笔独立 PCIe
+事务 (几十 µs), 只要刷新周期短于这个窗口, 读出来的 8 个字就**跨越两代快照** (CDC 再相干也
+救不了 —— 撕裂发生在寄存器文件这一层)。显式触发让 8 个字**冻结到下一次触发**, 读窗口天然原子,
+主机不需要 seqlock/重试。代价: 快照是"上次触发时刻"的值 (读计数完全够用)。
+`done` 是 sticky 的 ⇒ 即使快照在第一次轮询前就完成也不会漏。详见 `_proj_pcie/rtl/axi_regs.v` 头注释。
+
+## 二、判读: ping 不通时按这个顺序看
+
+```
+W5 (gmii_free) 不走 ⇒ PHY 回送的 RXC 根本没来 (网线/PHY/前端) —— 后面都不用看了
+W5 在走, W0 不涨 ⇒ 线上没有帧到达 FPGA (对端没发/线没通/接错口)
+W0 涨, W3 涨      ⇒ 帧到了但 FCS 错 ⇒ 物理层/时序 (PHY 绑带/IDELAY 配方)
+W0 涨, W6 不涨    ⇒ 帧没进慢路径 ⇒ ARP/ICMP 收不到 ⇒ 查 rx_classify 过滤/端口/IP 配置
+W6 涨, W7 不涨    ⇒ HLS 收到了但没回 ⇒ 问题在慢路径/HLS, 不在前端
+W7 涨但 PC 收不到 ⇒ 回包发出去了, 查对端 (ARP 表/防火墙/接线)
+```
+
+`W2` (线上帧长) 是现成的判别器: **≈1518 是整帧, ≈66 是短帧** (历史上正是用它分开了
+"PC 真的只发 66 字节" vs "FPGA 侧吞了帧中段字节")。
+
+## 三、跨时钟域 (这里唯一的技术难点)
+
+数据面跑 PHY 回送的 `gmii_clk` (125MHz), 寄存器块跑 XDMA 的 `axi_aclk` (≈250MHz, 实测 259.5)。
+**多比特计数不能用两级同步器直接跨** —— 各比特到达时刻不同 ⇒ 读出来是"位混"的假值, 而且
+看起来像"数据面疯了"。走 `rtl/snap_cdc.v` 的 toggle 握手: b 域一次性锁存整束 ⇒ 快照内的各位
+来自同一个 gmii 沿。
+
+## 四、验证 (已经跑过的门)
+
+| 门 | 内容 | 结果 |
+|---|---|---|
+| `sim/snapcdc/run_tb_snap_cdc.bat` | snap_cdc 单元门: 相干性(飞行中换束扫 16 相位)/busy/背靠背/复位回收/**时钟停摆恢复** + **撕裂负对照**(证明检查器有判别力) | **PASS_ALL** |
+| `_proj_pcie/run_tb_axi_regs.bat` | 寄存器块单元门 17 项 (含快照窗口/触发脉冲/冻结/中途换代的 gen 守卫负对照) | **PASS_ALL** |
+| `sim/p6e_pcie/run_tb_p6e_pcie.bat` | ⭐ **真 wrapper 全链门**: 把 7 路计数源 force 成互不相同的常数, 从 AXI 侧读回来逐字比对 | **PASS_ALL 16/16** |
+| `sim/snapcdc/negctrl/run_negctrl_2rst.bat` | 负对照: "两域各自复位会不会死锁" —— **实测不会** (见下) | 结论已改文档 |
+
+⚠️ **记一笔被实测纠正的判断**: `snap_cdc` 最初按"两个域各用各的复位 ⇒ 握手永久死锁"来设计
+(并把这条写进了注释)。后来专门写了个负对照跑 —— **不死锁**: 同步器把 toggle 当**电平**连续
+采样, b 域复位后会把"仍然是 1 的电平"重新识别成一次沿, 握手自动补完。**推理错了, 是测量纠正的**。
+同源复位仍然保留 (理由是"复位后必然空闲/一致"这种确定性, 不是躲死锁), 注释已按实测改写。
+
+## 五、已知边界 (别当成缺陷)
+
+- **XDMA 的 DMA 通道没用**: `m_axi` 全 tie "永不应答", 只有寄存器窗口。要搬大数据再加。
+- **未实现地址读回 `0xFFFFFFFF` 是 XDMA 主机的行为**, 不是 `axi_regs` 的行为 (后者给 0 + SLVERR)。
+  仿真替身不模仿 XDMA 这一段, 所以单元门验 `rresp`、主机脚本验读数 —— 两边各验自己那半。
+- **快照是 8 个字 (256 位)**, 想加计数就同时改 `NW`(wrapper 里 `snap_cdc #(.W(32), .NW(8))`)、
+  `snap_src` 拼接、`axi_regs` 的读 mux 与 `axi_regs` 的 SLVERR 边界 (三处必须同改)。
+- **`snap_src` 拼接必须恰好 `NW*32` 位**: 多一项会被静默截断 (门里 `findstr 10-3091` 当硬失败)。
+- **不新增端口给 PCIe 复位**: 板上 `reset_n` 就接在 PCIe 槽的 PERST# (J9) 上, 同一个信号直连
+  `xdma.sys_rst_n` (厂商 BD 也是这么接的)。

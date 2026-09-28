@@ -11,3 +11,4 @@ findstr /C:"10-3091" xvlog_axr.log >NUL && (echo BITWIDTH-MISMATCH-FAIL & type x
 call %XV%\xelab.bat -debug typical -L unisims_ver xil_defaultlib.tb_axi_regs xil_defaultlib.glbl -s tb_axi_regs -log xelab_axr.log > NUL 2>&1 || (type xelab_axr.log & exit /b 1)
 call %XV%\xsim.bat tb_axi_regs -runall -log xsim_axr.log > NUL 2>&1
 findstr /C:"PASS" /C:"FAIL" /C:"TIMEOUT" xsim_axr.log
+findstr /C:"PASS_ALL" xsim_axr.log >NUL || exit /b 1
