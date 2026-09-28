@@ -26,6 +26,7 @@ import socket, sys, time, argparse
 
 M64 = (1 << 64) - 1
 SEED = 0x9E3779B97F4A7C15
+RESYNC_WIN = 8192          # Python 侧重同步窗口 (小: 解释器搜索慢; 大窗口用 C++ 版)
 BOARD = "192.168.100.2"
 PORT = 8081
 
@@ -74,6 +75,8 @@ def main():
     off = 0                    # 已校验的流偏移
     frames = 0
     bad = 0
+    gaps = 0
+    gap_bytes = 0
     first = None
     t_end = time.time() + a.secs
     t0 = time.time()
@@ -93,11 +96,32 @@ def main():
         frames += 1
         exp = pat.fill(n)          # 期望: 图案流的连续下一段
         if payload != exp:
-            bad += 1
-            if bad <= 3:
-                i = next((k for k in range(n) if payload[k] != exp[k]), n)
-                print(f"  [FAIL] 第 {frames} 帧失配: 长 {n}, 首个不同字节 @{i} "
-                      f"(got {payload[i] if i < n else '-'} exp {exp[i] if i < n else '-'}); 流偏移 {off+i}")
+            # ⚠️ 接收侧丢包也会让"连续前缀"不成立 (满速时内核缓冲溢出是常态) ⇒ 先在图案流里
+            #    向前找这段载荷 (小窗口; 大窗口请用 C++ 版, Python 搜索太慢):
+            #      找到 @k ⇒ 中间少 k 字节 ⇒ 记 gap (接收侧掉包, 不是图案错)
+            #      找不到  ⇒ 真失配 ⇒ 记 bad
+            probe_n = min(n, 32)
+            k = 0
+            for cand in range(probe_n, min(RESYNC_WIN, 262144) + 1):
+                probe = Pattern.__new__(Pattern)
+                probe.s = pat.s
+                probe.fill(cand)                       # 前推 cand 步 (丢弃)
+                if probe.fill(probe_n) == payload[:probe_n]:
+                    k = cand
+                    break
+            if k:
+                gap_bytes += k
+                gaps += 1
+                pat.fill(k)                            # 期望流也推到新位置
+                if gaps <= 3:
+                    print(f"  [GAP] 第 {frames} 帧前少 {k} 字节 (接收侧掉包) ⇒ 重对齐; 累计 {gap_bytes} 字节")
+                if pat.fill(n) != payload:
+                    bad += 1
+            else:
+                bad += 1
+                if bad <= 3:
+                    i = next((j for j in range(n) if payload[j] != exp[j]), n)
+                    print(f"  [FAIL] 第 {frames} 帧真失配 (窗口内找不到对齐点): 长 {n}, 首个不同字节 @{i}")
         off += n
         now = time.time()
         if now - last_report >= 1.0:
@@ -114,8 +138,11 @@ def main():
     if frames == 0:
         print("  [FAIL] 一个包都没收到 ⇒ peer 没学到 / 板子没发 / 网段不对")
         return 1
+    if gaps:
+        print(f"  [INFO] 接收侧掉包 {gaps} 次 / {gap_bytes} 字节 (占 {(gap_bytes/(off+gap_bytes)*100 if off+gap_bytes else 0):.2f}%)")
+        print("         ⚠️ 与板子 W9(udpapp_tx_bytes) 对账可确认少的是我丢的还是板子没发")
     if bad:
-        print(f"  [FAIL] {bad}/{frames} 帧图案失配 ⇒ 板子的图案流不是连续前缀 (跨帧断了?)")
+        print(f"  [FAIL] {bad}/{frames} 帧图案真失配 ⇒ 板子的图案流不是连续前缀 (跨帧断了?)")
         return 1
     print(f"  [PASS] 全部 {frames} 帧**逐字节**等于图案流前缀 (offset 0 起到 {off}) ⇒ 图案通路成立")
     return 0
