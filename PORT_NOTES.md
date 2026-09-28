@@ -3799,3 +3799,51 @@ P5d 记录的新风险族 `app_ctrl.c_snd_wnd → app_pattern` 同样**完全退
 **遗留**: 位流已出, 但**未上板** —— 板级第一步是"烧 t8p0 位流 + ping/图案测试"来验证 15 根 RGMII
 引脚与零 IDELAY 配方 (两者都只有图纸/模型证据, 无硅上证据); 且烧录会把板子的 PCIe 端点顶掉(见
 `XCKU5PMini/CLAUDE.md` 的纪律)。
+
+## 2026-09-28 PCIe/XDMA 观测通道验证 (P6 风险 U4 关闭; U4b 判不可用)
+
+**背景**: KU5P 板上**没有 UART** ⇒ P6 的观测通道定为 **PCIe / XDMA**。此前状态: 驱动"能编译+能链接"
+已证, "**能加载 + 能搬数据**"未证 (全程未 insmod, 无 sudo)。本轮把后者关掉。
+
+### 结论 (证据: `_pcie/README.md` 与对端机 `/tmp/pcie_verify.log`)
+
+| 项 | 读数 |
+|---|---|
+| 端点 / 链路 | `02:00.0` `10ee:9034`; **`5.0 GT/s × 4` = PCIe 2.0 x4**(理论 2.0 GB/s; 端点 max 8.0GT/s, 受 Z87 芯片组封顶) |
+| 驱动 | **out-of-tree `Xilinx XDMA Reference Driver xdma v2025.2.0`** probe 成功 (`dmesg: probe_one 0000:02:00.0 xdma0`) |
+| 节点 | **19 个** `/dev/xdma0_{control,h2c_0,c2h_0,events_0..15}` (`crw------- root root` ⇒ **工具要 root**) |
+| BAR | **`identify_bars: 1 BARs: config 0, user -1, bypass -1`** ⇒ 只引出配置 BAR, **无 user BAR**; `ch 1,1` = 1 H2C + 1 C2H |
+| 寄存器 | `reg_rw /dev/xdma0_control 0x0 w` → **`0x1fc00006`** (非 0 非全 F) |
+| 数据 | **4MB 图案 H2C→DDR4→C2H 逐字节一致**; 地址 0 与 16MB 两处都对; 同址重读一致; **反向读序(尾→头)也对** ⇒ 真存储非 FIFO |
+| 吞吐(扫曲线) | **H2C 收敛到 ~804 MB/s**(64KB 单发仅 39 ⇒ 固定开销主导, `-c 64` 批量 741); **C2H ≤257 MB/s 且几乎不随批量改善** ⇒ 被工具的完成等待(~1.8ms/传输)污染, **真实上限未测到**, 别当板子能力。⚠️ 规划: 板子在**芯片组槽 2.0x4 = 2.0 GB/s**, 10G 线速 1.25 GB/s ⇒ **仅 1.6x 余量** ⇒ **不适合当 10G 速率的采集通道**, 适合寄存器/状态/低频数据 |
+| MSI | `/proc/interrupts` 里 `IR-PCI-MSI-0000:02:00.0` 有计数 ⇒ 完成中断真的在走 |
+| **U4b (XVC)** | **不可用**: 无 `/dev/xdma0_xvc` (厂商 BD 未例化) ⇒ **USB/JTAG 线仍必需**; 要省线须在自己 BD 里例化 |
+
+### ⭐⭐ 本轮最贵的一条操作纪律 (已实测): **PCIe 端点只认"FPGA 配置先于主机 POST"**
+- 主机开机时若 FPGA 跑的是**无 PCIe 的设计** (本轮: 我们 09-28 用 JTAG 烧的 `_proj_mdio` 位流,
+  且**主机重启不会给 PCIe 槽断电** ⇒ 板子一直跑着它), 根端口扫描不到就**直接放弃链路**。
+- **事后补烧带 PCIe 的设计救不回来**: 实测四种主机侧手段**全部无效** ——
+  `rescan`(根端口/全总线) / 桥复位(`/sys/bus/pci/devices/0000:00:1c.0/reset` = secondary bus reset) /
+  `setpci CAP_EXP+0x10.w=0x20`(Retrain Link) / `setpci ...=0x10→0x00`(Link Disable 1→0)。
+  现象恒为 `LnkSta: Speed 2.5GT/s, Width x0` (而 `LnkCap: 5GT/s x4` 说明槽本身没问题)。
+  机理: 主机侧复位的语义是"对**已训练**的链路发 hot reset", 链路没起来时传不下去;
+  而 Xilinx PCIe 硬核通常还要一次 **PERST# 沿**才启动 LTSSM。
+- **唯一可靠恢复 = 重启主机**(热重启即可; BIOS 在 POST 重新训练 ✓)。FPGA 若不掉电则保留位流,
+  掉了就从 QSPI 加载厂商设计(**也带 XDMA**) —— 两种结果都对。
+- ⇒ **纪律**: **要 PCIe 观测, 就先烧好带 PCIe 的位流、再重启主机**; 反过来, 每次 JTAG 烧非 PCIe
+  设计都等于"本上电周期内放弃 PCIe 观测"。这对 P6e(正式观测通道)是硬约束。
+- ⚠️ 附带: `SltSta: ... PresDet-`(主机认为槽里没卡) 在本板**一直如此**, 与链路无关, **不是故障**。
+
+### 两个"判据写错会假失败"的坑 (都踩了)
+1. **判"驱动是否绑定"不能用 `lspci -k`**: `insmod` 的 out-of-tree 模块不一定显示为
+   `Kernel driver in use:`(它显示的是 in-tree 候选 `8250_pci`) ⇒ 计数为 0 的假 FAIL。
+   **真证据 = `dmesg` 的 `probe_one ... xdma0` 行 + `/dev/xdma*` 节点齐**。
+2. **`modinfo -n xdma` 会指向 in-tree 路径**(`.../kernel/drivers/dma/xilinx/xdma.ko.zst`),
+   而实际加载的是我们的 out-of-tree 模块 —— 用 `dmesg` 的 `loading out-of-tree module` +
+   `xdma v2025.2.0` 判身份, 别用 modinfo 的路径。
+
+### 对我们自己设计的三条含义 (P6e 必读)
+1. **user BAR 要自己例化**(厂商设计没有) —— P6e 的"寄存器映射/前置闸"必须显式引出 AXI-Lite。
+2. **XVC 也要自己例化**(若要省 USB/JTAG 线); 否则"板子搬不搬"的权衡里 XVC 这条收益拿不到。
+3. **单通道吞吐远低于链路**: 正式采集/灌数要**多通道 + 深提交**(`-c` 或自写批量提交的
+   用户态程序), 不能拿 `dma_to_device` 单发数字当性能预期(`pcie_verify2.sh` 在扫这条曲线)。
