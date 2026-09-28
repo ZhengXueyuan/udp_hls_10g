@@ -3668,3 +3668,134 @@ P5d 记录的新风险族 `app_ctrl.c_snd_wnd → app_pattern` 同样**完全退
 5. `PORT_NOTES` 早前记的 **"3 字 skid"** 已过时 —— **代码里是 6 字** (见 `rx_classify`)。
 6. **P5e 提交后基线冻结**: 本节的实测数字全部锚在 `9218c47` 之后的 **P5e 提交** (WNS +0.290 /
    LUT 51588 / BRAM 312); 若将来在 1G 上继续改代码, 这些数字需要重测才能当 10G 的起点。
+
+## 2026-09-28 P6a-T1/T2 (K7 → KU5P 器件移植第一批: frame_fifo 的 RAMB36E2 + RGMII 前端) — 门全绿
+
+> 平台切换: **P6 落在 XCKU5PMini (xcku5p-ffvb676-1-e)**; K7/ECO 板保留为已验证的 1G 基线。
+> 本节的源码在 `D:/repo/XCKU5PMini/udp_hls_10g` (本仓已整体拷贝到那里, **以该副本为准**)。
+> 规格见 `~/.claude/plans/p6_spec.md`; 板卡事实见同目录 `CLAUDE.md`。
+
+### T1 — `rtl/frame_fifo.v` 主存 RAMB36E1 → RAMB36E2 (`` `ifdef DEV_USP ``)
+- **K7 路径零改动**: 未定义宏时逐字不变 (`git diff` 为纯新增; RTL 行 0 删除, 仅注释行有更正)。
+- **E2 与 E1 的四处差异** (按本机 unisim 源核对 + 实测):
+  ① 地址口 **15 位** (E1 16 位); 512x72 的字址仍在 **[14:6]** ⇒ `{a[8:0],6'h00}` (E1 是 `{1'b1,a[8:0],6'h3F}`)
+     (依据 `RAMB36E2.v:2190` 的 `rd_addr_a_mask` = `{9{1'b1},6'h00}`)。
+  ② **宽度属性的方向语义**: `READ_WIDTH_A`/`WRITE_WIDTH_B` 可为 **72**, 而 **`READ_WIDTH_B`/`WRITE_WIDTH_A` 不许 72**
+     (只许 0/1/2/4/9/18/36 —— SDP 只有 A 读 / B 写一个方向)。照抄 E1 的"四个都填 72"会被模型内部归一成
+     非法值 8 而报 `Unisim RAMB36E2-269/278`。**正确组合 = `READ_WIDTH_A(72), WRITE_WIDTH_B(72), 另两个 0`**。
+  ③ 端口改名 (DOUTADOUT/DINADIN/DINP*), 且 **无 `RAM_MODE`/`SIM_DEVICE`/`RDADDR_COLLISION_HWCONFIG` 参数**;
+     新增 `CASCADE_ORDER_*`/`CLOCK_DOMAINS`/`ENADDRENA,B`/`RDADDRCHANGEA,B`/`SLEEP_ASYNC`, 需显式接
+     `ADDRENA/ADDRENB=1`、`SLEEP=0` 与 CASDIMUX/CASDOMUX(EN)/CASOREGIMUX(EN) 一族哑端口。
+  ④ **仿真模型行为差异两条**: `ENBWREN=0` 的写**丢** (两代同); 而 **未写槽初值 E2 = 0** (INIT 默认)。
+     ⚠️ 另有一条**仿真器坑**: E2 模型的 INIT 装载在 t>0 才完成 ⇒ **上电头 ~200ns 的写会被 INIT 覆盖**
+     (非硬件行为; TB 里必须先 `#200` 再写, 否则首写"丢失")。
+- **判据两条** (`sim/p6a_ku5p/`):
+  · 原语级 `tb/tb_ramb36e2_sem.v`: `SEM RESULT: E2_SEMANTICS_MATCH_7SERIES` —— 1 拍读延迟 / 同址碰撞
+    (X 一拍 + 内容存活) / 字址 [14:6] 三条判据全一致。
+  · 行为级**同一 TB 同激励 A/B** (`run_tb_frame_fifo_{us,k7}.bat`): 两者 `PASS_ALL` 六计数逐数一致
+    (`writes A=568139 B=595715 C=616302 pops A=567224 B=591216 C=611802 cycles=750700`)。
+- ⚠️ **写使能口的更正**: 本仓 P4b-7 期的注释把"写边沿使能"记成 `ENARDEN` —— 那是**读口 A** 的使能;
+  **SDP 下写走 B 口, 使能是 `ENBWREN`** (旧探针只拨 en_a, 测的是"读口使能不影响写", 结论系测量错误)。
+  已更正 `rtl/frame_fifo.v` 注释与探针 (P3a/P3b 两口分测)。两代器件在这一点上**行为一致**。
+- ⚠️ **DEV_USP 分支尚未过综合/实现**（闸 G 才有答案）⇒ "仿真语义已复验" ≠ "已上器件验证"。
+
+### T2 — RGMII 前端: 三条实证把配方从"IDELAYE3 重标定"改成"零 IDELAY"
+1. **HDIO 放不了 IDELAY**: KU5P 的 RGMII/MDIO 全在 **bank 86 = HDIO** (不是 HP)。自建
+   `board/ku5p_probe/idly_probe.v` (真实引脚 + IBUF/BUFG/MMCME4/IDELAYCTRL/IDELAYE3/IDDRE1/ODDRE1)
+   综合过、opt 过, `place_design` 报 **`ERROR: [DRC PLHDIO-6] … the shape contains IDelay and ISerDes
+   (details: presence of I/ODELAY or I/OSERDES is not supported in HDIO)`**。
+   HDIO 同时**没有 BUFIO/BUFR** (厂商 KU5P 设计里 `BUFIO` 被综合降级成 `BUFGCE`)。
+2. **底板把 PHY 的两个延迟搭接都拉高** (底板原理图**出图**实测 —— PDF 文本层是错位叠加的, **不能 grep 判读**):
+   `LED2/RXDLY`(pin32)→R52 10k→VDD3.3 (**RXDLY=1**)、`RXD[1]/TXDLY`(pin16)→R51 10k→VDD3.3 (**TXDLY=1**)。
+   即 RTL8211E 手册 10.6.5 Figure 32/33 的 "internal delay added" 模式 ⇒ **2ns 在 PHY 内部, FPGA 侧零延迟**。
+   顺带: 原理图注记 `PHY_ADDR[2:0]=001` ⇒ PHY 在 MDIO 地址 1。
+3. **判据不用 K7 当 oracle** (两块板 PHY 搭接不同 ⇒ 前端本来就该不同): 新写
+   `tb/tb_rgmii_phy_model.v` = **行为级 RTL8211E 模型** (RXDLY=1/TXDLY=1) + 往返逐字节一致。
+   实测: **KU5P 前端 TX/RX 各 200/200 字节 d=0 全对**; **K7 前端 TX 也全对, RX mis=179 全错**
+   ⇒ 反推 **ECO 板 PHY 的 RXDLY=0** (K7 靠 `IDELAYE2` + `BUFG(~rxc)` 自己凑相位)。
+4. **⚠️ 一条被实测推翻的推论 (值得记)**: 一度以为"K7 的 TX 结构在 TXDLY=1 下不自洽"(理由:
+   `.D1(gmii_txd_r_d1)` 取 2 拍前字节的低 nibble、`.D2(gmii_txd_low)` 取 1 拍前字节的高 nibble)。
+   **错** —— `gmii_txd_low` 是**同一时钟块内的阻塞赋值**读沿前 `gmii_txd_r` (天然多滞后一拍),
+   正好补偿 `gmii_txd_r_d1` 的两级流水 ⇒ **两代前端在 nibble 约定上等价**。教训: 逐拍手算流水线时,
+   必须把**阻塞赋值**的采样时刻单独算一遍 (它读的是沿前值, 相当于额外的寄存器级)。
+5. **落地文件**: `board/util_gmii_to_rgmii_us.v` (零 IDELAY: RX `IBUF→BUFG→IDDRE1`
+   + `IS_CB_INVERTED=1` 且 C/CB 同网; TX `ODDRE1` 边沿对齐, D1/D2 = **同一个**已寄存字节的低/高 nibble);
+   `board/wrapper_p4.v` 加 `` `ifdef DEV_USP `` 三处 (端口表去掉 `fpga_gclk` / 去掉 MMCM+IDELAYCTRL /
+   前端实例换模块名 —— 端口名一致故只需换名); `board/ku5p_p6a_{t8p0,t6p4}.xdc` (与 K7 闸 B 的 XDC
+   **逐项同构**, 差异 = LVCMOS33 / **generated clock 不带 -invert** / 无 fpga_gclk);
+   `board/build_p6a_ku5p.tcl` + `run_build_p6a_ku5p.bat [t8p0|t6p4]`; `p6a_ku5p_verify/` (只读校验, 同 K7 的 p6_verify)。
+
+### 本轮踩到的坑 (按坑的"咬人程度"排序)
+1. **判据的假通过路径 (最贵)**: 初版 `tb_rgmii_phy_model.v` 把 `ctl_fall_bad` 只打印、不进 PASS 条件,
+   且 ER 恒 0 ⇒ **"D2 接错"与"gmii_rx_er 硬接 0"两种坏前端都会 PASS**。已修: PASS 四项
+   (data / 条数 / TX_CTL 两半 / RX_ER), 且序列里**各注入 1 个 ER=1 的字节**把两条通路都激励到。
+   ⇒ **审查/测试 agent 的第一价值就是找这种"判据声称检查了却没接进判据"的洞。**
+2. **bat 里写中文注释 → GBK 控制台下被拆成伪命令** (本仓老坑复发): 症状是 `'T' 不是内部或外部命令`
+   + `系统找不到文件`, 但构建其实照常跑 (极易忽略)。**新 bat 一律纯 ASCII**, 写完用
+   "非 ASCII 字节数 == 0 且 CR 数 == LF 数" 自检 (本项目已把这条写进自检脚本)。
+3. **`str.replace` 改到不该改的分支**: 给 `frame_fifo` 加 E2 分支时, 一条跨行的
+   `.WRITE_WIDTH_A(72), .WRITE_WIDTH_B(72),` 替换**同时命中了 E1 分支** ⇒ 直接破坏"K7 零回归"。
+   靠 `git diff --numstat` (发现 4 条删除行) 才抓到。⇒ **改 RTL 后立刻看 numstat**; 多分支文件用
+   索引切片而不是宽匹配替换。
+4. **Vivado 的 `dfx_runtime.txt` 落在当前工作目录** (每次跑都在 cwd 掉一个), 会被 git 当新文件。
+   本仓根的那份是**已跟踪**的历史遗留, 新目录里出现的要及时删。
+5. **`-tclargs` 会贪婪吞掉后面的 `-log`** (老坑): 本轮改用**环境变量** `P6A_TAG` 传参。
+6. **E2 的 `Error: [Unisim RAMB36E2-11] Memory Collision at ...` 是设计预期的信息** (bypass 拍的同址
+   碰撞, 每帧都可能出现成百条) —— ⚠️ **任何按 "Error" 抓失败的脚本会在此假报**。
+7. **自建模型时"解码/编码必须镜像" (本项目最贵的一条判据教训)**: `tb_rgmii_phy_model.v` 的 TX 侧
+   解码按 **RGMII 半槽**口径 (`TX_ER = ctl_rise ^ ctl_fall`), 而 RX 侧初版把 `RX_CTL` 整字节驱动成
+   同值 ⇒ ER=1 的字节被 DUT 解成 **DV=0** (整条流错位 recorded=199 / data_mis=99), 且"ER 通路"
+   那条判据**在任何合法 DUT 上都不可被激励** (假绿色)。修正 = 一行: `ctl_w = phy_clk ? load_en :
+   (load_en & ~cur_er)` (与数据 nibble 同相位)。⇒ **凡自建 stimulus/模型, 必须把"对端的编解码"
+   写成同一套口径, 并问一句"这条判据真的能被一个坏 DUT 激励到吗"**。
+8. **xvlog 少了 `-work xil_defaultlib` 会静默落到 `work` 库** (本轮 bat 重生成时漏了):
+   症状是 xelab 报 `Cannot find design unit xil_defaultlib.<tb> in library work`。
+   更隐蔽的是**反向情形**: 库已存在时, xvlog 分析了新源码但 `.sdb` 时间戳**可能不更新**
+   (本次实测: 库里 `rgmii_pair.sdb` 停在 21:54, 而我在 22:02 用"修好的判据"跑出与修前**一模一样**
+   的 FAIL 读数 —— 差点被当成 DUT 缺陷)。⇒ **判据类跑之前先 `rm -rf xsim.dir`** (或独立目录)
+   是最省事的免疫; 判读异常时**先看库文件时间戳**, 别先改 RTL。
+9. **`{1'b0, r_ad[8:0], 6'h00}` 接到 15 位地址口是 no-op** (最高位被端口截掉, 与原式功能相同) ——
+   这类"16 位字面量 → 15 位端口"的静默截断**功能门抓不住**, 只有 elaboration 的
+   `WARNING: [VRFC 10-3091] actual bit length ... differs ...` 能看见。
+   ⇒ 已把 `findstr /C:"10-3091"` 与 `findstr /I /C:"implicitly"` 一并列为门里的**硬失败**。
+10. **两家 unisim 模型的报错口径不同**: US+ 构建里 bypass 拍的同址碰撞打 **`Error: [Unisim RAMB36E2-11]`**
+    (通过的正常仿真里 1983 条), K7 构建同现象却是 **2004 条无 `Error:` 前缀**的
+    `Memory Collision Error on RAMB36E1`。两个构建功能逐位相同而报数不同 ⇒
+    **任何"日志含 Error 即失败"的判据会在 US+ 构建上假失败** (本项目 BAS 期已有同源教训)。
+
+### 闸 G — KU5P 上的时序基线 (2026-09-28, **结论: 数据面在 16nm 上直接收口**)
+
+构建口径: 与 K7 闸 B **逐项同构** (`build_p6a_ku5p.tcl` 同文件清单 / `APP_MODE=1` /
+`Performance_ExtraTimingOpt` / `launch_runs` 全流程 / XDC 同构, 只换器件+前端模块+引脚),
+两跑 `P6A_TAG=t8p0|t6p4` 只改 `create_clock` 的周期。读数脚本 `p6a_ku5p_verify/`(只读)。
+
+| 指标 | **KU5P @8.000ns (真实 1G)** | **KU5P @6.400ns (10G 时钟尖峰)** | K7 @6.400ns (闸 B, 对照) |
+|---|---|---|---|
+| WNS / TNS 失败端点 | **+0.973** / 0 | **+0.426** / **0** | −0.948 / **647** |
+| WHS / THS 失败端点 | **+0.013** / 0 | **+0.012** / 0 | +0.054 / 0 |
+| WPWS / 失败端点 | +6.501 / 0 | **−1.600 / 16** (见下) | +0.264 / 0 |
+| LUT / FF | 46,842 (21.6%) / 40,688 (9.4%) | 同左 | 51,588 / 41,513 |
+| Block RAM | **312** (RAMB36E2×281 + RAMB18E2×62) | 312 | 312 (RAMB36E1) |
+| IOB / DSP / URAM | 18 / 4 / 0 | 同左 | 177 / 3 / – |
+| 位流 | 15,431,261 B | 有 | – |
+
+**三条结论**:
+1. ⭐ **K7 在 6.4ns 下的 647 个 setup 失败端点 (WNS −0.948) 到 KU5P 上全部消失**: 同样 RTL、同样
+   流程与策略, 只换器件+前端 ⇒ WNS 从 −0.948 变 **+0.426**, 失败端点 647 → **0**。
+   这正是前置闸 U1 ("K7 上 −0.948, 16nm 预计吸收, 未实测") 的答案 —— **16nm -1 速度等级吸收有余**。
+2. ⚠️ **t6p4 的 16 条脉冲宽度违例是实验方法的产物, 不是数据面缺陷**: 全部是
+   `IDDRE1/C` 与 `IDDRE1/CB` 的 **Min Period 检查 (required 8.000ns, actual 6.400ns, slack −1.600)**
+   —— UltraScale+ **HDIO 的 DDR I/O 寄存器器件上限就是 125MHz**。本实验把 RGMII 前端(本质 125MHz)
+   一起按 156.25MHz 约束才触发; 而 **P6b 的既定方案正是"1G 前端留在 125MHz + async FIFO 跨域"**
+   (见 p6_spec §P6b) ⇒ 该违例在正式方案里不复存在。**读数时务必把这条与 setup/hold 分开看**。
+3. **RAMB36E2 映射正确**: Block RAM tile = **312, 与 K7 逐数相同**, 且器件报告点名
+   `RAMB36E2 only ×281` / `RAMB18E2 only ×62` ⇒ T1 的 `DEV_USP` 分支**综合+实现都成立**
+   (此前只到行为级仿真)。
+
+**hold 余量仍薄**: t8p0 WHS **+0.013** / t6p4 **+0.012** (K7 时代是 +0.010/+0.051), 性质一致 ——
+`report_timing -delay_type min -max_paths 400` 的族 (见 `p6a_<tag>_hold_400.rpt`) 是后续加逻辑时
+**最先失败**的地方; 与 K7 的结论相同: 加逻辑前先看这三个族的余量。
+
+**遗留**: 位流已出, 但**未上板** —— 板级第一步是"烧 t8p0 位流 + ping/图案测试"来验证 15 根 RGMII
+引脚与零 IDELAY 配方 (两者都只有图纸/模型证据, 无硅上证据); 且烧录会把板子的 PCIe 端点顶掉(见
+`XCKU5PMini/CLAUDE.md` 的纪律)。

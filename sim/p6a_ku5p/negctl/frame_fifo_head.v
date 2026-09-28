@@ -17,12 +17,6 @@
 //   side_dout_r <= mem_s[rptr_n] —— 1 拍读延迟与主存 DOA_REG=0 对齐, 呈现时
 //   {side_dout_r, main_sel} 拼回 W 位。W<=64 时无边存 (主存余 [W-1:0], SW 占位 1
 //   防 0 宽; 无复位写块是 LUTRAM 推断前提, 故 mem_s 只存在于 W>64 分支)。
-// P6a-T1 (K7 → KU5P 器件移植): 定义 `DEV_USP` 时**主存**改 RAMB36E2 (UltraScale+;
-//   地址口 15 位 / 端口改名 / 无 RAM_MODE·SIM_DEVICE 参数), 边存不变。
-//   **未定义时逐位不变** (K7 构建零回归)。判据与读数: 原语级 `tb/tb_ramb36e2_sem.v`
-//   (P1/P3a/P4/P5 判据 + P2/P3b 观察) + 行为级**同一 TB 同激励 A/B**
-//   (`sim/p6a_ku5p/run_tb_frame_fifo_{us,k7}.bat`, 两者 PASS_ALL 六计数逐数一致)。
-//   ⚠️ **DEV_USP 分支尚未过综合/实现** ⇒ "仿真语义已复验" ≠ "已上器件验证"。
 // 主存 BRAM 端口语义 (7 系列 unisim 实测 + xpm_fifo 综合网表对照; 边存 LUTRAM 不适用):
 //   - SDP 模式写口 = B (ADDRBWRADDR/CLKBWRCLK/ENBWREN/WEBWE), 读口 = A
 //     (ADDRARDADDR/CLKARDCLK/ENARDEN/REGCEAREGCE)。DOA_REG=0: 沿 N 捕获的字在
@@ -31,9 +25,8 @@
 //   - 512 行配置的无效位按 Xilinx 网表惯例 (xpm 亦如此) 恒接 1。字址位段实测
 //     (单元 TB 碰撞时序反推): RAMB36 (16 位地址) 512x72 字址在 [14:6]:
 //     {1'b1, a[8:0], 6'h3F}。DRC: WRITE_MODE_A 必须 == WRITE_MODE_B。
-//   - unisim 实测 + **P6a-T1 审查更正**: SDP 下写走 B 口 ⇒ **写使能是 `ENBWREN`**。
-//     旧记录写成 `ENARDEN` (那是**读口 A** 的使能, 拨它并不影响写) —— 见
-//     `tb/tb_ramb36e2_sem.v` 的 P3a/P3b 两口分测。故 ENBWREN 恒 1, 每片每拍以本地
+//   - unisim 实测: 写边沿 ENARDEN=0 的写会丢 (探针 P3: 唯一 ENARDEN=0 的写未落盘;
+//     P2/P4 全部 ENARDEN=1 的写落盘且读回正确)。故 ENARDEN 恒 1, 每片每拍以本地
 //     r_ad[8:0] 捕获; 空拍重复捕获同址无害 (读不改内容)。
 //
 // 拍级语义 (主/边逐拍对齐, 消费端零改动):
@@ -95,7 +88,7 @@ module frame_fifo #(
     wire [AW:0] rptr_n  = rptr + (rd_ok ? 1'b1 : 1'b0);
     wire [AW:0] wptr_n  = wptr + (wr_ok ? 1'b1 : 1'b0);
     wire        bypass  = wr_ok && (rptr_n[AW-1:0] == wptr[AW-1:0]);
-    // (ENBWREN 恒 1 见头注释: 写使能低时该写会丢)
+    // (ENARDEN 恒 1 见头注释: 写边沿 ENARDEN=0 的写在 unisim 上会丢)
 
     // 全宽字地址 (含片号位段) 做片选范围比较; 片内地址 = 低 9 位 (512 对齐天然切出)
     wire [AW-1:0] w_ad = wptr[AW-1:0];
@@ -115,62 +108,6 @@ module frame_fifo #(
         wire r_hit_o = (r_sel >= g * 512) && (r_sel < (g + 1) * 512);  // 本片为显示片
         wire [63:0] mo;                       // 本片 DOA 读回 (DOA_REG=0: 1 拍延时)
 
-`ifdef DEV_USP
-        // ---- UltraScale+ 分支 (P6a-T1): RAMB36E2 (⚠️ E2 **没有** SIM_DEVICE 参数) ----
-        // 与 RAMB36E1 的差异 (逐条, 均已按本机 unisim 源核对):
-        //   ① 地址口 **15 位** (E1 是 16 位)。512x72 SDP 的字址仍在 [14:6]:
-        //      E2 模型 rd_addr_a_mask(READ_WIDTH_A=72) = {9{1'b1}, 6'h00} ⇒ [5:0] 是
-        //      无关位 (掩码掉), 故 E1 的 {1'b1, a[8:0], 6'h3F} 退化为 {a[8:0], 6'h00}。
-        //   ② 端口改名: DOADO/DOBDO → DOUTADOUT/DOUTBDOUT、DIADI/DIBDI → DINADIN/DINBDIN、
-        //      DIPADIP/DIPBDIP → DINPADINP/DINPBDINP、CASCADEIN* → 拆成 CASDIMUX*/
-        //      CASDINA*/CASDOMUX*/CASOREGIMUX* + CASINDBITERR/CASINSBITERR。
-        //   ③ 无 RAM_MODE / SIM_DEVICE / RDADDR_COLLISION_HWCONFIG 参数 (E2 无此三者);
-        //      新增 CASCADE_ORDER_*/CLOCK_DOMAINS/ENADDRENA,B/RDADDRCHANGEA,B/SLEEP_ASYNC。
-        //   ④ 必须显式接 ADDRENA/ADDRENB (=1'b1) 与 SLEEP(=1'b0)/ECCPIPECE。
-        //   ⑤ 端口名 DOUTADOUT 接 mo[31:0]、DOUTBDOUT 接 mo[63:32] —— 与 E1 的
-        //      DOADO/DOBDO 同一语义 (72 位 SDP 读同时出现在 A/B 两个数据寄存器上)。
-        // 依赖的端口语义**已在 E2 上分测** (tb/tb_ramb36e2_sem.v + 同一 TB 的
-        // DEV_USP 行为级 A/B): 1 拍读延迟 / 同址碰撞 X 一拍且内容存活 / 字址 [14:6]
-        // 三条一致; **写使能的口是 ENBWREN** (不是 ENARDEN —— 见头注释的更正);
-        // 空槽初值 E2 = 0 (E1 未测)。⚠️ 但**综合/实现尚未跑过** (闸 G 才有答案)。
-        RAMB36E2 #(
-            .CASCADE_ORDER_A("NONE"), .CASCADE_ORDER_B("NONE"),
-            .CLOCK_DOMAINS("COMMON"),          // 两端口同 clk
-            .WRITE_WIDTH_A(0),  .WRITE_WIDTH_B(72),   // E2: SDP 只认 A 读/B 写 (A 写宽必须 <=36)
-            .READ_WIDTH_A(72), .READ_WIDTH_B(0),     // E2: 同上 (B 读宽必须 <=36)
-            .WRITE_MODE_A("WRITE_FIRST"), .WRITE_MODE_B("WRITE_FIRST"),
-            .DOA_REG(0), .DOB_REG(0),
-            .ENADDRENA("FALSE"), .ENADDRENB("FALSE"),
-            .RDADDRCHANGEA("FALSE"), .RDADDRCHANGEB("FALSE"),
-            .RSTREG_PRIORITY_A("RSTREG"), .RSTREG_PRIORITY_B("RSTREG"),
-            .SIM_COLLISION_CHECK("ALL")
-        ) u_main (
-            .CLKARDCLK(clk), .CLKBWRCLK(clk),
-            .ENARDEN(1'b1), .ENBWREN(1'b1),    // 每拍捕获 (写使能 ENBWREN 恒 1)
-            .ADDRENA(1'b1), .ADDRENB(1'b1),
-            .WEA(4'h0), .WEBWE(w_hit && wr_ok ? 8'hFF : 8'h00),
-            .ADDRARDADDR({r_ad[8:0], 6'h00}),  // 字址在 [14:6], [5:0] 无关位
-            .ADDRBWRADDR({w_ad[8:0], 6'h00}),
-            .DINADIN(din[31:0]), .DINPADINP(4'h0),
-            .DINBDIN(din[63:32]), .DINPBDINP(4'h0),
-            .REGCEAREGCE(1'b1), .REGCEB(1'b0),
-            .RSTRAMARSTRAM(1'b0), .RSTRAMB(1'b0),
-            .RSTREGARSTREG(1'b0), .RSTREGB(1'b0),
-            .DOUTADOUT(mo[31:0]), .DOUTPADOUTP(),
-            .DOUTBDOUT(mo[63:32]), .DOUTPBDOUTP(),
-            .CASDIMUXA(1'b0), .CASDIMUXB(1'b0),
-            .CASDINA(32'h0), .CASDINB(32'h0),
-            .CASDINPA(4'h0), .CASDINPB(4'h0),
-            .CASDOMUXA(1'b0), .CASDOMUXB(1'b0),
-            .CASDOMUXEN_A(1'b1), .CASDOMUXEN_B(1'b1),
-            .CASINDBITERR(1'b0), .CASINSBITERR(1'b0),
-            .CASOREGIMUXA(1'b0), .CASOREGIMUXB(1'b0),
-            .CASOREGIMUXEN_A(1'b1), .CASOREGIMUXEN_B(1'b1),
-            .ECCPIPECE(1'b1), .SLEEP(1'b0),
-            .INJECTDBITERR(1'b0), .INJECTSBITERR(1'b0),
-            .DBITERR(), .SBITERR(), .ECCPARITY(), .RDADDRECC()
-        );
-`else
         RAMB36E1 #(
             .RAM_MODE("SDP"),
             .WRITE_WIDTH_A(72), .WRITE_WIDTH_B(72),
@@ -182,7 +119,7 @@ module frame_fifo #(
             .SIM_DEVICE("7SERIES")
         ) u_main (
             .CLKARDCLK(clk), .CLKBWRCLK(clk),
-            .ENARDEN(1'b1), .ENBWREN(1'b1),    // 每拍捕获 (写使能 ENBWREN 恒 1)
+            .ENARDEN(1'b1), .ENBWREN(1'b1),    // 每拍捕获 (写边沿必须 ENARDEN=1)
             .WEA(4'h0), .WEBWE(w_hit && wr_ok ? 8'hFF : 8'h00),
             .ADDRARDADDR({1'b1, r_ad[8:0], 6'h3F}),
             .ADDRBWRADDR({1'b1, w_ad[8:0], 6'h3F}),
@@ -198,7 +135,6 @@ module frame_fifo #(
             .INJECTDBITERR(1'b0), .INJECTSBITERR(1'b0),
             .DBITERR(), .SBITERR(), .ECCPARITY(), .RDADDRECC()
         );
-`endif
         assign main_mux[g] = r_hit_o ? mo : 64'h0;
     end
     endgenerate

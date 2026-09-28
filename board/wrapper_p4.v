@@ -134,7 +134,13 @@
 
 module wrapper_p4 (
     input           reset_n,
-    input           fpga_gclk,
+`ifndef DEV_USP
+    input           fpga_gclk,     // K7 板 50MHz 晶振 -> MMCM -> 200MHz IDELAYCTRL 参考钟
+`endif
+    // P6a-T2: US+ (DEV_USP) 分支**不需要** fpga_gclk —— 本板 RGMII 走**零 IDELAY**配方
+    //   (KU5P 的 RGMII 引脚在 bank86=HDIO, 放不了 IDELAYE3; 且底板 PHY 的 RXDLY/TXDLY
+    //   已搭接为 1, 延迟由 PHY 内部提供) ⇒ 无 IDELAYCTRL ⇒ 无参考钟需求。
+    //   详见 board/util_gmii_to_rgmii_us.v 头注释与 board/ku5p_probe/README.md。
     input           phy1_rxc,
     input  [3:0]    phy1_rxd,
     input           phy1_rxctl,
@@ -165,6 +171,7 @@ module wrapper_p4 (
     // 改一处漏两处就会分叉 — 现在全部由本 localparam 下发。
     localparam [15:0] WIN_CAP_5 = 16'hBFFE;
 
+`ifndef DEV_USP
     // --- 200MHz IDELAYCTRL 参考钟 (逐字照抄 wrapper_tcp.v) ---
     wire ref200_clk, ref200_clk_raw, ref200_fb, mmcm_ref_locked;
     MMCME2_BASE #(
@@ -208,6 +215,8 @@ module wrapper_p4 (
         .RST(1'b0)
     );
 
+`endif
+
     // --- RGMII 适配 (实例名 u_rgmii 不可改, XDC generated clock 引用) ---
     wire gmii_clk;
     wire [7:0] e_rxd;
@@ -216,7 +225,11 @@ module wrapper_p4 (
     wire       e_txen;
     wire       e_txer;
 
-    util_gmii_to_rgmii u_rgmii (
+`ifdef DEV_USP
+    util_gmii_to_rgmii_us u_rgmii (     // US+ 零 IDELAY 版 (bank86 HDIO 约束)
+`else
+    util_gmii_to_rgmii u_rgmii (        // K7 版 (IDELAYE2 10 tap + BUFG(~rxc))
+`endif
         .reset          (1'b0),
         .rgmii_td       (phy1_txd),
         .rgmii_tx_ctl   (phy1_txctl),

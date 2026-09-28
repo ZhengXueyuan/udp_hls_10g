@@ -137,7 +137,7 @@ module frame_fifo #(
             .CASCADE_ORDER_A("NONE"), .CASCADE_ORDER_B("NONE"),
             .CLOCK_DOMAINS("COMMON"),          // 两端口同 clk
             .WRITE_WIDTH_A(0),  .WRITE_WIDTH_B(72),   // E2: SDP 只认 A 读/B 写 (A 写宽必须 <=36)
-            .READ_WIDTH_A(72), .READ_WIDTH_B(0),     // E2: 同上 (B 读宽必须 <=36)
+            .READ_WIDTH_A(36), .READ_WIDTH_B(0),     // E2: 同上 (B 读宽必须 <=36)
             .WRITE_MODE_A("WRITE_FIRST"), .WRITE_MODE_B("WRITE_FIRST"),
             .DOA_REG(0), .DOB_REG(0),
             .ENADDRENA("FALSE"), .ENADDRENB("FALSE"),

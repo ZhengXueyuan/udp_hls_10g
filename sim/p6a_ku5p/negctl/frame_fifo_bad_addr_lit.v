@@ -149,7 +149,7 @@ module frame_fifo #(
             .ENARDEN(1'b1), .ENBWREN(1'b1),    // 每拍捕获 (写使能 ENBWREN 恒 1)
             .ADDRENA(1'b1), .ADDRENB(1'b1),
             .WEA(4'h0), .WEBWE(w_hit && wr_ok ? 8'hFF : 8'h00),
-            .ADDRARDADDR({r_ad[8:0], 6'h00}),  // 字址在 [14:6], [5:0] 无关位
+            .ADDRARDADDR({1'b0, r_ad[8:0], 6'h00}),  // 字址在 [14:6], [5:0] 无关位
             .ADDRBWRADDR({w_ad[8:0], 6'h00}),
             .DINADIN(din[31:0]), .DINPADINP(4'h0),
             .DINBDIN(din[63:32]), .DINPBDINP(4'h0),
