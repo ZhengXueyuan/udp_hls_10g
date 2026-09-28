@@ -7,7 +7,7 @@
 //   "复位有没有接对" 这类错在单元门里完全隐身 (P5a W1 / P5e-T2 两次血的教训:
 //   子模块 TB 全绿, 板上却是静默故障)。
 //
-// 本门怎么抓: 把数据面那 7 路计数源用 `force` 打成**互不相同的常数**, 然后**从 AXI 侧**
+// 本门怎么抓: 把数据面那 15 路计数源用 `force` 打成**互不相同的常数**, 然后**从 AXI 侧**
 //   把 8 个字读回来, 逐字比对常数 ⇒ 任何"接错一路"都会当场现形。
 //   (gmii_free 那一路故意**不 force**: 它是自由计数器, 用"两次快照之间必须递增"来验它 ——
 //    既证明它接对了, 又证明 gmii 域在仿真里真的在跑。)
@@ -92,7 +92,7 @@ module tb_p6e_pcie_wrapper;
 
         $display("  --- 判据 1-3: AXI 读通路 (替身主机 → wrapper 内 axi_regs) ---");
         u_dut.u_pcie_xdma.axil_read(32'h00, v); chk("1  MAGIC", v, 32'h50360001);
-        u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("2  BUILD_ID (合体版=2)", v, 32'h00000002);
+        u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("2  BUILD_ID (合体版 16 字=3)", v, 32'h00000003);
         u_dut.u_pcie_xdma.axil_read(32'h14, v); chk("3  MARKER", v, 32'hDEADBEEF);
         // HW_STATUS 字段: [7:5]=msi_vec_w [4]=msi_enable [3]=user_lnk_up [2:0]=0
         u_dut.u_pcie_xdma.axil_read(32'h10, v);
@@ -120,8 +120,20 @@ module tb_p6e_pcie_wrapper;
         force u_dut.rx_stat_drop     = 32'h44444444;
         force u_dut.srx_stat_commit  = 32'h66666666;
         force u_dut.stx_stat_frames  = 32'h77777777;
+        force u_dut.udpapp_tx_frames = 32'h88888888;   // W8  图案 app 发帧
+        force u_dut.udpapp_tx_bytes  = 32'h99999999;   // W9  图案 app 发字节
+        force u_dut.udpapp_rx_frames = 32'hAAAAAAAA;   // W10 图案 app 收帧
+        force u_dut.udpapp_rx_bytes  = 32'hBBBBBBBB;   // W11 图案 app 收字节
+        force u_dut.udpapp_rx_null   = 32'hCCCCCCCC;   // W12 空帧
+        force u_dut.udpapp_mismatch  = 32'hDDDDDDDD;   // W13 图案失配
+        force u_dut.tx_stat_frames   = 32'hEEEEEEEE;   // W14 MAC 发帧
+        force u_dut.tx_stat_bytes    = 32'hFFFFFFFF;   // W15 MAC 发字节
         // gmii_free (W5) 故意不 force (判据 5 已用活性验过)
         repeat (10) @(posedge phy1_rxc);                     // 让 force 生效于 gmii 域
+        // 诊断: force 到底落在哪根线上 —— 新加的 8 路曾读回 zzzz, 用这行区分
+        // "force 没落上" vs "快照路径没接对"
+        $display("  [DBG] 源: tx_stat_frames=%h udpapp_tx_frames=%h | snap_src[511:256]=%h",
+                 u_dut.tx_stat_frames, u_dut.udpapp_tx_frames, u_dut.snap_src[511:256]);
         snap_take(ok_r);
         u_dut.u_pcie_xdma.axil_read(32'h20, v); chk("6 W0 = rx_stat_frames",  v, 32'h11111111);
         u_dut.u_pcie_xdma.axil_read(32'h24, v); chk("6 W1 = rx_stat_bytes",   v, 32'h22222222);
@@ -129,7 +141,15 @@ module tb_p6e_pcie_wrapper;
         u_dut.u_pcie_xdma.axil_read(32'h2c, v); chk("6 W3 = rx_stat_crc_err", v, 32'h33333333);
         u_dut.u_pcie_xdma.axil_read(32'h30, v); chk("6 W4 = rx_stat_drop",    v, 32'h44444444);
         u_dut.u_pcie_xdma.axil_read(32'h38, v); chk("6 W6 = srx_stat_commit", v, 32'h66666666);
-        u_dut.u_pcie_xdma.axil_read(32'h3c, v); chk("6 W7 = stx_stat_frames", v, 32'h77777777);
+        u_dut.u_pcie_xdma.axil_read(32'h3c, v); chk("6 W7  = stx_stat_frames", v, 32'h77777777);
+        u_dut.u_pcie_xdma.axil_read(32'h40, v); chk("6 W8  = udpapp_tx_frames", v, 32'h88888888);
+        u_dut.u_pcie_xdma.axil_read(32'h44, v); chk("6 W9  = udpapp_tx_bytes",  v, 32'h99999999);
+        u_dut.u_pcie_xdma.axil_read(32'h48, v); chk("6 W10 = udpapp_rx_frames", v, 32'hAAAAAAAA);
+        u_dut.u_pcie_xdma.axil_read(32'h4c, v); chk("6 W11 = udpapp_rx_bytes",  v, 32'hBBBBBBBB);
+        u_dut.u_pcie_xdma.axil_read(32'h50, v); chk("6 W12 = udpapp_rx_null",   v, 32'hCCCCCCCC);
+        u_dut.u_pcie_xdma.axil_read(32'h54, v); chk("6 W13 = udpapp_mismatch",  v, 32'hDDDDDDDD);
+        u_dut.u_pcie_xdma.axil_read(32'h58, v); chk("6 W14 = tx_stat_frames",   v, 32'hEEEEEEEE);
+        u_dut.u_pcie_xdma.axil_read(32'h5c, v); chk("6 W15 = tx_stat_bytes",    v, 32'hFFFFFFFF);
 
         // ---- 判据 7: 未触发时 8 个字必须冻结 (读窗口原子性) ----
         $display("  --- 判据 7: 未触发 ⇒ 8 字冻结 ---");
@@ -152,8 +172,9 @@ module tb_p6e_pcie_wrapper;
         //    那是 **XDMA 的 AXI-Lite 主机**在错误响应时填的数据, 不是 axi_regs 的行为
         //    (axi_regs 的读 mux 对未实现地址给 0 + rresp=SLVERR)。替身不模仿 XDMA 那一段,
         //    所以本门只能验 rresp —— 两边各验自己能验的那一半, 别把结论张冠李戴。
-        u_dut.u_pcie_xdma.axil_read(32'h44, v);
-        chk("9  未实现地址 0x44 ⇒ rresp = SLVERR", {30'd0, u_dut.u_pcie_xdma.last_rresp}, 32'd2);
+        // ⚠️ 0x44 现在是 W9 (16 字快照把 0x20-0x5C 全占了) ⇒ 未实现地址挪到 0x60
+        u_dut.u_pcie_xdma.axil_read(32'h60, v);
+        chk("9  未实现地址 0x60 ⇒ rresp = SLVERR", {30'd0, u_dut.u_pcie_xdma.last_rresp}, 32'd2);
 
         release u_dut.rx_stat_frames;
         release u_dut.rx_stat_bytes;
@@ -162,6 +183,14 @@ module tb_p6e_pcie_wrapper;
         release u_dut.rx_stat_drop;
         release u_dut.srx_stat_commit;
         release u_dut.stx_stat_frames;
+        release u_dut.udpapp_tx_frames;
+        release u_dut.udpapp_tx_bytes;
+        release u_dut.udpapp_rx_frames;
+        release u_dut.udpapp_rx_bytes;
+        release u_dut.udpapp_rx_null;
+        release u_dut.udpapp_mismatch;
+        release u_dut.tx_stat_frames;
+        release u_dut.tx_stat_bytes;
 
         if (fails == 0) $display("PASS_ALL  tb_p6e_pcie_wrapper: 全链门全过");
         else            $display("FAIL      tb_p6e_pcie_wrapper: %0d 项失败", fails);

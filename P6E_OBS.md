@@ -35,7 +35,22 @@
 | `0x34` | RO | `SNAP_W5` = `gmii_free` (**gmii_clk 域自由计数** = 数据面时钟活性) |
 | `0x38` | RO | `SNAP_W6` = `srx_stat_commit` (提交给 HLS 慢路径的帧: ARP/ICMP 会涨) |
 | `0x3C` | RO | `SNAP_W7` = `stx_stat_frames` (**HLS 发出去的帧**: 应答/自发行文) |
+| `0x40` | RO | `SNAP_W8` = `udpapp_tx_frames` (**图案 app 发出帧**) |
+| `0x44` | RO | `SNAP_W9` = `udpapp_tx_bytes` (图案 app 发出字节) |
+| `0x48` | RO | `SNAP_W10` = `udpapp_rx_frames` (图案 app 收到帧) |
+| `0x4C` | RO | `SNAP_W11` = `udpapp_rx_bytes` (图案 app 收到字节) |
+| `0x50` | RO | `SNAP_W12` = `udpapp_rx_null` (空/坏帧) |
+| `0x54` | RO | `SNAP_W13` = `udpapp_mismatch` (**图案失配: 必须恒 0**) |
+| `0x58` | RO | `SNAP_W14` = `tx_stat_frames` (MAC 发出帧; 与 W8 对账) |
+| `0x5C` | RO | `SNAP_W15` = `tx_stat_bytes` (MAC 发出字节) |
 | 其它 | — | 读回 `0xFFFFFFFF`、写被拒 (SLVERR) —— 见下"用法坑" |
+
+> **16 字是 2026-09-29 从 8 字扩上来的** (动机: 图案/吞吐测试要 app 层计数, 光靠 MAC 层反推不出来)。
+> ⚠️ 扩窗必须**四处同改**: wrapper 的 `SNAP_NW_P6E` (单一来源) / `snap_src` 拼接项数 /
+> `snap_src` 与 `snap_dout` 的**位宽** / `axi_regs.SNAP_NW`; 另外**验收脚本里"未实现地址"的取值
+> 也要跟着挪** (0x18 → 0x44 → **0x60**), 否则会把"新功能上线"判成回归。
+> 这一轮扩窗被全链门抓到 **3 个 lint 看不见的真 bug** (字号索引回绕 / 去程与回程两条线各截断
+> 256 位) —— xvlog 的位宽检查**不覆盖端口连接**, 所以只能靠例化真 wrapper 的门。
 
 ### 主机读快照的协议 (三步)
 

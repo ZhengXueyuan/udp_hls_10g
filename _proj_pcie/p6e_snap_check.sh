@@ -1,7 +1,7 @@
 #!/bin/bash
 #=============================================================================
 # p6e_snap_check.sh — P6e **合体版**验收: 数据面计数经 PCIe 寄存器窗口读出来
-#   前置: (1) FPGA 已烧上 p6e (合体) 位流 —— BUILD_ID 必须 = 0x00000002;
+#   前置: (1) FPGA 已烧上 p6e (合体 16 字) 位流 —— BUILD_ID 必须 = 0x00000003;
 #         (2) **主机已在烧录之后重启过** (PCIe 端点只认"配置先于 POST"; 见 _pcie/README.md);
 #         (3) 驱动已 insmod (本脚本自己 insmod)。
 #   用法: sudo bash /home/a/xdma_test/p6e_snap_check.sh     日志: /tmp/p6e_snap_check.log
@@ -17,7 +17,7 @@ KO=/home/a/xdma_test/dma_ip_drivers-patched/XDMA/linux-kernel/xdma/xdma.ko
 TOOLS=/home/a/xdma_test/dma_ip_drivers-patched/XDMA/linux-kernel/tools
 DEV=/dev/xdma0_user
 LOG=/tmp/p6e_snap_check.log
-EXPECT_BID=0x00000002          # 合体版位流身份 (前置闸)
+EXPECT_BID=0x00000003          # 合体版位流身份 (前置闸); 1=最小版 2=合体8字 3=合体16字
 PASS=0; FAIL=0
 exec > >(tee "$LOG") 2>&1
 echo "########## P6e 合体版验收 (数据面 + 观测通道) $(date '+%F %T') ##########"
@@ -39,10 +39,10 @@ snap_take(){
   done
   return 1
 }
-# 快照字 W0..W7 (0x20,0x24,...,0x3c) 一次读全, 打印成一行
-snap_words(){
+# 快照字 W0..W15 (0x20..0x5C) 一次读全, 打印成一行
+snap_words(){          # 16 字 (2026-09-29 从 8 扩上来): 0x20..0x5C
   local a
-  for a in 20 24 28 2c 30 34 38 3c; do printf "%s " "$(rd 0x$a)"; done
+  for a in 20 24 28 2c 30 34 38 3c 40 44 48 4c 50 54 58 5c; do printf "%s " "$(rd 0x$a)"; done
   echo
 }
 
@@ -61,7 +61,7 @@ echo; echo "===== 0.3 通道活性总闸 (0xffffffff 一律当"没应答", 不�
 # ⚠️ 用法坑 (实测踩到, 2026-09-29): reg_rw **不因 SLVERR 报错** —— XDMA 的 AXI-Lite 主机把
 #    错误响应的数据填成 0xffffffff 交回用户态 ⇒ 0xffffffff **不是数据, 是"这次读没成功"**。
 #    一旦这样, 后面所有"按位判断"的判据都会**假通过** (例: done 位测 `s & 2`, 而
-#    0xffffffff & 2 != 0 恒真; "8 字冻结"也会因两次都读到同一个 ffffffff 而"通过")。
+#    0xffffffff & 2 != 0 恒真; "16 字冻结"也会因两次都读到同一个 ffffffff 而"通过")。
 #    ⇒ 先把这道总闸立起来, 拦住整类假通过。
 #    ⚠️ 注意: `lspci` 看到端点、甚至 config 空间读得出 10ee:9034, **都不能**当"设备活着"的
 #       证据 (可能是主机侧/缓存状态)。唯一靠得住的是"BAR 读得动"。
@@ -79,9 +79,9 @@ echo "  [PASS] 0.3 通道在应答 (MAGIC = $M0)"; PASS=$((PASS+1))
 
 echo; echo "===== 1. 身份 (前置闸: 认位流) ====="
 chk "1.1 MAGIC (0x00)"  "$(rd 0x00)" "0x50360001"
-chk "1.2 BUILD_ID (0x04) = 合体版" "$(rd 0x04)" "$EXPECT_BID"
+chk "1.2 BUILD_ID (0x04) = 合体版 16 字" "$(rd 0x04)" "$EXPECT_BID"
 chk "1.3 MARKER (0x14)" "$(rd 0x14)" "0xdeadbeef"
-hw=$(rd 0x10); echo "  [INFO] 1.4 HW_STATUS (0x10) = $hw  (bit0 = user_lnk_up, bit1 = msi_enable)"
+hw=$(rd 0x10); echo "  [INFO] 1.4 HW_STATUS (0x10) = $hw  ([3]=user_lnk_up [4]=msi_enable [7:5]=msi_vec_w)"
 
 echo; echo "===== 2. 快照触发协议 (0x18 / 0x1C) ====="
 s0=$(rd 0x1c)
@@ -93,11 +93,11 @@ if [ -n "$s0" ] && [ -n "$s1" ] && [ $(( s1 >> 16 )) -eq $(( (s0 >> 16) + 1 )) ]
   echo "  [PASS] 2.2 gen 恰好 +1"; PASS=$((PASS+1))
 else echo "  [FAIL] 2.2 gen 不是恰好 +1 ($s0 -> $s1)"; FAIL=$((FAIL+1)); fi
 
-echo; echo "===== 3. 读窗口原子性 (不重新触发 ⇒ 8 字必须逐位不变) ====="
+echo; echo "===== 3. 读窗口原子性 (不重新触发 ⇒ 16 字必须逐位不变) ====="
 R1=$(snap_words); R2=$(snap_words)
 echo "  [INFO] 第 1 次: $R1"
 echo "  [INFO] 第 2 次: $R2"
-chk "3.1 未触发时 8 字完全不变" "$R1" "$R2"
+chk "3.1 未触发时 16 字完全不变" "$R1" "$R2"
 
 echo; echo "===== 4. ★ GMII 时钟活性 + 频率反解 (W5 = 0x34) ====="
 snap_take; A=$(rd 0x34); T1=$(date +%s.%N)
@@ -113,29 +113,41 @@ else
   else echo "  [FAIL] 4.1 GMII 时钟**没在跑** (RXC 没来 / PHY 没起 / 网线没插)"; FAIL=$((FAIL+1)); fi
 fi
 
-echo; echo "===== 5. 数据面计数快照 (W0..W7) ====="
+echo; echo "===== 5. 数据面计数快照 (W0..W15) ====="
 snap_take
 W0=$(rd 0x20); W1=$(rd 0x24); W2=$(rd 0x28); W3=$(rd 0x2c)
 W4=$(rd 0x30); W5=$(rd 0x34); W6=$(rd 0x38); W7=$(rd 0x3c)
+W8=$(rd 0x40); W9=$(rd 0x44); WA=$(rd 0x48); WB=$(rd 0x4c)
+WC=$(rd 0x50); WD=$(rd 0x54); WE=$(rd 0x58); WF=$(rd 0x5c)
 cat <<EOF
-  W0 0x20 rx_stat_frames (MAC 收帧数)      = $W0
-  W1 0x24 rx_stat_bytes  (MAC 收字节)      = $W1
-  W2 0x28 {16'd0,wl_last} (最近线上帧长)   = $W2
-  W3 0x2c rx_stat_crc_err (FCS 错帧)       = $W3
-  W4 0x30 rx_stat_drop   (MAC 丢弃)        = $W4
-  W5 0x34 gmii_free      (gmii 自由计数)   = $W5
-  W6 0x38 srx_stat_commit (交 HLS 慢路径)  = $W6
-  W7 0x3c stx_stat_frames (HLS 发出帧)     = $W7
+  W0  0x20 rx_stat_frames    (MAC 收帧数)      = $W0
+  W1  0x24 rx_stat_bytes     (MAC 收字节)      = $W1
+  W2  0x28 {16'd0,wl_last}   (最近线上帧长)    = $W2
+  W3  0x2c rx_stat_crc_err   (FCS 错帧)        = $W3
+  W4  0x30 rx_stat_drop      (MAC 丢弃)        = $W4
+  W5  0x34 gmii_free         (gmii 自由计数)   = $W5
+  W6  0x38 srx_stat_commit   (交 HLS 慢路径)   = $W6
+  W7  0x3c stx_stat_frames   (HLS 发出帧)      = $W7
+  W8  0x40 udpapp_tx_frames  (图案 app 发帧)   = $W8
+  W9  0x44 udpapp_tx_bytes   (图案 app 发字节) = $W9
+  W10 0x48 udpapp_rx_frames  (图案 app 收帧)   = $WA
+  W11 0x4c udpapp_rx_bytes   (图案 app 收字节) = $WB
+  W12 0x50 udpapp_rx_null    (空/坏帧)         = $WC
+  W13 0x54 udpapp_mismatch   (图案失配, 必须0) = $WD
+  W14 0x58 tx_stat_frames    (MAC 发出帧)      = $WE
+  W15 0x5c tx_stat_bytes     (MAC 发出字节)    = $WF
 EOF
 echo "  [INFO] 判读: 有 ping 流量时 W0/W1 应涨; 若 W0 涨而 W6 不涨 ⇒ 帧没进慢路径 (ARP/ICMP 收不到);"
 echo "          W6 涨而 W7 不涨 ⇒ HLS 收到了但没回 ⇒ 问题在慢路径/HLS, 不在前端。"
 
 echo; echo "===== 6. 负向: 未实现地址必须走 SLVERR ====="
-U44=$(rd 0x44); U00=$(rd 0x00)
-echo "  [INFO] 0x44 (未实现) = $U44 ; 0x00 (实现) = $U00"
-if [ "$U44" = "0xffffffff" ] && [ "$U44" != "$U00" ]; then
+# ⚠️ 这个"未实现地址"随地图扩张挪过两次: 0x18 -> 0x44 -> **0x60**
+#    (16 字快照把 0x20-0x5C 全占了; 0x60 = word 24 起)。不挪 ⇒ 把"新功能上线"判成回归。
+U60=$(rd 0x60); U00=$(rd 0x00)
+echo "  [INFO] 0x60 (未实现) = $U60 ; 0x00 (实现) = $U00"
+if [ "$U60" = "0xffffffff" ] && [ "$U60" != "$U00" ]; then
   echo "  [PASS] 6.1 未实现地址返回 0xffffffff (SLVERR)"; PASS=$((PASS+1))
-else echo "  [FAIL] 6.1 未实现地址读出 $U44 ⇒ 译码可能过宽"; FAIL=$((FAIL+1)); fi
+else echo "  [FAIL] 6.1 未实现地址读出 $U60 ⇒ 译码可能过宽"; FAIL=$((FAIL+1)); fi
 
 echo; echo "########## 汇总: PASS=$PASS FAIL=$FAIL ##########"
 echo "########## 日志: $LOG ##########"

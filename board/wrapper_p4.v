@@ -2320,6 +2320,11 @@ module wrapper_p4 (
     //=========================================================================
 
     // ---- 0. 线网声明先行 (xvlog 先声明后用; 也防隐式 1 位线 —— 工程坑 24) ----
+    // ⚠️ 快照字数 = **单一来源**: snap_src 拼接项数 / snap_cdc.NW / snap_dout 与 snap_src 的位宽
+    //    / axi_regs.SNAP_NW 全从这里推导。手写 256 的教训: 扩到 16 字时源头与回程**两条线**都
+    //    会被静默截断成"上 256 位悬空 ⇒ 读回 X", 而 **xvlog 的位宽检查不覆盖端口连接**
+    //    (lint 全绿) ⇒ 这种错只有例化真 wrapper 的全链门能抓 (判据 6 的 W8-W15 读回 zzzz 就是它)。
+    localparam SNAP_NW_P6E = 16;
     wire         pcie_clk_gt, pcie_clk;
     wire         pcie_axi_aclk, pcie_axi_aresetn;
     wire         pcie_lnk_up, pcie_msi_enable;
@@ -2335,10 +2340,14 @@ module wrapper_p4 (
     wire [1:0]   pcie_rresp;
     wire         pcie_rvalid, pcie_rready;
     wire         snap_req, snap_busy, snap_valid;
-    wire [255:0] snap_dout;
+    // ⚠️ 宽度必须由 SNAP_NW_P6E 推导: 手写 256 (= 8 字时代) 会让 snap_cdc 的**上 256 位悬空**
+    //    ⇒ axi_regs 采到的 W8-W15 全是 X。这是同一处坑的**另一半**: 源头那侧 (snap_src) 修好
+    //    只能让"送进 CDC 的数据"对, 回程这条线宽度不对照样白搭 —— 两边都要跟着 NW 走。
+    wire [SNAP_NW_P6E*32-1:0] snap_dout;
     wire [31:0]  pcie_hw_status, pcie_scratch, pcie_wr_cnt;
     wire         pcie_decode_err;
-    wire [255:0] snap_src;
+    // (快照字数 localparam 见本段开头的声明区 —— 必须在那里, xvlog 先声明后用)
+    wire [SNAP_NW_P6E*32-1:0] snap_src;
     reg  [31:0]  gmii_free;
 
     // ---- 1. 参考钟: 与厂商 BD 逐条同构 (O→sys_clk_gt, ODIV2→sys_clk, 不加 BUFG_GT) ----
@@ -2355,16 +2364,31 @@ module wrapper_p4 (
     );
 
     // ---- 2. 快照数据源 (gmii_clk 域; 全部是寄存器输出 ⇒ 只在 gmii 沿变化, 满足 CDC 前提) ----
-    // 8 个字按"ping 不通时该看哪一步"排序 (这也是 P6a 板级首测要回答的问题):
+    // 16 个字 (NW=16, 2026-09-29 从 8 扩上来): W0-W7 保持原义 (ping 诊断用), W8-W15 是
+    // **图案/吞吐测试**要用的 app 层计数 —— 扩窗的动机就是"没有它们就只能靠 MAC 层反推"。
     //   W0 线上有帧吗 → W1 多少字节 → W2 那一帧有多长 (66 vs 1518) → W3 FCS 干净吗
     //   → W4 被丢了吗 → W5 gmii 时钟在跑吗 → W6 慢路径收下了吗 (ARP/ICMP) → W7 HLS 回了吗
-    // ⚠️ 恰好 8 项 = 8×32 位: 多一项会被静默截断/位宽告警 (门里 findstr 位宽当硬失败)
+    //   → W8/W9 图案 app 发出 → W10/W11 图案 app 收到 → W12 空帧 → W13 图案失配(必须恒 0)
+    //   → W14/W15 MAC 层发出 (与 W8 对账: 有帧没出 MAC = TX 卡住)
+    // ⚠️ 拼接项数必须**恰好 SNAP_NW_P6E**: 少一项 ⇒ 高位悬空 (X); 多一项 ⇒ 被截断。
+    //    两者都不会被 xvlog 的位宽检查报出来 (不覆盖端口连接) ⇒ 只有全链门能抓
+    // ⚠️ `udpapp_*` 的 wire 声明在 wrapper 里是**无条件**的, 但驱动它们的 app_udp_pattern 只在
+    //    `ifdef APP_MODE 里 ⇒ 本块与 APP_MODE 是一对 (P6e 构建固定 APP_MODE=1 ✓)。若将来做
+    //    "PCIE_OBS 但不带 APP_MODE" 的构建, W8-W13 会是未驱动线 (读出来是 X/0), 不是缺陷。
     always @(posedge gmii_clk or negedge reset_n) begin
         if (!reset_n) gmii_free <= 32'd0;
         else          gmii_free <= gmii_free + 32'd1;
     end
 
-    assign snap_src = {stx_stat_frames,     // W7  HLS 慢路径发出的帧 (ping 的回包)
+    assign snap_src = {tx_stat_bytes,       // W15 MAC 发出字节
+                       tx_stat_frames,      // W14 MAC 发出帧
+                       udpapp_mismatch,     // W13 图案失配 (对端校验不通过; 必须恒 0)
+                       udpapp_rx_null,      // W12 空帧/坏帧
+                       udpapp_rx_bytes,     // W11 图案 app 收字节 (本板当接收端时)
+                       udpapp_rx_frames,    // W10 图案 app 收帧
+                       udpapp_tx_bytes,     // W9  图案 app 发字节
+                       udpapp_tx_frames,    // W8  图案 app 发帧
+                       stx_stat_frames,     // W7  HLS 慢路径发出的帧 (ping 的回包)
                        srx_stat_commit,     // W6  提交给 HLS 的慢帧 (ARP/ICMP 会涨)
                        gmii_free,           // W5  gmii 时钟自由计数 (活性锚点 + 频率反解)
                        rx_stat_drop,        // W4  MAC 丢弃
@@ -2374,7 +2398,8 @@ module wrapper_p4 (
                        rx_stat_frames};     // W0  MAC 收帧
 
     // ---- 3. 相干快照 CDC (gmii_clk → axi_aclk) ----
-    snap_cdc #(.W(32), .NW(8)) u_snap (
+    // ⚠️ NW 必须与下面 snap_src 的项数、axi_regs 的读 mux/SLVERR 边界**三处同改** (P6E_OBS.md 已记)
+    snap_cdc #(.W(32), .NW(SNAP_NW_P6E)) u_snap (
         .clk_a      (pcie_axi_aclk),
         .rst_n      (pcie_axi_aresetn),
         .req_a      (snap_req),
@@ -2449,7 +2474,9 @@ module wrapper_p4 (
 
     axi_regs #(
         .MAGIC_V    (32'h50360001),
-        .BUILD_ID_V (32'h00000002)      // ⚠️ 每次改动自增 (前置闸读这一项认位流)
+        .BUILD_ID_V (32'h00000003),     // ⚠️ 每次改动自增 (前置闸读这一项认位流)
+                                        //    1 = 最小版 / 2 = 合体版 8 字 / 3 = 合体版 16 字
+        .SNAP_NW    (SNAP_NW_P6E)       // 必须 = 上面 snap_cdc 的 .NW 和 snap_src 的项数
     ) u_pcie_regs (
         .clk            (pcie_axi_aclk),
         .rst_n          (pcie_axi_aresetn),

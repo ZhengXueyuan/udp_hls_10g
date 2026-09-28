@@ -22,7 +22,7 @@ wr(){ $T/reg_rw $DEV $1 w $2 >/dev/null 2>&1; }
 snap(){ wr 0x18 0x1; local i s; for i in $(seq 1 100); do s=$(rd 0x1c); [ -z "$s" ] && continue
         [ $(( s & 2 )) -ne 0 ] && return 0; sleep 0.01; done; return 1; }
 declare -a W
-read8(){ local a i=0; for a in 20 24 28 2c 30 34 38 3c; do W[$i]=$(rd 0x$a); i=$((i+1)); done; }
+read16(){ local a i=0; for a in 20 24 28 2c 30 34 38 3c 40 44 48 4c 50 54 58 5c; do W[$i]=$(rd 0x$a); i=$((i+1)); done; }  # 16 字 (2026-09-29 扩)
 # ⚠️ 计数必须从 sysfs 拿: 早先用 `ip -s link | awk '/RX:/{r=$2}'` 把**表头行**("RX: bytes packets...")
 #    当成了数值 ⇒ 拿到字面量 "bytes" ⇒ set -u 下算术展开炸掉 (unbound variable), 后面的对账全丢
 srx(){ cat /sys/class/net/$IFACE/statistics/rx_packets; }
@@ -36,7 +36,7 @@ if ! ip -br addr show "$IFACE" | grep -q "192.168.100.1"; then
   echo "-- 加 192.168.100.1/24 --"; ip addr add 192.168.100.1/24 dev "$IFACE"
 fi
 snap || { echo "快照触发失败 (观测通道?)"; exit 1; }
-read8; f0=$((W[0])); k0=$((W[6])); t0=$((W[7]))
+read16; f0=$((W[0])); k0=$((W[6])); t0=$((W[7]))
 r0=$(srx); tx0=$(stx)
 echo "  起点: 网卡 RX=$r0 TX=$tx0 | FPGA W0=$f0 W6=$k0 W7=$t0"
 
@@ -52,7 +52,7 @@ sleep 4
 kill $TCPID 2>/dev/null; wait $TCPID 2>/dev/null
 
 sleep 1
-snap && read8
+snap && read16
 r1=$(srx); tx1=$(stx)
 echo; echo "===== 2. 数据面增量 (整个窗口) ====="
 echo "  ΔW0帧=$((W[0]-f0))  ΔW6进慢路=$((W[6]-k0))  ΔW7 HLS发=$((W[7]-t0))"

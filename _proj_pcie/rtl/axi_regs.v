@@ -19,7 +19,13 @@
 //   0x1C RO  SNAP_STATUS= bit0 busy (CDC 还在飞) / bit1 done (sticky, 触发时清)
 //                         bit2 seen (复位后完成过至少一次) / [31:16] gen (完成次数)
 //   0x20 RO  SNAP_W0    = 快照字 0 (数据面 gmii 域)
-//   0x24 RO  SNAP_W1    ... 一直到 0x3C SNAP_W7 (共 8 字)
+//   0x24 RO  SNAP_W1    ... 一直到 0x5C SNAP_W15 (共 **16 字**, 2026-09-29 从 8 扩上来)
+//   ⚠️ 扩窗要**三处同改**: wrapper 的 `snap_cdc #(.NW())` / wrapper 的 `snap_src` 拼接项数 /
+//      本文件的读 mux 与 SLVERR 边界 (`r_word <= 6'd23`)。漏一处的表现各不相同 (截断/位宽告警/
+//      读到 SLVERR), 所以三处都要在门里被覆盖。
+//   ⚠️ 扩窗会把"未实现地址"的边界推后 ⇒ 验收脚本里那个"读未实现地址应得 SLVERR"的**地址也得跟着挪**
+//      (0x18→0x44 那次就是这么挪的, 现在 0x44 已实现 ⇒ 挪到 0x60)。地址不挪的后果是
+//      "新功能上线"被门报成回归 (本工程已经踩过一次)。
 //
 // ⚠️ **为什么用"显式触发"而不是"自动周期刷新" (设计取舍, 别改成自动的)**:
 //   主机读 8 个字要走 8 笔独立 PCIe 事务 (几十 µs), 而自动刷新的周期只要短于这个窗口,
@@ -42,8 +48,12 @@
 //     避免"两个 always 块写同一个寄存器" ⇒ 综合报多驱动/仿真出 X。
 //=============================================================================
 module axi_regs #(
-    parameter [31:0] MAGIC_V    = 32'h50360001,
-    parameter [31:0] BUILD_ID_V = 32'h00000001
+    parameter [31:0]  MAGIC_V    = 32'h50360001,
+    parameter [31:0]  BUILD_ID_V = 32'h00000001,
+    // 快照字数: 必须与 wrapper 的 `snap_cdc #(.NW())` 和 `snap_src` 项数**同值**。
+    // 位宽由它推导 ⇒ 扩窗时端口宽度自动跟着走 (手写 256 位的话, 扩到 16 字就是静默截断)。
+    // 上限 16 (读侧选字用 r_word[3:0] ⇒ 4 位); 要超过 16 得同时加宽 snap_base。
+    parameter integer SNAP_NW    = 8
 ) (
     input  wire        clk,
     input  wire        rst_n,
@@ -76,8 +86,11 @@ module axi_regs #(
     output wire        snap_req,       // 1 拍脉冲: 请求一次快照
     input  wire        snap_busy,      // 来自 snap_cdc.busy_a (高 = 上一次还在飞)
     input  wire        snap_valid,     // 1 拍脉冲: 快照完成 (随 dout 有效)
-    input  wire [255:0] snap_din       // 来自 snap_cdc.dout_a (8 字 × 32 位)
+    input  wire [SNAP_NW*32-1:0] snap_din   // 来自 snap_cdc.dout_a (SNAP_NW 字 × 32 位)
 );
+
+    localparam integer SNAP_W0_IDX   = 8;                   // 快照字起始 word 号 (= 0x20)
+    localparam integer SNAP_LAST_IDX = 8 + SNAP_NW - 1;      // 最后一个快照字的 word 号
 
     // ---------------- 自由计数器 (0x0C) ----------------
     reg [31:0] freecnt;
@@ -138,7 +151,7 @@ module axi_regs #(
     // ---------------- 数据面快照寄存器 (0x18-0x3C) ----------------
     // ⚠️ 本块必须放在**写/读通道的 wire 声明之后** (wr_go / w_word / r_word): xvlog 先声明后用 (工程坑 22)
     // 单驱动块: "触发清零" 与 "valid 捕获" 都在同一个 always 里 (避免两个 always 写同一寄存器)
-    reg [255:0] snap_words_r;
+    reg [SNAP_NW*32-1:0] snap_words_r;
     reg         snap_done_r, snap_seen_r;
     reg [15:0]  snap_gen_r;
 
@@ -147,8 +160,8 @@ module axi_regs #(
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            snap_words_r <= 256'd0; snap_done_r <= 1'b0;
-            snap_seen_r  <= 1'b0;   snap_gen_r  <= 16'd0;
+            snap_words_r <= {SNAP_NW*32{1'b0}}; snap_done_r <= 1'b0;
+            snap_seen_r  <= 1'b0;               snap_gen_r  <= 16'd0;
         end else if (snap_valid) begin
             snap_words_r <= snap_din;
             snap_done_r  <= 1'b1;
@@ -159,8 +172,14 @@ module axi_regs #(
         end
     end
 
-    // 读侧译码: 8 个字 = word 8..15 = 0x20..0x3C
-    wire [7:0]  snap_base   = {r_word[2:0], 5'b0};
+    // 读侧译码: SNAP_NW 个字 = word 8..(8+SNAP_NW-1) = 0x20.. (NW=16 时是 0x20..0x5C)
+    // ⚠️⚠️ 下标必须是 `r_word - 8`, **不能**直接截 r_word 的低位 —— 这里连踩两次:
+    //   8 字版写 `r_word[2:0]`, 恰好 8..15 → 0..7 正确 (纯属巧合);
+    //   扩到 16 字时换 `r_word[3:0]` ⇒ word 16..23 回绕到 0..7, **且** 0x20 也被当成 W8
+    //   (读出来是重复的另一路数据 —— 静默错, 单看某一遍读不出问题)。
+    //   是单元门判据 15b (16 字同代 + 字号逐一核对) 当场抓到的。
+    wire [4:0]  snap_idx    = r_word[4:0] - SNAP_W0_IDX[4:0];
+    wire [8:0]  snap_base   = {snap_idx, 5'b0};
     wire [31:0] snap_status = {snap_gen_r, 13'd0, snap_seen_r, snap_done_r, snap_busy};
 
     reg [31:0] rdata_mux;
@@ -174,9 +193,10 @@ module axi_regs #(
             6'd5:    rdata_mux = 32'hDEADBEEF;
             6'd6:    rdata_mux = 32'd0;                        // 0x18 写口, 读回 0
             6'd7:    rdata_mux = snap_status;                  // 0x1C
-            6'd8, 6'd9, 6'd10, 6'd11,
-            6'd12, 6'd13, 6'd14, 6'd15: rdata_mux = snap_words_r[snap_base +: 32];
-            default: rdata_mux = 32'h00000000;
+            // 快照字: word 8..(8+SNAP_NW-1) —— 用 if 按参数判范围 (case 的标签没法由参数生成),
+            // 这样扩窗时只需要改 SNAP_NW 一个数, 不会漏掉某个标签 ⇒ 也就不会回绕读错字。
+            default: rdata_mux = ((r_word >= SNAP_W0_IDX) && (r_word <= SNAP_LAST_IDX))
+                                 ? snap_words_r[snap_base +: 32] : 32'h00000000;
         endcase
     end
 
@@ -192,8 +212,8 @@ module axi_regs #(
             end
             if (!s_axil_arready && !s_axil_rvalid) begin
                 s_axil_rdata <= rdata_mux;
-                s_axil_rresp <= (r_word <= 6'd15) ? 2'b00 : 2'b10;  // 未实现 -> SLVERR
-                decode_err_r <= (r_word > 6'd15);
+                s_axil_rresp <= (r_word <= SNAP_LAST_IDX) ? 2'b00 : 2'b10;  // 未实现 -> SLVERR
+                decode_err_r <= (r_word >  SNAP_LAST_IDX);
                 s_axil_rvalid <= 1'b1;
             end
             if (s_axil_rvalid && s_axil_rready) begin

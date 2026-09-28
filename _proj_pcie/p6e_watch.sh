@@ -27,23 +27,23 @@ snap(){                       # 触发一次并等 done
   done
   return 1
 }
-# 读 8 个字到全局 W[]
+# 读 16 个字到全局 W[]
 declare -a W
-read8(){ local a i=0; for a in 20 24 28 2c 30 34 38 3c; do W[$i]=$(rd 0x$a); i=$((i+1)); done; }
+read16(){ local a i=0; for a in 20 24 28 2c 30 34 38 3c 40 44 48 4c 50 54 58 5c; do W[$i]=$(rd 0x$a); i=$((i+1)); done; }  # 16 字 (2026-09-29 扩)
 
 snap || { echo "触发失败 (通道没应答?)"; exit 1; }
-read8
+read16
 # ⚠️ 基线要单独存 — 循环里会把 pf/pb/pk/pt 一路吃掉, 拿它们算"总差值"只会得到 0
 #    (本轮已经在"判据算术"上栽过两次: 判据 4 的 k0、snap_take 的输出端口覆盖调用变量)
-f0=$((W[0])); b0=$((W[1])); k0=$((W[6])); t0=$((W[7]))
+f0=$((W[0])); b0=$((W[1])); k0=$((W[6])); t0=$((W[7])); a8=$((W[8])); a10=$((W[10]))
 pf=$f0; pb=$b0; pk=$k0; pt=$t0
-echo "样本   Δt(s)  ΔW0帧  ΔW1字节  ΔW6进慢路  ΔW7 HLS发   W2当帧长   W3错帧  W4丢弃  W5 gmii"
+echo "样本   Δt(s)  ΔW0帧  ΔW1字节  ΔW6进慢路  ΔW7 HLS发  ΔW8图案发  ΔW10图案收  W13失配   W2当帧长   W3错帧"
 for n in $(seq 1 $N); do
   sleep "$IV"
   snap || { echo "第 $n 次触发超时"; break; }
-  read8
+  read16
   f=$((W[0])); b=$((W[1])); k=$((W[6])); t=$((W[7]))
-  echo "$(printf '%3d' $n)  $(printf '%7s' $IV)  $(printf '%7d' $((f-pf)))  $(printf '%8d' $((b-pb)))  $(printf '%9d' $((k-pk)))  $(printf '%9d' $((t-pt)))   $(printf '%8d' $((W[2])))  $(printf '%6d' $((W[3])))  $(printf '%6d' $((W[4])))  ${W[5]}"
+  echo "$(printf '%3d' $n)  $(printf '%7s' $IV)  $(printf '%7d' $((f-pf)))  $(printf '%8d' $((b-pb)))  $(printf '%9d' $((k-pk)))  $(printf '%9d' $((t-pt)))  $(printf '%9d' $((W[8]-a8)))  $(printf '%10d' $((W[10]-a10)))  $(printf '%7d' $((W[13])))   $(printf '%8d' $((W[2])))  $(printf '%6d' $((W[3])))"
   pf=$f; pb=$b; pk=$k; pt=$t
 done
 echo
