@@ -17,7 +17,7 @@ rd(){ $T/reg_rw $1 $2 w 2>&1 | tail -1; }
 echo "===== P6e 重启前判别 ====="
 echo "-- config BAR (XDMA 自己的寄存器; 上次实测 0x1fc00006 = 0x1fc00006) --"
 echo "   /dev/xdma0_control 0x00 : $(rd /dev/xdma0_control 0x00)"
-echo "-- user BAR (我们的寄存器块; 合体版 MAGIC 应为 0x50360001, BUILD_ID=2) --"
+echo "-- user BAR (我们的寄存器块; 合体版 MAGIC 应 0x50360001; BUILD_ID=4 (1=最小 2=8字 3=16字 4=24字)) --"
 echo "   /dev/xdma0_user    0x00 : $(rd /dev/xdma0_user 0x00)"
 echo "   /dev/xdma0_user    0x04 : $(rd /dev/xdma0_user 0x04)"
 echo "-- 回绕自检 (排除"读的是同一个陈旧数据") --"
