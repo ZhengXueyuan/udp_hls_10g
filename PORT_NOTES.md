@@ -3847,3 +3847,37 @@ P5d 记录的新风险族 `app_ctrl.c_snd_wnd → app_pattern` 同样**完全退
 2. **XVC 也要自己例化**(若要省 USB/JTAG 线); 否则"板子搬不搬"的权衡里 XVC 这条收益拿不到。
 3. **单通道吞吐远低于链路**: 正式采集/灌数要**多通道 + 深提交**(`-c` 或自写批量提交的
    用户态程序), 不能拿 `dma_to_device` 单发数字当性能预期(`pcie_verify2.sh` 在扫这条曲线)。
+
+## 2026-09-28 P6e 最小版: **我们自己的** PCIe/XDMA 观测通道 — 板级通过
+
+**动机**: `_pcie/` 那轮验的是**厂商设计**上的 PCIe 通道, 但厂商 BD 的 `axilite_master_en=false`
+⇒ 只有 config BAR ⇒ **读不到我们自己的任何状态**。P6e 要的是"我们自己的寄存器窗口 + 前置闸"。
+本轮把它做出来并上板验穿 (全程约 2 小时, 从建工程到读数)。
+
+**做法** (`_proj_pcie/`): `pcie_min_top.v` = `IBUFDS_GTE4` + `xdma_0`(IP `xdma:4.2`) + 我们写的
+`axi_regs.v`(AXI4-Lite, 6 个寄存器)。**XDMA 配置逐条复制厂商那份实测跑通的值**
+(`pcie_blk_locn=X0Y0` / `pf0_device_id=9034` / `ref_clk_freq=100_MHz` / `num_queues=1` /
+`axi_data_width=128b`), **唯一改动 = `axilite_master_en=true`** ⇒ 引出 user BAR。
+**接线配方逐条照抄厂商 BD 的 nets** (从那块板上唯一跑通过的接法里读出来的):
+`IBUFDS_GTE4.O → sys_clk_gt`、`IBUFDS_GTE4.ODIV2 → sys_clk`、`pcieReset → sys_rst_n`(**直连无反相器**)。
+
+**板级读数** (证据: `_proj_pcie/README.md` 与对端机 `/tmp/pcie_regs_check.log`):
+- `identify_bars: **2 BARs: config 1, user 0**` (厂商: `1 BARs: config 0, user -1`) + `/dev/xdma0_user` 出现
+  ⇒ **user BAR 生效**, 这是我们自己的逻辑存在的硬证据;
+- **`MAGIC` = `0x50360001`** + `MARKER` = `0xdeadbeef` + SCRATCH 回环 + 字节选通 `0xffffff11`
+  ⇒ 寄存器窗口全通; `FREECNT` 反解出 **AXI ≈250MHz**;
+- 设计侧: `PCIE40E4`×1 + `GTYE4_CHANNEL`×4 + 36 BRAM, setup/hold 0 失败端点, DRC 0 错;
+- **`/dev/xdma0_xvc` 也出现了** (厂商设计没有) ⇒ **U4b (JTAG over PCIe) 有了新可能**: XVC 支持已在驱动里
+  (`cdev_xvc.c`), 只差一个**用户态 TCP 桥** (XVC 协议简单) 就能让 hw_server 经 PCIe 连 ⇒ 有机会省掉 USB 线。
+
+**本轮踩的坑 (都是"判据/流程"而不是设计)**:
+1. **`reg_rw` 不会因 SLVERR 报错**: XDMA 的 AXI-Lite 主机把错误响应的数据填成 **`0xffffffff`** 交回
+   ⇒ 判"未实现地址"要看**读出值**, 不能 grep "error/fail"(初版判据因此假 FAIL; 修正后门 8/8 全过)。
+2. **Vivado batch 出错不一定返回非零** ⇒ 构建的成功判据必须是**产物存在**(本目录的 bat 已改成
+   `if not exist %BIT% ... exit /b 1`), 不能信 exit code。
+3. **Tcl 的花括号串不能含不平衡括号** ⇒ 我最初把 .xci 校验写成 tcl 的 `regexp` 就报
+   `missing close-brace`(且因此整个构建在综合前就退了) ⇒ **改成 bat 里跑 `check_xci.py`**。
+4. **`IBUFDS_GTE4` 在 2025.2 的参数名是 `REFCLK_ICNTL_RX`(2 位), 不是 `REFCLK_ICNTL_TX`** ——
+   凭记忆写会综合报错(`Synth 8-7136`)。**照例去本机 unisim 源核对**(`data/verilog/src/unisims/IBUFDS_GTE4.v`)。
+5. (流程纪律) 一个会话里被"相对路径在错误的 cwd 下失效"咬了 **三次** ⇒ 复合命令一律先
+   `cd /d <绝对路径>` 再干活。

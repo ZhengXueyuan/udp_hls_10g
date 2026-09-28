@@ -1,0 +1,66 @@
+#-----------------------------------------------------------
+# Vivado v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Mon Sep 28 23:01:15 2026
+# Process ID         : 24876
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/_proj_pcie
+# Command line       : vivado.exe -mode batch -source probe_xdma.tcl -log probe_xdma.log -nojournal
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/_proj_pcie/probe_xdma.log
+# Journal file       : 
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 53196 MB
+#-----------------------------------------------------------
+source probe_xdma.tcl
+# set root [file dirname [file normalize [info script]]]
+# set part xcku5p-ffvb676-1-e
+# create_project -force xdma_probe ${root}/probe -part $part
+# puts "==== XDMA IP �?�? ===="
+==== XDMA IP �?�? ====
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository 'C:/AMDDesignTools/2025.2/Vivado/data/ip'.
+# foreach d [get_ipdefs -filter {NAME == xdma}] { puts "  $d" }
+  xilinx.com:ip:xdma:4.2
+# foreach d [get_ipdefs -filter {NAME =~ xdma*}] { puts "  (like) $d" }
+  (like) xilinx.com:ip:xdma:4.2
+# create_ip -name xdma -vendor xilinx.com -library ip -module_name xdma_probe
+# set ip [get_ips xdma_probe]
+# puts "==== IP: $ip  version=[get_property -quiet IPDEF $ip] ===="
+==== IP: xdma_probe  version=xilinx.com:ip:xdma:4.2 ====
+# set_property -dict [list \
+#     CONFIG.pcie_blk_locn        {X0Y0} \
+#     CONFIG.pf0_device_id        {9034} \
+#     CONFIG.pf0_subsystem_id     {0007} \
+#     CONFIG.ref_clk_freq         {100_MHz} \
+#     CONFIG.mode_selection       {Basic} \
+#     CONFIG.axi_data_width       {128_bit} \
+#     CONFIG.num_queues           {1} \
+#     CONFIG.axilite_master_en    {true} \
+#     CONFIG.axilite_master_scale {Megabytes} \
+#     CONFIG.axilite_master_size  {1} \
+#     CONFIG.pl_link_cap_max_link_speed {8.0_GT/s} \
+#     CONFIG.pl_link_cap_max_link_width {X4} \
+# ] $ip
+# puts "==== 设置完成, 生成 (generate_target all) ===="
+==== 设置完成, 生成 (generate_target all) ====
+# generate_target all $ip
+INFO: [IP_Flow 19-1686] Generating 'Instantiation Template' target for IP 'xdma_probe'...
+INFO: [IP_Flow 19-1686] Generating 'Synthesis' target for IP 'xdma_probe'...
+INFO: [IP_Flow 19-1686] Generating 'Simulation' target for IP 'xdma_probe'...
+INFO: [IP_Flow 19-1686] Generating 'Implementation' target for IP 'xdma_probe'...
+INFO: [IP_Flow 19-1686] Generating 'Change Log' target for IP 'xdma_probe'...
+generate_target: Time (s): cpu = 00:00:03 ; elapsed = 00:00:05 . Memory (MB): peak = 760.758 ; gain = 0.418
+# puts "==== 生成完成 ===="
+==== 生成完成 ====
+INFO: [Common 17-206] Exiting Vivado at Mon Sep 28 23:01:39 2026...
