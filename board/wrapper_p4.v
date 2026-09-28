@@ -905,6 +905,11 @@ module wrapper_p4 (
     wire        tx_tvalid, tx_tready, tx_tlast;
     wire [31:0] tx_stat_frames, tx_stat_bytes, tx_stat_abort;
     wire [31:0] tx_stat_retx;    // P4b-7: 重传回卷计数 (暂留内部 wire, LED 后议)
+    // P6e: `mac_tx_64.stat_frames` 原来**悬空** (线上真发出去多少帧, 以前全设计没有这个数)
+    //   ⇒ 接出来当观测 (PCIE_OBS 作快照 W20)。声明在 ifdef **外**: 例化点在 ifdef 外,
+    //   若只在分支里声明, 默认构建会退化成"隐式 1 位线 ⇒ 静默截断"(工程坑 24)。
+    //   默认构建里这根线无负载 ⇒ 综合后与改前逐位等价。
+    wire [31:0] mac_tx_frames;
     wire        tx_retx_req;     // P4b-7 P3: dup-ACK 快速重传 tcp_rx -> tcp_tx_frame
     wire [3:0]  tx_retx_id;
     wire        tx_retx_gnt;
@@ -2051,7 +2056,7 @@ module wrapper_p4 (
         .gmii_txd       (e_txd),
         .gmii_tx_en     (e_txen),
         .gmii_tx_er     (e_txer),
-        .stat_frames    (),
+        .stat_frames    (mac_tx_frames),     // P6e: 原悬空 ⇒ 接出 (快照 W20); 默认构建无负载
         .stat_abort     (tx_stat_abort)
     );
 
@@ -2306,15 +2311,15 @@ module wrapper_p4 (
     //   直接读寄存器 ⇒ 不用 ILA、不用 JTAG 交互、可脚本化判定。
     //
     // 结构 (自下而上):
-    //   ⑧个数据面计数 → ⑥snap_cdc (gmii_clk → axi_aclk 相干快照, 一次性锁存整束)
+    //   23 路数据面计数 → ⑥snap_cdc (gmii_clk → axi_aclk 相干快照, 一次性锁存整束)
     //   → ⑤axi_regs (我们的 AXI4-Lite 寄存器块) → ④xdma_0 (user BAR) → 金手指 → 主机
     //
     // ⚠️ 跨时钟域是这里唯一的技术难点: 数据面在 PHY 回送的 gmii_clk(125MHz), 寄存器块在
     //   XDMA 的 axi_aclk(250MHz)。多比特计数**不能**用两级同步器直接跨 (各比特到达时刻不同
     //   ⇒ 读出来的是"位混"的假值, 而且看起来像数据面疯了) ⇒ 走 snap_cdc 的 toggle 握手,
     //   由它保证"整束来自同一个 gmii 沿"。
-    // ⚠️ 快照**只在主机写 SNAP_CTRL 时更新**, 不自动刷新 —— 理由是主机读 8 个字要走 8 笔
-    //   独立 PCIe 事务, 自动刷新会让读出来的 8 个字跨越两代快照 (寄存器文件这一层撕裂,
+    // ⚠️ 快照**只在主机写 SNAP_CTRL 时更新**, 不自动刷新 —— 理由是主机读 N 个字要走 N 笔
+    //   独立 PCIe 事务, 自动刷新会让读出来的字跨越两代快照 (寄存器文件这一层撕裂,
     //   CDC 再相干也救不了)。详见 _proj_pcie/rtl/axi_regs.v 头注释。
     // ⚠️ 复位复用 reset_n (板上就是 PCIe 槽的 PERST#, J9) —— 与厂商 BD 的接法一致。
     //=========================================================================
@@ -2324,7 +2329,14 @@ module wrapper_p4 (
     //    / axi_regs.SNAP_NW 全从这里推导。手写 256 的教训: 扩到 16 字时源头与回程**两条线**都
     //    会被静默截断成"上 256 位悬空 ⇒ 读回 X", 而 **xvlog 的位宽检查不覆盖端口连接**
     //    (lint 全绿) ⇒ 这种错只有例化真 wrapper 的全链门能抓 (判据 6 的 W8-W15 读回 zzzz 就是它)。
-    localparam SNAP_NW_P6E = 16;
+    // ⚠️ **扩窗要五处同改** (24 字版起定为五处 —— "三处/四处"的旧说法漏了 ③⑤):
+    //    ① 本 localparam ② snap_src 拼接项数 ③ `axi_regs` 里 `snap_base` 的**位宽**
+    //    (装不下 ⇒ 高位静默截断 ⇒ 高地址字回绕读低地址字; 24 字版已加宽到 [9:0])
+    //    ④ `axi_regs.SNAP_NW` (同一参数) ⑤ **验收/采样脚本里"未实现地址"的取值** (0x60→0x84)。
+    //    ⑤ 绝不能挑 ≥0x100: `ar_word = araddr[7:2]` 6 位 ⇒ 地址每 256 字节回绕。
+    // 字宽 24 (2026-09-29 从 16 扩上来): 动机 = 钉死"慢路径失聪"现象的机理, 8 个新字全是
+    //    HLS/慢路径健康位与 MAC 级 TX 锚点 (W16-W23), 详见下面数据源注释。
+    localparam SNAP_NW_P6E = 24;
     wire         pcie_clk_gt, pcie_clk;
     wire         pcie_axi_aclk, pcie_axi_aresetn;
     wire         pcie_lnk_up, pcie_msi_enable;
@@ -2340,15 +2352,33 @@ module wrapper_p4 (
     wire [1:0]   pcie_rresp;
     wire         pcie_rvalid, pcie_rready;
     wire         snap_req, snap_busy, snap_valid;
-    // ⚠️ 宽度必须由 SNAP_NW_P6E 推导: 手写 256 (= 8 字时代) 会让 snap_cdc 的**上 256 位悬空**
-    //    ⇒ axi_regs 采到的 W8-W15 全是 X。这是同一处坑的**另一半**: 源头那侧 (snap_src) 修好
-    //    只能让"送进 CDC 的数据"对, 回程这条线宽度不对照样白搭 —— 两边都要跟着 NW 走。
+    // ⚠️ 宽度必须由 SNAP_NW_P6E 推导: 手写常数 (如 256 = 8 字时代 / 512 = 16 字时代) 会让
+    //    snap_cdc 的**高位悬空** ⇒ axi_regs 采到的那些字全是 X。这是同一处坑的**另一半**:
+    //    源头那侧 (snap_src) 修好只能让"送进 CDC 的数据"对, 回程这条线宽度不对照样白搭
+    //    —— 两边都要跟着 NW 走 (扩窗时这两条线是分开改的, 漏一条的症状都像"数据面坏了")。
     wire [SNAP_NW_P6E*32-1:0] snap_dout;
     wire [31:0]  pcie_hw_status, pcie_scratch, pcie_wr_cnt;
     wire         pcie_decode_err;
     // (快照字数 localparam 见本段开头的声明区 —— 必须在那里, xvlog 先声明后用)
     wire [SNAP_NW_P6E*32-1:0] snap_src;
     reg  [31:0]  gmii_free;
+    // ---- W16/W17 要用的两个**新增计数器** (gmii 域寄存器输出 ⇒ 满足 snap_cdc 的 CDC 前提:
+    //      din_b 只在 clk_b 沿变化; snap_src 里其余各路也都是寄存器, 这里不能引入组合量) ----
+    // srx_hls_bytes: 累加"**HLS 真读走的字节数**" = HLS rx_stream 上 `tvalid && tready` 的**字节拍数**。
+    //   口径说明 (为什么按拍计而不是 popcount): `slow_rx_adp` 到 HLS 的接口是 **9 位字节流**
+    //   `{TLAST, byte}` (rtl/slow_rx_adp.v 的 hls_rx_tdata/_tvalid/_tready), **一拍恰好一个字节**,
+    //   没有 tkeep 可数 ⇒ 接受拍数 ≡ 字节数。它包含每帧 8 字节前导 (0x55×7 + 0xD5), 所以
+    //   它与 `srx_stat_commit`(帧数) 的比例 ≈ 帧长+8, 不是纯内容字节 —— 判读时按"涨不涨"看。
+    //   ⚠️ 为什么它才是真正的"HLS 读了"证据: `srx_stat_commit` (W6) 在适配器**输入侧**帧尾自增
+    //   (只说明排进了给 HLS 的缓冲), `stx_stat_frames` (W7) 在 slow_tx_adp 写自己的 wf FIFO 时
+    //   自增 (冻结既可能"没产生"也可能"产生了被回卷")。本计数在**消费侧**, 与 FIFO 的 rd 是
+    //   同一个表达式 (`hls_rx_tvalid && hls_rx_tready` 就是 slow_rx_adp 的 o_pop) ⇒ 它停 = HLS 真的不读了。
+    //   (核实过: wrapper 里就能看见这个握手, **不需要**给 slow_rx_adp 加端口 —— 那会动数据面。)
+    reg  [31:0]  srx_hls_bytes;
+    // hr_cnt: `hls_rst_n` 为低的 gmii 拍数 (÷64 = 看门狗复位次数, 每次低电平 64 拍 = 512ns)。
+    //   为什么必须用计数而不是把它当一个位塞进快照: 低电平只持续 512ns, 而快照是**采样**
+    //   ⇒ 瞬时命中率 ~1%, 当位用几乎永远读不到。累计拍数则单调可见。
+    reg  [31:0]  hr_cnt;
 
     // ---- 1. 参考钟: 与厂商 BD 逐条同构 (O→sys_clk_gt, ODIV2→sys_clk, 不加 BUFG_GT) ----
     IBUFDS_GTE4 #(
@@ -2364,25 +2394,51 @@ module wrapper_p4 (
     );
 
     // ---- 2. 快照数据源 (gmii_clk 域; 全部是寄存器输出 ⇒ 只在 gmii 沿变化, 满足 CDC 前提) ----
-    // 16 个字 (NW=16, 2026-09-29 从 8 扩上来): W0-W7 保持原义 (ping 诊断用), W8-W15 是
-    // **图案/吞吐测试**要用的 app 层计数 —— 扩窗的动机就是"没有它们就只能靠 MAC 层反推"。
+    // 24 个字 (NW=24, 2026-09-29 从 16 扩上来): W0-W15 **逐位保持原义** (已有板级基线读数
+    // 依赖它们, 所以新项一律加在拼接的**最高位侧** —— 拼接 LSB 端是 W0 = 地址最低),
+    // W16-W23 是这一轮为"**慢路径失聪**"现象加的健康位 + MAC 级 TX 锚点。
     //   W0 线上有帧吗 → W1 多少字节 → W2 那一帧有多长 (66 vs 1518) → W3 FCS 干净吗
     //   → W4 被丢了吗 → W5 gmii 时钟在跑吗 → W6 慢路径收下了吗 (ARP/ICMP) → W7 HLS 回了吗
     //   → W8/W9 图案 app 发出 → W10/W11 图案 app 收到 → W12 空帧 → W13 图案失配(必须恒 0)
-    //   → W14/W15 **TCP fast path** 的 tx_tx_frame 计数 (⚠️ **不是 MAC**: mac_tx_64.stat_frames
-    //     在本 wrapper 里是悬空的; 图案走 UDP 通路 ⇒ W14/W15 正确读 0, 别当成"MAC 没发")
+    //   → W14/W15 **TCP fast path** 的 tcp_tx_frame 计数 (⚠️ **不是 MAC**: mac_tx_64.stat_frames
+    //     在本 wrapper 里原先悬空, 现在接到了 W20; 图案走 UDP 通路 ⇒ W14/W15 正确读 0,
+    //     别当成"MAC 没发" —— 要看 MAC 发帧数请看 W20)
+    //   → W16 HLS 真读走的字节 (⚡ 与 W6 配对: W6 涨而 W16 不涨 = HLS 不吃了)
+    //   → W17 hls_rst_n 低电平拍数 (÷64 ≈ 饥饿看门狗复位次数; ⚡ 与 W16/W7 同时看)
+    //   → W18 slow_tx_adp 回卷帧数 (⚡ 解释 W7 冻结: 是"没产生"还是"产生了被回卷")
+    //   → W19 slow_rx_adp 丢帧数 (坏 FCS/rx_er/fifo 满/截断)
+    //   → W20 **MAC 级**发帧数 (线上真发出去多少帧; 以前全设计没有这个数)
+    //   → W21 MAC 帧内中止数 (源流断供 ⇒ runt, mac_tx_64.stat_abort)
+    //   → W22 TCP fast path 接受帧数 → W23 TCP fast path 最大丢帧桶 (nonmatch)
     // ⚠️ 拼接项数必须**恰好 SNAP_NW_P6E**: 少一项 ⇒ 高位悬空 (X); 多一项 ⇒ 被截断。
     //    两者都不会被 xvlog 的位宽检查报出来 (不覆盖端口连接) ⇒ 只有全链门能抓
     // ⚠️ `udpapp_*` 的 wire 声明在 wrapper 里是**无条件**的, 但驱动它们的 app_udp_pattern 只在
     //    `ifdef APP_MODE 里 ⇒ 本块与 APP_MODE 是一对 (P6e 构建固定 APP_MODE=1 ✓)。若将来做
     //    "PCIE_OBS 但不带 APP_MODE" 的构建, W8-W13 会是未驱动线 (读出来是 X/0), 不是缺陷。
     always @(posedge gmii_clk or negedge reset_n) begin
-        if (!reset_n) gmii_free <= 32'd0;
-        else          gmii_free <= gmii_free + 32'd1;
+        if (!reset_n) begin
+            gmii_free     <= 32'd0;
+            srx_hls_bytes <= 32'd0;
+            hr_cnt        <= 32'd0;
+        end else begin
+            gmii_free <= gmii_free + 32'd1;
+            // 字节拍数 (见上面 srx_hls_bytes 声明的口径注释) —— 与 slow_rx_adp 的 o_pop 同式
+            if (hls_rx_tvalid && hls_rx_tready) srx_hls_bytes <= srx_hls_bytes + 32'd1;
+            // 看门狗复位脉冲的**持续拍数**; 低电平只 64 拍 ⇒ 采样必漏, 只能累计
+            if (!hls_rst_n)                     hr_cnt        <= hr_cnt + 32'd1;
+        end
     end
 
-    assign snap_src = {tx_stat_bytes,       // W15 MAC 发出字节
-                       tx_stat_frames,      // W14 MAC 发出帧
+    assign snap_src = {rx_stat_nonmatch,    // W23 TCP fast path 最大丢帧桶 (nonmatch)
+                       rx_stat_pass,        // W22 TCP fast path 接受帧数
+                       tx_stat_abort,       // W21 MAC 帧内中止 (源流断供 ⇒ runt; mac_tx_64.stat_abort)
+                       mac_tx_frames,       // W20 **MAC 级**发帧 (原悬空, 本轮接出)
+                       srx_stat_drop,       // W19 slow_rx_adp 丢帧 (坏 FCS/rx_er/fifo 满/截断)
+                       stx_stat_purge,      // W18 slow_tx_adp 回卷帧数 (解释 W7 冻结的那一半)
+                       hr_cnt,              // W17 hls_rst_n 低电平拍数 (÷64 ≈ 看门狗复位次数)
+                       srx_hls_bytes,       // W16 HLS 真读走的字节 (消费侧, 与 W6 配对判读)
+                       tx_stat_bytes,       // W15 TCP fast path 发字节 (⚠️ 不是 MAC; MAC 见 W20)
+                       tx_stat_frames,      // W14 TCP fast path 发帧
                        udpapp_mismatch,     // W13 图案失配 (对端校验不通过; 必须恒 0)
                        udpapp_rx_null,      // W12 空帧/坏帧
                        udpapp_rx_bytes,     // W11 图案 app 收字节 (本板当接收端时)
@@ -2399,7 +2455,8 @@ module wrapper_p4 (
                        rx_stat_frames};     // W0  MAC 收帧
 
     // ---- 3. 相干快照 CDC (gmii_clk → axi_aclk) ----
-    // ⚠️ NW 必须与下面 snap_src 的项数、axi_regs 的读 mux/SLVERR 边界**三处同改** (P6E_OBS.md 已记)
+    // ⚠️ NW 必须与下面 snap_src 的项数、axi_regs 的 `.SNAP_NW` 与读侧 `snap_base` 位宽、
+    //    以及验收脚本的"未实现地址"**五处同改** (完整清单见本段开头声明区)
     snap_cdc #(.W(32), .NW(SNAP_NW_P6E)) u_snap (
         .clk_a      (pcie_axi_aclk),
         .rst_n      (pcie_axi_aresetn),
@@ -2475,8 +2532,9 @@ module wrapper_p4 (
 
     axi_regs #(
         .MAGIC_V    (32'h50360001),
-        .BUILD_ID_V (32'h00000003),     // ⚠️ 每次改动自增 (前置闸读这一项认位流)
+        .BUILD_ID_V (32'h00000004),     // ⚠️ 每次改动自增 (前置闸读这一项认位流)
                                         //    1 = 最小版 / 2 = 合体版 8 字 / 3 = 合体版 16 字
+                                        //    4 = 合体版 24 字 (+ W16-W23 慢路径健康位)
         .SNAP_NW    (SNAP_NW_P6E)       // 必须 = 上面 snap_cdc 的 .NW 和 snap_src 的项数
     ) u_pcie_regs (
         .clk            (pcie_axi_aclk),
