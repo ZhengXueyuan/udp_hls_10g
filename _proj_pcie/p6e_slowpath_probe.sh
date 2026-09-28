@@ -21,12 +21,13 @@
 set -u
 ROUNDS=${1:-100}
 IV=${2:-20}
+# 第 3 个参数 = 每轮 ping 包数 (默认 20 = 密集). 假设: **轻流量才暴露失聪** (见 PORT_NOTES)
 IFACE=enp3s0
 BOARD=192.168.100.2
 TOOLS=/home/a/xdma_test/dma_ip_drivers-patched/XDMA/linux-kernel/tools   # ⚠️ 用长名: 短名 T 曾与"已跑秒数"撞车
 D=/dev/xdma0_user
 LOG=/tmp/p6e_slowpath_probe.log
-PING_N=20
+PING_N=${3:-20}   # 每轮 ping 包数: 第 3 个参数可调 —— **轻流量(2) vs 密集(20) 是待验的关键变量**
 exec > >(tee -a "$LOG") 2>&1
 
 W32=$((1<<32))
@@ -75,7 +76,7 @@ W16_0=${W[16]}; W17_0=${W[17]}
 FIRST_DEAF=""; PREV_PING="-"
 for n in $(seq 1 "$ROUNDS"); do
     prep
-    GOT=$(ping -c $PING_N -i 0.05 -W 1 "$BOARD" 2>/dev/null | grep -oE '[0-9]+ received' | grep -oE '[0-9]+')
+    GOT=$(ping -c $PING_N -W 1 "$BOARD" 2>/dev/null | grep -oE '[0-9]+ received' | grep -oE '[0-9]+')
     GOT=${GOT:-0}
     # 活性自检 + 本进程触发自证: 任一不成立 ⇒ 本行整行不可信, 明确标出来 (别让它伪装成读数)
     M=$(rd 0x00) || M=""; OK=1
