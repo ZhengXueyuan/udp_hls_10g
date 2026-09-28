@@ -2369,7 +2369,8 @@ module wrapper_p4 (
     //   W0 线上有帧吗 → W1 多少字节 → W2 那一帧有多长 (66 vs 1518) → W3 FCS 干净吗
     //   → W4 被丢了吗 → W5 gmii 时钟在跑吗 → W6 慢路径收下了吗 (ARP/ICMP) → W7 HLS 回了吗
     //   → W8/W9 图案 app 发出 → W10/W11 图案 app 收到 → W12 空帧 → W13 图案失配(必须恒 0)
-    //   → W14/W15 MAC 层发出 (与 W8 对账: 有帧没出 MAC = TX 卡住)
+    //   → W14/W15 **TCP fast path** 的 tx_tx_frame 计数 (⚠️ **不是 MAC**: mac_tx_64.stat_frames
+    //     在本 wrapper 里是悬空的; 图案走 UDP 通路 ⇒ W14/W15 正确读 0, 别当成"MAC 没发")
     // ⚠️ 拼接项数必须**恰好 SNAP_NW_P6E**: 少一项 ⇒ 高位悬空 (X); 多一项 ⇒ 被截断。
     //    两者都不会被 xvlog 的位宽检查报出来 (不覆盖端口连接) ⇒ 只有全链门能抓
     // ⚠️ `udpapp_*` 的 wire 声明在 wrapper 里是**无条件**的, 但驱动它们的 app_udp_pattern 只在

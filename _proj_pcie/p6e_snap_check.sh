@@ -134,8 +134,8 @@ cat <<EOF
   W11 0x4c udpapp_rx_bytes   (图案 app 收字节) = $WB
   W12 0x50 udpapp_rx_null    (空/坏帧)         = $WC
   W13 0x54 udpapp_mismatch   (图案失配, 必须0) = $WD
-  W14 0x58 tx_stat_frames    (MAC 发出帧)      = $WE
-  W15 0x5c tx_stat_bytes     (MAC 发出字节)    = $WF
+  W14 0x58 tx_stat_frames    (TCP fast path 发帧) = $WE
+  W15 0x5c tx_stat_bytes     (TCP fast path 发字节) = $WF
 EOF
 echo "  [INFO] 判读: 有 ping 流量时 W0/W1 应涨; 若 W0 涨而 W6 不涨 ⇒ 帧没进慢路径 (ARP/ICMP 收不到);"
 echo "          W6 涨而 W7 不涨 ⇒ HLS 收到了但没回 ⇒ 问题在慢路径/HLS, 不在前端。"
