@@ -65,6 +65,9 @@
 > ④ `axi_regs.SNAP_NW` ⑤ **验收/采样脚本里"未实现地址"的取值** (0x18 → 0x44 → 0x60 → **0x84**),
 >   否则会把"新功能上线"判成回归。⚠️ ⑤ 绝不能挑 **≥0x100**: `ar_word = araddr[7:2]` 只有 6 位
 >   ⇒ **地址每 256 字节回绕** (挑 0x100 ⇒ 别名到 MAGIC ⇒ 假 FAIL; 挑 0x160 ⇒ 别名到已实现字 ⇒ 假 PASS)。
+> ⚠️ **还有第 ⑥ 处最容易漏**: 三道门自己的**参数** —— `tb_axi_regs` 的 `.SNAP_NW`/`snap_din` 位宽/`w8` 长度、
+> `tb_snap_cdc` 的 `NW`、wrapper 门的 force 清单与 BUILD_ID 期望。16 字版当年就是漏了这层,
+> 才让 `snap_base` 的位宽截断一路潜伏到下一次扩窗 (门自己没扩 ⇒ 它"看不见"新字)。
 > 历史上这一轮 (8→16) 被全链门抓到 **3 个 lint 看不见的真 bug** (字号索引回绕 / 去程与回程两条线各
 > 截断 256 位 / 这次的回绕读错字) —— xvlog 的位宽检查**不覆盖端口连接, 也不报窄左端赋值**,
 > 所以只能靠例化真 wrapper 的门 + 逐字读回。
@@ -102,7 +105,9 @@ W6 涨 而 W16 不涨 ⇒ **HLS 真不读了** (W6 只在适配器输入侧帧�
 W17 在涨          ⇒ **饥饿看门狗在反复复位 HLS** (hls_rst_n 低电平累计拍数 ÷ 64 = 复位次数)
                      ⇒ 与 W16 停涨同时出现 = "HLS 卡住 ⇒ 看门狗踢它" 的闭环
 W7 不涨 而 W18 涨 ⇒ HLS **产出了**帧但被 slow_tx_adp 整帧回卷 (别再怪 HLS; 查 wf FIFO 消费侧)
-W20 vs W7         ⇒ **MAC 级**发帧 vs TCP fast path 发帧 —— 分开"没产生"与"没上线"
+W20 vs W7         ⇒ **MAC 级发帧 vs HLS 慢路径发帧** —— 分开"没产生"与"没上线"
+                    ⚠️ W7 = `stx_stat_frames` 是**慢路径**的 (不是 TCP fast path —— 本文件曾标错);
+                    W20 是**全部 TX 源的超集** ⇒ 只有"HLS 是唯一 TX 源"时两者才相等 (板上基线 W20≡W7)
 ```
 
 `W2` (线上帧长) 是现成的判别器: **≈1518 是整帧, ≈66 是短帧** (历史上正是用它分开了
@@ -121,7 +126,8 @@ W20 vs W7         ⇒ **MAC 级**发帧 vs TCP fast path 发帧 —— 分开"�
 |---|---|---|
 | `sim/snapcdc/run_tb_snap_cdc.bat` | snap_cdc 单元门: 相干性(飞行中换束扫 16 相位)/busy/背靠背/复位回收/**时钟停摆恢复** + **撕裂负对照**(证明检查器有判别力) | **PASS_ALL** |
 | `_proj_pcie/run_tb_axi_regs.bat` | 寄存器块单元门 17 项 (含快照窗口/触发脉冲/冻结/中途换代的 gen 守卫负对照) | **PASS_ALL** |
-| `sim/p6e_pcie/run_tb_p6e_pcie.bat` | ⭐ **真 wrapper 全链门**: 把 23 路计数源 force 成互不相同的常数, 从 AXI 侧读回来逐字比对 (24 字全覆盖, 含 0x7C) | **PASS_ALL 24/24** |
+| `sim/p6e_pcie/run_tb_p6e_pcie.bat` | ⭐ **真 wrapper 全链门**: 23 路计数源 force 成互不相同的常数, 从 AXI 侧读回逐字比对 (24 字全覆盖)<br>⚠️ force 必须打**生产者节点**(子模块端口): 打 wrapper 线会**掩盖"生产者↔线断开"** —— 实测把 `mac_tx_frames` 改回悬空, 打线版照样 PASS_ALL, 打生产者节点版当场 FAIL | **PASS_ALL 24/24** |
+| `sim/p6e_pcie/run_tb_p6e_pcie_counters.bat` | ⭐ **新计数器增量门** (2026-09-29 加): 200 拍握手 ⇒ `W16` **恰好 +200**; 150 拍 `hls_rst_n` 低 ⇒ `W17` **恰好 +150**; 含 tvalid-only / tready-only 负向 —— 全链门把这两路 force 成常数, 掩盖了增量条件, 这道补动态那一段 | **PASS_ALL** |
 | `sim/snapcdc/negctrl/run_negctrl_2rst.bat` | 负对照: "两域各自复位会不会死锁" —— **实测不会** (见下) | 结论已改文档 |
 | `_proj_pcie/run_tb_axi_regs.bat` (变异体) | ⭐ **自证判别力**: 把 `snap_base` 临时改回 `[8:0]` ⇒ 单元门必须 FAIL | **实测 FAIL** (13d=8 字错 / 15b=0x320), 改回 `[9:0]` ⇒ PASS_ALL |
 
@@ -251,5 +257,5 @@ d4:3d:7e:de:28:f4 > 00:0a:35:01:fe:c0  Request who-has 192.168.100.2  (42B)
    `S_IFG` 只有数满 12 拍一条出口 ⇒ 每帧都有完整 IFG, 而且网卡 99.8% 收全了 ✓。
    ⇒ **判"板子能跑多快"只能看板子自报 (W8/W9) 或网卡硬件计数**, 不能看用户态 socket 的收包数。
 2. **`W14/W15` 不是 MAC 计数** —— 它们接的是 `tcp_tx_frame` (TCP fast path);
-   `mac_tx_64.stat_frames` 在本 wrapper 里**悬空**。图案走 UDP 通路 ⇒ W14/W15 正确读 0。
-   (若将来要 MAC 级 TX 计数, 把那个悬空端口接出来即可 —— 一行改动。)
+   `mac_tx_64.stat_frames` 当时在本 wrapper 里**悬空**。图案走 UDP 通路 ⇒ W14/W15 正确读 0。
+   ✅ **2026-09-29 已接出 = `W20`** (见寄存器表 §一 与 §八) —— 本段是当时的历史记录, 别按它当现状。
