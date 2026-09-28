@@ -1,0 +1,796 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Sun Sep 27 21:26:19 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source {D:\repo\ECO\udp_hls_10g\p6_verify\p6_verify.tcl}
+# set root_dir D:/repo/ECO/udp_hls_10g
+# set out_dir  ${root_dir}/p6_verify
+# foreach tag {t8p0 t6p4} {
+#     set dcp ${root_dir}/vivado_prj/p6_${tag}_prj.runs/impl_1/wrapper_p4_routed.dcp
+#     puts "\n########## P6 VERIFY: ${tag}  (${dcp}) ##########"
+#     if {![file exists $dcp]} {
+#         puts "P6VERIFY MISSING DCP: $dcp"
+#         continue
+#     }
+#     open_checkpoint $dcp
+# 
+#     report_clocks -file ${out_dir}/p6_${tag}_clocks.rpt
+#     report_timing_summary -max_paths 20 -routable_nets -report_unconstrained \
+#         -file ${out_dir}/p6_${tag}_timing_summary_routed.rpt
+#     report_timing -max_paths 400 -delay_type max -sort_by slack -nworst 400 \
+#         -file ${out_dir}/p6_${tag}_setup_400.rpt
+#     report_timing -max_paths 400 -delay_type min -sort_by slack -nworst 400 \
+#         -file ${out_dir}/p6_${tag}_hold_400.rpt
+#     report_utilization -file ${out_dir}/p6_${tag}_utilization_routed.rpt
+#     report_utilization -hierarchical -hierarchical_depth 2 \
+#         -file ${out_dir}/p6_${tag}_util_hier.rpt
+#     report_route_status -file ${out_dir}/p6_${tag}_route_status.rpt
+# 
+#     # ---- clock period evidence (printed inline, so it lands in the log too) ----
+#     puts "P6CLOCKS ${tag}:"
+#     foreach clk [lsort [get_clocks -quiet]] {
+#         set per [get_property -quiet PERIOD $clk]
+#         set wav [get_property -quiet WAVEFORM $clk]
+#         set gen [get_property -quiet IS_GENERATED $clk]
+#         set src [get_property -quiet SOURCE_PINS $clk]
+#         puts "P6CLOCK ${tag}  $clk  period=${per}  generated=${gen}  waveform=${wav}  src=${src}"
+#     }
+# 
+#     # ---- failing-endpoint census (setup) ----
+#     set fh [open ${out_dir}/p6_${tag}_failing_endpoints.txt w]
+#     puts $fh "# tag=$tag delay_type=max slack_lesser_than=0 nworst=1"
+#     puts $fh "# columns: slack  logic_levels  startpoint_pin  endpoint_pin  path_group"
+#     # cap 20000 worst endpoints -- the exact failing-endpoint total comes from
+#     # the WNS/TNS summary table (TNS Failing Endpoints); this census only feeds
+#     # the per-hierarchy distribution.
+#     set feps [get_timing_paths -quiet -delay_type max -slack_lesser_than 0 \
+#                   -nworst 1 -max_paths 20000]
+#     puts "P6FEP ${tag} setup_failing_endpoint_paths=[llength $feps]"
+#     foreach p $feps {
+#         set s  [get_property -quiet SLACK $p]
+#         set lv [get_property -quiet LOGIC_LEVELS $p]
+#         set sp [get_property -quiet STARTPOINT_PIN $p]
+#         set ep [get_property -quiet ENDPOINT_PIN $p]
+#         set pg [get_property -quiet PATH_GROUP $p]
+#         puts $fh "$s  $lv  $sp  $ep  $pg"
+#     }
+#     close $fh
+# 
+#     # per-2-level-hierarchy failing endpoint histogram (Tcl-side, no python needed)
+#     set hist [dict create]
+#     foreach p $feps {
+#         set ep [get_property -quiet ENDPOINT_PIN $p]
+#         set s  [get_property -quiet SLACK $p]
+#         set leaf [get_property -quiet NAME [get_cells -quiet -of_objects $ep]]
+#         set parts [split $leaf /]
+#         set key [join [lrange $parts 0 1] /]
+#         if {$key eq ""} { set key "?" }
+#         if {[dict exists $hist $key]} {
+#             set cur [dict get $hist $key]
+#             set w [lindex $cur 0]
+#             if {$s < $w} { set w $s }
+#             dict set hist $key [list $w [expr {[lindex $cur 1] + 1}]]
+#         } else {
+#             dict set hist $key [list $s 1]
+#         }
+#     }
+#     puts "P6FEPHIST ${tag} (endpoint 2-level hierarchy: worst_slack count)"
+#     set sorted [lsort -real -index 0 [lmap k [dict keys $hist] {list [lindex [dict get $hist $k] 0] $k [lindex [dict get $hist $k] 1]}]]
+#     foreach e $sorted {
+#         puts "  P6FEPHIST ${tag}  [lindex $e 1]  worst=[lindex $e 0]  count=[lindex $e 2]"
+#     }
+# }
+
+########## P6 VERIFY: t8p0  (D:/repo/ECO/udp_hls_10g/vivado_prj/p6_t8p0_prj.runs/impl_1/wrapper_p4_routed.dcp) ##########
+Command: open_checkpoint D:/repo/ECO/udp_hls_10g/vivado_prj/p6_t8p0_prj.runs/impl_1/wrapper_p4_routed.dcp
+
+Starting open_checkpoint Task
+
+Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.026 . Memory (MB): peak = 319.184 ; gain = 0.000
+INFO: [Device 21-403] Loading part xc7k325tffg676-2
+Netlist sorting complete. Time (s): cpu = 00:00:01 ; elapsed = 00:00:00.426 . Memory (MB): peak = 936.836 ; gain = 0.000
+INFO: [Netlist 29-17] Analyzing 8070 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
+INFO: [Project 1-479] Netlist was created with Vivado 2025.2
+INFO: [Project 1-570] Preparing netlist for logic optimization
+Read ShapeDB Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.144 . Memory (MB): peak = 1126.125 ; gain = 23.867
+INFO: [Timing 38-478] Restoring timing data from binary archive.
+INFO: [Timing 38-479] Binary timing data restore complete.
+INFO: [Project 1-856] Restoring constraints from binary archive.
+INFO: [Project 1-853] Binary constraint restore complete.
+INFO: [Designutils 20-5722] Start Reading Physical Databases.
+Reading placement.
+Read Netlist Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.069 . Memory (MB): peak = 1900.633 ; gain = 0.000
+Reading placer database...
+Read Device Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.009 . Memory (MB): peak = 1900.633 ; gain = 0.000
+Read PlaceDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 1900.633 ; gain = 0.000
+Read placeStorage: Time (s): cpu = 00:00:02 ; elapsed = 00:00:01 . Memory (MB): peak = 1942.551 ; gain = 41.918
+Read PulsedLatchDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 1942.551 ; gain = 0.000
+Reading routing.
+Read RouteStorage: Time (s): cpu = 00:00:01 ; elapsed = 00:00:00.622 . Memory (MB): peak = 1993.578 ; gain = 51.027
+Read Physdb Files: Time (s): cpu = 00:00:03 ; elapsed = 00:00:02 . Memory (MB): peak = 1993.578 ; gain = 92.945
+Restored from archive | CPU: 3.000000 secs | Memory: 0.000000 MB |
+Finished XDEF File Restore: Time (s): cpu = 00:00:03 ; elapsed = 00:00:02 . Memory (MB): peak = 1993.578 ; gain = 92.945
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.024 . Memory (MB): peak = 2095.426 ; gain = 0.000
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 1364 instances were transformed.
+  RAM16X1S => RAM32X1S (RAMS32): 224 instances
+  RAM32M => RAM32M (RAMD32(x6), RAMS32(x2)): 63 instances
+  RAM32X1D => RAM32X1D (RAMD32(x2)): 3 instances
+  RAM64M => RAM64M (RAMD64E(x4)): 933 instances
+  RAM64X1D => RAM64X1D (RAMD64E(x2)): 141 instances
+
+INFO: [Project 1-604] Checkpoint was created with Vivado v2025.2 (64-bit) build 6299465
+open_checkpoint: Time (s): cpu = 00:00:23 ; elapsed = 00:00:22 . Memory (MB): peak = 2101.066 ; gain = 1792.199
+INFO: [Timing 38-91] UpdateTimingParams: Speed grade: -2, Delay Type: min_max.
+INFO: [Timing 38-191] Multithreading enabled for timing update using a maximum of 2 CPUs
+report_timing_summary: Time (s): cpu = 00:00:40 ; elapsed = 00:00:24 . Memory (MB): peak = 2615.281 ; gain = 514.215
+INFO: [Timing 38-91] UpdateTimingParams: Speed grade: -2, Delay Type: max.
+INFO: [Timing 38-191] Multithreading enabled for timing update using a maximum of 2 CPUs
+INFO: [Timing 38-78] ReportTimingParams: -max_paths 400 -nworst 400 -delay_type max -sort_by slack.
+INFO: [Timing 38-91] UpdateTimingParams: Speed grade: -2, Delay Type: min.
+INFO: [Timing 38-191] Multithreading enabled for timing update using a maximum of 2 CPUs
+INFO: [Timing 38-78] ReportTimingParams: -max_paths 400 -nworst 400 -delay_type min -sort_by slack.
+P6CLOCKS t8p0:
+P6CLOCK t8p0  fpga_gclk  period=20.000  generated=0  waveform=0.000 10.000  src=fpga_gclk
+P6CLOCK t8p0  gmii_clk  period=8.000  generated=1  waveform=4.000 8.000  src=u_rgmii/bufmr_rgmii_rxc/O
+P6CLOCK t8p0  phy1_rxc  period=8.000  generated=0  waveform=0.000 4.000  src=phy1_rxc
+P6CLOCK t8p0  ref200_clk_raw  period=5.000  generated=1  waveform=0.000 2.500  src=u_mmcm_ref/CLKOUT0
+P6CLOCK t8p0  ref200_fb  period=20.000  generated=1  waveform=0.000 10.000  src=u_mmcm_ref/CLKFBOUT
+P6FEP t8p0 setup_failing_endpoint_paths=0
+P6FEPHIST t8p0 (endpoint 2-level hierarchy: worst_slack count)
+
+########## P6 VERIFY: t6p4  (D:/repo/ECO/udp_hls_10g/vivado_prj/p6_t6p4_prj.runs/impl_1/wrapper_p4_routed.dcp) ##########
+Command: open_checkpoint D:/repo/ECO/udp_hls_10g/vivado_prj/p6_t6p4_prj.runs/impl_1/wrapper_p4_routed.dcp
+
+Starting open_checkpoint Task
+
+Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2615.281 ; gain = 0.000
+Netlist sorting complete. Time (s): cpu = 00:00:01 ; elapsed = 00:00:00.432 . Memory (MB): peak = 2619.887 ; gain = 0.000
+INFO: [Netlist 29-17] Analyzing 8070 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
+INFO: [Project 1-479] Netlist was created with Vivado 2025.2
+INFO: [Project 1-570] Preparing netlist for logic optimization
+Read ShapeDB Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.142 . Memory (MB): peak = 2747.180 ; gain = 27.344
+INFO: [Timing 38-478] Restoring timing data from binary archive.
+INFO: [Timing 38-479] Binary timing data restore complete.
+INFO: [Project 1-856] Restoring constraints from binary archive.
+INFO: [Project 1-853] Binary constraint restore complete.
+INFO: [Designutils 20-5722] Start Reading Physical Databases.
+Reading placement.
+Read Netlist Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.069 . Memory (MB): peak = 3013.438 ; gain = 0.000
+Reading placer database...
+Read Device Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.008 . Memory (MB): peak = 3013.438 ; gain = 0.000
+Read PlaceDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 3013.438 ; gain = 0.000
+Read placeStorage: Time (s): cpu = 00:00:01 ; elapsed = 00:00:01 . Memory (MB): peak = 3055.203 ; gain = 41.766
+Read PulsedLatchDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 3055.203 ; gain = 0.000
+Reading routing.
+Read RouteStorage: Time (s): cpu = 00:00:01 ; elapsed = 00:00:00.651 . Memory (MB): peak = 3100.008 ; gain = 44.805
+Read Physdb Files: Time (s): cpu = 00:00:02 ; elapsed = 00:00:02 . Memory (MB): peak = 3100.008 ; gain = 86.570
+Restored from archive | CPU: 2.000000 secs | Memory: 0.000000 MB |
+Finished XDEF File Restore: Time (s): cpu = 00:00:02 ; elapsed = 00:00:02 . Memory (MB): peak = 3100.008 ; gain = 86.570
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.029 . Memory (MB): peak = 3198.250 ; gain = 0.000
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 1364 instances were transformed.
+  RAM16X1S => RAM32X1S (RAMS32): 224 instances
+  RAM32M => RAM32M (RAMD32(x6), RAMS32(x2)): 63 instances
+  RAM32X1D => RAM32X1D (RAMD32(x2)): 3 instances
+  RAM64M => RAM64M (RAMD64E(x4)): 933 instances
+  RAM64X1D => RAM64X1D (RAMD64E(x2)): 141 instances
+
+INFO: [Project 1-604] Checkpoint was created with Vivado v2025.2 (64-bit) build 6299465
+open_checkpoint: Time (s): cpu = 00:00:13 ; elapsed = 00:00:12 . Memory (MB): peak = 3205.219 ; gain = 589.938
+INFO: [Timing 38-91] UpdateTimingParams: Speed grade: -2, Delay Type: min_max.
+INFO: [Timing 38-191] Multithreading enabled for timing update using a maximum of 2 CPUs
+report_timing_summary: Time (s): cpu = 00:00:42 ; elapsed = 00:00:25 . Memory (MB): peak = 3647.012 ; gain = 441.793
+INFO: [Timing 38-91] UpdateTimingParams: Speed grade: -2, Delay Type: max.
+INFO: [Timing 38-191] Multithreading enabled for timing update using a maximum of 2 CPUs
+INFO: [Timing 38-78] ReportTimingParams: -max_paths 400 -nworst 400 -delay_type max -sort_by slack.
+INFO: [Timing 38-91] UpdateTimingParams: Speed grade: -2, Delay Type: min.
+INFO: [Timing 38-191] Multithreading enabled for timing update using a maximum of 2 CPUs
+INFO: [Timing 38-78] ReportTimingParams: -max_paths 400 -nworst 400 -delay_type min -sort_by slack.
+P6CLOCKS t6p4:
+P6CLOCK t6p4  fpga_gclk  period=20.000  generated=0  waveform=0.000 10.000  src=fpga_gclk
+P6CLOCK t6p4  gmii_clk  period=6.400  generated=1  waveform=3.200 6.400  src=u_rgmii/bufmr_rgmii_rxc/O
+P6CLOCK t6p4  phy1_rxc  period=6.400  generated=0  waveform=0.000 3.200  src=phy1_rxc
+P6CLOCK t6p4  ref200_clk_raw  period=5.000  generated=1  waveform=0.000 2.500  src=u_mmcm_ref/CLKOUT0
+P6CLOCK t6p4  ref200_fb  period=20.000  generated=1  waveform=0.000 10.000  src=u_mmcm_ref/CLKFBOUT
+P6FEP t6p4 setup_failing_endpoint_paths=647
+P6FEPHIST t6p4 (endpoint 2-level hierarchy: worst_slack count)
+  P6FEPHIST t6p4  u_udp_tx/ip_csum_r_reg[13]  worst=-0.948  count=1
+  P6FEPHIST t6p4  u_udp_tx/ip_csum_r_reg[15]  worst=-0.896  count=1
+  P6FEPHIST t6p4  u_udp_tx/ip_csum_r_reg[14]  worst=-0.867  count=1
+  P6FEPHIST t6p4  u_udp_tx/ip_csum_r_reg[9]  worst=-0.865  count=1
+  P6FEPHIST t6p4  u_udp_tx/ip_csum_r_reg[12]  worst=-0.864  count=1
+  P6FEPHIST t6p4  u_udp_tx/ip_csum_r_reg[5]  worst=-0.844  count=1
+  P6FEPHIST t6p4  u_udp_tx/ip_csum_r_reg[8]  worst=-0.838  count=1
+  P6FEPHIST t6p4  u_udp_tx/ip_csum_r_reg[7]  worst=-0.826  count=1
+  P6FEPHIST t6p4  u_udp_tx/ip_csum_r_reg[10]  worst=-0.811  count=1
+  P6FEPHIST t6p4  u_udp_tx/ip_csum_r_reg[6]  worst=-0.790  count=1
+  P6FEPHIST t6p4  u_udp_tx/ip_csum_r_reg[4]  worst=-0.788  count=1
+  P6FEPHIST t6p4  u_udp_tx/ip_csum_r_reg[11]  worst=-0.732  count=1
+  P6FEPHIST t6p4  u_app_ctrl/pool_reg[11]  worst=-0.455  count=1
+  P6FEPHIST t6p4  u_tcp_tx/ip_csum_r_reg[12]  worst=-0.433  count=1
+  P6FEPHIST t6p4  u_udp_tx/ip_csum_r_reg[3]  worst=-0.432  count=1
+  P6FEPHIST t6p4  u_udp_tx/ip_csum_r_reg[1]  worst=-0.425  count=1
+  P6FEPHIST t6p4  u_udp_tx/ip_csum_r_reg[2]  worst=-0.409  count=1
+  P6FEPHIST t6p4  u_tcp_tx/ip_csum_r_reg[13]  worst=-0.398  count=1
+  P6FEPHIST t6p4  u_tcp_tx/ip_csum_r_reg[15]  worst=-0.389  count=1
+  P6FEPHIST t6p4  u_tcp_tx/ip_csum_r_reg[8]  worst=-0.387  count=1
+  P6FEPHIST t6p4  u_tcp_rx/FSM_sequential_state_reg[2]  worst=-0.381  count=1
+  P6FEPHIST t6p4  u_tcp_tx/ip_csum_r_reg[7]  worst=-0.370  count=1
+  P6FEPHIST t6p4  u_tcp_tx/ip_csum_r_reg[9]  worst=-0.353  count=1
+  P6FEPHIST t6p4  u_app_ctrl/pool_reg[2]  worst=-0.351  count=1
+  P6FEPHIST t6p4  u_app_ctrl/pool_reg[14]  worst=-0.350  count=1
+  P6FEPHIST t6p4  u_app/tx_lfsr_reg[14]  worst=-0.348  count=1
+  P6FEPHIST t6p4  u_tcp_tx/ip_csum_r_reg[14]  worst=-0.344  count=1
+  P6FEPHIST t6p4  u_tcp_tx/ip_csum_r_reg[11]  worst=-0.334  count=1
+  P6FEPHIST t6p4  u_app_ctrl/pool_reg[4]  worst=-0.330  count=1
+  P6FEPHIST t6p4  u_tcp_tx/ip_csum_r_reg[10]  worst=-0.327  count=1
+  P6FEPHIST t6p4  u_udp_tx/ip_csum_r_reg[0]  worst=-0.327  count=1
+  P6FEPHIST t6p4  u_app_ctrl/pool_reg[9]  worst=-0.325  count=1
+  P6FEPHIST t6p4  u_app_ctrl/pool_reg[0]  worst=-0.317  count=1
+  P6FEPHIST t6p4  u_tcp_tx/u_csum  worst=-0.307  count=18
+  P6FEPHIST t6p4  u_tcp_tx/ip_csum_r_reg[5]  worst=-0.299  count=1
+  P6FEPHIST t6p4  u_app_ctrl/pool_reg[1]  worst=-0.282  count=1
+  P6FEPHIST t6p4  u_tcp_tx/total_len_r_reg[7]  worst=-0.267  count=2
+  P6FEPHIST t6p4  u_app/tx_lfsr_reg[13]  worst=-0.267  count=1
+  P6FEPHIST t6p4  u_udp_split/u_udp_rx  worst=-0.264  count=19
+  P6FEPHIST t6p4  u_tcp_tx/ip_csum_r_reg[2]  worst=-0.261  count=1
+  P6FEPHIST t6p4  u_app_ctrl/pool_reg[8]  worst=-0.257  count=1
+  P6FEPHIST t6p4  u_tcp_tx/ip_csum_r_reg[3]  worst=-0.255  count=1
+  P6FEPHIST t6p4  u_tcp_tx/ip_csum_r_reg[4]  worst=-0.252  count=1
+  P6FEPHIST t6p4  u_tcp_tx/ip_csum_r_reg[6]  worst=-0.245  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][0]  worst=-0.233  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][10]  worst=-0.233  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][18]  worst=-0.233  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][1]  worst=-0.233  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][21]  worst=-0.233  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][22]  worst=-0.233  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][2]  worst=-0.233  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][31]  worst=-0.233  count=1
+  P6FEPHIST t6p4  u_app_ctrl/pool_reg[7]  worst=-0.233  count=1
+  P6FEPHIST t6p4  u_app_ctrl/pool_reg[12]  worst=-0.233  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[10]  worst=-0.222  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[11]  worst=-0.222  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[18]  worst=-0.222  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[19]  worst=-0.222  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[26]  worst=-0.222  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[27]  worst=-0.222  count=1
+  P6FEPHIST t6p4  u_app_ctrl/pool_reg[5]  worst=-0.211  count=2
+  P6FEPHIST t6p4  u_app_ctrl/pool_reg[3]  worst=-0.200  count=1
+  P6FEPHIST t6p4  u_app_ctrl/pool_reg[13]  worst=-0.200  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[28]  worst=-0.193  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[29]  worst=-0.193  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[30]  worst=-0.193  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[31]  worst=-0.193  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[14][12]  worst=-0.189  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[14][1]  worst=-0.189  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[14][2]  worst=-0.189  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[14][3]  worst=-0.189  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[14][4]  worst=-0.189  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[14][5]  worst=-0.189  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[14][6]  worst=-0.189  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[14][8]  worst=-0.189  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[11][25]  worst=-0.187  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[22]  worst=-0.186  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[23]  worst=-0.186  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[30]  worst=-0.186  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[31]  worst=-0.186  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[20]  worst=-0.183  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[21]  worst=-0.183  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[22]  worst=-0.183  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[23]  worst=-0.183  count=1
+  P6FEPHIST t6p4  u_tcp_tx/ip_csum_r_reg[1]  worst=-0.182  count=1
+  P6FEPHIST t6p4  u_app_ctrl/pool_reg[10]  worst=-0.181  count=2
+  P6FEPHIST t6p4  u_app/stg_reg[14]  worst=-0.177  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[15]  worst=-0.177  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[38]  worst=-0.177  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[39]  worst=-0.177  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[50]  worst=-0.177  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[51]  worst=-0.177  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[58]  worst=-0.177  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[59]  worst=-0.177  count=1
+  P6FEPHIST t6p4  u_app_ctrl/pool_reg[15]  worst=-0.175  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[10][5]  worst=-0.171  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[10][6]  worst=-0.171  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[13][9]  worst=-0.166  count=1
+  P6FEPHIST t6p4  u_tcp_tx/u_ackq  worst=-0.164  count=3
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[13][11]  worst=-0.164  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[13][18]  worst=-0.164  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[13][19]  worst=-0.164  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[13][25]  worst=-0.164  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[4][11]  worst=-0.163  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[4][12]  worst=-0.163  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[4][1]  worst=-0.163  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[4][2]  worst=-0.163  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[4][3]  worst=-0.163  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[4][5]  worst=-0.163  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[4][6]  worst=-0.163  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[4][9]  worst=-0.163  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[13][26]  worst=-0.161  count=1
+  P6FEPHIST t6p4  u_tcp_tx/total_len_r_reg[4]  worst=-0.161  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[6][18]  worst=-0.160  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[6][21]  worst=-0.160  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[13][12]  worst=-0.160  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[13][14]  worst=-0.160  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[13][15]  worst=-0.160  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[10]  worst=-0.159  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[11]  worst=-0.159  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[8]  worst=-0.159  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[9]  worst=-0.159  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[15][30]  worst=-0.155  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][12]  worst=-0.152  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][15]  worst=-0.152  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][17]  worst=-0.152  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][23]  worst=-0.152  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][24]  worst=-0.152  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][28]  worst=-0.152  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][6]  worst=-0.152  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[13][4]  worst=-0.152  count=1
+  P6FEPHIST t6p4  u_app_ctrl/pool_reg[6]  worst=-0.148  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][11]  worst=-0.147  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][13]  worst=-0.147  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][14]  worst=-0.147  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][16]  worst=-0.147  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][20]  worst=-0.147  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][3]  worst=-0.147  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][4]  worst=-0.147  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][9]  worst=-0.147  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[13][8]  worst=-0.146  count=1
+  P6FEPHIST t6p4  u_tcp_echo/u_fifo  worst=-0.145  count=4
+  P6FEPHIST t6p4  u_app/stg_reg[20]  worst=-0.144  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[21]  worst=-0.144  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[28]  worst=-0.144  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[29]  worst=-0.144  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[36]  worst=-0.144  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[37]  worst=-0.144  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[44]  worst=-0.144  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[45]  worst=-0.144  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[8][2]  worst=-0.140  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[15][6]  worst=-0.138  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[7][10]  worst=-0.137  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[7][19]  worst=-0.137  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[7][22]  worst=-0.137  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[7][25]  worst=-0.137  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[7][28]  worst=-0.137  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[7][29]  worst=-0.137  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[7][30]  worst=-0.137  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[7][31]  worst=-0.137  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[34]  worst=-0.135  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[35]  worst=-0.135  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[46]  worst=-0.135  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[47]  worst=-0.135  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[54]  worst=-0.135  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[55]  worst=-0.135  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[62]  worst=-0.135  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[63]  worst=-0.135  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][19]  worst=-0.132  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][25]  worst=-0.132  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][26]  worst=-0.132  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][27]  worst=-0.132  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][29]  worst=-0.132  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][30]  worst=-0.132  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][5]  worst=-0.132  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][7]  worst=-0.132  count=1
+  P6FEPHIST t6p4  u_tcp_tx/ip_csum_r_reg[0]  worst=-0.131  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[6][3]  worst=-0.130  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[7][6]  worst=-0.129  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[6]  worst=-0.129  count=2
+  P6FEPHIST t6p4  u_tcp_tx/tcp_len_r_reg[10]  worst=-0.127  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[16]  worst=-0.127  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[17]  worst=-0.127  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[2]  worst=-0.127  count=2
+  P6FEPHIST t6p4  u_app/stg_reg[4]  worst=-0.127  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[56]  worst=-0.127  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[57]  worst=-0.127  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[15][29]  worst=-0.127  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[15][3]  worst=-0.127  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[15][5]  worst=-0.127  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[0]  worst=-0.125  count=2
+  P6FEPHIST t6p4  u_app/stg_reg[12]  worst=-0.125  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[13]  worst=-0.125  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[42]  worst=-0.125  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[43]  worst=-0.125  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[52]  worst=-0.125  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[53]  worst=-0.125  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[60]  worst=-0.125  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[61]  worst=-0.125  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[11][11]  worst=-0.124  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[11][1]  worst=-0.124  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[11][2]  worst=-0.124  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[11][3]  worst=-0.124  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[11][5]  worst=-0.124  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[11][9]  worst=-0.124  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[7][12]  worst=-0.124  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[7][15]  worst=-0.122  count=1
+  P6FEPHIST t6p4  u_tcp_rx/FSM_sequential_state_reg[1]  worst=-0.120  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[13][23]  worst=-0.119  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[7]  worst=-0.116  count=2
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[11][11]  worst=-0.109  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[24]  worst=-0.106  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[25]  worst=-0.106  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[26]  worst=-0.106  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[27]  worst=-0.106  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[8][30]  worst=-0.106  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[7][7]  worst=-0.103  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[8][7]  worst=-0.100  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[8][9]  worst=-0.100  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[16]  worst=-0.099  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[17]  worst=-0.099  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[18]  worst=-0.099  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[19]  worst=-0.099  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[10][12]  worst=-0.099  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[10][13]  worst=-0.099  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[10][20]  worst=-0.099  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[10][23]  worst=-0.099  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[10][24]  worst=-0.099  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[10][27]  worst=-0.099  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[10][29]  worst=-0.099  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[10][5]  worst=-0.099  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[13][8]  worst=-0.097  count=1
+  P6FEPHIST t6p4  u_tcp_rx/FSM_sequential_state_reg[0]  worst=-0.096  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[12][21]  worst=-0.091  count=1
+  P6FEPHIST t6p4  u_tcp_tx/total_len_r_reg[3]  worst=-0.090  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[12]  worst=-0.087  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[13]  worst=-0.087  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[14]  worst=-0.087  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[15]  worst=-0.087  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[12][23]  worst=-0.087  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[12][25]  worst=-0.087  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[12][26]  worst=-0.087  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[12][28]  worst=-0.087  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[12][31]  worst=-0.087  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[12][4]  worst=-0.087  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[12][6]  worst=-0.087  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[12][7]  worst=-0.087  count=1
+  P6FEPHIST t6p4  u_tcp_tx/tcp_len_r_reg[8]  worst=-0.086  count=1
+  P6FEPHIST t6p4  u_tcp_rx/wcnt_reg[1]  worst=-0.085  count=1
+  P6FEPHIST t6p4  u_tcp_tx/FSM_sequential_state_reg[1]  worst=-0.085  count=1
+  P6FEPHIST t6p4  u_tcp_rx/wcnt_reg[2]  worst=-0.084  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[4]  worst=-0.083  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[5]  worst=-0.083  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[6]  worst=-0.083  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[7]  worst=-0.083  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[13][5]  worst=-0.083  count=1
+  P6FEPHIST t6p4  u_tcp_tx/u_retx  worst=-0.082  count=9
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[12][11]  worst=-0.080  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[12][13]  worst=-0.080  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[12][16]  worst=-0.080  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[12][1]  worst=-0.080  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[12][24]  worst=-0.080  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[12][3]  worst=-0.080  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[12][5]  worst=-0.080  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[12][8]  worst=-0.080  count=1
+  P6FEPHIST t6p4  u_app/tx_lfsr_reg[20]  worst=-0.078  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[5][15]  worst=-0.078  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[5][2]  worst=-0.078  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[5][8]  worst=-0.078  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[12][29]  worst=-0.078  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[12][30]  worst=-0.078  count=1
+  P6FEPHIST t6p4  u_hls/l1_cache_valid_U  worst=-0.076  count=2
+  P6FEPHIST t6p4  u_tcb/snd_wnd_r_reg[0][0]  worst=-0.073  count=1
+  P6FEPHIST t6p4  u_tcb/snd_wnd_r_reg[0][11]  worst=-0.073  count=1
+  P6FEPHIST t6p4  u_tcb/snd_wnd_r_reg[0][12]  worst=-0.073  count=1
+  P6FEPHIST t6p4  u_tcb/snd_wnd_r_reg[0][13]  worst=-0.073  count=1
+  P6FEPHIST t6p4  u_tcb/snd_wnd_r_reg[0][15]  worst=-0.073  count=1
+  P6FEPHIST t6p4  u_tcb/snd_wnd_r_reg[0][1]  worst=-0.073  count=1
+  P6FEPHIST t6p4  u_tcb/snd_wnd_r_reg[0][4]  worst=-0.073  count=1
+  P6FEPHIST t6p4  u_tcb/snd_wnd_r_reg[0][5]  worst=-0.073  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[15][28]  worst=-0.072  count=1
+  P6FEPHIST t6p4  u_tcp_tx/total_len_r_reg[2]  worst=-0.071  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fc_val_r_reg[6]  worst=-0.071  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[11][10]  worst=-0.071  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[11][7]  worst=-0.071  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[11][9]  worst=-0.071  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fin_to_reg[7][11]  worst=-0.071  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fin_to_reg[7][12]  worst=-0.071  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fin_to_reg[7][14]  worst=-0.071  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[4][8]  worst=-0.066  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fc_val_r_reg[10]  worst=-0.066  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fc_val_r_reg[3]  worst=-0.066  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[5][10]  worst=-0.065  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[5][14]  worst=-0.065  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[5][16]  worst=-0.065  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[5][1]  worst=-0.065  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[5][22]  worst=-0.065  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[5][26]  worst=-0.065  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[5][27]  worst=-0.065  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[5][8]  worst=-0.065  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[13][15]  worst=-0.064  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[3][24]  worst=-0.064  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[3][3]  worst=-0.064  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[3][5]  worst=-0.064  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[3][7]  worst=-0.064  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[3][8]  worst=-0.064  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[3][9]  worst=-0.064  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[3][10]  worst=-0.064  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[0][10]  worst=-0.064  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[0][13]  worst=-0.064  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[0][15]  worst=-0.064  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[0][1]  worst=-0.064  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[0][2]  worst=-0.064  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[0][5]  worst=-0.064  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[0][8]  worst=-0.064  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[0][9]  worst=-0.064  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fc_val_r_reg[14]  worst=-0.062  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[3][15]  worst=-0.062  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[7][15]  worst=-0.061  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[7][9]  worst=-0.061  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][24]  worst=-0.061  count=1
+  P6FEPHIST t6p4  u_tcp_tx/total_len_r_reg[8]  worst=-0.060  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fc_pend_reg[13]  worst=-0.060  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[0]  worst=-0.060  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[1]  worst=-0.060  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[2]  worst=-0.060  count=1
+  P6FEPHIST t6p4  u_tcp_rx/stat_drop_ipcsum_reg[3]  worst=-0.060  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fin_to_reg[7][3]  worst=-0.060  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fin_to_reg[7][4]  worst=-0.060  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fin_to_reg[7][6]  worst=-0.060  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fc_val_r_reg[13]  worst=-0.059  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fc_val_r_reg[5]  worst=-0.059  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fc_val_r_reg[8]  worst=-0.059  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fin_to_reg[7][8]  worst=-0.059  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[11][16]  worst=-0.058  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[11][17]  worst=-0.058  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[11][18]  worst=-0.058  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[11][19]  worst=-0.058  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[11][21]  worst=-0.058  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[11][22]  worst=-0.058  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[11][30]  worst=-0.058  count=1
+  P6FEPHIST t6p4  u_hls/buffer_r_U  worst=-0.057  count=3
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[11][4]  worst=-0.056  count=1
+  P6FEPHIST t6p4  u_tcp_tx/ring_d_r_reg[59]  worst=-0.056  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[11][14]  worst=-0.054  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[0][0]  worst=-0.054  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[0][11]  worst=-0.054  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[0][12]  worst=-0.054  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[0][14]  worst=-0.054  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[0][3]  worst=-0.054  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[0][4]  worst=-0.054  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[0][6]  worst=-0.054  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[0][7]  worst=-0.054  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[15][4]  worst=-0.054  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[13][12]  worst=-0.054  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[13][14]  worst=-0.054  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[13][29]  worst=-0.054  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[13][3]  worst=-0.054  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[13][4]  worst=-0.054  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[13][8]  worst=-0.054  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[13][9]  worst=-0.054  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[24]  worst=-0.053  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[25]  worst=-0.053  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[40]  worst=-0.053  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[41]  worst=-0.053  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[48]  worst=-0.053  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[49]  worst=-0.053  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[8]  worst=-0.053  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[9]  worst=-0.053  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fc_val_r_reg[1]  worst=-0.052  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[13][3]  worst=-0.052  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[10][13]  worst=-0.051  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[10][15]  worst=-0.051  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[10][2]  worst=-0.051  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[10][7]  worst=-0.051  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[10][8]  worst=-0.051  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[10][9]  worst=-0.051  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[10][21]  worst=-0.051  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[7][12]  worst=-0.050  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[7][14]  worst=-0.050  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[7][15]  worst=-0.050  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[7][21]  worst=-0.050  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[7][26]  worst=-0.050  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[7][27]  worst=-0.050  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[7][6]  worst=-0.050  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[7][9]  worst=-0.050  count=1
+  P6FEPHIST t6p4  u_app_ctrl/st_pend_reg[13]  worst=-0.050  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[10][1]  worst=-0.050  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[10][24]  worst=-0.050  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[10][2]  worst=-0.050  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[10][8]  worst=-0.050  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[10][9]  worst=-0.050  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[6][0]  worst=-0.050  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fc_val_r_reg[9]  worst=-0.049  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fin_to_reg[7][0]  worst=-0.047  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fin_to_reg[7][16]  worst=-0.047  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[7][8]  worst=-0.047  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[9][8]  worst=-0.046  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[7][5]  worst=-0.045  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[9][14]  worst=-0.043  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[9][20]  worst=-0.043  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[9][23]  worst=-0.043  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[9][28]  worst=-0.043  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[9][2]  worst=-0.043  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[9][5]  worst=-0.043  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[9][8]  worst=-0.043  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[14][5]  worst=-0.043  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[14][14]  worst=-0.042  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[15][23]  worst=-0.042  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[7][13]  worst=-0.042  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[8][18]  worst=-0.041  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[8][19]  worst=-0.041  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[8][20]  worst=-0.041  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[8][21]  worst=-0.041  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[8][22]  worst=-0.041  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[8][26]  worst=-0.041  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[8][31]  worst=-0.041  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[8][5]  worst=-0.041  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[11][13]  worst=-0.038  count=1
+  P6FEPHIST t6p4  u_tcp_rx/wcnt_reg[0]  worst=-0.038  count=1
+  P6FEPHIST t6p4  u_tcp_tx/total_len_r_reg[9]  worst=-0.037  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[11][10]  worst=-0.037  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[11][26]  worst=-0.037  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[11][28]  worst=-0.037  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[11][2]  worst=-0.037  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[11][31]  worst=-0.037  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[11][4]  worst=-0.037  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[11][7]  worst=-0.037  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][17]  worst=-0.036  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][18]  worst=-0.036  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][26]  worst=-0.036  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][30]  worst=-0.036  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][11]  worst=-0.034  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][20]  worst=-0.034  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][21]  worst=-0.034  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][23]  worst=-0.034  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][2]  worst=-0.034  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][3]  worst=-0.034  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][4]  worst=-0.034  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][7]  worst=-0.034  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[7][4]  worst=-0.033  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[15][12]  worst=-0.033  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[7][3]  worst=-0.033  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][16]  worst=-0.033  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][18]  worst=-0.033  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][19]  worst=-0.033  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][21]  worst=-0.033  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][23]  worst=-0.033  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][25]  worst=-0.033  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][8]  worst=-0.033  count=1
+  P6FEPHIST t6p4  u_tcp_rx/drop_ack_reg  worst=-0.032  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[15][9]  worst=-0.032  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[10][23]  worst=-0.031  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fin_to_reg[7][5]  worst=-0.031  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fin_to_reg[10][3]  worst=-0.031  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fin_to_reg[10][8]  worst=-0.031  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fin_to_reg[10][11]  worst=-0.031  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fin_to_reg[10][6]  worst=-0.031  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[1]  worst=-0.030  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[32]  worst=-0.030  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[33]  worst=-0.030  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[3]  worst=-0.030  count=1
+  P6FEPHIST t6p4  u_app/stg_reg[5]  worst=-0.030  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[13][0]  worst=-0.030  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[13][10]  worst=-0.030  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[13][7]  worst=-0.030  count=1
+  P6FEPHIST t6p4  u_hls/l1_age_U  worst=-0.030  count=2
+  P6FEPHIST t6p4  u_app_ctrl/st_pend_reg[10]  worst=-0.029  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[3][23]  worst=-0.028  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[7][4]  worst=-0.025  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[7][9]  worst=-0.023  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fc_sel_r_reg[2]  worst=-0.023  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fc_val_r_reg[0]  worst=-0.023  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fc_val_r_reg[15]  worst=-0.023  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fc_val_r_reg[2]  worst=-0.023  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fc_val_r_reg[4]  worst=-0.023  count=1
+  P6FEPHIST t6p4  u_app_ctrl/wu_pend_reg[13]  worst=-0.021  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[13][11]  worst=-0.021  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[13][12]  worst=-0.021  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[13][13]  worst=-0.021  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[13][20]  worst=-0.021  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[13][22]  worst=-0.021  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[13][28]  worst=-0.021  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[13][2]  worst=-0.021  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[13][6]  worst=-0.021  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[14][15]  worst=-0.020  count=1
+  P6FEPHIST t6p4  u_tcb/snd_wnd_r_reg[0][14]  worst=-0.020  count=1
+  P6FEPHIST t6p4  u_tcb/snd_wnd_r_reg[0][2]  worst=-0.020  count=1
+  P6FEPHIST t6p4  u_tcb/snd_wnd_r_reg[0][3]  worst=-0.020  count=1
+  P6FEPHIST t6p4  u_tcb/snd_wnd_r_reg[0][6]  worst=-0.020  count=1
+  P6FEPHIST t6p4  u_tcb/snd_wnd_r_reg[0][7]  worst=-0.020  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[8][24]  worst=-0.019  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[15][12]  worst=-0.018  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[15][13]  worst=-0.018  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[15][14]  worst=-0.018  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[15][25]  worst=-0.018  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[15][26]  worst=-0.018  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[15][29]  worst=-0.018  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[15][3]  worst=-0.018  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][0]  worst=-0.018  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[14][10]  worst=-0.017  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[15][27]  worst=-0.016  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[7][8]  worst=-0.016  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[15][10]  worst=-0.015  count=1
+  P6FEPHIST t6p4  u_tcp_tx/tcp_len_r_reg[9]  worst=-0.015  count=1
+  P6FEPHIST t6p4  u_tcp_tx/total_len_r_reg[10]  worst=-0.015  count=1
+  P6FEPHIST t6p4  u_tcp_tx/total_len_r_reg[11]  worst=-0.015  count=1
+  P6FEPHIST t6p4  u_tcp_tx/total_len_r_reg[6]  worst=-0.015  count=2
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[10][30]  worst=-0.015  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[10][31]  worst=-0.015  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[1][12]  worst=-0.014  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[1][1]  worst=-0.014  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[1][6]  worst=-0.014  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[1][7]  worst=-0.014  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[15][17]  worst=-0.014  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[15][18]  worst=-0.014  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[15][24]  worst=-0.014  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[15][26]  worst=-0.014  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[15][27]  worst=-0.014  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[15][31]  worst=-0.014  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[15][6]  worst=-0.014  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[15][8]  worst=-0.014  count=1
+  P6FEPHIST t6p4  u_tcp_tx/ring_d_r_reg[33]  worst=-0.013  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][12]  worst=-0.013  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][14]  worst=-0.013  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][15]  worst=-0.013  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][17]  worst=-0.013  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][1]  worst=-0.013  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][26]  worst=-0.013  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][28]  worst=-0.013  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][29]  worst=-0.013  count=1
+  P6FEPHIST t6p4  trace_mem_reg[1487]  worst=-0.012  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[6][12]  worst=-0.012  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[6][14]  worst=-0.012  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[6][27]  worst=-0.012  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[6][28]  worst=-0.012  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[6][29]  worst=-0.012  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[6][2]  worst=-0.012  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[6][6]  worst=-0.012  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[10][6]  worst=-0.011  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][10]  worst=-0.010  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][12]  worst=-0.010  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][27]  worst=-0.010  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][5]  worst=-0.010  count=1
+  P6FEPHIST t6p4  trace_mem_reg[335]  worst=-0.010  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fin_to_reg[7][10]  worst=-0.010  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fin_to_reg[7][9]  worst=-0.010  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[7][10]  worst=-0.010  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[7][7]  worst=-0.010  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[8][0]  worst=-0.009  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[8][10]  worst=-0.009  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[8][11]  worst=-0.009  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[8][12]  worst=-0.009  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[8][6]  worst=-0.009  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[8][7]  worst=-0.009  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[8][8]  worst=-0.009  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_wnd_r_reg[8][9]  worst=-0.009  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fc_val_r_reg[11]  worst=-0.008  count=1
+  P6FEPHIST t6p4  u_tcb/snd_nxt_r_reg[12][2]  worst=-0.008  count=1
+  P6FEPHIST t6p4  u_dbg_line/cur_reg[5]  worst=-0.006  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][11]  worst=-0.006  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][13]  worst=-0.006  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][22]  worst=-0.006  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][2]  worst=-0.006  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][31]  worst=-0.006  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][3]  worst=-0.006  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][4]  worst=-0.006  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[2][5]  worst=-0.006  count=1
+  P6FEPHIST t6p4  u_tcb/rcv_nxt_r_reg[6][8]  worst=-0.005  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[11][8]  worst=-0.005  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[15][11]  worst=-0.003  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[15][12]  worst=-0.003  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[15][19]  worst=-0.003  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[15][20]  worst=-0.003  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[15][2]  worst=-0.003  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[15][30]  worst=-0.003  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[15][5]  worst=-0.003  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[15][9]  worst=-0.003  count=1
+  P6FEPHIST t6p4  u_app_ctrl/fin_to_reg[7][2]  worst=-0.003  count=1
+  P6FEPHIST t6p4  u_app/tx_lfsr_reg[26]  worst=-0.003  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][13]  worst=-0.002  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][15]  worst=-0.002  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][6]  worst=-0.002  count=1
+  P6FEPHIST t6p4  u_tcb/snd_una_r_reg[13][9]  worst=-0.002  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[8][12]  worst=-0.001  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[8][15]  worst=-0.001  count=1
+  P6FEPHIST t6p4  u_app_ctrl/winq_reg[8][3]  worst=-0.001  count=1
+# puts "\n===== P6 VERIFY DONE: reports in ${out_dir} ====="
+
+===== P6 VERIFY DONE: reports in D:/repo/ECO/udp_hls_10g/p6_verify =====
+# exit
+INFO: [Common 17-206] Exiting Vivado at Sun Sep 27 21:28:00 2026...

@@ -1,0 +1,192 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Sun Sep 27 21:32:01 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source {D:\repo\ECO\udp_hls_10g\p6_verify\p6_worst_ep.tcl}
+# set root_dir D:/repo/ECO/udp_hls_10g
+# set out_dir  ${root_dir}/p6_verify
+# foreach tag {t8p0 t6p4} {
+#     set dcp ${root_dir}/vivado_prj/p6_${tag}_prj.runs/impl_1/wrapper_p4_routed.dcp
+#     if {![file exists $dcp]} { puts "P6EP MISSING $dcp"; continue }
+#     open_checkpoint $dcp
+# 
+#     # (a) one worst setup path per endpoint, worst 400 endpoints
+#     report_timing -max_paths 400 -nworst 1 -sort_by slack -delay_type max \
+#         -file ${out_dir}/p6_${tag}_setup_ep400.rpt
+#     report_timing -max_paths 400 -nworst 1 -sort_by slack -delay_type min \
+#         -file ${out_dir}/p6_${tag}_hold_ep400.rpt
+# 
+#     # (b) top fanout nets in the routed design
+#     set fh [open ${out_dir}/p6_${tag}_fanout.txt w]
+#     puts $fh "# tag=$tag  routed netlist, nets with FLAT_PIN_COUNT >= 64, sorted desc"
+#     set nets [get_nets -hier -quiet -filter {FLAT_PIN_COUNT >= 64}]
+#     set rows {}
+#     foreach n $nets {
+#         lappend rows [list [get_property -quiet FLAT_PIN_COUNT $n] $n]
+#     }
+#     set rows [lsort -integer -decreasing -index 0 $rows]
+#     puts "P6FANOUT ${tag}: nets_with_fanout_ge64=[llength $rows]"
+#     foreach r $rows {
+#         puts $fh "[lindex $r 0]  [lindex $r 1]"
+#     }
+#     close $fh
+#     foreach r [lrange $rows 0 14] {
+#         puts "  P6FANOUT ${tag}  fo=[lindex $r 0]  [lindex $r 1]"
+#     }
+#     # the historical worst family (P4c/P5e): u_retx read-address nets
+#     foreach pat {rpe r_tap_seq ring_rem nbeats rb_snd_nxt} {
+#         set fn [get_nets -hier -quiet -filter "NAME =~ *u_retx/${pat}*"]
+#         set mx 0
+#         set mn ""
+#         foreach n $fn {
+#             set c [get_property -quiet FLAT_PIN_COUNT $n]
+#             if {$c > $mx} { set mx $c; set mn $n }
+#         }
+#         puts "  P6RETX ${tag}  u_retx/${pat}*  nets=[llength $fn]  max_fo=$mx  $mn"
+#     }
+# }
+Command: open_checkpoint D:/repo/ECO/udp_hls_10g/vivado_prj/p6_t8p0_prj.runs/impl_1/wrapper_p4_routed.dcp
+
+Starting open_checkpoint Task
+
+Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.030 . Memory (MB): peak = 324.656 ; gain = 5.898
+INFO: [Device 21-403] Loading part xc7k325tffg676-2
+Netlist sorting complete. Time (s): cpu = 00:00:01 ; elapsed = 00:00:00.573 . Memory (MB): peak = 935.977 ; gain = 0.000
+INFO: [Netlist 29-17] Analyzing 8070 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 1 CPU seconds
+INFO: [Project 1-479] Netlist was created with Vivado 2025.2
+INFO: [Project 1-570] Preparing netlist for logic optimization
+Read ShapeDB Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.142 . Memory (MB): peak = 1126.582 ; gain = 23.996
+INFO: [Timing 38-478] Restoring timing data from binary archive.
+INFO: [Timing 38-479] Binary timing data restore complete.
+INFO: [Project 1-856] Restoring constraints from binary archive.
+INFO: [Project 1-853] Binary constraint restore complete.
+INFO: [Designutils 20-5722] Start Reading Physical Databases.
+Reading placement.
+Read Netlist Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.069 . Memory (MB): peak = 1899.406 ; gain = 0.000
+Reading placer database...
+Read Device Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.009 . Memory (MB): peak = 1899.406 ; gain = 0.000
+Read PlaceDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 1899.406 ; gain = 0.000
+Read placeStorage: Time (s): cpu = 00:00:02 ; elapsed = 00:00:02 . Memory (MB): peak = 1940.797 ; gain = 41.391
+Read PulsedLatchDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 1940.797 ; gain = 0.000
+Reading routing.
+Read RouteStorage: Time (s): cpu = 00:00:01 ; elapsed = 00:00:00.808 . Memory (MB): peak = 1994.984 ; gain = 54.188
+Read Physdb Files: Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 1994.984 ; gain = 95.578
+Restored from archive | CPU: 4.000000 secs | Memory: 0.000000 MB |
+Finished XDEF File Restore: Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 1994.984 ; gain = 95.578
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.036 . Memory (MB): peak = 2096.793 ; gain = 0.000
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 1364 instances were transformed.
+  RAM16X1S => RAM32X1S (RAMS32): 224 instances
+  RAM32M => RAM32M (RAMD32(x6), RAMS32(x2)): 63 instances
+  RAM32X1D => RAM32X1D (RAMD32(x2)): 3 instances
+  RAM64M => RAM64M (RAMD64E(x4)): 933 instances
+  RAM64X1D => RAM64X1D (RAMD64E(x2)): 141 instances
+
+INFO: [Project 1-604] Checkpoint was created with Vivado v2025.2 (64-bit) build 6299465
+open_checkpoint: Time (s): cpu = 00:00:26 ; elapsed = 00:00:25 . Memory (MB): peak = 2102.430 ; gain = 1790.285
+INFO: [Timing 38-91] UpdateTimingParams: Speed grade: -2, Delay Type: max.
+INFO: [Timing 38-191] Multithreading enabled for timing update using a maximum of 2 CPUs
+INFO: [Timing 38-78] ReportTimingParams: -max_paths 400 -nworst 1 -delay_type max -sort_by slack.
+report_timing: Time (s): cpu = 00:00:33 ; elapsed = 00:00:18 . Memory (MB): peak = 2345.488 ; gain = 243.059
+INFO: [Timing 38-91] UpdateTimingParams: Speed grade: -2, Delay Type: min.
+INFO: [Timing 38-191] Multithreading enabled for timing update using a maximum of 2 CPUs
+INFO: [Timing 38-78] ReportTimingParams: -max_paths 400 -nworst 1 -delay_type min -sort_by slack.
+P6FANOUT t8p0: nets_with_fanout_ge64=33626
+  P6FANOUT t8p0  fo=47573  gmii_clk
+  P6FANOUT t8p0  fo=47573  u_app/gmii_clk
+  P6FANOUT t8p0  fo=47573  u_app_ctrl/gmii_clk
+  P6FANOUT t8p0  fo=47573  u_app_ctrl/u_evfifo/gmii_clk
+  P6FANOUT t8p0  fo=47573  u_app_pipe/gmii_clk
+  P6FANOUT t8p0  fo=47573  u_app_status/gmii_clk
+  P6FANOUT t8p0  fo=47573  u_app_status/u_uart/gmii_clk
+  P6FANOUT t8p0  fo=47573  u_app_udp/gmii_clk
+  P6FANOUT t8p0  fo=47573  u_app_udp/u_txf/gmii_clk
+  P6FANOUT t8p0  fo=47573  u_app_udp/u_txf/mem_reg_0_63_0_2/WCLK
+  P6FANOUT t8p0  fo=47573  u_app_udp/u_txf/mem_reg_0_63_12_14/WCLK
+  P6FANOUT t8p0  fo=47573  u_app_udp/u_txf/mem_reg_0_63_15_17/WCLK
+  P6FANOUT t8p0  fo=47573  u_app_udp/u_txf/mem_reg_0_63_18_20/WCLK
+  P6FANOUT t8p0  fo=47573  u_app_udp/u_txf/mem_reg_0_63_21_23/WCLK
+  P6FANOUT t8p0  fo=47573  u_app_udp/u_txf/mem_reg_0_63_24_26/WCLK
+  P6RETX t8p0  u_retx/rpe*  nets=12  max_fo=33  u_tcp_tx/u_retx/rpe[0]
+  P6RETX t8p0  u_retx/r_tap_seq*  nets=4  max_fo=2  u_tcp_tx/u_retx/r_tap_seq[0]
+  P6RETX t8p0  u_retx/ring_rem*  nets=16  max_fo=152  u_tcp_tx/u_retx/ring_rem[0]_repN_9
+  P6RETX t8p0  u_retx/nbeats*  nets=0  max_fo=0  
+  P6RETX t8p0  u_retx/rb_snd_nxt*  nets=16  max_fo=78  u_tcp_tx/u_retx/rb_snd_nxt[4]
+Command: open_checkpoint D:/repo/ECO/udp_hls_10g/vivado_prj/p6_t6p4_prj.runs/impl_1/wrapper_p4_routed.dcp
+
+Starting open_checkpoint Task
+
+Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2373.516 ; gain = 0.000
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.526 . Memory (MB): peak = 2551.797 ; gain = 0.000
+INFO: [Netlist 29-17] Analyzing 8070 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 1 CPU seconds
+INFO: [Project 1-479] Netlist was created with Vivado 2025.2
+INFO: [Project 1-570] Preparing netlist for logic optimization
+Read ShapeDB Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.157 . Memory (MB): peak = 2720.824 ; gain = 27.953
+INFO: [Timing 38-478] Restoring timing data from binary archive.
+INFO: [Timing 38-479] Binary timing data restore complete.
+INFO: [Project 1-856] Restoring constraints from binary archive.
+INFO: [Project 1-853] Binary constraint restore complete.
+INFO: [Designutils 20-5722] Start Reading Physical Databases.
+Reading placement.
+Read Netlist Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.075 . Memory (MB): peak = 2986.828 ; gain = 0.000
+Reading placer database...
+Read Device Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.011 . Memory (MB): peak = 2986.828 ; gain = 0.000
+Read PlaceDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2986.828 ; gain = 0.000
+Read placeStorage: Time (s): cpu = 00:00:02 ; elapsed = 00:00:02 . Memory (MB): peak = 3027.789 ; gain = 40.961
+Read PulsedLatchDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 3027.789 ; gain = 0.000
+Reading routing.
+Read RouteStorage: Time (s): cpu = 00:00:01 ; elapsed = 00:00:00.869 . Memory (MB): peak = 3075.922 ; gain = 48.133
+Read Physdb Files: Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 3075.922 ; gain = 89.094
+Restored from archive | CPU: 3.000000 secs | Memory: 0.000000 MB |
+Finished XDEF File Restore: Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 3075.922 ; gain = 89.094
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.039 . Memory (MB): peak = 3177.875 ; gain = 0.000
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 1364 instances were transformed.
+  RAM16X1S => RAM32X1S (RAMS32): 224 instances
+  RAM32M => RAM32M (RAMD32(x6), RAMS32(x2)): 63 instances
+  RAM32X1D => RAM32X1D (RAMD32(x2)): 3 instances
+  RAM64M => RAM64M (RAMD64E(x4)): 933 instances
+  RAM64X1D => RAM64X1D (RAMD64E(x2)): 141 instances
+
+INFO: [Project 1-604] Checkpoint was created with Vivado v2025.2 (64-bit) build 6299465
+open_checkpoint: Time (s): cpu = 00:00:15 ; elapsed = 00:00:15 . Memory (MB): peak = 3184.895 ; gain = 811.379
+INFO: [Timing 38-91] UpdateTimingParams: Speed grade: -2, Delay Type: max.
+INFO: [Timing 38-191] Multithreading enabled for timing update using a maximum of 2 CPUs
+INFO: [Timing 38-78] ReportTimingParams: -max_paths 400 -nworst 1 -delay_type max -sort_by slack.
+report_timing: Time (s): cpu = 00:00:35 ; elapsed = 00:00:19 . Memory (MB): peak = 3366.863 ; gain = 181.969
+INFO: [Timing 38-91] UpdateTimingParams: Speed grade: -2, Delay Type: min.
+INFO: [Timing 38-191] Multithreading enabled for timing update using a maximum of 2 CPUs
+INFO: [Timing 38-78] ReportTimingParams: -max_paths 400 -nworst 1 -delay_type min -sort_by slack.
+P6FANOUT t6p4: nets_with_fanout_ge64=33758
+  P6FANOUT t6p4  fo=47630  gmii_clk
+  P6FANOUT t6p4  fo=47630  u_app/gmii_clk
+  P6FANOUT t6p4  fo=47630  u_app_ctrl/gmii_clk
+  P6FANOUT t6p4  fo=47630  u_app_ctrl/u_evfifo/gmii_clk
+  P6FANOUT t6p4  fo=47630  u_app_pipe/gmii_clk
+  P6FANOUT t6p4  fo=47630  u_app_status/gmii_clk
+  P6FANOUT t6p4  fo=47630  u_app_status/u_uart/gmii_clk
+  P6FANOUT t6p4  fo=47630  u_app_udp/gmii_clk
+  P6FANOUT t6p4  fo=47630  u_app_udp/u_txf/gmii_clk
+  P6FANOUT t6p4  fo=47630  u_app_udp/u_txf/mem_reg_0_63_0_2/WCLK
+  P6FANOUT t6p4  fo=47630  u_app_udp/u_txf/mem_reg_0_63_12_14/WCLK
+  P6FANOUT t6p4  fo=47630  u_app_udp/u_txf/mem_reg_0_63_15_17/WCLK
+  P6FANOUT t6p4  fo=47630  u_app_udp/u_txf/mem_reg_0_63_18_20/WCLK
+  P6FANOUT t6p4  fo=47630  u_app_udp/u_txf/mem_reg_0_63_21_23/WCLK
+  P6FANOUT t6p4  fo=47630  u_app_udp/u_txf/mem_reg_0_63_24_26/WCLK
+  P6RETX t6p4  u_retx/rpe*  nets=12  max_fo=33  u_tcp_tx/u_retx/rpe[0]
+  P6RETX t6p4  u_retx/r_tap_seq*  nets=4  max_fo=2  u_tcp_tx/u_retx/r_tap_seq[0]
+  P6RETX t6p4  u_retx/ring_rem*  nets=16  max_fo=127  u_tcp_tx/u_retx/ring_rem[0]_repN_3
+  P6RETX t6p4  u_retx/nbeats*  nets=0  max_fo=0  
+  P6RETX t6p4  u_retx/rb_snd_nxt*  nets=16  max_fo=78  u_tcp_tx/u_retx/rb_snd_nxt[4]
+# puts "\n===== P6 WORST-EP DONE ====="
+
+===== P6 WORST-EP DONE =====
+# exit
+INFO: [Common 17-206] Exiting Vivado at Sun Sep 27 21:33:51 2026...

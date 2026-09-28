@@ -1,0 +1,117 @@
+#-----------------------------------------------------------
+# Vivado v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Sat Sep 26 09:16:38 2026
+# Process ID         : 21832
+# Current directory  : D:/repo/ECO/udp_hls_10g
+# Command line       : vivado.exe -mode batch -source p5f_verify/bramscan.tcl -log p5f_verify/bramscan.log -nojournal
+# Log file           : D:/repo/ECO/udp_hls_10g/p5f_verify/bramscan.log
+# Journal file       : 
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 53218 MB
+#-----------------------------------------------------------
+source p5f_verify/bramscan.tcl
+# set out_dir D:/repo/ECO/udp_hls_10g/p5f_verify
+# open_checkpoint D:/repo/ECO/udp_hls_10g/vivado_prj/p5_prj.runs/impl_1/wrapper_p4_routed.dcp
+Command: open_checkpoint D:/repo/ECO/udp_hls_10g/vivado_prj/p5_prj.runs/impl_1/wrapper_p4_routed.dcp
+
+Starting open_checkpoint Task
+
+Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.024 . Memory (MB): peak = 323.359 ; gain = 4.531
+INFO: [Device 21-403] Loading part xc7k325tffg676-2
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.551 . Memory (MB): peak = 939.793 ; gain = 0.000
+INFO: [Netlist 29-17] Analyzing 8194 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 1 CPU seconds
+INFO: [Project 1-479] Netlist was created with Vivado 2025.2
+INFO: [Project 1-570] Preparing netlist for logic optimization
+Read ShapeDB Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.184 . Memory (MB): peak = 1129.477 ; gain = 23.715
+INFO: [Timing 38-478] Restoring timing data from binary archive.
+INFO: [Timing 38-479] Binary timing data restore complete.
+INFO: [Project 1-856] Restoring constraints from binary archive.
+INFO: [Project 1-853] Binary constraint restore complete.
+INFO: [Designutils 20-5722] Start Reading Physical Databases.
+Reading placement.
+Read Netlist Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.082 . Memory (MB): peak = 1904.191 ; gain = 0.000
+Reading placer database...
+Read Device Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.011 . Memory (MB): peak = 1904.191 ; gain = 0.000
+Read PlaceDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 1904.191 ; gain = 0.000
+Read placeStorage: Time (s): cpu = 00:00:02 ; elapsed = 00:00:02 . Memory (MB): peak = 1946.352 ; gain = 42.160
+Read PulsedLatchDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 1946.352 ; gain = 0.000
+Reading routing.
+Read RouteStorage: Time (s): cpu = 00:00:01 ; elapsed = 00:00:00.774 . Memory (MB): peak = 1997.418 ; gain = 51.066
+Read Physdb Files: Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 1997.418 ; gain = 93.227
+Restored from archive | CPU: 4.000000 secs | Memory: 0.000000 MB |
+Finished XDEF File Restore: Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 1997.418 ; gain = 93.227
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.029 . Memory (MB): peak = 2100.410 ; gain = 0.000
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 1364 instances were transformed.
+  RAM16X1S => RAM32X1S (RAMS32): 224 instances
+  RAM32M => RAM32M (RAMD32(x6), RAMS32(x2)): 63 instances
+  RAM32X1D => RAM32X1D (RAMD32(x2)): 3 instances
+  RAM64M => RAM64M (RAMD64E(x4)): 933 instances
+  RAM64X1D => RAM64X1D (RAMD64E(x2)): 141 instances
+
+INFO: [Project 1-604] Checkpoint was created with Vivado v2025.2 (64-bit) build 6299465
+open_checkpoint: Time (s): cpu = 00:00:28 ; elapsed = 00:00:28 . Memory (MB): peak = 2106.051 ; gain = 1795.492
+# proc scan_ramb {tag pat} {
+#   set cells [get_cells -hier -quiet -filter "NAME =~ *$pat* && PRIMITIVE_TYPE =~ BMEM.*"]
+#   set n [llength $cells]
+#   set smin 99.0; set cmin ""
+#   set smax 99.0; set cmax ""
+#   foreach cc $cells {
+#     set tp [get_timing_paths -quiet -delay_type min -to $cc -max_paths 1]
+#     if {[llength $tp] > 0} {
+#       set s [get_property SLACK $tp]
+#       if {$s < $smin} { set smin $s; set cmin $cc }
+#     }
+#     set tp2 [get_timing_paths -quiet -delay_type max -to $cc -max_paths 1]
+#     if {[llength $tp2] > 0} {
+#       set s2 [get_property SLACK $tp2]
+#       if {$s2 < $smax} { set smax $s2; set cmax $cc }
+#     }
+#   }
+#   puts "BRAMSCAN $tag : brams=$n worst_hold=$smin @ $cmin | worst_setup=$smax @ $cmax"
+# }
+# puts "=== BRAMSCAN start ==="
+=== BRAMSCAN start ===
+# scan_ramb "UDP_UF"    "u_udp_split/u_uf/"
+BRAMSCAN UDP_UF : brams=1 worst_hold=0.065 @ u_udp_split/u_uf/gen_mem[0].u_main | worst_setup=2.834 @ u_udp_split/u_uf/gen_mem[0].u_main
+# scan_ramb "TCP_ECHO"  "u_tcp_echo/u_fifo/"
+BRAMSCAN TCP_ECHO : brams=16 worst_hold=0.063 @ u_tcp_echo/u_fifo/gen_mem[7].u_main | worst_setup=1.626 @ u_tcp_echo/u_fifo/gen_mem[11].u_main
+# scan_ramb "SLOW_RX"   "u_slow_rx/"
+BRAMSCAN SLOW_RX : brams=1 worst_hold=0.057 @ u_slow_rx/u_ff/gen_mem[0].u_main | worst_setup=3.845 @ u_slow_rx/u_ff/gen_mem[0].u_main
+# scan_ramb "SLOW_TX"   "u_slow_tx/"
+BRAMSCAN SLOW_TX : brams=1 worst_hold=0.122 @ u_slow_tx/u_wf/gen_mem[0].u_main | worst_setup=3.112 @ u_slow_tx/u_wf/gen_mem[0].u_main
+# scan_ramb "RETX"      "u_tcp_tx/u_retx/"
+BRAMSCAN RETX : brams=256 worst_hold=0.057 @ u_tcp_tx/u_retx/g_byte[1].mem_o_reg_5_1_1 | worst_setup=0.183 @ u_tcp_tx/u_retx/g_byte[1].mem_o_reg_5_1_3
+# scan_ramb "MAC_RX"    "u_mac_rx/"
+BRAMSCAN MAC_RX : brams=0 worst_hold=99.0 @  | worst_setup=99.0 @ 
+# scan_ramb "HLS"       "u_hls/"
+BRAMSCAN HLS : brams=68 worst_hold=0.061 @ u_hls/grp_ip_rx_process_fu_1766/hdr_U/ram_reg | worst_setup=0.577 @ u_hls/tcp_conn_flight_size_U/udp_echo_tcp_conn_flight_size_RAM_2P_BRAM_1R1W_ram_u/ram_reg
+# puts "=== BRAMSCAN: design-wide worst hold paths that END on a BRAM pin ==="
+=== BRAMSCAN: design-wide worst hold paths that END on a BRAM pin ===
+# set n0 0
+# foreach c [get_cells -hier -quiet -filter {PRIMITIVE_TYPE =~ BMEM.*}] {
+#   incr n0
+# }
+# puts "BRAMSCAN total_bram_cells=$n0"
+BRAMSCAN total_bram_cells=343
+# report_timing -delay_type min -max_paths 400 -nworst 400 -sort_by slack -file ${out_dir}/bramhold400.rpt
+INFO: [Timing 38-78] ReportTimingParams: -max_paths 400 -nworst 400 -delay_type min -sort_by slack.
+# report_timing -delay_type max -max_paths 400 -nworst 400 -sort_by slack -file ${out_dir}/bramsetup400.rpt
+INFO: [Timing 38-78] ReportTimingParams: -max_paths 400 -nworst 400 -delay_type max -sort_by slack.
+# puts "BRAMSCAN DONE"
+BRAMSCAN DONE
+# exit
+INFO: [Common 17-206] Exiting Vivado at Sat Sep 26 09:17:39 2026...

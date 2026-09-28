@@ -1,0 +1,175 @@
+        // ================= ⑦ RXP_DIAG v4: 三组字段的**逐口判别力** (审查 C1) =====
+        // 【为什么必须有这一相】⑥ 相里 {NE,NR,MR,EN} 全 = 1、A 部 7 个全 = 0、
+        //   QB..QH 全 0 是**判别力最差**的取值组合 ⇒ 下列编辑类别完全不可见:
+        //     ① {CN,RD,NC,NP,WF,RL,WC} 组内任意置换;
+        //     ② QB..QH 组内任意置换 / 移位;
+        //     ③ {NE,NR,MR} 之间互换、或 EN 错接到 NE/NR/MR (16→4 位截断);
+        //     ④ 任意一根 `.name()` 掉了而落到 0。
+        //   本相把三组都做成**两两不同的非 0 值**并**逐口断言具体值** ⇒ 四类编辑
+        //   都会让某条断言变红 (变异证据见 sim/rxpdiag/mutate_wrap_v4.sh)。
+        // 【顺序很关键】⑦α 必须紧跟 ⑥: ⑥ 只占了 1 条事件条目, 且图案流仍然对齐 ⇒
+        //   ⑦α 的 9 个事件是**设计出来的**、并且是**头 7 个被记录**的 (QB..QH);
+        //   ⑦β 的丢弃会打断图案流, 但那时条目已满 (EO=1), 只计数不入队。
+        // ---- ⑦α B 部结构 (11 帧, 载荷 = 图案流续流, base = 2944 + 1472k) ----
+        //   帧 0 干净(分隔) → 帧 1,2,3 坏 (**连续段 A**, 3 帧) → 帧 4 干净(分隔)
+        //   → 帧 5..10 坏 (**连续段 B**, 6 帧)
+        //   ⇒ 事件帧 = {frm+1, frm+2, frm+3} ∪ {frm+5..frm+10}: NE +9, NR +2, MR=6
+        //   (两段都与 ⑥ 的孤立事件被"干净帧"隔开 ⇒ NR 恰 +2; 各帧掩码互不相同 ⇒
+        //    7 条被记录条目的 24 位 {帧号, got} 两两不同)
+        repeat (4000) @(posedge u_dut.gmii_clk);          // 等 ⑥ 的帧彻底收完
+        ne0 = u_dut.v4_ne_w; nr0 = u_dut.v4_nr_w; mr0 = u_dut.v4_mr_w;
+        bf_plen = PLEN[31:0]; bf_udplen_ex = 32'd0; bf_badfcs = 1'b0;
+        for (i = 0; i < 11; i = i + 1) begin
+            bf_base    = 32'd2944 + i * 1472;
+            bf_corrupt = ((i >= 1) && (i <= 3)) || (i >= 5);
+            case (i)
+                1: bf_mask = 8'h11;  2: bf_mask = 8'h22;  3: bf_mask = 8'h44;
+                5: bf_mask = 8'h88;  6: bf_mask = 8'h13;  7: bf_mask = 8'h26;
+                8: bf_mask = 8'h4C;  9: bf_mask = 8'h91; 10: bf_mask = 8'hA2;
+                default: bf_mask = 8'h00;
+            endcase
+            if (i == 0) frm_base = u_dut.u_app_udp.stat_rx_frames[15:0];
+            build_rx_frame;
+            if (i == 1) qex[0] = pay[0] ^ bf_mask;
+            if (i == 2) qex[1] = pay[0] ^ bf_mask;
+            if (i == 3) qex[2] = pay[0] ^ bf_mask;
+            if (i == 5) qex[3] = pay[0] ^ bf_mask;
+            if (i == 6) qex[4] = pay[0] ^ bf_mask;
+            if (i == 7) qex[5] = pay[0] ^ bf_mask;
+            if (i == 8) qex[6] = pay[0] ^ bf_mask;
+            inj_frame;
+            repeat (2600) @(posedge u_dut.gmii_clk);      // 逐帧喂 (不撞缓冲/描述符)
+        end
+        repeat (4000) @(posedge u_dut.gmii_clk);
+        $display("RXPV4-7a B: NE=%0d NR=%0d MR=%0d EN=%0d EO=%0d (prev: NE=%0d NR=%0d MR=%0d, frm_base=%0d)",
+                 u_dut.v4_ne_w, u_dut.v4_nr_w, u_dut.v4_mr_w, u_dut.v4_en_w,
+                 u_dut.v4_eo_w, ne0, nr0, mr0, frm_base);
+        $display("RXPV4-7a Q: QA=%06X QB=%06X QC=%06X QD=%06X QE=%06X QF=%06X QG=%06X QH=%06X",
+                 u_dut.v4_qa_w, u_dut.v4_qb_w, u_dut.v4_qc_w, u_dut.v4_qd_w,
+                 u_dut.v4_qe_w, u_dut.v4_qf_w, u_dut.v4_qg_w, u_dut.v4_qh_w);
+        chk(u_dut.v4_ne_w === (ne0 + 16'd9), "7a: NE delta != 9 (3+6)");
+        chk(u_dut.v4_nr_w === (nr0 + 16'd2), "7a: NR delta != 2 (two runs)");
+        chk(u_dut.v4_mr_w === 16'd6,         "7a: MR != 6 (longest run)");
+        chk(u_dut.v4_ne_w !== u_dut.v4_nr_w && u_dut.v4_ne_w !== u_dut.v4_mr_w &&
+            u_dut.v4_nr_w !== u_dut.v4_mr_w, "7a: NE/NR/MR not pairwise distinct");
+        chk(u_dut.v4_en_w === 4'd8, "7a: EN != 8 (FIFO not saturated)");
+        chk(u_dut.v4_eo_w === 1'b1, "7a: EO != 1 (overflow not flagged)");
+        chk({12'd0, u_dut.v4_en_w} !== u_dut.v4_ne_w, "7a: EN == NE (wrong wire?)");
+        chk(u_dut.v4_qa_w === 24'h0001A8, "7a: QA != {1,0xA8} (phase 6 event)");
+        chk(u_dut.v4_qb_w === {frm_base + 16'd1, qex[0]}, "7a: QB != {f+1, got}");
+        chk(u_dut.v4_qc_w === {frm_base + 16'd2, qex[1]}, "7a: QC != {f+2, got}");
+        chk(u_dut.v4_qd_w === {frm_base + 16'd3, qex[2]}, "7a: QD != {f+3, got}");
+        chk(u_dut.v4_qe_w === {frm_base + 16'd5, qex[3]}, "7a: QE != {f+5, got}");
+        chk(u_dut.v4_qf_w === {frm_base + 16'd6, qex[4]}, "7a: QF != {f+6, got}");
+        chk(u_dut.v4_qg_w === {frm_base + 16'd7, qex[5]}, "7a: QG != {f+7, got}");
+        chk(u_dut.v4_qh_w === {frm_base + 16'd8, qex[6]}, "7a: QH != {f+8, got}");
+        chk(u_dut.v4_qa_w !== u_dut.v4_qb_w, "7a: QA == QB");
+        chk(u_dut.v4_qb_w !== u_dut.v4_qc_w, "7a: QB == QC");
+        chk(u_dut.v4_qb_w !== u_dut.v4_qd_w, "7a: QB == QD");
+        chk(u_dut.v4_qb_w !== u_dut.v4_qe_w, "7a: QB == QE");
+        chk(u_dut.v4_qc_w !== u_dut.v4_qd_w, "7a: QC == QD");
+        chk(u_dut.v4_qc_w !== u_dut.v4_qe_w, "7a: QC == QE");
+        chk(u_dut.v4_qd_w !== u_dut.v4_qe_w, "7a: QD == QE");
+        chk(u_dut.v4_qg_w !== u_dut.v4_qh_w, "7a: QG == QH");
+        chk(u_dut.u_app_udp.stat_rx_frames[15:0] === (frm_base + 16'd11),
+            "7a: not all 11 frames delivered");
+        // ---- ⑦β A 部: RD / CN / WF / WC / NC / NP ----
+        // 【与 V5/V8 的关系】单元门 (tb_rxp_v4.v) 用"TB 灌得比消费者快"造 CN/WF;
+        //   wrapper 里线上只有 1 字节/拍 (= 消费者 1 字/8 拍) ⇒ **结构性无法靠灌快**
+        //   ⇒ 这里把**消费者变慢** (force app rx_tready=0, 见 sc_en) 造同一个条件。
+        //   这是本相唯一的新手法 (报告里已显式说明)。
+        // β1 RD x2: "声明 > 实际"的残帧 (各后随一帧好帧触发边界回卷, 载荷 104B)
+        for (i = 0; i < 2; i = i + 1) begin
+            bf_plen = 32'd104; bf_base = 32'd0; bf_corrupt = 1'b0;
+            bf_udplen_ex = 32'd58; bf_badfcs = 1'b0; bf_mask = 8'h00;
+            build_rx_frame; inj_frame;
+            bf_udplen_ex = 32'd0; bf_plen = PLEN[31:0];
+            build_rx_frame; inj_frame;
+            repeat (2500) @(posedge u_dut.gmii_clk);
+        end
+        repeat (4000) @(posedge u_dut.gmii_clk);
+        // β2 CN: 慢消费者 + 80 个小帧 (8B = 1 字) 背靠背 ⇒ 描述符 FIFO 注满
+        sc_en = 1'b1;
+        repeat (8) @(posedge u_dut.gmii_clk);
+        for (i = 0; i < 80; i = i + 1) begin
+            bf_plen = 32'd8; bf_base = 32'd0; bf_corrupt = 1'b0;
+            bf_udplen_ex = 32'd0; bf_badfcs = 1'b0;
+            build_rx_frame; inj_frame;
+        end
+        repeat (2000) @(posedge u_dut.gmii_clk);
+        sc_en = 1'b0;                                     // 放行 + 排空积压
+        repeat (40000) @(posedge u_dut.gmii_clk);
+        // β3 WF: 慢消费者 + 12 个整帧 (1472B) 背靠背 ⇒ 载荷缓冲 (512 字) 注满
+        sc_en = 1'b1;
+        repeat (8) @(posedge u_dut.gmii_clk);
+        for (i = 0; i < 12; i = i + 1) begin
+            bf_plen = PLEN[31:0]; bf_base = 32'd0; bf_corrupt = 1'b0;
+            bf_udplen_ex = 32'd0; bf_badfcs = 1'b0;
+            build_rx_frame; inj_frame;
+        end
+        repeat (2000) @(posedge u_dut.gmii_clk);
+        sc_en = 1'b0;                                     // 放行 + 排空
+        repeat (40000) @(posedge u_dut.gmii_clk);
+        // β4 WC: 强偏 u_meta_len (+8) 下投 5 个干净整帧 ⇒ 每帧恰 1 次违例
+        @(negedge u_dut.gmii_clk);
+        force u_dut.u_udp_split.u_meta_len = 16'd1480;
+        for (i = 0; i < 5; i = i + 1) begin
+            bf_plen = PLEN[31:0]; bf_base = 32'd0; bf_corrupt = 1'b0;
+            bf_udplen_ex = 32'd0; bf_badfcs = 1'b0;
+            build_rx_frame; inj_frame;
+            repeat (2500) @(posedge u_dut.gmii_clk);
+        end
+        @(negedge u_dut.gmii_clk);
+        release u_dut.u_udp_split.u_meta_len;
+        repeat (3000) @(posedge u_dut.gmii_clk);
+        // β5 NC/NP: 6 个 0 长数据报 (4 好 FCS + 2 坏 FCS) ⇒ NC=6, NP=4
+        for (i = 0; i < 6; i = i + 1) begin
+            bf_plen = 32'd0; bf_base = 32'd0; bf_corrupt = 1'b0;
+            bf_udplen_ex = 32'd0; bf_badfcs = (i >= 4) ? 1'b1 : 1'b0;
+            build_rx_frame; inj_frame;
+            repeat (300) @(posedge u_dut.gmii_clk);
+        end
+        repeat (3000) @(posedge u_dut.gmii_clk);
+        $display("RXPV4-7b A: CN=%0d RD=%0d NC=%0d NP=%0d WF=%0d RL=%0d WC=%0d",
+                 u_dut.v4_cn_w, u_dut.v4_rd_w, u_dut.v4_nc_w, u_dut.v4_np_w,
+                 u_dut.v4_wf_w, u_dut.v4_rl_w, u_dut.v4_wc_w);
+        $display("RXPV4-7b B: NE=%0d NR=%0d MR=%0d EN=%0d EO=%0d",
+                 u_dut.v4_ne_w, u_dut.v4_nr_w, u_dut.v4_mr_w, u_dut.v4_en_w,
+                 u_dut.v4_eo_w);
+        // 逐口具体值 (模型精确的: RD/NC/NP/WC 由注入次数直接定; CN/WF/RL 见常量)
+        chk(u_dut.v4_rd_w === 16'd2, "7b: RD != 2");
+        chk(u_dut.v4_nc_w === 16'd6, "7b: NC != 6");
+        chk(u_dut.v4_np_w === 16'd4, "7b: NP != 4");
+        chk(u_dut.v4_wc_w === 16'd5, "7b: WC != 5");
+        chk(u_dut.v4_cn_w === CN_EXP_VAL, "7b: CN != CN_EXP_VAL");
+        chk(u_dut.v4_wf_w === WF_EXP_VAL, "7b: WF != WF_EXP_VAL");
+        chk(u_dut.v4_rl_w === RL_EXP_VAL, "7b: RL != RL_EXP_VAL");
+        // RL 与 v3 的 RC 同源 ⇒ 两处读数必须一致
+        chk(u_dut.u_udp_split.v3_rc === u_dut.v4_rl_w, "7b: RL != v3 RC");
+        // A 部 7 个值两两不同 (组内任意置换必被逐值断言或这 21 条之一抓到)
+        chk(u_dut.v4_cn_w !== u_dut.v4_rd_w, "7b: CN == RD");
+        chk(u_dut.v4_cn_w !== u_dut.v4_nc_w, "7b: CN == NC");
+        chk(u_dut.v4_cn_w !== u_dut.v4_np_w, "7b: CN == NP");
+        chk(u_dut.v4_cn_w !== u_dut.v4_wf_w, "7b: CN == WF");
+        chk(u_dut.v4_cn_w !== u_dut.v4_rl_w, "7b: CN == RL");
+        chk(u_dut.v4_cn_w !== u_dut.v4_wc_w, "7b: CN == WC");
+        chk(u_dut.v4_rd_w !== u_dut.v4_nc_w, "7b: RD == NC");
+        chk(u_dut.v4_rd_w !== u_dut.v4_np_w, "7b: RD == NP");
+        chk(u_dut.v4_rd_w !== u_dut.v4_wf_w, "7b: RD == WF");
+        chk(u_dut.v4_rd_w !== u_dut.v4_rl_w, "7b: RD == RL");
+        chk(u_dut.v4_rd_w !== u_dut.v4_wc_w, "7b: RD == WC");
+        chk(u_dut.v4_nc_w !== u_dut.v4_np_w, "7b: NC == NP");
+        chk(u_dut.v4_nc_w !== u_dut.v4_wf_w, "7b: NC == WF");
+        chk(u_dut.v4_nc_w !== u_dut.v4_rl_w, "7b: NC == RL");
+        chk(u_dut.v4_nc_w !== u_dut.v4_wc_w, "7b: NC == WC");
+        chk(u_dut.v4_np_w !== u_dut.v4_wf_w, "7b: NP == WF");
+        chk(u_dut.v4_np_w !== u_dut.v4_rl_w, "7b: NP == RL");
+        chk(u_dut.v4_np_w !== u_dut.v4_wc_w, "7b: NP == WC");
+        chk(u_dut.v4_wf_w !== u_dut.v4_rl_w, "7b: WF == RL");
+        chk(u_dut.v4_wf_w !== u_dut.v4_wc_w, "7b: WF == WC");
+        chk(u_dut.v4_rl_w !== u_dut.v4_wc_w, "7b: RL == WC");
+        // B 部终值也必须两两不同 (⑦β 的丢弃让 NE 涨, 但结构不塌到相等)
+        chk(u_dut.v4_ne_w !== u_dut.v4_nr_w, "7b: NE == NR");
+        chk(u_dut.v4_ne_w !== u_dut.v4_mr_w, "7b: NE == MR");
+        chk(u_dut.v4_nr_w !== u_dut.v4_mr_w, "7b: NR == MR");
+        chk({12'd0, u_dut.v4_en_w} !== u_dut.v4_ne_w, "7b: EN == NE (wrong wire?)");

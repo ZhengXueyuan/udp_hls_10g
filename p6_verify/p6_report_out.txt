@@ -1,0 +1,130 @@
+============================================================================================================
+P6 GATE B -- controlled experiment report   out_dir=D:/repo/ECO/udp_hls_10g/p6_verify
+============================================================================================================
+
+[1] TIMING SUMMARY (from *_timing_summary_routed.rpt)
+metric               t8p0           t6p4 delta(6p4-8p0)
+WNS                 0.473         -0.948         -1.421
+TNS                 0.000        -71.289        -71.289
+TNS_FEP                 0            647       +647.000
+WHS                 0.049          0.054         +0.005
+THS                 0.000          0.000         +0.000
+THS_FEP                 0              0         +0.000
+WPWS                0.264          0.264         +0.000
+TPWS_FEP                0              0         +0.000
+
+[2] CLOCK PERIOD EVIDENCE (from *_clocks.rpt)
+   --- t8p0 ---
+   Clock           Period(ns)  Waveform(ns)    Attributes  Sources
+   fpga_gclk       20.000      {0.000 10.000}  P           {fpga_gclk}
+   phy1_rxc        8.000       {0.000 4.000}   P           {phy1_rxc}
+   gmii_clk        8.000       {4.000 8.000}   P,G,I       {u_rgmii/bufmr_rgmii_rxc/O}
+   ref200_clk_raw  5.000       {0.000 2.500}   P,G,A       {u_mmcm_ref/CLKOUT0}
+   ref200_fb       20.000      {0.000 10.000}  P,G,A       {u_mmcm_ref/CLKFBOUT}
+   --- t6p4 ---
+   Clock           Period(ns)  Waveform(ns)    Attributes  Sources
+   fpga_gclk       20.000      {0.000 10.000}  P           {fpga_gclk}
+   phy1_rxc        6.400       {0.000 3.200}   P           {phy1_rxc}
+   gmii_clk        6.400       {3.200 6.400}   P,G,I       {u_rgmii/bufmr_rgmii_rxc/O}
+   ref200_clk_raw  5.000       {0.000 2.500}   P,G,A       {u_mmcm_ref/CLKOUT0}
+   ref200_fb       20.000      {0.000 10.000}  P,G,A       {u_mmcm_ref/CLKFBOUT}
+
+[3] WORST-400 SLACK DISTRIBUTION
+   -- SETUP --
+      t8p0: n=400  violated=0  min=0.473 p25=0.473 med=0.473 p75=0.473 max=0.473 mean=0.473
+         hist(0.25ns bins): 0.25:400
+      t6p4: n=400  violated=400  min=-0.948 p25=-0.948 med=-0.948 p75=-0.948 max=-0.948 mean=-0.948
+         hist(0.25ns bins): -1.00:400
+   -- HOLD --
+      t8p0: n=400  violated=0  min=0.049 p25=0.072 med=0.077 p75=0.080 max=0.080 mean=0.075
+         hist(0.25ns bins): 0.00:400
+      t6p4: n=400  violated=0  min=0.054 p25=0.081 med=0.093 p75=0.098 max=0.105 mean=0.089
+         hist(0.25ns bins): 0.00:400
+
+[4] WORST SETUP PATH DETAIL (rank 1..3)
+   --- t8p0 ---
+    #1 slack=0.473 grp=gmii_clk levels=27  (CARRY4=17 LUT1=1 LUT2=2 LUT3=2 LUT4=2 LUT5=1 LUT6=2)
+        src=u_app_udp/u_txf/dout_reg[64]/C (rising edge-triggered cell FDCE clocked by gmii_clk  {rise@4.000ns fall@8.000ns period=8.000ns})
+        dst=u_udp_tx/ip_csum_r_reg[14]/D (rising edge-triggered cell FDCE clocked by gmii_clk  {rise@4.000ns fall@8.000ns period=8.000ns})
+        7.489ns  (logic 3.755ns (50.139%)  route 3.734ns (49.861%))  route=3.734ns (49.861%)
+    #2 slack=0.473 grp=gmii_clk levels=27  (CARRY4=17 LUT1=1 LUT2=2 LUT3=2 LUT4=2 LUT5=1 LUT6=2)
+        src=u_app_udp/u_txf/dout_reg[64]/C (rising edge-triggered cell FDCE clocked by gmii_clk  {rise@4.000ns fall@8.000ns period=8.000ns})
+        dst=u_udp_tx/ip_csum_r_reg[14]/D (rising edge-triggered cell FDCE clocked by gmii_clk  {rise@4.000ns fall@8.000ns period=8.000ns})
+        7.489ns  (logic 3.755ns (50.139%)  route 3.734ns (49.861%))  route=3.734ns (49.861%)
+    #3 slack=0.473 grp=gmii_clk levels=27  (CARRY4=17 LUT1=1 LUT2=2 LUT3=2 LUT4=2 LUT5=1 LUT6=2)
+        src=u_app_udp/u_txf/dout_reg[64]/C (rising edge-triggered cell FDCE clocked by gmii_clk  {rise@4.000ns fall@8.000ns period=8.000ns})
+        dst=u_udp_tx/ip_csum_r_reg[14]/D (rising edge-triggered cell FDCE clocked by gmii_clk  {rise@4.000ns fall@8.000ns period=8.000ns})
+        7.489ns  (logic 3.755ns (50.139%)  route 3.734ns (49.861%))  route=3.734ns (49.861%)
+   --- t6p4 ---
+    #1 slack=-0.948 grp=gmii_clk levels=26  (CARRY4=16 LUT1=1 LUT2=2 LUT3=2 LUT4=1 LUT5=3 LUT6=1)
+        src=u_app_udp/u_txf/dout_reg[64]/C (rising edge-triggered cell FDCE clocked by gmii_clk  {rise@3.200ns fall@6.400ns period=6.400ns})
+        dst=u_udp_tx/ip_csum_r_reg[13]/D (rising edge-triggered cell FDCE clocked by gmii_clk  {rise@3.200ns fall@6.400ns period=6.400ns})
+        7.148ns  (logic 3.646ns (51.006%)  route 3.502ns (48.994%))  route=3.502ns (48.994%)
+    #2 slack=-0.948 grp=gmii_clk levels=26  (CARRY4=16 LUT1=1 LUT2=2 LUT3=2 LUT4=1 LUT5=3 LUT6=1)
+        src=u_app_udp/u_txf/dout_reg[64]/C (rising edge-triggered cell FDCE clocked by gmii_clk  {rise@3.200ns fall@6.400ns period=6.400ns})
+        dst=u_udp_tx/ip_csum_r_reg[13]/D (rising edge-triggered cell FDCE clocked by gmii_clk  {rise@3.200ns fall@6.400ns period=6.400ns})
+        7.148ns  (logic 3.646ns (51.006%)  route 3.502ns (48.994%))  route=3.502ns (48.994%)
+    #3 slack=-0.948 grp=gmii_clk levels=26  (CARRY4=16 LUT1=1 LUT2=2 LUT3=2 LUT4=1 LUT5=3 LUT6=1)
+        src=u_app_udp/u_txf/dout_reg[64]/C (rising edge-triggered cell FDCE clocked by gmii_clk  {rise@3.200ns fall@6.400ns period=6.400ns})
+        dst=u_udp_tx/ip_csum_r_reg[13]/D (rising edge-triggered cell FDCE clocked by gmii_clk  {rise@3.200ns fall@6.400ns period=6.400ns})
+        7.148ns  (logic 3.646ns (51.006%)  route 3.502ns (48.994%))  route=3.502ns (48.994%)
+
+[5] PER-CONE WORST SLACK (SETUP, cone = src hierarchy prefix)
+   --- t8p0 ---
+      u_app_udp                worst=+0.473  paths=400
+   --- t6p4 ---
+      u_app_udp                worst=-0.948  paths=400
+
+[5] PER-CONE WORST SLACK (HOLD, cone = src hierarchy prefix)
+   --- t8p0 ---
+      u_app_udp                worst=+0.049  paths=14
+      u_hls                    worst=+0.051  paths=362
+      u_mac_rx                 worst=+0.062  paths=2
+      u_cam                    worst=+0.070  paths=4
+      u_tcp_tx/u_retx          worst=+0.071  paths=2
+      u_tcp_tx/u_ackq          worst=+0.076  paths=16
+   --- t6p4 ---
+      u_app_udp                worst=+0.054  paths=64
+      u_hls                    worst=+0.056  paths=64
+      u_tcp_tx/u_retx          worst=+0.061  paths=50
+      u_tcp_tx/u_fifo          worst=+0.061  paths=16
+      u_vlan_strip             worst=+0.062  paths=8
+      u_udp_split              worst=+0.065  paths=72
+      u_tcp_echo/u_fifo        worst=+0.070  paths=30
+      u_classify               worst=+0.073  paths=12
+      u_udp_tx                 worst=+0.082  paths=32
+      u_slow_tx/u_ififo        worst=+0.082  paths=8
+      u_slow_cfg               worst=+0.084  paths=4
+      u_udp_split/u_uf         worst=+0.084  paths=4
+
+[6] NET FANOUT SIGNATURE of worst-400 setup paths (fo= token census)
+   t8p0: fo=47572:800  fo=15:400  fo=6:400  fo=4:400  fo=3:800  fo=2:800  fo=1:10000  fo=0:800
+   t6p4: fo=47629:800  fo=13:400  fo=4:400  fo=3:1200  fo=2:1200  fo=1:9200  fo=0:800
+
+[7] FAILING SETUP ENDPOINT HIERARCHY (from *_failing_endpoints.txt)
+   t8p0: 0 failing endpoints
+   --- t6p4: 647 failing endpoints, worst=-0.948 ---
+      u_udp_split/u_udp_rx         count=19     worst=-0.264
+      u_tcp_tx/u_csum              count=18     worst=-0.307
+      u_tcp_tx/u_retx              count=9      worst=-0.082
+      u_tcp_echo/u_fifo            count=4      worst=-0.145
+      u_tcp_tx/u_ackq              count=3      worst=-0.164
+      u_hls/buffer_r_U             count=3      worst=-0.057
+      u_tcp_tx/total_len_r_reg[7]  count=2      worst=-0.267
+      u_app_ctrl/pool_reg[5]       count=2      worst=-0.211
+      u_app_ctrl/pool_reg[10]      count=2      worst=-0.181
+      u_app/stg_reg[6]             count=2      worst=-0.129
+      u_app/stg_reg[2]             count=2      worst=-0.127
+      u_app/stg_reg[0]             count=2      worst=-0.125
+      u_app/stg_reg[7]             count=2      worst=-0.116
+      u_hls/l1_cache_valid_U       count=2      worst=-0.076
+      u_hls/l1_age_U               count=2      worst=-0.030
+      u_tcp_tx/total_len_r_reg[6]  count=2      worst=-0.015
+      u_udp_tx/ip_csum_r_reg[13]   count=1      worst=-0.948
+      u_udp_tx/ip_csum_r_reg[15]   count=1      worst=-0.896
+      u_udp_tx/ip_csum_r_reg[14]   count=1      worst=-0.867
+      u_udp_tx/ip_csum_r_reg[9]    count=1      worst=-0.865
+
+[8] UTILIZATION (from *_utilization_routed.rpt)
+   t8p0: {'Slice LUTs': '52190', 'Slice Registers': '42083', 'Block RAM Tile': '312', 'RAMB36/FIFO*': '281', 'RAMB18': '62', 'DSPs': '4'}
+   t6p4: {'Slice LUTs': '52648', 'Slice Registers': '42140', 'Block RAM Tile': '312', 'RAMB36/FIFO*': '281', 'RAMB18': '62', 'DSPs': '4'}

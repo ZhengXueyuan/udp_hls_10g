@@ -211,3 +211,37 @@ __pycache__/
 #      无 tx_arb): 帧周期/载荷 Mbps; 档位由 -d GAP*/PL* 选择 (见 .bat 头注释)
 sim/p5e_rate/*
 !sim/p5e_rate/run_tb_rate.bat
+
+# ============================================================================
+# P6 (10G 换板 → XCKU5P) 期的补充规则 (2026-09-28)
+#
+# 背景: 未跟踪条目一度有 67 条 / 4.58 GB (其中 4.56 GB 是抓包), git status
+# 被噪声淹没, "有没有真的改动"一眼看不出来。以下只补上面没覆盖到的类别。
+# ============================================================================
+
+# ---- 抓包与抓包导出
+# (上面 PktMon* / Pkt2.txt / PktIdle.txt 只覆盖旧命名, 不匹配 *.pcapng)
+*.pcapng
+*.etl
+
+# ---- Routed checkpoint
+# ⚠️ 全局 `*.bit` 只挡位流, **`.dcp` 一直漏网** ——
+# p5f_verify/keep/wrapper_p4_holdfix_routed.dcp 单个就有 39 MB。
+*.dcp
+
+# ---- cpp_peer: peer.exe 已有规则, udpsend.exe 没有
+tools/cpp_peer/*.exe
+
+# ---- shell 转义事故产物 (防复发)
+# `D:\repo\ECO\udp_hls_10g\pk2.txt` 里的反斜杠被 shell 当字面量, 于是在仓库根
+# 生成了名为 repoECOudp_hls_10gpk2.txt / .etl 的文件 (pktmon/ETW 导出, 共 15.8 MB)。
+# 2026-09-28 已清理, 规则留着防复发。
+repoECO*
+
+# ---- 大块重放数据与一次性残渣
+replay*.json
+p4b7_p2f.json
+freeze_cap_*
+rate*.txt
+conv.txt
+tshark_err.txt
