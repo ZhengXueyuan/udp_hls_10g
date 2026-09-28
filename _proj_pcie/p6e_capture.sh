@@ -68,11 +68,24 @@ echo "  广播帧:               $(tcpdump -r /tmp/p6e_ping.pcap -n -e 2>/dev/nu
 echo "  ARP:                  $(tcpdump -r /tmp/p6e_ping.pcap -n -e 2>/dev/null | grep -ci 'ARP')"
 echo "  ICMP:                 $(tcpdump -r /tmp/p6e_ping.pcap -n -e 2>/dev/null | grep -ci 'ICMP')"
 
-echo; echo "===== 4. 判读 ====="
-echo "  抓包里 ARP 请求有 IP 192.168.100.2 的 'who-has' 但没有任何 $BOARDMAC 的应答"
-echo "    ⇒ 板子的慢路径没回 ARP (W7=0 印证) ⇒ 查 HLS: 是否被复位(hls_rst_n)/是否在跑"
-echo "  抓包里连 who-has 都没有 ⇒ 主机的 ARP 根本没上线 ⇒ 换个查法 (网卡/驱动/路由)"
-echo "  抓包里有 $BOARDMAC 但 tcpdump 解不出来 (奇异长度/坏帧) ⇒ 板子发了但帧格式不对"
+echo; echo "===== 4. 判读 (按抓包内容判, **不预设结论**) ====="
+# ⚠️ 这一段原来写的是"如果没回 ARP 就查 HLS"这种**固定文案** —— 结果 5/5 全通的那一轮里
+#    它照样打印"⇒ 慢路径没回 ARP, 去查 HLS", 与事实相反 (打印与检查脱节, 与审查 agent 在
+#    单元门里抓到的 F2 同一类错)。现在一律**按抓到的内容**分支。
+n_board=$(tcpdump -r /tmp/p6e_ping.pcap -n -e 2>/dev/null | grep -ci "$BOARDMAC")
+n_icmp=$( tcpdump -r /tmp/p6e_ping.pcap -n -e 2>/dev/null | grep -ci "ICMP")
+n_arp=$(  tcpdump -r /tmp/p6e_ping.pcap -n -e 2>/dev/null | grep -ci "ARP")
+n_whohas=$(tcpdump -r /tmp/p6e_ping.pcap -n -e 2>/dev/null | grep -ci "who-has $BOARD")
+if [ "$n_icmp" -ge 2 ]; then
+  echo "  [PASS] 抓包里 ICMP 成对出现 (共 $n_icmp 帧) ⇒ 板子在回 echo, 慢路径通"
+elif [ "$n_whohas" -gt 0 ] && [ "$n_board" -eq 0 ]; then
+  echo "  [FAIL] 有 who-has 但**没有任何**来自板子的帧 ($n_arp 条 ARP) ⇒ 慢路径没回 ARP"
+  echo "         ⇒ 查 HLS: hls_rst_n 是否一直被拉低 / 饥饿看门狗是否在反复复位它"
+elif [ "$n_whohas" -eq 0 ] && [ "$n_board" -eq 0 ]; then
+  echo "  [FAIL] 连 who-has 都没有 ⇒ 主机的 ARP 没上线 ⇒ 查主机侧 (网卡/路由/网段)"
+else
+  echo "  [WARN] 抓到板子的帧 ($n_board) 但没解出 ICMP/ARP ⇒ 帧格式可疑, 逐条看上面"
+fi
 
 echo; echo "===== 5. 稳定性: 10 轮 x 3 包, 每轮间隔 2s (回答【那次不响应是一次性还是间歇】) ====="
 LOST=0
