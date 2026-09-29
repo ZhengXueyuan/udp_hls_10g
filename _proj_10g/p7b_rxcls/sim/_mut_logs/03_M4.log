@@ -1,0 +1,256 @@
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Tue Sep 29 22:27:51 2026
+# Process ID         : 30736
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_rxcls/sim
+# Command line       : xsim.exe -log xsim_rxcls.log -mode tcl -source {xsim.dir/tb_rxcls_v2/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_rxcls/sim/xsim_rxcls.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_rxcls/sim\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 39776 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_rxcls_v2/xsim_script.tcl
+# xsim {tb_rxcls_v2} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+=== tb_rxcls_v2 (P7B rx_classify 吞吐修复单元门) ===
+-- S1 stream_min_tcp: 32 frames x 8 words, back-to-back, no gap
+  [FAIL] S1_tcp_min stimulus fully consumed (no timeout) | src=tb:source drain
+  [ ok ] S1_tcp_min both DUTs drained (no timeout) | src=tb:pipeline drain
+  ==== S1_tcp_min: mode=0 cycles=400060 v1stall=192 v2stall=400041 v2ovf=0 rqovf=0 occ=16
+  [FAIL] S1_tcp_min beats: v1 count == v2 count | src=cmp:v1==v2
+  ---- S1_tcp_min: v1 beats=256 v2 beats=2 specFrames=32 ----
+  [ ok ] S1_tcp_min beat-wise bit-exact v1 vs v2 (0 mism) | src=cmp:v1==v2
+  [FAIL] S1_tcp_min route constant within each frame | src=contract:1 route/frame
+  [FAIL] S1_tcp_min v1 no dangling frame (all end w/ tlast) | src=cmp:whole-frame rule
+  [FAIL] S1_tcp_min v2 no dangling frame (all end w/ tlast) | src=cmp:whole-frame rule
+  [FAIL] S1_tcp_min frame count v1 == v2 | src=cmp:v1==v2
+  [ ok ] S1_tcp_min v1 never valid on both routes same cycle | src=contract:1 word/beat
+  [ ok ] S1_tcp_min v2 never valid on both routes same cycle | src=contract:1 word/beat
+  [ ok ] S1_tcp_min v1 output sidebands carry no X | src=contract:no X
+  [ ok ] S1_tcp_min v2 output sidebands carry no X | src=contract:no X
+  [FAIL] S1_tcp_min v1 stat_fast == frames routed fast in capture | src=content vs counter
+  [FAIL] S1_tcp_min v1 stat_slow == frames routed slow in capture | src=content vs counter
+  [FAIL] S1_tcp_min v2 stat_fast == frames routed fast in capture | src=content vs counter
+  [FAIL] S1_tcp_min v2 stat_slow == frames routed slow in capture | src=content vs counter
+  [FAIL] S1_tcp_min v1 dbg words_out == words in fast frames | src=content vs counter
+  [FAIL] S1_tcp_min v2 dbg words_out == words in fast frames | src=content vs counter
+  [ ok ] S1_tcp_min v1 accepted words == stimulus words | src=stim:nstim
+  [FAIL] S1_tcp_min v2 accepted words == stimulus words | src=stim:nstim
+  [FAIL] S1_tcp_min v1 frame count == spec model | src=model:w2/w5/tlast
+  [FAIL] S1_tcp_min v2 frame count == spec model | src=model:w2/w5/tlast
+  [FAIL] S1_tcp_min v2 frame table == spec model (nw,route,keep,hash) | src=model:w2/w5/tlast
+  [FAIL] S1_tcp_min v1 frame table == spec model (nw,route,keep,hash) | src=model:w2/w5/tlast
+  [FAIL] S1_tcp_min v2 sum(popc(tkeep)) == stimulus sum | src=stim:byte conservation
+  [FAIL] S1_tcp_min v1 sum(popc(tkeep)) == stimulus sum | src=stim:byte conservation
+  [meas] S1 v2 steady min-TCP frame period == 8 frames=0 span=x -> period=x (exp 8)
+  [FAIL] S1 v2 steady min-TCP frame period == 8 | src=derived:1 word/cycle input
+  [meas] S1 v1 steady min-TCP frame period == 14 frames=0 span=x -> period=x (exp 14)
+  [FAIL] S1 v1 steady min-TCP frame period == 14 | src=derived:8+6 audit 4.2
+  [FAIL] S1 v2 input stall cycles == 0 | src=derived:dec 6 < fifo 16
+  [ ok ] S1 v1 input stall cycles > 0 | src=derived:FILL blocks input
+  [ ok ] S1 v2 stall: DUT counter == TB measurement | src=content vs counter
+  [ ok ] S1 v2 self-check counters == 0 | src=derived:exact space gate
+-- S2 stream_min_udp: 32 frames x 8 words, back-to-back
+  [FAIL] S2_udp_min stimulus fully consumed (no timeout) | src=tb:source drain
+  [ ok ] S2_udp_min both DUTs drained (no timeout) | src=tb:pipeline drain
+  ==== S2_udp_min: mode=0 cycles=400060 v1stall=96 v2stall=400041 v2ovf=0 rqovf=0 occ=16
+  [FAIL] S2_udp_min beats: v1 count == v2 count | src=cmp:v1==v2
+  ---- S2_udp_min: v1 beats=256 v2 beats=2 specFrames=32 ----
+  [ ok ] S2_udp_min beat-wise bit-exact v1 vs v2 (0 mism) | src=cmp:v1==v2
+  [FAIL] S2_udp_min route constant within each frame | src=contract:1 route/frame
+  [FAIL] S2_udp_min v1 no dangling frame (all end w/ tlast) | src=cmp:whole-frame rule
+  [FAIL] S2_udp_min v2 no dangling frame (all end w/ tlast) | src=cmp:whole-frame rule
+  [FAIL] S2_udp_min frame count v1 == v2 | src=cmp:v1==v2
+  [ ok ] S2_udp_min v1 never valid on both routes same cycle | src=contract:1 word/beat
+  [ ok ] S2_udp_min v2 never valid on both routes same cycle | src=contract:1 word/beat
+  [ ok ] S2_udp_min v1 output sidebands carry no X | src=contract:no X
+  [ ok ] S2_udp_min v2 output sidebands carry no X | src=contract:no X
+  [FAIL] S2_udp_min v1 stat_fast == frames routed fast in capture | src=content vs counter
+  [FAIL] S2_udp_min v1 stat_slow == frames routed slow in capture | src=content vs counter
+  [FAIL] S2_udp_min v2 stat_fast == frames routed fast in capture | src=content vs counter
+  [FAIL] S2_udp_min v2 stat_slow == frames routed slow in capture | src=content vs counter
+  [FAIL] S2_udp_min v1 dbg words_out == words in fast frames | src=content vs counter
+  [FAIL] S2_udp_min v2 dbg words_out == words in fast frames | src=content vs counter
+  [ ok ] S2_udp_min v1 accepted words == stimulus words | src=stim:nstim
+  [FAIL] S2_udp_min v2 accepted words == stimulus words | src=stim:nstim
+  [FAIL] S2_udp_min v1 frame count == spec model | src=model:w2/w5/tlast
+  [FAIL] S2_udp_min v2 frame count == spec model | src=model:w2/w5/tlast
+  [FAIL] S2_udp_min v2 frame table == spec model (nw,route,keep,hash) | src=model:w2/w5/tlast
+  [FAIL] S2_udp_min v1 frame table == spec model (nw,route,keep,hash) | src=model:w2/w5/tlast
+  [FAIL] S2_udp_min v2 sum(popc(tkeep)) == stimulus sum | src=stim:byte conservation
+  [FAIL] S2_udp_min v1 sum(popc(tkeep)) == stimulus sum | src=stim:byte conservation
+  [meas] S2 v2 steady min-UDP frame period == 8 frames=0 span=x -> period=x (exp 8)
+  [FAIL] S2 v2 steady min-UDP frame period == 8 | src=derived:1 word/cycle input
+  [meas] S2 v1 steady min-UDP frame period == 11 frames=0 span=x -> period=x (exp 11)
+  [FAIL] S2 v1 steady min-UDP frame period == 11 | src=derived:8+3 audit 4.2
+-- S3 stream_max_tcp: 16 frames x 190 words, back-to-back
+  [FAIL] S3_tcp_max stimulus fully consumed (no timeout) | src=tb:source drain
+  [ ok ] S3_tcp_max both DUTs drained (no timeout) | src=tb:pipeline drain
+  ==== S3_tcp_max: mode=0 cycles=400060 v1stall=96 v2stall=400042 v2ovf=0 rqovf=0 occ=16
+  [FAIL] S3_tcp_max beats: v1 count == v2 count | src=cmp:v1==v2
+  ---- S3_tcp_max: v1 beats=3040 v2 beats=1 specFrames=16 ----
+  [ ok ] S3_tcp_max beat-wise bit-exact v1 vs v2 (0 mism) | src=cmp:v1==v2
+  [FAIL] S3_tcp_max route constant within each frame | src=contract:1 route/frame
+  [FAIL] S3_tcp_max v1 no dangling frame (all end w/ tlast) | src=cmp:whole-frame rule
+  [FAIL] S3_tcp_max v2 no dangling frame (all end w/ tlast) | src=cmp:whole-frame rule
+  [FAIL] S3_tcp_max frame count v1 == v2 | src=cmp:v1==v2
+  [ ok ] S3_tcp_max v1 never valid on both routes same cycle | src=contract:1 word/beat
+  [ ok ] S3_tcp_max v2 never valid on both routes same cycle | src=contract:1 word/beat
+  [ ok ] S3_tcp_max v1 output sidebands carry no X | src=contract:no X
+  [ ok ] S3_tcp_max v2 output sidebands carry no X | src=contract:no X
+  [FAIL] S3_tcp_max v1 stat_fast == frames routed fast in capture | src=content vs counter
+  [FAIL] S3_tcp_max v1 stat_slow == frames routed slow in capture | src=content vs counter
+  [FAIL] S3_tcp_max v2 stat_fast == frames routed fast in capture | src=content vs counter
+  [FAIL] S3_tcp_max v2 stat_slow == frames routed slow in capture | src=content vs counter
+  [FAIL] S3_tcp_max v1 dbg words_out == words in fast frames | src=content vs counter
+  [FAIL] S3_tcp_max v2 dbg words_out == words in fast frames | src=content vs counter
+  [ ok ] S3_tcp_max v1 accepted words == stimulus words | src=stim:nstim
+  [FAIL] S3_tcp_max v2 accepted words == stimulus words | src=stim:nstim
+  [FAIL] S3_tcp_max v1 frame count == spec model | src=model:w2/w5/tlast
+  [FAIL] S3_tcp_max v2 frame count == spec model | src=model:w2/w5/tlast
+  [FAIL] S3_tcp_max v2 frame table == spec model (nw,route,keep,hash) | src=model:w2/w5/tlast
+  [FAIL] S3_tcp_max v1 frame table == spec model (nw,route,keep,hash) | src=model:w2/w5/tlast
+  [FAIL] S3_tcp_max v2 sum(popc(tkeep)) == stimulus sum | src=stim:byte conservation
+  [FAIL] S3_tcp_max v1 sum(popc(tkeep)) == stimulus sum | src=stim:byte conservation
+  [meas] S3 v2 steady max-TCP frame period == 190 frames=0 span=x -> period=x (exp 190)
+  [FAIL] S3 v2 steady max-TCP frame period == 190 | src=derived:1 word/cycle input
+  [meas] S3 v1 steady max-TCP frame period == 196 frames=0 span=x -> period=x (exp 196)
+  [FAIL] S3 v1 steady max-TCP frame period == 196 | src=derived:190+6 audit 4.2
+-- S4 seq matrix x4 (668 words): no backpressure
+  [FAIL] S4_nostall stimulus fully consumed (no timeout) | src=tb:source drain
+  [ ok ] S4_nostall both DUTs drained (no timeout) | src=tb:pipeline drain
+  ==== S4_nostall: mode=0 cycles=400060 v1stall=536 v2stall=400023 v2ovf=0 rqovf=0 occ=16
+  [FAIL] S4_nostall beats: v1 count == v2 count | src=cmp:v1==v2
+  ---- S4_nostall: v1 beats=668 v2 beats=6 specFrames=124 ----
+  [ ok ] S4_nostall beat-wise bit-exact v1 vs v2 (0 mism) | src=cmp:v1==v2
+  [FAIL] S4_nostall route constant within each frame | src=contract:1 route/frame
+  [FAIL] S4_nostall v1 no dangling frame (all end w/ tlast) | src=cmp:whole-frame rule
+  [FAIL] S4_nostall v2 no dangling frame (all end w/ tlast) | src=cmp:whole-frame rule
+  [FAIL] S4_nostall frame count v1 == v2 | src=cmp:v1==v2
+  [ ok ] S4_nostall v1 never valid on both routes same cycle | src=contract:1 word/beat
+  [ ok ] S4_nostall v2 never valid on both routes same cycle | src=contract:1 word/beat
+  [ ok ] S4_nostall v1 output sidebands carry no X | src=contract:no X
+  [ ok ] S4_nostall v2 output sidebands carry no X | src=contract:no X
+  [FAIL] S4_nostall v1 stat_fast == frames routed fast in capture | src=content vs counter
+  [FAIL] S4_nostall v1 stat_slow == frames routed slow in capture | src=content vs counter
+  [FAIL] S4_nostall v2 stat_fast == frames routed fast in capture | src=content vs counter
+  [FAIL] S4_nostall v2 stat_slow == frames routed slow in capture | src=content vs counter
+  [FAIL] S4_nostall v1 dbg words_out == words in fast frames | src=content vs counter
+  [FAIL] S4_nostall v2 dbg words_out == words in fast frames | src=content vs counter
+  [ ok ] S4_nostall v1 accepted words == stimulus words | src=stim:nstim
+  [FAIL] S4_nostall v2 accepted words == stimulus words | src=stim:nstim
+  [FAIL] S4_nostall v1 frame count == spec model | src=model:w2/w5/tlast
+  [FAIL] S4_nostall v2 frame count == spec model | src=model:w2/w5/tlast
+  [FAIL] S4_nostall v2 frame table == spec model (nw,route,keep,hash) | src=model:w2/w5/tlast
+  [FAIL] S4_nostall v1 frame table == spec model (nw,route,keep,hash) | src=model:w2/w5/tlast
+  [FAIL] S4_nostall v2 sum(popc(tkeep)) == stimulus sum | src=stim:byte conservation
+  [FAIL] S4_nostall v1 sum(popc(tkeep)) == stimulus sum | src=stim:byte conservation
+  [ ok ] S4 first-frame beat cycles identical v1 vs v2 | src=derived:same decision point
+  [FAIL] S4 F4 TERM closure frames present (1 word, 0 payload bytes) | src=model:TERM word
+  [FAIL] S5_stall stimulus fully consumed (no timeout) | src=tb:source drain
+  [ ok ] S5_stall both DUTs drained (no timeout) | src=tb:pipeline drain
+  ==== S5_stall: mode=1 cycles=400060 v1stall=792 v2stall=400023 v2ovf=0 rqovf=0 occ=16
+  [FAIL] S5_stall beats: v1 count == v2 count | src=cmp:v1==v2
+  ---- S5_stall: v1 beats=668 v2 beats=6 specFrames=124 ----
+  [ ok ] S5_stall beat-wise bit-exact v1 vs v2 (0 mism) | src=cmp:v1==v2
+  [FAIL] S5_stall route constant within each frame | src=contract:1 route/frame
+  [FAIL] S5_stall v1 no dangling frame (all end w/ tlast) | src=cmp:whole-frame rule
+  [FAIL] S5_stall v2 no dangling frame (all end w/ tlast) | src=cmp:whole-frame rule
+  [FAIL] S5_stall frame count v1 == v2 | src=cmp:v1==v2
+  [ ok ] S5_stall v1 never valid on both routes same cycle | src=contract:1 word/beat
+  [ ok ] S5_stall v2 never valid on both routes same cycle | src=contract:1 word/beat
+  [ ok ] S5_stall v1 output sidebands carry no X | src=contract:no X
+  [ ok ] S5_stall v2 output sidebands carry no X | src=contract:no X
+  [FAIL] S5_stall v1 stat_fast == frames routed fast in capture | src=content vs counter
+  [FAIL] S5_stall v1 stat_slow == frames routed slow in capture | src=content vs counter
+  [FAIL] S5_stall v2 stat_fast == frames routed fast in capture | src=content vs counter
+  [FAIL] S5_stall v2 stat_slow == frames routed slow in capture | src=content vs counter
+  [FAIL] S5_stall v1 dbg words_out == words in fast frames | src=content vs counter
+  [FAIL] S5_stall v2 dbg words_out == words in fast frames | src=content vs counter
+  [ ok ] S5_stall v1 accepted words == stimulus words | src=stim:nstim
+  [FAIL] S5_stall v2 accepted words == stimulus words | src=stim:nstim
+  [FAIL] S5_stall v1 frame count == spec model | src=model:w2/w5/tlast
+  [FAIL] S5_stall v2 frame count == spec model | src=model:w2/w5/tlast
+  [FAIL] S5_stall v2 frame table == spec model (nw,route,keep,hash) | src=model:w2/w5/tlast
+  [FAIL] S5_stall v1 frame table == spec model (nw,route,keep,hash) | src=model:w2/w5/tlast
+  [FAIL] S5_stall v2 sum(popc(tkeep)) == stimulus sum | src=stim:byte conservation
+  [FAIL] S5_stall v1 sum(popc(tkeep)) == stimulus sum | src=stim:byte conservation
+  [ ok ] S5 first-frame beat cycles identical v1 vs v2 | src=derived:same decision point
+  [FAIL] S6_rand stimulus fully consumed (no timeout) | src=tb:source drain
+  [ ok ] S6_rand both DUTs drained (no timeout) | src=tb:pipeline drain
+  ==== S6_rand: mode=3 cycles=400060 v1stall=1382 v2stall=400023 v2ovf=0 rqovf=0 occ=16
+  [FAIL] S6_rand beats: v1 count == v2 count | src=cmp:v1==v2
+  ---- S6_rand: v1 beats=668 v2 beats=6 specFrames=124 ----
+  [ ok ] S6_rand beat-wise bit-exact v1 vs v2 (0 mism) | src=cmp:v1==v2
+  [FAIL] S6_rand route constant within each frame | src=contract:1 route/frame
+  [FAIL] S6_rand v1 no dangling frame (all end w/ tlast) | src=cmp:whole-frame rule
+  [FAIL] S6_rand v2 no dangling frame (all end w/ tlast) | src=cmp:whole-frame rule
+  [FAIL] S6_rand frame count v1 == v2 | src=cmp:v1==v2
+  [ ok ] S6_rand v1 never valid on both routes same cycle | src=contract:1 word/beat
+  [ ok ] S6_rand v2 never valid on both routes same cycle | src=contract:1 word/beat
+  [ ok ] S6_rand v1 output sidebands carry no X | src=contract:no X
+  [ ok ] S6_rand v2 output sidebands carry no X | src=contract:no X
+  [FAIL] S6_rand v1 stat_fast == frames routed fast in capture | src=content vs counter
+  [FAIL] S6_rand v1 stat_slow == frames routed slow in capture | src=content vs counter
+  [FAIL] S6_rand v2 stat_fast == frames routed fast in capture | src=content vs counter
+  [FAIL] S6_rand v2 stat_slow == frames routed slow in capture | src=content vs counter
+  [FAIL] S6_rand v1 dbg words_out == words in fast frames | src=content vs counter
+  [FAIL] S6_rand v2 dbg words_out == words in fast frames | src=content vs counter
+  [ ok ] S6_rand v1 accepted words == stimulus words | src=stim:nstim
+  [FAIL] S6_rand v2 accepted words == stimulus words | src=stim:nstim
+  [FAIL] S6_rand v1 frame count == spec model | src=model:w2/w5/tlast
+  [FAIL] S6_rand v2 frame count == spec model | src=model:w2/w5/tlast
+  [FAIL] S6_rand v2 frame table == spec model (nw,route,keep,hash) | src=model:w2/w5/tlast
+  [FAIL] S6_rand v1 frame table == spec model (nw,route,keep,hash) | src=model:w2/w5/tlast
+  [FAIL] S6_rand v2 sum(popc(tkeep)) == stimulus sum | src=stim:byte conservation
+  [FAIL] S6_rand v1 sum(popc(tkeep)) == stimulus sum | src=stim:byte conservation
+  [FAIL] S7_hard stimulus fully consumed (no timeout) | src=tb:source drain
+  [ ok ] S7_hard both DUTs drained (no timeout) | src=tb:pipeline drain
+  ==== S7_hard: mode=2 cycles=400060 v1stall=570 v2stall=400023 v2ovf=0 rqovf=0 occ=16
+  [FAIL] S7_hard beats: v1 count == v2 count | src=cmp:v1==v2
+  ---- S7_hard: v1 beats=668 v2 beats=6 specFrames=124 ----
+  [ ok ] S7_hard beat-wise bit-exact v1 vs v2 (0 mism) | src=cmp:v1==v2
+  [FAIL] S7_hard route constant within each frame | src=contract:1 route/frame
+  [FAIL] S7_hard v1 no dangling frame (all end w/ tlast) | src=cmp:whole-frame rule
+  [FAIL] S7_hard v2 no dangling frame (all end w/ tlast) | src=cmp:whole-frame rule
+  [FAIL] S7_hard frame count v1 == v2 | src=cmp:v1==v2
+  [ ok ] S7_hard v1 never valid on both routes same cycle | src=contract:1 word/beat
+  [ ok ] S7_hard v2 never valid on both routes same cycle | src=contract:1 word/beat
+  [ ok ] S7_hard v1 output sidebands carry no X | src=contract:no X
+  [ ok ] S7_hard v2 output sidebands carry no X | src=contract:no X
+  [FAIL] S7_hard v1 stat_fast == frames routed fast in capture | src=content vs counter
+  [FAIL] S7_hard v1 stat_slow == frames routed slow in capture | src=content vs counter
+  [FAIL] S7_hard v2 stat_fast == frames routed fast in capture | src=content vs counter
+  [FAIL] S7_hard v2 stat_slow == frames routed slow in capture | src=content vs counter
+  [FAIL] S7_hard v1 dbg words_out == words in fast frames | src=content vs counter
+  [FAIL] S7_hard v2 dbg words_out == words in fast frames | src=content vs counter
+  [ ok ] S7_hard v1 accepted words == stimulus words | src=stim:nstim
+  [FAIL] S7_hard v2 accepted words == stimulus words | src=stim:nstim
+  [FAIL] S7_hard v1 frame count == spec model | src=model:w2/w5/tlast
+  [FAIL] S7_hard v2 frame count == spec model | src=model:w2/w5/tlast
+  [FAIL] S7_hard v2 frame table == spec model (nw,route,keep,hash) | src=model:w2/w5/tlast
+  [FAIL] S7_hard v1 frame table == spec model (nw,route,keep,hash) | src=model:w2/w5/tlast
+  [FAIL] S7_hard v2 sum(popc(tkeep)) == stimulus sum | src=stim:byte conservation
+  [FAIL] S7_hard v1 sum(popc(tkeep)) == stimulus sum | src=stim:byte conservation
+  [ ok ] S7 stress real: v2 input stalled in 40-cycle stall | src=derived:40 > fifo 16
+  [ ok ] S7 no silent loss under stall: ovf/rqovf == 0 | src=derived:exact space gate
+  [FAIL] S7 truncated frame closed by TERM (whole-frame drop rule) | src=model:TERM word
+  [FAIL] S7 frame count == spec model (TERM closes truncation) | src=model:w2/w5/tlast
+=== tb_rxcls_v2 done: 199 checks, 143 fail ===
+VERDICT = FAIL
+$finish called at time : 17922864 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_rxcls/sim/tb_rxcls_v2.v" Line 698
+exit
+INFO: [Common 17-206] Exiting xsim at Tue Sep 29 22:27:55 2026...

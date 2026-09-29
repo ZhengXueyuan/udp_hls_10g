@@ -1,0 +1,36 @@
+=== P7B rx_classify_v2 单元门 变异测试 ===
+  [OK ] 正例 (干净件副本)                    rc=0  === tb_rxcls_v2 done: 206 checks, 0 fail ===
+  [OK ] M1 FILL-without-output modality restored (read blanked in decision window) expect=caught      rc=1  nFAIL=6
+         [FAIL] S1 v2 steady min-TCP frame period == 8 | src=derived:1 word/cycle input
+         [FAIL] S1 v2 input stall cycles == 0 | src=derived:dec 6 < fifo 16
+         [FAIL] S2 v2 steady min-UDP frame period == 8 | src=derived:1 word/cycle input
+         [FAIL] S3 v2 steady max-TCP frame period == 190 | src=derived:1 word/cycle input
+  [OK ] M2 F4-style silent word loss (registered full as space gate) expect=caught      rc=1  nFAIL=54
+         [FAIL] S5_stall beats: v1 count == v2 count | src=cmp:v1==v2
+         [FAIL] S5_stall route constant within each frame | src=contract:1 route/frame
+         [FAIL] S5_stall v1 no dangling frame (all end w/ tlast) | src=cmp:whole-frame rule
+         [FAIL] S5_stall v2 no dangling frame (all end w/ tlast) | src=cmp:whole-frame rule
+  [OK ] M3 tlast priority lost (w5 flags override tlast)     expect=caught      rc=1  nFAIL=12
+         [FAIL] S4_nostall beat-wise bit-exact v1 vs v2 (0 mism) | src=cmp:v1==v2
+         [FAIL] S4_nostall per-frame content/route identical (nw,route,keep,hash) | src=cmp:v1==v2
+         [FAIL] S4_nostall v2 frame table == spec model (nw,route,keep,hash) | src=model:w2/w5/tlast
+         [FAIL] S5_stall beat-wise bit-exact v1 vs v2 (0 mism) | src=cmp:v1==v2
+  [OK ] M4 route queue popped every word (should pop at frame end) expect=caught      rc=1  nFAIL=143
+         [FAIL] S1_tcp_min stimulus fully consumed (no timeout) | src=tb:source drain
+         [FAIL] S1_tcp_min beats: v1 count == v2 count | src=cmp:v1==v2
+         [FAIL] S1_tcp_min route constant within each frame | src=contract:1 route/frame
+         [FAIL] S1_tcp_min v1 no dangling frame (all end w/ tlast) | src=cmp:whole-frame rule
+  [OK ] M5 (equivalent) widx == 4'd2 written as widx == 2    expect=not_caught  rc=0  nFAIL=0
+  [OK ] M6 (equivalent) cur_tcp_ctl inlined into dec_val     expect=not_caught  rc=0  nFAIL=0
+  [OK ] M7 (equivalent, found by experiment) dec_w2 loses !tlast: non-TCP is SLOW either way expect=not_caught  rc=0  nFAIL=0
+
+---- 汇总 ----
+  OK  M1 FILL-without-output modality restored (read blanked in decision window) expect=caught  got=caught
+  OK  M2 F4-style silent word loss (registered full as space gate) expect=caught  got=caught
+  OK  M3 tlast priority lost (w5 flags override tlast)       expect=caught  got=caught
+  OK  M4 route queue popped every word (should pop at frame end) expect=caught  got=caught
+  OK  M5 (equivalent) widx == 4'd2 written as widx == 2      expect=missed  got=missed
+  OK  M6 (equivalent) cur_tcp_ctl inlined into dec_val       expect=missed  got=missed
+  OK  M7 (equivalent, found by experiment) dec_w2 loses !tlast: non-TCP is SLOW either way expect=missed  got=missed
+
+MUT_VERDICT = PASS (非等价变异漏掉 0 条)
