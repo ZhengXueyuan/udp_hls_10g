@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+REPO_ROOT="$(cd -- "$(dirname -- "$0")/../" && pwd)" || exit 1
+if [ ! -f "$REPO_ROOT/CLAUDE.md" ]; then
+  echo "[PATHGUARD FAIL] cannot locate this checkout from $0" >&2
+  echo "  derived REPO_ROOT = $REPO_ROOT" >&2
+  exit 1
+fi
 # board_rounds_v7_batch.sh -- the v7 board run.
 #
 # THE QUESTION (ISSUE §18.17): was the frame ORDER on the wire permuted, or is the
@@ -23,7 +29,7 @@
 # prediction in the falsifiable form NB==560 && CM==0 (the 560 non-UDP tail bytes that
 # v6 used to mis-count as payload now land in NB instead).
 set -u
-cd /d/repo/ECO/udp_hls_10g || exit 1
+cd %REPO_ROOT% || exit 1
 BIT="${1:-wrapper_p4_diag_v7.bit}"
 P=p5diag_verify/v7
 mkdir -p "$P"

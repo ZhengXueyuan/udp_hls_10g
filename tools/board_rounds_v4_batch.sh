@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+REPO_ROOT="$(cd -- "$(dirname -- "$0")/../" && pwd)" || exit 1
+if [ ! -f "$REPO_ROOT/CLAUDE.md" ]; then
+  echo "[PATHGUARD FAIL] cannot locate this checkout from $0" >&2
+  echo "  derived REPO_ROOT = $REPO_ROOT" >&2
+  exit 1
+fi
 # board_rounds_v4_batch.sh -- the planned v4 board measurement batch.
 #
 # WHY these eight rounds and not fewer:
@@ -15,7 +21,7 @@
 # Every round records sysmon (die temp + VCCINT/VCCAUX/VCCBRAM current/min/max),
 # whose MIN/MAX latches reset on reconfiguration, so they bracket exactly that round.
 set -u
-cd /d/repo/ECO/udp_hls_10g || exit 1
+cd %REPO_ROOT% || exit 1
 BIT="${1:-wrapper_p4_diag_v4.bit}"
 P=p5diag_verify/v4
 mkdir -p "$P"

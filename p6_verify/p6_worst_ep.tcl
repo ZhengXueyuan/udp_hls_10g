@@ -1,3 +1,7 @@
+set REPO_ROOT [file normalize [file join [file dirname [info script]] ..]]
+if {![file exists [file join $REPO_ROOT CLAUDE.md]]} {
+  error "PATHGUARD FAIL: cannot locate this checkout from [info script] -- derived REPO_ROOT = $REPO_ROOT"
+}
 #=============================================================================
 # p6_worst_ep.tcl -- P6 gate-B follow-up, read-only.
 #   (a) per-ENDPOINT worst-400 setup report (-nworst 1: one path per endpoint,
@@ -5,7 +9,7 @@
 #   (b) design-wide top fanout nets (answers "is the fo=498 family still worst")
 #   ASCII only. Writes into p6_verify/.
 #=============================================================================
-set root_dir D:/repo/ECO/udp_hls_10g
+set root_dir %REPO_ROOT%
 set out_dir  ${root_dir}/p6_verify
 
 foreach tag {t8p0 t6p4} {

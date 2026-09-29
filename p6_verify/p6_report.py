@@ -2,14 +2,17 @@
 """p6_report.py - P6 gate-B controlled experiment: side-by-side comparison of the
 8.000ns control (t8p0) and the 6.400ns run (t6p4).  Read-only.
 
-Usage: python p6_report.py [out_dir]      (default: D:/repo/ECO/udp_hls_10g/p6_verify)
+Usage: python p6_report.py [out_dir]      (default: this file's own directory)
+       self-locating since 2026-09-29: the previous default was a hardcoded
+       D:/repo/ECO/udp_hls_10g/p6_verify, i.e. the report of ANOTHER checkout.
 """
 import os
 import re
 import sys
 from collections import Counter, OrderedDict
 
-OUT = sys.argv[1] if len(sys.argv) > 1 else "D:/repo/ECO/udp_hls_10g/p6_verify"
+OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.dirname(
+    os.path.abspath(__file__))
 TAGS = ["t8p0", "t6p4"]
 
 # Longest-known-prefix cone list, copied verbatim from p5e_verify/rank_cones.py

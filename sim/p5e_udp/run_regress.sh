@@ -1,7 +1,13 @@
 #!/bin/bash
+REPO_ROOT="$(cd -- "$(dirname -- "$0")/../../" && pwd)" || exit 1
+if [ ! -f "$REPO_ROOT/CLAUDE.md" ]; then
+  echo "[PATHGUARD FAIL] cannot locate this checkout from $0" >&2
+  echo "  derived REPO_ROOT = $REPO_ROOT" >&2
+  exit 1
+fi
 # P5e-T3 回归驱动: P1 三门 + P4 矩阵 16 门 + P5 全套 + 新增 T3/T4/T5 门
 # 用法: bash sim/p5e_udp/run_regress.sh [p1|p4|p5|new|all]
-R=/d/repo/ECO/udp_hls_10g
+R=%REPO_ROOT%
 OUT=$R/sim/p5e_udp/regress_t3.log
 WHICH=${1:-all}
 

@@ -1,7 +1,13 @@
 #!/bin/bash
+REPO_ROOT="$(cd -- "$(dirname -- "$0")/../" && pwd)" || exit 1
+if [ ! -f "$REPO_ROOT/CLAUDE.md" ]; then
+  echo "[PATHGUARD FAIL] cannot locate this checkout from $0" >&2
+  echo "  derived REPO_ROOT = $REPO_ROOT" >&2
+  exit 1
+fi
 # 每 case 一个独立目录 (SIM=%~dp0): 彻底避免 xsim.dir 复用 / 文件锁问题
 # 用法: bash adv_run_case.sh <case>
-ROOT=/d/repo/ECO/udp_hls_10g
+ROOT=%REPO_ROOT%
 c="$1"
 D="$ROOT/sim/advrun/$c"
 mkdir -p "$D"

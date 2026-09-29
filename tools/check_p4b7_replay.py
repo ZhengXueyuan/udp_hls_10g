@@ -8,15 +8,23 @@
   (echo offset 434228); echo 链停 305858505 (offset 438608, 差 32120 = 32KB FIFO 边缘);
   合法 ack=305858505 被拒; RTO 100ms 循环 (sim: 32k 拍)。
 """
+import os
 import struct
 import sys
 import zlib
 
-sys.path.insert(0, r'D:\repo\ECO\udp_hls_10g\tools')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_stim_p4_chain as G
 
-ROOT = r'D:\repo\ECO\udp_hls_10g'
-SIMDIR = r'D:\repo\ECO\udp_hls_10g\sim\p4sim'
+# self-locating: never a repository path literal (a hardcoded one silently
+# checks ANOTHER checkout -- the "empty gate" defect, see
+# sim/p4gates/evidence/inventory_eco_class.txt)
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SIMDIR = os.path.join(ROOT, 'sim', 'p4sim')
+for _p in (os.path.join(ROOT, 'CLAUDE.md'), SIMDIR):
+    if not os.path.exists(_p):
+        sys.exit('[PATHGUARD FAIL] cannot locate this checkout (%s missing); '
+                 'derived ROOT=%s' % (_p, ROOT))
 
 PC_ISS = 691601198          # pcap SYN seq
 PC_BASE = 691601199         # 首数据字节

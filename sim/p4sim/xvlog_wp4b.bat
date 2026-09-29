@@ -1,4 +1,13 @@
 @echo off
+set "REPO_ROOT=%~dp0..\..\."
+for %%I in ("%REPO_ROOT%") do set "REPO_ROOT=%%~fI"
+if "%REPO_ROOT:~-1%"=="\" set "REPO_ROOT=%REPO_ROOT:~0,-1%"
+if not exist "%REPO_ROOT%\CLAUDE.md" (
+  echo [PATHGUARD FAIL] cannot locate this checkout from %~f0
+  echo   derived REPO_ROOT = %REPO_ROOT%
+  exit /b 1
+)
+
 REM xvlog_wp4b.bat -- P4b chain TB compile gate (HLS slow stack + RTL + board wrapper)
 REM   regenerates hls_files.f from the current HLS syn/verilog dir (same pattern as
 REM   run_tb_p4_chain.bat -- stale hls_files_new.f references deleted files and is
@@ -6,7 +15,7 @@ REM   missing current HLS units), propagates xvlog errors. Run from Git Bash:
 REM   cmd //c D:\repo\ECO\udp_hls_10g\sim\p4sim\xvlog_wp4b.bat
 cd /d %~dp0
 set XV=C:\AMDDesignTools\2025.2\Vivado\bin
-set HLS=D:\repo\ECO\udp_hls_10g\hls\slowstack_prj\solution1\syn\verilog
+set HLS=%REPO_ROOT%\hls\slowstack_prj\solution1\syn\verilog
 
 copy /y %HLS%\*.dat . >nul
 (if exist %HLS%\ (dir /b /s %HLS%\*.v) else (echo HLS dir missing & exit /b 1)) > hls_files.f

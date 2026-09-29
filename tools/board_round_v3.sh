@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+REPO_ROOT="$(cd -- "$(dirname -- "$0")/../" && pwd)" || exit 1
+if [ ! -f "$REPO_ROOT/CLAUDE.md" ]; then
+  echo "[PATHGUARD FAIL] cannot locate this checkout from $0" >&2
+  echo "  derived REPO_ROOT = $REPO_ROOT" >&2
+  exit 1
+fi
 # board_round_v3.sh -- one complete RXP measurement round, gate enforced.
 #
 #   program (== reset, mandatory) -> load pattern at line rate -> read the 637-char
@@ -13,7 +19,7 @@
 #
 # usage: tools/board_round_v3.sh <bitfile-in-keep> <out.line> [sent-bytes] [sent-frames]
 set -u
-REPO=/d/repo/ECO/udp_hls_10g
+REPO=%REPO_ROOT%
 PY=/c/Users/zhxue/anaconda3/python.exe
 IFACE='\Device\NPF_{528A3E8C-9A80-4D17-96A0-48F3FD70186E}'
 SRC_MAC='FC:9D:05:7D:88:6B'
@@ -25,7 +31,7 @@ PAYLEN=1472
 
 cd "$REPO" || exit 1
 echo "=== [1/4] program (reset) : $BIT ==="
-cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_program_p5_keep.bat' "$BIT" >/tmp/round_prog.out 2>&1
+cmd //c '%REPO_ROOT%\board\run_program_p5_keep.bat' "$BIT" >/tmp/round_prog.out 2>&1
 if [ $? -ne 0 ]; then
     echo "!! PROGRAM GATE FAILED -- round aborted, no reading taken"
     tail -4 /tmp/round_prog.out

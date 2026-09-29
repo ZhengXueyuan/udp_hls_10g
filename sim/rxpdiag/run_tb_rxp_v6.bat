@@ -1,4 +1,23 @@
 @echo off
+set "REPO_ROOT=%~dp0..\..\."
+for %%I in ("%REPO_ROOT%") do set "REPO_ROOT=%%~fI"
+if "%REPO_ROOT:~-1%"=="\" set "REPO_ROOT=%REPO_ROOT:~0,-1%"
+if not exist "%REPO_ROOT%\CLAUDE.md" (
+  echo [PATHGUARD FAIL] cannot locate this checkout from %~f0
+  echo   derived REPO_ROOT = %REPO_ROOT%
+  exit /b 1
+)
+rem --- pathguard tripwire: refuse to run if a LIVE line points outside ---
+set "P4PY=C:\Users\zhxue\anaconda3\python.exe"
+if exist "%P4PY%" goto :pg_py_ok
+set "P4PY="
+for %%P in (python.exe) do if not defined P4PY set "P4PY=%%~$PATH:P"
+:pg_py_ok
+if not defined P4PY goto :pg_sc_done
+if not exist "%REPO_ROOT%\sim\p4gates\p4gate.py" goto :pg_sc_done
+"%P4PY%" "%REPO_ROOT%\sim\p4gates\p4gate.py" selfcheck --root "%REPO_ROOT%" --bat "%~f0" --quiet || exit /b 1
+:pg_sc_done
+
 REM run_tb_rxp_v6.bat -- RXP_DIAG v6 FUNCTIONAL gate: the THIRD LFSR byte
 REM checker, on the INPUT PORT SIDE of udp_split (the stream entering u_pre).
 REM (ISSUE_RX_BYTE_CORRUPTION sections 18.9 / 18.10 / 18.13)
@@ -18,7 +37,7 @@ REM NOTE: never redirect to xvlog.log / xelab.log (the tools' own default log
 REM names; holding them open fails with a misleading 'directory not writable').
 cd /d %~dp0
 set XV=C:\AMDDesignTools\2025.2\Vivado\bin
-set RTL=D:\repo\ECO\udp_hls_10g\rtl
+set RTL=%REPO_ROOT%\rtl
 
 if exist xsim.dir rmdir /s /q xsim.dir
 call %XV%\xvlog.bat -work xil_defaultlib -d RXP_DIAG ^

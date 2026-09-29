@@ -1,4 +1,23 @@
 @echo off
+set "REPO_ROOT=%~dp0..\..\."
+for %%I in ("%REPO_ROOT%") do set "REPO_ROOT=%%~fI"
+if "%REPO_ROOT:~-1%"=="\" set "REPO_ROOT=%REPO_ROOT:~0,-1%"
+if not exist "%REPO_ROOT%\CLAUDE.md" (
+  echo [PATHGUARD FAIL] cannot locate this checkout from %~f0
+  echo   derived REPO_ROOT = %REPO_ROOT%
+  exit /b 1
+)
+rem --- pathguard tripwire: refuse to run if a LIVE line points outside ---
+set "P4PY=C:\Users\zhxue\anaconda3\python.exe"
+if exist "%P4PY%" goto :pg_py_ok
+set "P4PY="
+for %%P in (python.exe) do if not defined P4PY set "P4PY=%%~$PATH:P"
+:pg_py_ok
+if not defined P4PY goto :pg_sc_done
+if not exist "%REPO_ROOT%\sim\p4gates\p4gate.py" goto :pg_sc_done
+"%P4PY%" "%REPO_ROOT%\sim\p4gates\p4gate.py" selfcheck --root "%REPO_ROOT%" --bat "%~f0" --quiet || exit /b 1
+:pg_sc_done
+
 REM run_tb_rate.bat -- app UDP TX path line-rate measurement gate (P5f)
 REM chain: app_udp_pattern -> udp_tx_cfg -> udp_tx_frame -> mac_tx_64 (no tx_arb)
 REM usage: run_tb_rate.bat [cfg]      cfg in {g0,g1380,g2760,g5000,g58000} x {p1472,p996,p512}
@@ -6,8 +25,8 @@ REM        examples: run_tb_rate.bat g0p1472 (default) / g0p996 / g58000p1472
 REM NOTE: keep this file ASCII-only (GBK console chokes on UTF-8 in REM lines).
 cd /d %~dp0
 set XV=C:\AMDDesignTools\2025.2\Vivado\bin
-set RTL=D:\repo\ECO\udp_hls_10g\rtl
-set TB=D:\repo\ECO\udp_hls_10g\tb
+set RTL=%REPO_ROOT%\rtl
+set TB=%REPO_ROOT%\tb
 
 set CFG=%1
 if "%CFG%"=="" set CFG=g0p1472

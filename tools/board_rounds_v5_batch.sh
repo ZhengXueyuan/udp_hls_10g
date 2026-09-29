@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+REPO_ROOT="$(cd -- "$(dirname -- "$0")/../" && pwd)" || exit 1
+if [ ! -f "$REPO_ROOT/CLAUDE.md" ]; then
+  echo "[PATHGUARD FAIL] cannot locate this checkout from $0" >&2
+  echo "  derived REPO_ROOT = $REPO_ROOT" >&2
+  exit 1
+fi
 # board_rounds_v5_batch.sh -- the v5 board run. Deliberately SHORT.
 #
 # WHY only three rounds: v5 exists to answer ONE binary question (ISSUE §18.12):
@@ -18,7 +24,7 @@
 # not rewrite the byte stream). tools/rxp_digest.py enforces this and marks the section
 # UNUSABLE otherwise.
 set -u
-cd /d/repo/ECO/udp_hls_10g || exit 1
+cd %REPO_ROOT% || exit 1
 BIT="${1:-wrapper_p4_diag_v5.bit}"
 P=p5diag_verify/v5
 mkdir -p "$P"

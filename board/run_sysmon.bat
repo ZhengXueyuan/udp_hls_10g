@@ -1,4 +1,13 @@
 @echo off
+set "REPO_ROOT=%~dp0..\."
+for %%I in ("%REPO_ROOT%") do set "REPO_ROOT=%%~fI"
+if "%REPO_ROOT:~-1%"=="\" set "REPO_ROOT=%REPO_ROOT:~0,-1%"
+if not exist "%REPO_ROOT%\CLAUDE.md" (
+  echo [PATHGUARD FAIL] cannot locate this checkout from %~f0
+  echo   derived REPO_ROOT = %REPO_ROOT%
+  exit /b 1
+)
+
 REM run_sysmon.bat - read the on-chip System Monitor (die temp + VCCINT/VCCAUX/VCCBRAM)
 REM over JTAG. No design change, no bitstream change, no extra FFs, so it cannot
 REM perturb the phenomenon being measured.
@@ -14,9 +23,9 @@ REM
 REM The XADC MIN/MAX latches reset on reconfiguration, so because every measurement
 REM round starts with a reprogram, current+min+max bracket exactly that round.
 set PATH=C:\AMDDesignTools\2025.2\Vivado\bin;C:\AMDDesignTools\2025.2\Vivado\lib\win64.o;%PATH%
-cd /d D:\repo\ECO\udp_hls_10g
+cd /d %REPO_ROOT%
 REM Delete first so the self-check below can only ever read THIS run's log.
 del /q vivado_sysmon.log 2>NUL
-call C:\AMDDesignTools\2025.2\Vivado\bin\vivado.bat -mode batch -log vivado_sysmon.log -nojournal -source D:\repo\ECO\udp_hls_10g\tools\sysmon_read.tcl
+call C:\AMDDesignTools\2025.2\Vivado\bin\vivado.bat -mode batch -log vivado_sysmon.log -nojournal -source %REPO_ROOT%\tools\sysmon_read.tcl
 findstr /C:"SYSMON T=" vivado_sysmon.log > NUL || (echo SYSMON_READ_FAILED & exit /b 1)
 exit /b 0

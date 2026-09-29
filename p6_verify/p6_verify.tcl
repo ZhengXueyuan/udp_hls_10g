@@ -1,3 +1,7 @@
+set REPO_ROOT [file normalize [file join [file dirname [info script]] ..]]
+if {![file exists [file join $REPO_ROOT CLAUDE.md]]} {
+  error "PATHGUARD FAIL: cannot locate this checkout from [info script] -- derived REPO_ROOT = $REPO_ROOT"
+}
 #=============================================================================
 # p6_verify.tcl -- P6 gate-B controlled experiment, read-only verification.
 #   For each of the two projects (t8p0 = 8.000ns control, t6p4 = 6.400ns):
@@ -11,7 +15,7 @@
 #   Usage: vivado -mode batch -source p6_verify/p6_verify.tcl -log ... -nojournal
 #   Does NOT modify any project or RTL. ASCII only.
 #=============================================================================
-set root_dir D:/repo/ECO/udp_hls_10g
+set root_dir %REPO_ROOT%
 set out_dir  ${root_dir}/p6_verify
 
 foreach tag {t8p0 t6p4} {

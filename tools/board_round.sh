@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+REPO_ROOT="$(cd -- "$(dirname -- "$0")/../" && pwd)" || exit 1
+if [ ! -f "$REPO_ROOT/CLAUDE.md" ]; then
+  echo "[PATHGUARD FAIL] cannot locate this checkout from $0" >&2
+  echo "  derived REPO_ROOT = $REPO_ROOT" >&2
+  exit 1
+fi
 # board_round.sh -- one complete RXP measurement round, gate enforced, sysmon recorded.
 #
 #   program (== reset, mandatory) -> load pattern at line rate -> read the status line
@@ -18,7 +24,7 @@
 # usage: tools/board_round.sh <bitfile-in-keep> <out-prefix> [sent-bytes] [sent-frames] [paylen]
 #   writes <out-prefix>.line  (status line)  and  <out-prefix>.sm  (sysmon line)
 set -u
-REPO=/d/repo/ECO/udp_hls_10g
+REPO=%REPO_ROOT%
 PY=/c/Users/zhxue/anaconda3/python.exe
 VIVADO='C:\AMDDesignTools\2025.2\Vivado\bin\vivado.bat'
 IFACE='\Device\NPF_{528A3E8C-9A80-4D17-96A0-48F3FD70186E}'
@@ -34,7 +40,7 @@ SMLOG="$REPO/vivado_sysmon.log"
 
 cd "$REPO" || exit 1
 echo "=== [1/5] program (reset) : $BIT ==="
-cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_program_p5_keep.bat' "$BIT" >/tmp/round_prog.out 2>&1
+cmd //c '%REPO_ROOT%\board\run_program_p5_keep.bat' "$BIT" >/tmp/round_prog.out 2>&1
 if [ $? -ne 0 ]; then
     echo "!! PROGRAM GATE FAILED -- round aborted, no reading taken"
     tail -4 /tmp/round_prog.out
@@ -64,7 +70,7 @@ echo "=== [4/5] read sysmon (die temp + rails, this round's envelope) ==="
 # ⚠️ MUST go through the .bat with SINGLE quotes. Passing the command line inline
 # with double quotes + variable expansion let MSYS2 mangle it, which silently failed
 # on all 8 rounds on 2026-09-27 (same root cause as the documented pit).
-cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_sysmon.bat' >/dev/null 2>&1
+cmd //c '%REPO_ROOT%\board\run_sysmon.bat' >/dev/null 2>&1
 SM=$(grep -m1 '^SYSMON T=' "$SMLOG" 2>/dev/null | tr -d '\r')
 if [ -z "$SM" ]; then
     echo "    !! sysmon read failed (no SYSMON line) -- recording NA"

@@ -1,5 +1,9 @@
-set out_dir D:/repo/ECO/udp_hls_10g/p5f_verify
-open_checkpoint D:/repo/ECO/udp_hls_10g/vivado_prj/p5_prj.runs/impl_1/wrapper_p4_routed.dcp
+set REPO_ROOT [file normalize [file join [file dirname [info script]] ..]]
+if {![file exists [file join $REPO_ROOT CLAUDE.md]]} {
+  error "PATHGUARD FAIL: cannot locate this checkout from [info script] -- derived REPO_ROOT = $REPO_ROOT"
+}
+set out_dir %REPO_ROOT%/p5f_verify
+open_checkpoint %REPO_ROOT%/vivado_prj/p5_prj.runs/impl_1/wrapper_p4_routed.dcp
 set pats {
   u_app_udp/cmp_d_reg u_app_udp/nx_d_reg u_app_udp/rx_lfsr_reg u_app_udp/cmp_i_reg
   u_app_udp/cmp_n_reg u_app_udp/cmp_busy_reg u_app_udp/stat_mismatch_reg

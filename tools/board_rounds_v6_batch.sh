@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+REPO_ROOT="$(cd -- "$(dirname -- "$0")/../" && pwd)" || exit 1
+if [ ! -f "$REPO_ROOT/CLAUDE.md" ]; then
+  echo "[PATHGUARD FAIL] cannot locate this checkout from $0" >&2
+  echo "  derived REPO_ROOT = $REPO_ROOT" >&2
+  exit 1
+fi
 # board_rounds_v6_batch.sh -- the v6 board run. Short by design.
 #
 # WHY two rounds: v6 answers ONE binary question (ISSUE §18.14). The v6 verifier sits on
@@ -25,7 +31,7 @@
 #     actually WRITTEN into u_uf; the two anchors only coincide when nothing was dropped.
 #     CO/CG/CE are index-free and comparable unconditionally.
 set -u
-cd /d/repo/ECO/udp_hls_10g || exit 1
+cd %REPO_ROOT% || exit 1
 BIT="${1:-wrapper_p4_diag_v6.bit}"
 P=p5diag_verify/v6
 mkdir -p "$P"

@@ -1,5 +1,9 @@
+set REPO_ROOT [file normalize [file join [file dirname [info script]] ..]]
+if {![file exists [file join $REPO_ROOT CLAUDE.md]]} {
+  error "PATHGUARD FAIL: cannot locate this checkout from [info script] -- derived REPO_ROOT = $REPO_ROOT"
+}
 # build_p5_holdfix.tcl -- P5f hold-margin hardened rebuild (reuses existing p5_prj)
-set root_dir D:/repo/ECO/udp_hls_10g
+set root_dir %REPO_ROOT%
 set out_dir  ${root_dir}/p5f_verify
 open_project ${root_dir}/vivado_prj/p5_prj.xpr
 add_files -fileset constrs_1 -norecurse ${root_dir}/board/eco_holdfix.xdc

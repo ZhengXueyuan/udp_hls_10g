@@ -1,3 +1,7 @@
+set REPO_ROOT [file normalize [file join [file dirname [info script]] ..]]
+if {![file exists [file join $REPO_ROOT CLAUDE.md]]} {
+  error "PATHGUARD FAIL: cannot locate this checkout from [info script] -- derived REPO_ROOT = $REPO_ROOT"
+}
 #=============================================================================
 # program.tcl — ECO 板 JTAG 1MHz 烧录 (PROGRAM.FILE 必设)
 # 用法: vivado -mode batch -source program.tcl -tclargs <bitfile>
@@ -9,7 +13,7 @@
 #         以日志为准。
 #=============================================================================
 set bitfile [lindex $argv 0]
-if {$bitfile eq ""} { set bitfile "D:/repo/ECO/udp_hls_10g/vivado_prj/udp_loop_phy1.runs/impl_1/wrapper_1g.bit" }
+if {$bitfile eq ""} { set bitfile "%REPO_ROOT%/vivado_prj/udp_loop_phy1.runs/impl_1/wrapper_1g.bit" }
 
 open_hw_manager
 if {[catch {connect_hw_server -url localhost:3121} msg]} { puts "HW_CONNECT_FAILED: $msg"; exit 1 }

@@ -1,4 +1,10 @@
 #!/bin/bash
+REPO_ROOT="$(cd -- "$(dirname -- "$0")/../" && pwd)" || exit 1
+if [ ! -f "$REPO_ROOT/CLAUDE.md" ]; then
+  echo "[PATHGUARD FAIL] cannot locate this checkout from $0" >&2
+  echo "  derived REPO_ROOT = $REPO_ROOT" >&2
+  exit 1
+fi
 # board_udprx_ab.sh -- independent board A/B for the app-UDP RX byte-fidelity defect
 #   usage: board_udprx_ab.sh <paylen> <rate_mbps> <bytes> <label> [--noprogram]
 # Program (fresh design reset => app RX LFSR back to SEED, UMM counter cleared),
@@ -7,7 +13,7 @@ set -u
 IFACE='\Device\NPF_{528A3E8C-9A80-4D17-96A0-48F3FD70186E}'
 SRCMAC='FC:9D:05:7D:88:6B'
 PY=/c/Users/zhxue/anaconda3/python.exe
-ROOT=/d/repo/ECO/udp_hls_10g
+ROOT=%REPO_ROOT%
 PL=$1; RATE=$2; NBYTES=$3; LABEL=$4; NOPROG=${5:-}
 
 if [ "$NOPROG" != "--noprogram" ]; then

@@ -1,5 +1,9 @@
-set out_dir D:/repo/ECO/udp_hls_10g/p5f_verify
-open_checkpoint D:/repo/ECO/udp_hls_10g/vivado_prj/p5_prj.runs/impl_1/wrapper_p4_routed.dcp
+set REPO_ROOT [file normalize [file join [file dirname [info script]] ..]]
+if {![file exists [file join $REPO_ROOT CLAUDE.md]]} {
+  error "PATHGUARD FAIL: cannot locate this checkout from [info script] -- derived REPO_ROOT = $REPO_ROOT"
+}
+set out_dir %REPO_ROOT%/p5f_verify
+open_checkpoint %REPO_ROOT%/vivado_prj/p5_prj.runs/impl_1/wrapper_p4_routed.dcp
 
 # u_udp_split/u_uf 内部: BRAM 主存 (gen_mem[0].u_main) 与 边存 LUTRAM (gen_side.mem_s*)
 # 目的: 比较 "BRAM 读地址/写地址/写数据" 与 "边存 LUTRAM 读地址" 的 hold 余量

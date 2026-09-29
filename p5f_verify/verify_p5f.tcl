@@ -1,10 +1,14 @@
+set REPO_ROOT [file normalize [file join [file dirname [info script]] ..]]
+if {![file exists [file join $REPO_ROOT CLAUDE.md]]} {
+  error "PATHGUARD FAIL: cannot locate this checkout from [info script] -- derived REPO_ROOT = $REPO_ROOT"
+}
 #=============================================================================
 # verify_p5e.tcl — P5e 出口验证 (只读, 不改工程/不改 RTL)
 #   open_checkpoint routed.dcp -> report_timing_summary / utilization / drc /
 #   route_status, 全部写到 p5f_verify/
 # 用法: vivado -mode batch -source p5f_verify/verify_p5e.tcl -log ...
 #=============================================================================
-set root_dir  D:/repo/ECO/udp_hls_10g
+set root_dir  %REPO_ROOT%
 set out_dir   ${root_dir}/p5f_verify
 set dcp       ${root_dir}/vivado_prj/p5_prj.runs/impl_1/wrapper_p4_routed.dcp
 
