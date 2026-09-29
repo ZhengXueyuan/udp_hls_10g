@@ -76,9 +76,12 @@
 //   **"无进展" = 对端自上次扫描以来没有新数据到达 (rcv_nxt 未推进)** —
 //   活性判据见下面 "P5c 关闭超时活性判据" 一节 (板级实测缺陷的修正)。
 //   计数单位 = **该槽被扫描到的轮次**: 扫描 tick 每 16 拍 1 次 (tick_cnt 16 分频),
-//   16 槽轮一遍 = 256 拍/轮 ⇒ 1 计数 = 256 拍 = 2.048us @125MHz。
-//   FIN_TO_LIM = 195313 ⇔ 195313 x 256 拍 = 50.0M 拍 = 400ms = **4 x RTO**
-//   (tcp_tx_frame RTO = RTO_LIM 48828 x 256 拍 = 12.5M 拍 = 100ms)。参数化以便
+//   16 槽轮一遍 = 256 拍/轮 ⇒ 1 计数 = 256 拍。
+//   ⚠️ P6b (对抗审查 F8): 墙钟随**时钟域**变 —— 本模块的消费者 (u_app_ctrl) 在 P6b 构建里
+//   搬到 156.25MHz 数据面域 ⇒ 256 拍 = **1.6384us** (不是 2.048us), FIN_TO_LIM = **244141**
+//   ⇔ 244141 x 256 拍 x 6.4ns = 400ms = **4 x RTO** (tcp_tx_frame RTO = RTO_LIM 61035 x 256 拍
+//   x 6.4ns = 100ms)。**两个域下墙钟相同 (400ms), 只有拍数不同** (见参数处的 `ifdef DP_156MHZ`)。
+//   125MHz 域 (默认构建) 仍是: 1 计数 = 2.048us, FIN_TO_LIM = 195313 ⇔ 400ms。参数化以便
 //   单元门用小值定向验证 (与 tcp_tx_frame.RTO_LIM 同惯例; 生产值不改)。
 //   计数器**饱和**到 FIN_TO_LIM + FIN_GRACE; 触发用 to_fired[c] 保鲜 (只触发一次)
 //   — 不用"每扫描拍检查条件的一次性脉冲"(坑 9: 跨扫描事件会漏), to_fired/st_done
@@ -125,7 +128,8 @@
 //   tcp_tx_frame 的 rst_push 门 (rb_state==1) 永久为假 (两个模块的 tick 都是复位起
 //   自由运行 /16, 同槽访问间隔必为 16 的整数倍, 落在 3 拍窗口外) ⇒ RST 结构性发不
 //   出去。修法: 超时只置 rst_req + 事件; state=0 写改由 st_req_now 挂出 = "RST 确实
-//   发出 (rst_sent 上升)" 或 "再数 FIN_GRACE 轮 (4 轮 = 1024 拍) 仍发不出" 的兜底。
+//   发出 (rst_sent 上升)" 或 "再数 FIN_GRACE 轮 (125MHz 域 4 轮 = 1024 拍 @2.048us/轮 =
+//   8.2us; P6b 156.25MHz 域 5 轮 = 1280 拍 @1.6384us/轮 = 8.19us —— 同墙钟) 仍发不出" 的兜底。
 //   正常时序因此变成 RST 先发、再拆 state (与协议一致)。
 // F3 "清位 ≠ 落地": 窗口写 (sel=3) 的 gnt 会把同槽挂着的 state 写请求一起清掉, 而
 //   st_done 已锁 ⇒ state=0 写永久丢失 (槽永不释放/永久发不出数据)。修法: st_pend 只在
@@ -212,14 +216,32 @@ module app_ctrl #(
     parameter [15:0] WIN_Q_MAX = 16'hC000,  // = wq_cap_r 的**复位默认值** (非运行时参数)
     // P5c-T3 G2: 关闭超时阈值 (单位 = 该槽被扫描到的轮次; 见文件头换算 —
     // 生产值 195313 轮 = 400ms = 4xRTO @125MHz)。18 位 (195313 < 2^18)。
-    parameter [17:0] FIN_TO_LIM = 18'd195313,
+    // ⚠️ P6b: 消费者搬到 156.25MHz 数据面域 ⇒ 维持同一墙钟需 ×1.25 = 244141 轮。
+    //    ⚠️ **18 位上限 262143 ⇒ 244141 刚好塞得下, 没有余量** (P6B_SPEC §5.1 点名)。
+    //    **只在 P6b 构建 (PCIE_OBS) 生效**; 默认构建保持 195313 (逐位不变契约)。
+// ⚠️ `DP_156MHZ = 「本设计的数据面跑在 156.25MHz 独立域」—— 时间常数必须跟着域走。
+//    为什么不用 PCIE_OBS 当守卫 (对抗审查 F1): 那个宏的语义是"例化 PCIe 观测通道",
+//    与时钟域**无关**; 拿它守卫时间常数 = 把两个无关开关绑成一根线 (一个语义完全
+//    无关的宏控制 UART 波特率/RTO/FIN 超时), 下次有人"要 PCIe 窗口但数据面仍 125MHz"
+//    就会静默拿到 8 个错常数。构建侧: board/build_p6b_ku5p.tcl (+ 被取代的 build_p6e) 定义它。
+`ifdef DP_156MHZ
+    parameter [17:0] FIN_TO_LIM = 18'd244141,     // 400ms @156.25MHz (195313 × 1.25)
+`else
+    parameter [17:0] FIN_TO_LIM = 18'd195313,     // 400ms @125MHz
+`endif
     // P5c-T3 G2 (审查 F2 修正): RST 宽限轮数。超时触发时 state=0 写只需 ~3 拍就
     // 落地, 而 RST 要等 tcp_tx_frame 的**下几次扫描** (该模块 rst_push 要求
     // rb_state==1) — 两个模块的 tick 都是复位起自由运行的 /16, 同槽访问间隔必为
     // 16 的整数倍 ⇒ 无宽限时 state 先落地, RST 结构性发不出去 (实测 R1: 0 帧)。
     // 因此超时只先置 rst_req + 事件, state=0 写等"RST 确实发出 (rst_sent 上升)"
-    // 或"再数 FIN_GRACE 轮仍发不出"的兜底 (4 轮 x 256 拍 = 1024 拍 = 8.2us)。
-    parameter [17:0] FIN_GRACE = 18'd4
+    // 或"再数 FIN_GRACE 轮仍发不出"的兜底 (4 轮 x 256 拍 = 1024 拍 = 8.2us @125MHz)。
+    // ⚠️ P6b: 同 FIN_TO_LIM —— 维持 8.19us 墙钟 ⇒ 5 轮 x 256 拍 x 6.4ns = 8.19us
+    //    (精确换算 8.192us/6.4ns/256 = 5.0 ⇒ 取 5)。只在 P6b 构建生效。
+`ifdef DP_156MHZ
+    parameter [17:0] FIN_GRACE = 18'd5           // 8.19us @156.25MHz
+`else
+    parameter [17:0] FIN_GRACE = 18'd4           // 8.2us @125MHz
+`endif
 ) (
     input  wire        clk,
     input  wire        rst_n,
@@ -303,7 +325,8 @@ module app_ctrl #(
     output reg  [31:0] stat_slot_reuse,
     // P5b 活性观测: fc 请求最长连续挂起拍数 (看门狗式)。规格 C1b 的 Δ 界
     // (通告右沿 = redge_old + Δ) 依赖"窗口写口不被长期饿死"这一活性假设 ——
-    // 若该值 > 16384 拍 (131us), Δ 的定量上界失效 ⇒ 必须落档提醒 (P6 前哨)。
+    // 若该值 > 20480 拍 (131us @156.25MHz —— P6b 域下同**墙钟**的拍数; 125MHz 域
+    // 对应的旧值是 16384 拍, 见 P6B_SPEC §5.1 末行)。
     output reg  [31:0] stat_fc_wait_max
 );
     // ESTABLISHED = state 1 (slow_cfg_adp ADD 写 state=1; DEL 写 0)

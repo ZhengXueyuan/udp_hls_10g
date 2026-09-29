@@ -159,8 +159,19 @@ module tcp_tx_frame (
     output wire [11:0] dbg_plen        // RUNNING plen (帧内累计, 未锁存; 区别于 plen_r)
 );
 
-    parameter integer RTO_LIM  = 48828;    // RTO = RTO_LIM 次连接访问 x 16 tick x 16 连接
-                                           // = 12.5M 拍 ≈ 100ms @125MHz (tick 版扫描, 见 scan_now)
+    // RTO = RTO_LIM 次连接访问 x 16 tick x 16 连接 = 12.5M 拍 ≈ 100ms @125MHz (tick 版扫描, 见 scan_now)
+    // ⚠️ P6b: 消费者 (u_tcp_tx) 搬到 156.25MHz 数据面域 ⇒ 维持同一墙钟需 ×1.25 =
+    //    61035 拍。**只在 P6b 构建 (PCIE_OBS) 生效**; 默认构建保持 48828 (逐位不变契约)。
+// ⚠️ `DP_156MHZ = 「本设计的数据面跑在 156.25MHz 独立域」—— 时间常数必须跟着域走。
+//    为什么不用 PCIE_OBS 当守卫 (对抗审查 F1): 那个宏的语义是"例化 PCIe 观测通道",
+//    与时钟域**无关**; 拿它守卫时间常数 = 把两个无关开关绑成一根线 (一个语义完全
+//    无关的宏控制 UART 波特率/RTO/FIN 超时), 下次有人"要 PCIe 窗口但数据面仍 125MHz"
+//    就会静默拿到 8 个错常数。构建侧: board/build_p6b_ku5p.tcl (+ 被取代的 build_p6e) 定义它。
+`ifdef DP_156MHZ
+    parameter integer RTO_LIM  = 61035;    // ≈100ms @156.25MHz (48828 × 1.25)
+`else
+    parameter integer RTO_LIM  = 48828;    // ≈100ms @125MHz
+`endif
     // P4c: 门控帽 0x2FFE -> 0xBFFE (窗口 12KB -> 48KB-2; tcb win 读口内亦硬编码
     // 同值, 两处必须一致)。
     // 门控消费 1 拍注册在飞 (win_open = 32 位回绕差 < 帽, 见下): 帧完成写

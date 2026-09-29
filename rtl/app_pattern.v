@@ -281,6 +281,18 @@ module app_pattern #(
 
     // 事件/活动/失配指示灯 (APP_MODE 板级)
     reg [3:0]   led_r;
+    // P6b: LED 活动保持计时器初值。1.6ms 墙钟 -> 156.25MHz 域下 250000 拍
+    //   (125MHz 域旧值 200000 拍)。只在 P6b 构建 (PCIE_OBS) 生效。
+// ⚠️ `DP_156MHZ = 「本设计的数据面跑在 156.25MHz 独立域」—— 时间常数必须跟着域走。
+//    为什么不用 PCIE_OBS 当守卫 (对抗审查 F1): 那个宏的语义是"例化 PCIe 观测通道",
+//    与时钟域**无关**; 拿它守卫时间常数 = 把两个无关开关绑成一根线 (一个语义完全
+//    无关的宏控制 UART 波特率/RTO/FIN 超时), 下次有人"要 PCIe 窗口但数据面仍 125MHz"
+//    就会静默拿到 8 个错常数。构建侧: board/build_p6b_ku5p.tcl (+ 被取代的 build_p6e) 定义它。
+`ifdef DP_156MHZ
+    localparam [19:0] ACT_TMR_INIT = 20'd250_000;
+`else
+    localparam [19:0] ACT_TMR_INIT = 20'd200_000;
+`endif
     reg [19:0]  act_tmr;
     reg         up_lat;
     assign led = led_r;
@@ -533,7 +545,7 @@ module app_pattern #(
 
             // ---- 活动/指示灯 ----
             if ((rx_tvalid && rx_tready) || (pw_valid && m_tready) || asm_go)
-                act_tmr <= 20'd200_000;
+                act_tmr <= ACT_TMR_INIT;
             else if (act_tmr != 20'd0)
                 act_tmr <= act_tmr - 20'd1;
             led_r[0] <= up_lat;

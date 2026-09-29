@@ -39,8 +39,26 @@
 // (status 门是整行逐字节比对; 漏同步 = 门红)。
 //=============================================================================
 module app_status_uart #(
+    // ⚠️ P6b: 本模块的消费者 (u_app_status) 搬到 156.25MHz 数据面域 ⇒ 维持 9600 波特
+    //    与 ~2s 行间隔, 拍数必须 ×1.25 (见 P6B_SPEC §5.1)。
+    //    156250000/9600 = 16276.04 ⇒ 周期 16276 拍 (BIT_LAST = 16275), 误差 +0.0003%
+    //    —— 优于 125MHz 下的 +0.008%。
+    //    ⚠️ GAP_TICKS 必须**加宽到 29 位**: 2^28 = 268,435,456 < 312,500,000 ⇒ 28 位
+    //       装不下, 会静默截断成 43,564,544 (行间期错乱)。参数与 gap 寄存器**同时**加宽,
+    //       否则比较/减法处会按旧的 28 位静默截断 (铁律②)。
+    //    **只在 P6b 构建 (PCIE_OBS) 生效**; 默认构建保持旧值 (逐位不变契约)。
+// ⚠️ `DP_156MHZ = 「本设计的数据面跑在 156.25MHz 独立域」—— 时间常数必须跟着域走。
+//    为什么不用 PCIE_OBS 当守卫 (对抗审查 F1): 那个宏的语义是"例化 PCIe 观测通道",
+//    与时钟域**无关**; 拿它守卫时间常数 = 把两个无关开关绑成一根线 (一个语义完全
+//    无关的宏控制 UART 波特率/RTO/FIN 超时), 下次有人"要 PCIe 窗口但数据面仍 125MHz"
+//    就会静默拿到 8 个错常数。构建侧: board/build_p6b_ku5p.tcl (+ 被取代的 build_p6e) 定义它。
+`ifdef DP_156MHZ
+    parameter [13:0] BIT_LAST  = 14'd16275,        // 每比特拍数-1 @156.25MHz/9600
+    parameter [28:0] GAP_TICKS = 29'd312_500_000   // 行间 ~2s
+`else
     parameter [13:0] BIT_LAST  = 14'd13020,        // 每比特拍数-1 @125MHz/9600
-    parameter [27:0] GAP_TICKS = 28'd250_000_000   // 行间 ~2s
+    parameter [28:0] GAP_TICKS = 29'd250_000_000   // 行间 ~2s
+`endif
 ) (
     input  wire        clk,
     input  wire        rst_n,
@@ -536,7 +554,7 @@ module app_status_uart #(
     reg [9:0]  ci;                       // 行内字符索引 (10 位: 最长行 1019 = RXP_DIAG v7;
                                          // v2 时是 9 位/470 —— 470 > 512 边界由
                                          // gen_offsets.py 的 LINE_LEN<=1023 断言守住)
-    reg [27:0] gap;
+    reg [28:0] gap;   // P6b: 28 -> 29 bit (GAP_TICKS needs 312,500,000 > 2^28)
     reg        sending;
 
     // 当前字符: 固定模板 (寄存) + hex 字段覆盖 (组合)
@@ -901,7 +919,7 @@ module app_status_uart #(
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            ci <= 10'd0; gap <= 28'd0; sending <= 1'b0;
+            ci <= 10'd0; gap <= 29'd0; sending <= 1'b0;
             sn_st <= 4'd0; sn_nx <= 32'd0; sn_ua <= 32'd0; sn_rn <= 32'd0;
             sn_rx <= 32'd0; sn_tx <= 32'd0; sn_rw <= 16'd0; sn_tf <= 16'd0;
             sn_mm <= 16'd0; sn_oc <= 17'd0; sn_ev <= 16'd0; sn_dp <= 16'd0;
@@ -942,7 +960,7 @@ module app_status_uart #(
         end else begin
             if (!sending) begin
                 // 行间间隔到 -> 锁存快照并开新行
-                if (gap == 28'd0) begin
+                if (gap == 29'd0) begin
                     sn_st <= st0;        sn_nx <= snd_nxt;  sn_ua <= snd_una;
                     sn_rn <= rcv_nxt;    sn_rw <= rcv_wnd;
                     sn_rx <= stat_rx_bytes; sn_tx <= stat_tx_bytes;
@@ -1004,7 +1022,7 @@ module app_status_uart #(
                     ci       <= 10'd0;
                     sending  <= 1'b1;
                 end else begin
-                    gap <= gap - 28'd1;
+                    gap <= gap - 29'd1;
                 end
             end else if (uart_go) begin
                 // 本拍发送 lc (ci 指向它), 推进索引

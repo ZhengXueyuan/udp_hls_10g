@@ -15,7 +15,27 @@ module slow_rx_adp #(
     // ≈16.8ms @125MHz; TB 用小值)。防 HLS 内部死锁 (其 512 词内部帧 fifo 满
     // 则 mac_rx 写阻塞 → 永久停读 — 泛洪实测实锤) 后永久失联。
     // 位宽铁律: 2^21 需 22 位! [20:0] 会把 2097152 截成 0 (看门狗立刻乱触发)。
-    parameter [21:0] WDOG = 22'd2097152
+    // ⚠️ P6b: 本模块的消费者 (u_slow_rx) 搬到 **156.25MHz 数据面域** ⇒ 要维持
+    //    "同一个 16.8ms 墙钟宽限", 拍数必须 ×1.25 = 2^21 × 1.25 = 2621440 (22 位够,
+    //    < 2^22)。**该值只在 P6b 构建 (PCIE_OBS) 里生效** —— 默认构建 (K7 各档 /
+    //    P6a) 仍是 125MHz 域, 必须拿旧值 (逐位不变契约)。见 P6B_SPEC §5.1/§5.3。
+// ⚠️ `DP_156MHZ = 「本设计的数据面跑在 156.25MHz 独立域」—— 时间常数必须跟着域走。
+//    为什么不用 PCIE_OBS 当守卫 (对抗审查 F1): 那个宏的语义是"例化 PCIe 观测通道",
+//    与时钟域**无关**; 拿它守卫时间常数 = 把两个无关开关绑成一根线 (一个语义完全
+//    无关的宏控制 UART 波特率/RTO/FIN 超时), 下次有人"要 PCIe 窗口但数据面仍 125MHz"
+//    就会静默拿到 8 个错常数。构建侧: board/build_p6b_ku5p.tcl (+ 被取代的 build_p6e) 定义它。
+`ifdef DP_156MHZ
+    parameter [21:0] WDOG = 22'd2621440,           // ≈16.8ms @156.25MHz (2^21 × 1.25)
+`else
+    parameter [21:0] WDOG = 22'd2097152,           // ≈16.8ms @125MHz
+`endif
+    // 看门狗复位脉冲宽度 (拍)。同样随域 ×1.25: 64 → 80 拍 (512ns 不变)。
+    // ⚠️ 与 wrapper 的 W17 口径 (hr_cnt ÷ RST_CNT) 必须同改 —— P6B_SPEC §5.1/§9.3。
+`ifdef DP_156MHZ
+    parameter [6:0]  RST_CNT = 7'd80
+`else
+    parameter [6:0]  RST_CNT = 7'd64
+`endif
 ) (
     input  wire        clk,
     input  wire        rst_n,
@@ -116,7 +136,7 @@ module slow_rx_adp #(
             end else if (starve) begin
                 if (starv >= WDOG) begin
                     starv        <= 21'd0;
-                    rst_cnt      <= 7'd64;
+                    rst_cnt      <= RST_CNT;        // P6b: 64 → 80 拍 (同墙钟宽度)
                     hls_rst_n_r  <= 1'b0;
                 end else begin
                     starv <= starv + 21'd1;

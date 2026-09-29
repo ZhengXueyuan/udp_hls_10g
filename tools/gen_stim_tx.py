@@ -3,9 +3,16 @@
 
 模式 main:  60B 帧 (无 pad) + 42B 帧 (pad 18) + 8B 帧 (pad 52), 背靠背。
    (pad 基准 = 60B 内容含 14B 以太头; 曾按 46 判, content∈[46,60) 出 runt)
-模式 abort: 仅 1 词 + 长空窗 10000 拍 -> 欠载中止 (runt 无 FCS); 残余 2 词开新帧。
+模式 abort: 仅 1 词 + 长空窗 10000 拍 -> 欠载中止 (runt 无 FCS);
+   残字被**冲刷丢弃** (逐字弹掉直到本帧 TLAST), 线保持空闲, 之后没有任何帧。
    (欠载点严格确定: FIFO 只装过 1 词, 无容量博弈)
-期望模型与 RTL 1:1 (16 词 FIFO / TB 握手 / TX 状态机 / 欠载中止)。
+期望模型与 RTL 1:1 (16 词 FIFO / TB 握手 / TX 状态机 / 欠载中止 + S_FLUSH 冲刷)。
+
+⚠️ 2026-09-29 修正 (P6B_CDC_AUDIT 附录 A / F-2): 本文件的 abort 期望原先写的是
+   "残余 2 词开新帧" —— 那是把**缺陷当金标准**: 修复前的 RTL 中止后直接回 IDLE, 于是
+   被中止帧的残字被当成新帧首字发出去 (补 pad + 算 CRC ⇒ 一个 FCS 完全正确的"幽灵帧",
+   载荷 = 被中止帧的中段残字)。修复后 RTL 进 `S_FLUSH`: 残字一律弹掉不发, 吞到本帧
+   TLAST 后等够 IFG 才回 IDLE。本模型按修复后的 RTL 重写; main 模式**未动**。
 """
 import struct
 import zlib
@@ -73,6 +80,9 @@ def model(script, maxc=30000):
     frames = []
     fbuf = []
     aborted = False
+    # S_FLUSH (F-2 修复后的 RTL): 帧内中止 -> 逐字冲刷到本帧 TLAST + 等够 IFG 才回 IDLE
+    flush_cnt = 0      # 线空闲计时 (对齐 RTL 的 flush_cnt, 0..12)
+    tl_seen = False    # 本帧 TLAST 字已被吞掉 (= 帧边界已到)
 
     for _ in range(maxc):
         # 本拍状态快照 (分支会改 state, CRC 更新须用本拍值, 与 RTL 组合 crc_en/crc_init 一致)
@@ -157,8 +167,11 @@ def model(script, maxc=30000):
                     cw = fifo.pop(0)
                     idx = 0
                 else:
-                    # 中止: 本拍末字节照常发出 (RTL 组合 txd 语义), 帧冲刷放到字节入账后
-                    state, cw = 'IDLE', None
+                    # 中止: 本拍末字节照常发出 (RTL 组合 txd 语义), 帧入账后进 S_FLUSH。
+                    # ⚠️ 修前这里是 `state = 'IDLE'` —— 残字会被当新帧首字 (幽灵帧)。
+                    state, cw = 'FLUSH', None
+                    flush_cnt = 0
+                    tl_seen = False
                     aborted = True
             else:
                 idx += 1
@@ -185,6 +198,22 @@ def model(script, maxc=30000):
                     fbuf = []
             else:
                 ifg += 1
+        elif state == 'FLUSH':
+            # ---- F-2: 中止后冲刷 (与 rtl/mac_tx_64.v 的 S_FLUSH 同形) ----
+            # 一个字都不发; 逐拍弹出并丢弃 FIFO 头字 (RTL: frd 每拍一字的寄存请求),
+            # 直到吞掉本帧的 TLAST 字 (= 帧边界, TX 字流不带 tuser);
+            # 再等线空闲够 IFG (flush_cnt 数到 12) 才回 IDLE。此后 FIFO 头字
+            # 必然是下一帧的首字 —— 残字永远不会成为新帧内容。
+            en, txd = 0, 0x07
+            if tl_seen and flush_cnt >= 12:
+                state, cw = 'IDLE', None          # (tl_seen 是上一拍置的, 对齐寄存语义)
+            else:
+                if (not tl_seen) and fifo:
+                    w = fifo.pop(0)
+                    if w[2]:
+                        tl_seen = True
+                if flush_cnt < 12:
+                    flush_cnt += 1
         else:
             en, txd = 0, 0x07
 
