@@ -4,6 +4,29 @@
 施工策略 (2026-08-23 用户拍板): **1G 先行、10G-ready** — 数据面统一 64bit 宽流水 @125MHz,
 10G 时仅提时钟到 156.25MHz, 流水线不改。设计审查与总计划: `../udp_hls_eco/design_review/` (01-04)。
 
+## 当前状态与下一步 (2026-09-29)
+
+**P7b (10G 数据面上板第一轮) 进行中**: **闸 0 ✅ / 闸 1 ✅ / 新 64 位 MAC ✅ (未接入) /
+`rx_classify` v2 ✅ (未落进 `rtl/`)**; **闸 2 (真网卡 802.3 裁决) 进行中、闸 3 (全链门)/闸 4 (板级验收) 未起**。
+
+**接手必读 (按序, 都在本仓内)**:
+1. `P7B_SPEC.md` —— 施工规格: 路线与 license 分叉 / 接口冻结 / 闸序 / **66 条正判据 + 9 条负对照**。
+2. `_proj_10g/notes/P7B_GATE1.md` —— **闸 1 板级读数原始件** (2 通道官方 PCS 板内 J7↔J8 自环:
+   6.6 s / **30,056,095 帧零错** · 9,999.94 Mbps · 三条负对照按期望翻转 · 1a GT 内部环回补测)。
+3. `_proj_10g/notes/P7B_{MAC_DESIGN,MAC_GATEFIX,MAC_TIMING}.md` —— 新 64 位 XGMII MAC
+   (单元门 **252/0**; 与 PCS 合并 **WNS +0.401 / 三类失败端点全 0**; ⚠️ **未接入 `board/wrapper_p4.v`**)。
+4. `_proj_10g/notes/P7B_IMPLICIT_GATE_FIX.md` + `P7B_IMPLICIT_GATE_ROLLOUT.md` —— 隐式网**哑门**修复
+   (`implicitly declared` 在 Vivado 2025.2 恒 0 ⇒ 必须补 xelab/synth 面; 铺开 87 文件 / 261 处)。
+5. `_proj_10g/notes/P7B_U7_AND_PEER.md` —— 字节序取证 (**lane0 = 首字节** ⇒ MAC 做纯 8 字节镜像)
+   + 闸 2 的对端机现状。
+6. `PORT_NOTES.md` 的 "2026-09-29 P7b" 节 —— 里程碑日志 + 10 条教训 + 未结项清单。
+
+⚠️ **P7b 尚未完成** —— 闸 2/3/4 未起、MAC 未接入 wrapper、v2 未落 `rtl/`, **别按"已完成"接手**。
+⚠️ **本条与下面"10G-ready 设计决策"第 2 条冲突时以本条为准**: 那句"10G 前端 = PG157 AXIS 输出
+加一层 shim"**已作废** —— P7b 闸 0 定的是官方 `xxv_ethernet` 取 `CORE = Ethernet PCS/PMA 64-bit`
+(**XGMII 出**) + **自写 64 位 XGMII MAC** (`P7B_SPEC.md` §0/§2.2)。其余三条决策不变。
+(P6b 时代的接手入口仍是 `P6B_SUMMARY.md`; 观测通道现役表 = `P6E_OBS.md`。)
+
 ## 10G-ready 设计决策 (不可违背)
 
 1. **数据面所有模块 64bit 字流 @125MHz** (10G 时 156.25MHz), 每级 II=1, 帧内零整包暂存。

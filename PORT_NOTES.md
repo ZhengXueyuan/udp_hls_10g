@@ -4526,3 +4526,136 @@ FTDI/MAX3232、无 USB 口、无调试排针；见 `../XCKU5PMini/CLAUDE.md`「�
 6-bit `rxheader` 只判"稳定"（2-bit sync header 不在 fabric 可观测面，**已承认的覆盖缺口**）·
 整窗比率读到 **0.999995** 而非 1.000000（≈5 ppm，成因未查；与 raw 候选差 3.1%，判别力不受影响）·
 只有 PRBS31，没有真实以太网帧/MAC/背压。
+
+---
+
+## 2026-09-29 P7b: 10G 数据面上板第一轮（官方 XGMII 核 + 自写 64 位 MAC）—— **闸 0 / 闸 1 完成；闸 2/3/4 未起**
+
+> **归档索引**（本节是里程碑日志；逐条判据、IP 配置逐项回读与复现命令在别处，别在这里找）：
+> **`P7B_SPEC.md`**（施工规格：路线与 license 分叉 / 接口冻结 / 闸序 / **66 条正判据 + 9 条负对照**）·
+> **`_proj_10g/notes/P7B_GATE1.md`**（**闸 1 板级读数原始件**：拓扑 / IP 逐项回读 / 长窗零错 / 三条负对照 / 1a 补测）·
+> 同目录 `P7B_XXV_OFFICIAL.md`（闸 0：官方核与 license 分叉）·
+> `P7B_MAC_{DESIGN,REVIEW,GATEFIX,TIMING}.md`（新 MAC：设计 / 对抗审查 / 判据修复 / 时序）·
+> `P7B_RXCLASSIFY_{AUDIT,DESIGN}.md`（v2）· `P7B_IMPLICIT_GATE_{FIX,ROLLOUT}.md`（哑门修复与铺开）·
+> `P7B_U7_AND_PEER.md`（字节序取证 + 闸 2 的对端机现状）· `_proj_10g/notes/p7b_tail/logs/`（尾巴轮原始日志）。
+> **本轮提交**：`c5f81cd` · `65753c3` · `11e93d3` · `95ce60f` · `fc718b2` · `e450b65`
+>（闸 0 的归档在更早的 `2b68936` / `ecc19ba`；`fa9e094` = 文档订正、`e87375a` = 归档补漏。）
+
+### ① 一句话
+
+**未完成 —— 但两块最硬的地基已经落地，且都是"工具/板级原始读数级"的证据。**
+闸 0（**选型**：官方 `xxv_ethernet` `CORE = Ethernet PCS/PMA 64-bit` 出 XGMII + **自写 64 位 XGMII MAC**）✅；
+闸 1（**板内 J7↔J8 自环**：2 通道官方 PCS + 官方 example 图案发生器/监视器，**未改一行**）✅ 板级 PASS；
+新 64 位 MAC 单元门 252 条 0 fail、与 PCS 合并时序收敛 ✅；`rx_classify` v2 设计完成但**未落进 `rtl/`**。
+**闸 2（真网卡 802.3 裁决）进行中；闸 3（全链门）/ 闸 4（板级验收）未起。**
+
+### ② 关键读数（逐条带出处）
+
+**闸 0 —— 工具 / 接口 / 选型**（`P7B_XXV_OFFICIAL.md` §0/§0.1/§0.2/§4.5/§4.6；`P7B_SPEC.md` §0/§3.6）
+
+- ⭐ **决定性对照**：官方 10GBASE-R PCS-only 核 `w2_pcs64_baser` 内嵌的 GT 子核与我们的 `gt_10gbr`
+  **配置逐项逐字相同**，而它的 fabric 面是 **XGMII**（`w_pcs64_baser.veo:78-79,98-99` =
+  `rx_mii_d_0[63:0]` / `rx_mii_c_0[7:0]`）⇒ **GT 是纯 gearbox + PMA，64b/66b PCS 在 GT 之外的 soft logic 里**。
+- ⭐ **license 按 CORE 分叉**：本机 `Xilinx.lic` 含 `INCREMENT xxv_eth_mac_pcs … permanent uncounted`；
+  `CORE = Ethernet PCS/PMA 64-bit` **位流过**（`probe_pcs64_top.bit`，15,431,266 B），
+  **含 MAC 的变体被拒**（原文 `require licenses greater than a Design Linking license`）。
+  ⚠️ **`generate_target` 成功 ≠ 能出位流**。
+- ⭐ ⚠️ **一个被证伪的前提**：P7a 曾以"`xxv_ethernet` 要 license"为由绕开官方 IP 自拼 PCS ——
+  **该前提不成立**（它来自"把 license 藏起来"的负对照；那个负对照口径没错，错的是把它延伸成
+  "`xxv_ethernet` 锁着"）。**"查不到"和"锁着"是两件事。**
+- ⭐ **U2 定案（证据升级）**：官方核**网表里确有** `i_TX_SCRAMBLER` / `i_RX_DECODER` / `i_RX_WD_ALIGN`
+  ⇒ **GT 不加扰，加扰在 soft logic** —— 由 **Xilinx 自己的产物**说话。
+- ⭐ **字节序定案**：官方 XGMII 是 **lane0 = 首字节**，与 `tdata[63:56]` 首发的冻结合同**相反**
+  ⇒ 新 MAC 在 XGMII 边界做**纯 8 字节镜像**（无位序翻转）。证据 = 官方**明文** example
+  `pcs64_pkt_gen_mon.v`（`swapn` @`:1238-1241`；五条独立证据见 `P7B_U7_AND_PEER.md` §A.6）
+  **且被板上读数 `c1_sword = 0xD5555555555555FB` 反推验证**（`P7B_GATE1.md` §5.3）。
+
+**闸 1 —— 板内 J7↔J8 自环**（`P7B_GATE1.md` §4、§5.1-5.8、§10.1）
+
+- 位流 `xxv_loop_top.bit`，sha256 `5560375b…72ee2c`；**−1 时序 WNS +1.404 / WHS +0.011 / WPWS +0.514，
+  三类失败端点全 0**；资源 7,942 LUT / 15,419 FF / **0 BRAM** / 2×GTYE4_CHANNEL。
+- 双向 `block_lock=1 status=1 los=0`，`hi_ber/local_fault/framing_err/bad_code/fifo_error` 全 0。
+- **零错的正证据**（防"真空 0"）：6.6 s 内 **30,056,095 帧**；**载荷字/帧 = 29.000000**
+  （实测 28.9999997）、**XGMII 字/帧 = 34.000000**（实测 33.9999997）；线速 **9,999.94 Mbps**（−0.0006%）；
+  官方 FSM `completion_status = 1`（`SUCCESSFUL_COMPLETION`）。
+- **负对照**：拉 `SFP1_TX_DIS`(C11) ⇒ ch1 掉块锁 + 对端 `sfp2_rx_los`(C9) **精确亮**；
+  `completion_status` 1→2(`NO_BLOCK_LOCK`)→恢复回 1；**打断时 `/E/` 计数 0→11,808 ⇒ 零错不是真空 0**。
+- **1a 补测**：GT 内部环回档 `001` ⇒ ch0 收到自己 **17,572,669** 帧、`010` ⇒ **11,945,493**，与 ch1 逐数相等；
+  `000/100/110` 全 0 作负对照。
+- ⚠️ **自报未测**：`stat_rx_error[7:0]` 的 `_valid` **整场从未触发** ⇒ 那条线"恒 0"是"**没话说**"，
+  **按未测登记**（R12 形态）。
+
+**新 64 位 XGMII MAC —— 已完成，未接入**（`P7B_MAC_DESIGN.md` §0/§2/§7/§8；`P7B_MAC_TIMING.md` §0/§2.2/§3/§4）
+
+- 单元门 **252 条判据 / 0 fail**；变异 **12 条 = 10 非等价全抓住 + 2 等价如实报"没抓到"**。
+- **帧首排布在板上闭环**：`lane0 /S/(0xFB,c=1) + lane1..6 0x55 + lane7 0xD5(c=0)`，`c=8'h01`；
+  手算例程前 3 字与板上实测 `0xD5555555555555FB` / `0xFE14FFFFFFFFFFFF` / `0x00000006829ADDB5` 逐字节吻合。
+- ⚠️ **拒绝了厂商例程的非标角落**（帧长恰为 8 的倍数时它组 `T0 D1..D7`，**IEEE Figure 49-7 无此格式**）。
+- 最小帧吞吐 **~1/3 → 95.5%**（L=60：11 拍/帧 = 88B / 理想 84B）。
+- **时序**：与 PCS 合并 **WNS +0.401 / WHS +0.008 / 三类失败端点全 0**，`route_design Complete`；
+  LUT 9040→**12877**；CRC 实测 **1058 / 1091 LUT**、reg→reg 仅 **6~7 级**；**时钟域核实无新增跨域对**。
+  ⚠️ MAC 单独 OOC 报的 hold 239 违例，**239 / 33 条起点全是端口、0 条来自寄存器 ⇒ OOC 端口伪影**；
+  真实 reg→reg `TX +0.024 / RX +0.011`。
+
+**`rx_classify` 收发解耦 v2 —— 设计完成，⚠️ 未落进 `rtl/`**（`P7B_RXCLASSIFY_DESIGN.md` §0/§5.1/§8）
+
+- 最小帧帧周期 **14 → 8 拍**（死拍 6→0）；10G 最小帧 **57.1% → 100%**（57.1% = `P7B_SPEC.md` §1.1 的 8/14）。
+- 保真：v1/v2 **逐拍逐位 6224 beat × 7 场景 0 失配**；变异 **4 条非等价全抓住 + 3 条等价如实报"没抓到"**。
+
+**门修复 —— 隐式网"哑门"**（`P7B_IMPLICIT_GATE_FIX.md` §0/§2.6/§3；`P7B_IMPLICIT_GATE_ROLLOUT.md` §1/§5）
+
+- 起因：`findstr implicit` 在 **Vivado 2025.2 是哑门**（2025.2 不再打印 `implicitly declared`）。
+- 2025.2 真实签名三条：synth `INFO: [Synth 8-11241] undeclared symbol`、
+  xelab `WARNING: [VRFC 10-3091] actual bit length 1 differs from formal bit length`、
+  xvlog 表达式 `ERROR: [VRFC 10-2989]`。⚠️ **端口连接形式的隐式网 xvlog 一个字都不打印**。
+- 铺开 **87 文件 / 261 处**；**假阳性 0**（收窄后本仓 43 份命中里 **41 份指向 `D:/repo/ECO/` 的陈旧日志**）。
+- ⭐ 真阳性首捕 `tb/tb_p5_app.v:511`（隐式 `tx_fsm_state_w` 驱动 3 位 `dbg_state`）；**污染核查 = 无**。
+- ⭐ `sim/p4sim/run_matrix_p4dfix.sh`（16 门矩阵现役 sh 入口，被 4 份文档引用）**从未入库** ⇒ 已放行。
+- 回归：P4 16 门矩阵 **16/16 EXIT=0**（`_proj_10g/notes/p7b_tail/logs/matrix_full_after.txt`）；
+  冻结校验 `VERDICT: FROZEN`（237 份哈希文件逐字节一致）。
+
+### ③ 教训（10 条）
+
+1. **计数器可以被伪装 —— 只有"按帧独立的内容比对"能抓幽灵帧。** 我们为 F-2 付过一轮学费
+   （线上出现 **FCS 正确**的幽灵帧），原案靠的是"该帧 content 与**任何注入帧都不等**"这条**内容判据**；
+   新门却只留了计数器 ⇒ 审查方新造变异 **M7b（去冲刷 + 计数器伪装）真的发出幽灵帧，而门 229/0 PASS**。
+   修后 **M7b FAIL**（而被伪装的那两条计数器判据**照样 PASS** ⇒ 反向证明计数器确实可被骗）。
+2. **"有输出没牙齿"是哑门的第二种形态**：14 行"检测到了只打印"不成硬失败。且 **cmd 管道写法实测
+   会反向误判**（病理读 0、干净读 1）⇒ 修门必须配负对照、并实测退出码真能传播。
+3. **`generate_target` 成功 ≠ 能出位流**（`Design_Linking` 级授权的分叉）。
+4. **"检测到了" ≠ "判据有判别力"**：审查还揪出两条**恒真**判据，以及一条**前提根本不成立**的判据
+   （"T/S 同拍"而原激励里**根本没有 `/T/`**）。
+5. **单帧用例测不出 IFG**：MAC 门的 IFG 变异最初没抓住，因为**单帧用例里 `S_IDLE` 空闲字与 IFG 空闲字
+   不可区分**；必须"两帧连发看 `/S/`→`/S/` 周期 == 12 拍"才成立。
+6. **自环回是对称的、对绝对字节序/加扰/802.3 符合性零判别力** ⇒ 必须有真网卡裁决
+   （这是闸 2 存在的理由）。
+7. **`gitignore` 是最后匹配者胜** ⇒ `!` 行与排除行的**相对位置**决定成败；且 **`git check-ignore -v`
+   的退出码在 `!` 行上不可信**（只有 `-q` 可信）。本次真踩过：一大块规则被编辑锚点带到第 53 行，
+   而否定行在第 462 行 ⇒ 排除被反向覆盖。
+8. **`core.autocrlf=true` 下，从 HEAD blob 看不出工作区的行尾**（索引里永远存 LF）——
+   本轮有两次测量栽在这上面。
+9. **"报告引用的东西必须真的在库里"**（本轮又有两处：`run_matrix_p4dfix.sh`、
+   以及 8 棵 0 已跟踪文件的树）。
+10. **"查不到" ≠ "锁着"**（闸 0 那条被证伪的前提）—— 负对照口径没错，错在把它的结论
+    延伸出适用范围；**一个负对照只能否定它自己测过的那个命题**。
+
+### ④ 现状 / 未核实（别记错）
+
+- **板上现载位流 = 未核实**（闸 2 正在用板；本文件写成时没有取过这条读数）。
+  上板前一律**重烧 + 重核 sha256**（本工程既有铁律）。
+- 闸 2 的**在库**现状读数（`P7B_U7_AND_PEER.md` §B.1.2/§B.3）取数时两口都是 `NO-CARRIER`
+  （`Link detected: no`）；`enp1s0f1np1` 是本机唯一实测上过 10000Mbps 的口。
+  **"当前已 link"与那次读数不同时点 —— 本文件未核实两者之间的状态变化。**
+
+### ⑤ 未结项（**别写成已完成**）
+
+- **闸 2（真网卡裁决 802.3）—— 进行中。** 诊断要点：`enp1s0f1np1` `Link detected: yes` /
+  `Speed: 10000Mb/s` / `FIBRE`，但 `RX packets 0`（⚠️ 那是 **netdev** 计数，**不是硬件计数**；
+  判收包只能看 `ethtool -S` 的 `port_rx_packets` / `rx_eth_crc_err`）。
+  **决定性负对照（拉 `TX_DIS` ⇒ 网卡必须掉 link）尚未完成。**
+- **闸 3（全链门）/ 闸 4（板级验收）—— 未起。**
+- **`rx_classify` v2 未落进 `rtl/`**（落地要配 P4 矩阵 + P6b 验收门回归）。
+- **MAC 未接入 `board/wrapper_p4.v`。**
+- 官方核 RTL **全加密**（读不到实现）；那 **10 条厂商例程**（`pcs64_pkt_gen_mon_ds.v`）的隐式网**未修**
+  （预先存在、与本轮无关）。
+- **其余 76 门未逐门重跑。**

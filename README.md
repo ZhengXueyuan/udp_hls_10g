@@ -11,6 +11,14 @@ Kintex-7 XC7K325T 纯硬件 TCP/IP 数据面: 64bit 字流 @125MHz, 当前 1G RG
 P6a(数据面移植到 KU5P) ✅ / P6e(我们自己的 PCIe 观测通道) ✅ / **P6b(数据面 125→156.25MHz) ✅ 板级正式验收 35/35**。
 **P7a(10G PCS/PMA，含 64b/66b gearbox) ✅ 板级验收 PASS** —— **10G PHY 已实测达标，BER 上界 4.997e-13**
 （双向各 600 s / 6.003×10¹² bit 零错；gearbox 三条腿齐）: 见 **`P7A_RESULT.md`**。
+**P7b(10G 数据面上板第一轮：官方 XGMII 核 + 自写 64 位 MAC) —— 🚧 进行中**:
+**闸 0(选型) ✅ / 闸 1(2 通道官方 PCS 板内 J7↔J8 自环) ✅** —— 6.6 s / **30,056,095 帧**零错、
+载荷字/帧 29.000000、XGMII 字/帧 34.000000、**9,999.94 Mbps**、官方 FSM `completion_status = 1`;
+负对照(拉 `SFP1_TX_DIS`(C11)) 按期望翻转(掉块锁 + 对端 `RX_LOS`(C9) 亮 + `/E/` 计数 0→11,808)。
+新 MAC 单元门 **252 条 / 0 fail**(变异 12 条: 10 非等价全抓住)、与 PCS 合并 **WNS +0.401 / 三类失败端点全 0**。
+⚠️ **未完成**: **闸 2(真网卡 802.3 裁决) 进行中**、**闸 3(全链门) / 闸 4(板级验收) 未起**;
+**新 MAC 未接入 `board/wrapper_p4.v`**、**`rx_classify` v2 未落进 `rtl/`**。
+规格 **`P7B_SPEC.md`**、闸 1 读数原件 **`_proj_10g/notes/P7B_GATE1.md`**。
 本节以下内容仍是 **2026-09-21 当时的记录**; 现状看上面那个 ⭐ 块。
 调研结论仍存档在"遗留"(定性与 6 块工作、K1-K6 前置实验、三个决策点、两个阻断级风险、工期更正)。
 
@@ -27,7 +35,11 @@ P6a(数据面移植到 KU5P) ✅ / P6e(我们自己的 PCIe 观测通道) ✅ / 
 > | 施工规格（**含 §0.4 勘误**：索引表错误 / as-built 偏离）| `P6B_SPEC.md` |
 > | 跨域审计（F-1/F-2/F-3）、对抗审查（F1–F13）、集成与"空门"核实 | `P6B_CDC_AUDIT.md` / `P6B_REVIEW.md` / `P6B_INTEGRATION_REVIEW.md` |
 > | **P7a 10G PHY（PCS/PMA + gearbox）板级验收的原始记录** | **`P7A_RESULT.md`** + `P7A_SPEC.md` |
-> | 里程碑日志与教训 | `PORT_NOTES.md` 的 "2026-09-29 P6b 收口" / "2026-09-29 P7a" 两节 |
+> | **P7b 施工规格**（路线与 license 分叉 / 接口冻结 / 闸序 / 66 条正判据 + 9 条负对照）| **`P7B_SPEC.md`** |
+> | **P7b 闸 1 板级读数原始件**（2 通道官方 PCS 板内 J7↔J8 自环：拓扑 / IP 逐项回读 / 长窗零错 / 三条负对照 / 1a 补测）| **`_proj_10g/notes/P7B_GATE1.md`** |
+> | **P7b 其余笔记**（闸 0 官方核与 license · 新 MAC 设计/审查/门修/时序 · v2 · 哑门修复与铺开 · 闸 2 对端现状）| `_proj_10g/notes/P7B_{XXV_OFFICIAL,MAC_DESIGN,MAC_REVIEW,MAC_GATEFIX,MAC_TIMING,RXCLASSIFY_AUDIT,RXCLASSIFY_DESIGN,IMPLICIT_GATE_FIX,IMPLICIT_GATE_ROLLOUT,U7_AND_PEER}.md` |
+> | ⚠️ **P7b 的"未完成"清单**（闸 2/3/4 未起 · MAC 未接入 wrapper · v2 未落 `rtl/`）| `P7B_SPEC.md` §5 · `PORT_NOTES.md` 的 "2026-09-29 P7b" 节 |
+> | 里程碑日志与教训 | `PORT_NOTES.md` 的 "2026-09-29 P6b 收口" / "2026-09-29 P7a" / "2026-09-29 P7b" 三节 |
 >
 > **一句话读数**：1G 图案通路 **956.0 Mbps**（线速 957.1 的 99.9%）· 数据面 **156.2585 MHz**
 > 与前端 **125.0061 MHz** 双域并存 · 同批修掉两个**早于 P6b 就存在**的数据通路缺陷（F4 / F-2）。
@@ -71,6 +83,12 @@ P6a(数据面移植到 KU5P) ✅ / P6e(我们自己的 PCIe 观测通道) ✅ / 
 | P6e | **我们自己的 PCIe/XDMA 观测通道** (user BAR 寄存器窗口, 无 UART 板上的唯一观测手段) | ✅ **板级 PASS** |
 | P6b | **数据面 125 → 156.25MHz** (前端留 125MHz + 手写异步 FIFO 跨域) | ✅ **板级正式验收 35/35** (956.0 Mbps) |
 | **P7a** | **10G PCS/PMA（含 64b/66b gearbox）在板上真的在跑** (X0Y4↔X0Y5 经 AOC 外部环回, 自写 PRBS31 计数器判 BER) | ✅ **板级 PASS** — 双向各 600 s / 6.003×10¹² bit 零错 ⇒ **BER 上界 4.997e-13**; 速率 1.000025×10¹⁰ bit/s 钉死 gearbox 比率 |
+| **P7b-闸0** | **选型定案**: 官方 `xxv_ethernet`(`CORE = Ethernet PCS/PMA 64-bit`, **XGMII 出**) + **自写 64 位 XGMII MAC** | ✅ **闸 0 完成** — PCS-only **能出位流** / **含 MAC 的变体被 license 拒**; 官方核网表里确有加扰·解码·对齐 ⇒ **GT 不加扰** |
+| **P7b-闸1** | **2 通道官方 PCS 板内自环** (J7↔J8, 用官方 example 的图案发生器/监视器, **未改一行**) | ✅ **板级 PASS** — 6.6 s / 30,056,095 帧零错 · 9,999.94 Mbps · 官方 FSM `completion_status = 1`; 三条负对照按期望翻转 |
+| **P7b-②** | **新 64 位 XGMII MAC** (`mac_rx_10g` / `mac_tx_10g` / `crc32_64`) | ✅ **单元门 252/0 + 与 PCS 合并 WNS +0.401 / 三类失败端点全 0**; ⚠️ **未接入 `board/wrapper_p4.v`** |
+| **P7b-③** | **`rx_classify` 收发解耦 v2** (最小帧帧周期 14→8 拍; 10G 最小帧 57.1%→100%) | 🚧 **设计完成, 未落进 `rtl/`** (落地要配 P4 矩阵 + P6b 验收门回归) |
+| **P7b-门修复** | 隐式网门 (`implicitly declared` 在 2025.2 是**哑门**) + xelab 面判据铺开 | ✅ 87 文件 / 261 处、**假阳性 0**; P4 矩阵 **16/16 EXIT=0** + 冻结校验 `FROZEN` |
+| **P7b-闸2/3/4** | 真网卡 802.3 裁决 / 全链门 / 板级验收 | 🚧 **闸 2 进行中** (决定性负对照未做); **闸 3 · 闸 4 未起** |
 
 - **P5b 一句话结论**: 通告窗口 = `winq - occ` 随 frame_fifo 占用收缩、零窗后由 `wu` ACK
   主动重开;接受界加 `ACC_MARGIN(4096)` 裕度 + 拒收回 ACK ⇒ 慢消费者背压**零丢字节**。
