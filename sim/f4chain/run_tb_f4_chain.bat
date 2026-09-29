@@ -28,9 +28,10 @@ call %XV%\xvlog.bat %DEFS% -work xil_defaultlib %MAC% ^
   %R%\rtl\crc32_8b.v %R%\rtl\vlan_strip.v %R%\rtl\rx_classify.v ^
   %R%\rtl\frame_fifo.v %R%\rtl\slow_rx_adp.v %R%\tb\tb_f4_chain.v > xv_c.log 2>&1 || (type xv_c.log & echo XVLOG-FAIL & exit /b 1)
 call %XV%\xvlog.bat -work xil_defaultlib "%XV%\..\data\verilog\src\glbl.v" >> xv_c.log 2>&1
-findstr /I /C:"implicitly" xv_c.log >NUL && (echo IMPLICIT-DECL-FAIL & type xv_c.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xv_c.log >NUL && (echo IMPLICIT-DECL-FAIL & type xv_c.log & exit /b 1)
 findstr /C:"10-3091" xv_c.log >NUL && (echo BITWIDTH-FAIL & type xv_c.log & exit /b 1)
 call %XV%\xelab.bat -debug typical -L unisims_ver xil_defaultlib.tb_f4_chain xil_defaultlib.glbl -s tb_f4c -log xe_c.log > NUL 2>&1 || (type xe_c.log & echo XELAB-FAIL & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xe_c.log >NUL && (echo IMPLICIT-DECL-FAIL-XELAB & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xe_c.log & exit /b 1)
 call %XV%\xsim.bat tb_f4c -runall -log xs_c.log > NUL 2>&1
 type xs_c.log
 exit /b 0

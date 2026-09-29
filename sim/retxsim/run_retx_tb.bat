@@ -13,6 +13,7 @@ call %XV%\xvlog.bat -work xil_defaultlib ^
   %TB%\tb_retx_ram.v > xvlog_c.log 2>&1 || (type xvlog_c.log & exit /b 1)
 
 call %XV%\xelab.bat -debug typical xil_defaultlib.tb_retx_ram -s tb_retx_ram -log xelab.log > NUL 2>&1 || (type xelab.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab.log >NUL && (echo IMPLICIT-DECL-FAIL-XELAB & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab.log & exit /b 1)
 
 call %XV%\xsim.bat tb_retx_ram -runall -log xsim.log > NUL 2>&1
 

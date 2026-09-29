@@ -118,9 +118,10 @@ _proj_10g/notes/p7b_implicit_repro/*/
 _proj_10g/xxv_gate2/
 
 # ---- audit_scratch 的 xsim 轮转备份 (产物) ----------------------------------
-#      既有 `!audit_scratch/**/*.log` (为本工程"归档级原始日志"而写) 把 *.backup.log
-#      一并放行了 —— 实测 7 个 / 485 KB。与既有 sim/**/*.backup.log 同性质, 补挡。
-audit_scratch/**/*.backup.log
+#      ⚠️ 这条排除规则**必须写在文件末尾** —— 既有 `!audit_scratch/**/*.log` 在本文件靠后的
+#      位置(第 46x 行), 而 gitignore **最后匹配者胜** ⇒ 写在这里会被那条否定行反过来覆盖。
+#      (2026-09-29 实测踩过: 写在这里时 `git check-ignore -q` 返回 1 = 没被排除。)
+#      有效规则见文件末尾。
 sim/vlansim/*
 !sim/vlansim/run_tb_*.bat
 tools/cpp_peer/peer.exe
@@ -552,3 +553,12 @@ _proj_10g/xxv_probe/logs/*.jou
 #      pcs64_exdes.v                                 = example 顶层
 #      runme.log ×5 (impl_1 / synth_1)               = 位流判据 + 时序/资源读数
 #    动这四个目录前, 先确认 P7B_SPEC.md 的引用仍可解析。
+
+# ============================================================================
+# ⚠️ 必须放在**文件末尾**的规则 (gitignore = 最后匹配者胜)
+# ============================================================================
+# ---- audit_scratch 的 xsim 轮转备份 (产物): 7 个 / 485 KB --------------------
+#      既有 `!audit_scratch/**/*.log`(第 46x 行, 为本工程"归档级原始日志"而写)把
+#      `*.backup.log` 一并放行了 —— 与既有 `sim/**/*.backup.log` 同性质, 补挡。
+#      ⚠️ 位置敏感: 必须排在那条 `!` 行**之后**, 否则会被它覆盖(2026-09-29 实测踩过)。
+audit_scratch/**/*.backup.log
