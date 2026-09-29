@@ -379,3 +379,54 @@ sim/*_p6b/
 #     是"未复现"这个结论的**唯一原始出处**；`soak_postcheck.log` 是停机态与守恒复核。
 #     不入库 ⇒ 结论悬空。位流(`*.bit`)/抓包(`*.pcap`)仍按既定策略排除。
 !_proj_pcie/soak_scratch/*.log
+
+# ============================================================================
+# P7a (2026-09-29): 10G PCS/PMA 板级验收 —— `_proj_10g/` 入库, 只排除"工程/生成物"
+#
+# 实测体积: `_proj_10g/` 125 MB 里 ~123 MB 是产物 (60M 构建工程 + 42M 两个 license
+#   负对照工程 + 15.4M iBERT 对照件位流[已被全局 *.bit 覆盖] + 3.6M 网表转储);
+#   **设计(RTL/XDC/脚本) + 门 + 全部原始读数 ≈ 2 MB, 全部入库**(本工程靠文本证据存档)。
+# `_p7a_probe/` 17 MB 同理: 只留 P7A_SPEC §1 逐字引用的那批文本读数 (324 KB)。
+# ============================================================================
+
+# ---- license 负对照的两个 Vivado 工程 (可重建: _proj_10g/tcl/lic_deny_p7a.tcl;
+#      且含厂商生成的 IP HDL, 不宜入库。*读数*在 reports/p7a_lic_deny_stdout.txt) ----
+_proj_10g/lic_deny_prj/
+_proj_10g/lic_deny_ctrl_prj/
+
+# ---- XDC 子集缺陷的最小复现工程 (可重建: tcl/xdc_cmd_support_probe.tcl;
+#      证据 = 它自己的 stdout: reports/p7a_xdc_probe_stdout.txt) ----
+_proj_10g/tcl/probe_xdc_prj/
+
+# ---- lint 工作目录: 只留读数 xvlog.txt (P7A 门 summary §[B] 的原始出处) ----
+#      (*.log / *.pb / xsim.dir/ 已被更早的全局规则覆盖 ⇒ 这里只需挡 files.f)
+_proj_10g/tcl/lint/files.f
+
+# ---- 探针描述文件 (.ltx): 本工程不跟踪位流, 而 .ltx 只是某个位流的探针表 ⇒ 一并排除。
+#      实测现库中 0 个已跟踪 .ltx; 位流/探针的身份以 sha256 记在 P7A_RESULT.md §6.1 ----
+*.ltx
+
+# ---- 布局后网表转储 (3.6 MB, readback tcl 的副产物): 判据读数已逐字归档在
+#      reports/p7a_readback.txt §[1]/§[1c]。若 TL 要连 netlist 留档, 加 `!` 放行 ----
+_proj_10g/reports/p7a_post_route_netlist.v
+
+# ---- P7a 工具核实的一次性探针工程: 三个 Vivado 工程 + 两个网表转储 = 17 MB 的主体 ----
+_p7a_probe/.Xil/
+_p7a_probe/pj_fin/
+_p7a_probe/rb_pos/
+_p7a_probe/rb_raw/
+_p7a_probe/nl_pos.v
+_p7a_probe/nl_raw.v
+_p7a_probe/*.log
+_p7a_probe/*.jou
+#   ⭐ 放行 P7A_SPEC §1.1/§1.2/§1.3/§10 逐字引用的**文本读数**(合计 324 KB):
+#      *_stdout.txt      = 每轮探针的 stdout (已核实 §1 的每一条引用都能在其中找到:
+#                          p1_stdout.txt:160 = TX_PROTOCOL 不存在; p2_stdout.txt:253 = 12-4371)
+#      *.tcl / run_p*.bat= 探针脚本本身 (可复跑)
+#      clockInfo.txt     = 时钟读数
+#   ⚠️ 这一条与 P7A_SPEC §10 原写的"不进 git"冲突 —— **已由 TL 改判**: §10 已更正为
+#      "被引用的小体积文本读数入库"(与 P6b 那轮同一条原则: 报告引用的东西必须真的在库里)。
+!_p7a_probe/*_stdout.txt
+!_p7a_probe/*.tcl
+!_p7a_probe/run_p*.bat
+!_p7a_probe/clockInfo.txt
