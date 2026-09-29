@@ -58,10 +58,6 @@ module tb_snap_cdc;
     `define TB_NW 24
     `define TB_NW_SRC "TB_NW_24"
     `define TB_NW_GIVEN
-`elsif TB_NW_36
-    `define TB_NW 36
-    `define TB_NW_SRC "TB_NW_36"
-    `define TB_NW_GIVEN
 `elsif TB_NW_32
     `define TB_NW 32
     `define TB_NW_SRC "TB_NW_32"

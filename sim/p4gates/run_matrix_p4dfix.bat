@@ -7,8 +7,10 @@ REM   usage:  cmd //c 'sim\p4gates\run_matrix_p4dfix.bat' [/canonical]
 REM           cmd //c 'sim\p4gates\run_matrix_p4dfix.bat' /only chain+unit_vlan
 REM   NOTE: the /only separator is '+' -- cmd splits ',' and ';' as token
 REM   separators, so a comma separated list cannot survive the command line.
-REM   From git bash use the shim sim/p4sim/run_matrix_p4dfix.sh -- it disables
-REM   MSYS argument path conversion (otherwise /only becomes C:/Program Files/...) .
+REM   From git bash use the shim sim/p4sim/run_matrix_p4dfix.sh (or the '-'
+REM   spelling) -- MSYS rewrites a '/switch' into a path-like token
+REM   (C:/Program Files/Git/only) before cmd.exe sees it, and any token this
+REM   script does not recognize is now REFUSED (exit 97) instead of ignored.
 REM   git-bash entry point (unchanged for callers):
 REM     bash sim/p4sim/run_matrix_p4dfix.sh          <- self-locating shim
 REM
@@ -31,12 +33,17 @@ REM   the runner exits 2 and reports DRIFT -- the per-gate results are then not
 REM   bound to any single revision.  /canonical runs the gates in their
 REM   historical directories instead (refused while another xsim.exe runs).
 REM
-REM   exit codes: 0 ok, 1 a gate failed, 2 revision drift, 97 precheck refusal.
+REM   exit codes: 0 ok, 1 a gate failed, 2 revision drift, 97 precheck refusal
+REM   (97 covers: unrecognized/valueless command-line switch, a gate name the
+REM   runner does not declare, and the per-gate path/manifest precheck).
 REM ==========================================================================
 setlocal EnableDelayedExpansion
 
-REM capture the script name BEFORE the arg loop (shift moves %0 as well)
+REM capture the script name+path BEFORE the arg loop (shift moves %0 as well --
+REM after 'shift' %~f0 is the leftover ARGUMENT, not this file: the gate-name
+REM check below once read 'bogus' as its own source file because of it)
 set "RUNNER_NAME=%~nx0"
+set "RUNNER_PATH=%~f0"
 
 call "%~dp0p4env.bat"
 if errorlevel 1 exit /b 1
@@ -47,23 +54,65 @@ for /f "usebackq eol=# tokens=1,* delims==" %%a in ("%PATHS_TXT%") do (
 set "MATRIX_LOG=%OUTDIR%\%MATRIX_LOG_NAME%"
 set "FRAME_FIFO=%RTL%\frame_fifo.v"
 
-REM ---- arguments: [/isolated|/canonical] [/only gate1,gate2,...] -----------
+REM ---- arguments: [/isolated|/canonical] [/only gate1+gate2,...] -----------
+REM   An UNRECOGNIZED token is REFUSED (exit 97), never quietly stepped over.
+REM   Why: 'run_matrix_p4dfix.bat /only unit_vlan' typed in git bash arrives
+REM   here as '"C:/Program Files/Git/only" unit_vlan' (MSYS rewrites the
+REM   POSIX-style switch before cmd.exe is even spawned); the old loop shifted
+REM   past both tokens without a word and the run went on to execute the FULL
+REM   16 gates while its own header said 'gate filter : (none -- all 16)' --
+REM   the caller believed one gate had been selected.  Selecting the wrong
+REM   gate set is the "empty gate" failure mode in its most expensive form
+REM   (25 minutes of matrix, all of it answering a question nobody asked).
+REM   Both spellings of every switch stay valid (/only and -only): a token is
+REM   only refused when it is neither spelling.
 set "MODE=isolated"
 set "GATE_ONLY="
+set "ONLY_SEEN="
+set "BADARG="
 :argloop
 if "%~1"=="" goto :args_done
-if /i "%~1"=="/canonical" set "MODE=canonical"
-if /i "%~1"=="-canonical" set "MODE=canonical"
-if /i "%~1"=="/isolated" set "MODE=isolated"
-if /i "%~1"=="-isolated" set "MODE=isolated"
-if /i "%~1"=="/only" set "GATE_ONLY=%~2"
-if /i "%~1"=="-only" set "GATE_ONLY=%~2"
-shift
-goto :argloop
+if /i "%~1"=="/canonical" (set "MODE=canonical" & shift & goto :argloop)
+if /i "%~1"=="-canonical" (set "MODE=canonical" & shift & goto :argloop)
+if /i "%~1"=="/isolated"  (set "MODE=isolated"  & shift & goto :argloop)
+if /i "%~1"=="-isolated"  (set "MODE=isolated"  & shift & goto :argloop)
+if /i "%~1"=="/only"      (set "ONLY_SEEN=1" & set "GATE_ONLY=%~2" & shift & shift & goto :argloop)
+if /i "%~1"=="-only"      (set "ONLY_SEEN=1" & set "GATE_ONLY=%~2" & shift & shift & goto :argloop)
+set "BADARG=%~1"
+goto :args_done
 :args_done
+if defined BADARG (
+  echo [P4GUARD FAIL] unrecognized argument : !BADARG!
+  echo   usage : run_matrix_p4dfix.bat [-isolated ^| -canonical] [-only gate1+gate2]
+  echo   NOTE  : from git bash a /switch is rewritten by MSYS into a path-like
+  echo           token ^(e.g. "C:/Program Files/Git/only"^) before cmd.exe sees
+  echo           it -- use the -switch spelling, or the shim
+  echo           sim\p4sim\run_matrix_p4dfix.sh
+  echo   gate names : the 16 'call :gate' rows of this file -- see p4gate.py table
+  exit /b 97
+)
+if defined ONLY_SEEN if not defined GATE_ONLY (
+  echo [P4GUARD FAIL] [-only] needs a gate list : -only chain+unit_vlan
+  exit /b 97
+)
 REM cmd treats ',' and ';' as token separators, so a comma separated list can
 REM never arrive intact: the documented separator is '+'; ',' is normalised.
 if defined GATE_ONLY set "GATE_ONLY=%GATE_ONLY:,=+%"
+REM   ... and every name in the filter must be a gate THIS file declares (the
+REM   names come from the file itself -- the gate list is declared once, so
+REM   there is no second list here to drift).  '-only bogus' used to run zero
+REM   gates and still exit 0: 'gates run 0 / 16' is not a pass.
+if defined GATE_ONLY (
+  set "UNKNOWN_GATE="
+  for %%T in (%GATE_ONLY:+= %) do (
+    findstr /i /b /c:"call :gate %%T " "%RUNNER_PATH%" >nul || set "UNKNOWN_GATE=!UNKNOWN_GATE! %%T"
+  )
+  if defined UNKNOWN_GATE (
+    echo [P4GUARD FAIL] -only names gate^(s^) this runner does not declare :!UNKNOWN_GATE!
+    echo   refusing: a filter matching nothing would run 0 gates and still exit 0
+    exit /b 97
+  )
+)
 
 if /i not "%MODE%"=="canonical" goto :mode_done
 tasklist /fi "imagename eq xsim.exe" 2>nul | findstr /i "xsim.exe" >nul

@@ -50,11 +50,29 @@ Exit codes: 0 = ok, 1 = refused.
 import glob
 import hashlib
 import io
+import locale
 import os
 import re
 import subprocess
 import sys
 import time
+
+# ---- make our own diagnostics unable to kill the tools ----------------------
+# Pit 16(1) of this repository, met again here: on a GBK console (this box's
+# stdout encoding is cp936/gbk) writing a character the code page cannot encode
+# raises UnicodeEncodeError -- and U+FFFD, the very character errors='replace'
+# produces, is one of them.  The crash is not a reading, it is a *reporting*
+# failure that also turns the exit code into 1 (a reader that judges by exit
+# code sees FAIL where the gate said OK).  This script hit it in gatebrief: the
+# tail of the `chain` gate console log contains GBK bytes, so the last lines --
+# including that gate's verdict line -- never reached the matrix log.
+# Same fix as sim/f4sim/f4_verdict.py and tools/*.py.  Note it is byte-neutral
+# for ASCII output, so every currently-working invocation prints identically.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:      # pragma: no cover -- reconfigure needs py3.7+, always ok
+    pass
 
 GATES_DIR = os.path.dirname(os.path.abspath(__file__))
 PATHS_FILE = os.path.join(GATES_DIR, "paths.txt")
@@ -76,6 +94,34 @@ def ascii_safe(s):
     if not isinstance(s, str):
         s = s.decode("utf-8", "replace")
     return s.encode("ascii", "replace").decode("ascii")
+
+
+def read_console_text(path):
+    """Read a gate console log without destroying its non-ASCII bytes.
+
+    A gate console log is written by cmd.exe (console code page -- GBK here)
+    and by xsim (ASCII).  Reading it as ASCII with errors='replace' -- what the
+    old gatebrief did -- turned every GBK byte into U+FFFD, which no GBK stdout
+    can encode (see the reconfigure note at the top).  So: UTF-8 first (a log
+    written by one of our own UTF-8 tools), then the console code page, and
+    U+FFFD only for bytes broken in both.  ASCII logs decode identically under
+    every scheme, so nothing that worked before changes bytes.
+    """
+    with open(path, "rb") as f:
+        raw = f.read()
+    encs = ["utf-8"]
+    try:
+        cp = locale.getpreferredencoding(False)
+    except Exception:
+        cp = None
+    if cp and cp.lower().replace("-", "") != "utf8":
+        encs.append(cp)
+    for enc in encs:
+        try:
+            return raw.decode(enc)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return raw.decode("utf-8", "replace")
 
 
 def die(msg):
@@ -672,14 +718,20 @@ def cmd_gatebrief(a):
     if not os.path.isfile(src):
         out("(no console log: %s)" % src)
         return 1
-    lines = io.open(src, "r", encoding="ascii", errors="replace").readlines()
+    # StringIO keeps readlines()' exact splitting (on '\n' only, terminators
+    # kept, no phantom line for a trailing newline) -- only the decoding changed
+    lines = io.StringIO(read_console_text(src)).readlines()
     tail = [l.rstrip("\r\n") for l in lines[-a.lines:]]
     out("--- last %d lines of %s" % (len(tail), os.path.basename(src)))
     for l in tail:
         out("| " + l)
     if a.out:
         dest = resolve(os.getcwd(), a.out)
-        with io.open(dest, "a", encoding="ascii", errors="replace",
+        # utf-8 for the same reason stdout is: the tail is only ASCII-safe by
+        # luck, and ascii/replace would quietly write '?' over the gate's own
+        # verdict text (the Chinese word for "expected" in the chain gate log);
+        # identical bytes while the tail is ASCII.
+        with io.open(dest, "a", encoding="utf-8", errors="replace",
                      newline="\r\n") as f:
             f.write("--- last %d lines of %s\n" % (len(tail),
                                                    os.path.basename(src)))

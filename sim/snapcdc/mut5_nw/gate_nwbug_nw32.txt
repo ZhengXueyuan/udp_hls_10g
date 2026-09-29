@@ -1,0 +1,63 @@
+SHA256 �� D:\repo\XCKU5PMini\udp_hls_10g\rtl\snap_cdc.v ��ϣ:
+965d0916473788171e1282e3893abaec60cb8dfadb45621e79bde94a6337ff2f
+CertUtil: -hashfile ����ɹ���ɡ�
+SHA256 �� D:\repo\XCKU5PMini\udp_hls_10g\sim\snapcdc\mut5_nw\tb_snap_cdc_nwbug.v ��ϣ:
+1fac5656d53175226b9473ceee2adc47f21cae0e5c2a6e5462f7cf8faf7751c7
+CertUtil: -hashfile ����ɹ���ɡ�
+run at 2026/09/29 �ܶ� 13:59:52.17 
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Tue Sep 29 14:00:06 2026
+# Process ID         : 26260
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/sim/snapcdc/mut5_nw
+# Command line       : xsim.exe -log xsim_nwbug_nw32.log -mode tcl -source {xsim.dir/tb_snap_cdc/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/sim/snapcdc/mut5_nw/xsim_nwbug_nw32.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/sim/snapcdc/mut5_nw\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 50119 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_snap_cdc/xsim_script.tcl
+# xsim {tb_snap_cdc} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+=== tb_snap_cdc: 相干快照 CDC 单元门 (NW=32 字 x 32 位 = 1024 位) ===
+TB_NW_SEL: NW=32 NB=1024 MACRO=TB_NW_32
+SKEW_SELFTEST: NW=32 STEP_FS=112500 TOTAL_FS=3600000 LIMIT_FS=4550000 VERDICT=OK
+  [PASS] 0 激励自洽: 逐字步长 112500 fs x 32 字 = 整束 3600000 fs < clk_b 最小半周期 4550000 fs
+  [PASS] 1 基本: 结果 = 请求时刻的位束 (tag=100, 全部 32 字全对)
+  --- 判据 2: 飞行途中换位束, 扫 16 个相位 (核心) ---
+  [INFO] 2 相位统计: 旧值 13 次 / 新值 3 次
+  [PASS] 2 相干性: 16 相位全部相干, 且新旧两侧都扫到 (判据非空)
+  [PASS] 3 busy: 连发 3 拍只产生 1 次 valid
+  [PASS] 4 背靠背: 8 次请求 = 8 次 valid, 数据全对
+  --- 判据 5 负对照 A: 飞行中只推第 3 个字 (源位束被撕裂) ---
+  [NEG-OK] 相位 2002: 检查器抓到撕裂
+  [PASS] 5 负对照 A: 撕裂被抓到 1 次 ⇒ 相干性检查确有判别力
+  [PASS] 6 复位回收: 飞行中复位 → 释放后回空闲, 无假 valid
+  [PASS] 6b 复位后恢复正常快照 (tag=601)
+  [INFO] 7 b 时钟停摆: busy 挂高且无 valid (预期行为, 不是故障)
+  [PASS] 7 时钟停摆: 恢复后握手自动补完, 数据正确 (tag=700)
+  --- 判据 8: 源每拍都变 + clk_b 周期 9.10..12.04ns 扫描 + 通道逐字偏斜 112500 fs (NW=32 字, 整束 3600000 fs), 200 次 ---
+  [INFO] 负对照 B 首次位混: naive tag=001f54 (该代 src_gen=8021)
+  [PASS] 8a 真 RTL 在 200 次快照中 0 次位混 (源每拍都变)
+  [PASS] 8b 负对照 B: 直通模型在**同一激励**下混了 105/200 次 ⇒ 判据 8a 有判别力
+  --- 判据 9: 复位释放时 clk_b 停着 ---
+  [PASS] 9a 复位释放 (clk_b 未起) ⇒ 空闲, 无假 valid/busy
+  [PASS] 9b clk_b 起来后第一次快照正常 (tag=900)
+PASS_ALL  tb_snap_cdc: NW=32 判据 0-9 全过 (含负对照 A/B)
+=== done ===
+$finish called at time : 17256 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/sim/snapcdc/mut5_nw/tb_snap_cdc_nwbug.v" Line 472
+exit
+INFO: [Common 17-206] Exiting xsim at Tue Sep 29 14:00:08 2026...
