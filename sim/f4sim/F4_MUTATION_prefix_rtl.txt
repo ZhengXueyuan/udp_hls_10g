@@ -1,0 +1,178 @@
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Tue Sep 29 10:09:37 2026
+# Process ID         : 5472
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/sim/f4sim/rd_old
+# Command line       : xsim.exe -log xs_f4.log -mode tcl -source {xsim.dir/tb_f4/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/sim/f4sim/rd_old/xs_f4.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/sim/f4sim/rd_old\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 40725 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_f4/xsim_script.tcl
+# xsim {tb_f4} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+F4 TB: nstim=10964 ncase=13
+CASE ctl : FE dF=3 dB=344 dCRC=0 dDROP=0 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=42 dPopc=332 dSOP=3 dGood=3 dTerm=0 dTermB=0 dBareSOP=0 dStray=0
+   CHK L1 good_frames==dFrames : PASS
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : PASS
+   CHK L3 term_frames==dPartial : PASS
+   CHK L4 bare_sop==0 : PASS
+   CHK L5 fifo_ovf==0 : PASS
+   CHK L6 dPartial<=dDropFull<=dDrop : PASS
+   CHK L7 sop_frames==good+term : PASS
+   CHK L8 stray_words==0 : PASS
+   [drop]  t=7628000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=2 rptr=10 | stat_drop=1 frames=4 bytes=420 dpart=0
+   [drop]  t=8300000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=2 rptr=10 | stat_drop=2 frames=4 bytes=420 dpart=0
+CASE b72_e8 : FE dF=1 dB=76 dCRC=0 dDROP=2 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=8 dPopc=64 dSOP=1 dGood=0 dTerm=0 dTermB=0 dBareSOP=0 dStray=0
+   CHK L1 good_frames==dFrames : FAIL
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL
+   CHK L3 term_frames==dPartial : PASS
+   CHK L4 bare_sop==0 : PASS
+   CHK L5 fifo_ovf==0 : PASS
+   CHK L6 dPartial<=dDropFull<=dDrop : PASS
+   CHK L7 sop_frames==good+term : FAIL
+   CHK L8 stray_words==0 : PASS
+   [drop]  t=12940000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=10 rptr=2 | stat_drop=3 frames=5 bytes=496 dpart=0
+   [drop]  t=13612000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=10 rptr=2 | stat_drop=4 frames=5 bytes=496 dpart=0
+   [BARE-SOP] t=14060000 prev frame had no TLAST (orphan run) cur_popc=64
+CASE b72_e12 : FE dF=1 dB=76 dCRC=0 dDROP=2 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=8 dPopc=64 dSOP=1 dGood=0 dTerm=0 dTermB=0 dBareSOP=1 dStray=0
+   CHK L1 good_frames==dFrames : FAIL
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL
+   CHK L3 term_frames==dPartial : PASS
+   CHK L4 bare_sop==0 : FAIL
+   CHK L5 fifo_ovf==0 : PASS
+   CHK L6 dPartial<=dDropFull<=dDrop : PASS
+   CHK L7 sop_frames==good+term : FAIL
+   CHK L8 stray_words==0 : PASS
+   [drop]  t=18252000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=2 rptr=10 | stat_drop=5 frames=6 bytes=572 dpart=0
+   [drop]  t=18924000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=2 rptr=10 | stat_drop=6 frames=6 bytes=572 dpart=0
+   [BARE-SOP] t=19372000 prev frame had no TLAST (orphan run) cur_popc=64
+CASE b72_e20 : FE dF=1 dB=76 dCRC=0 dDROP=2 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=8 dPopc=64 dSOP=1 dGood=0 dTerm=0 dTermB=0 dBareSOP=1 dStray=0
+   CHK L1 good_frames==dFrames : FAIL
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL
+   CHK L3 term_frames==dPartial : PASS
+   CHK L4 bare_sop==0 : FAIL
+   CHK L5 fifo_ovf==0 : PASS
+   CHK L6 dPartial<=dDropFull<=dDrop : PASS
+   CHK L7 sop_frames==good+term : FAIL
+   CHK L8 stray_words==0 : PASS
+   [drop]  t=23500000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=10 rptr=2 | stat_drop=7 frames=7 bytes=640 dpart=0
+   [drop]  t=24172000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=10 rptr=2 | stat_drop=8 frames=7 bytes=640 dpart=0
+   [BARE-SOP] t=24620000 prev frame had no TLAST (orphan run) cur_popc=64
+CASE b64_e8 : FE dF=1 dB=68 dCRC=0 dDROP=2 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=8 dPopc=64 dSOP=1 dGood=1 dTerm=0 dTermB=0 dBareSOP=1 dStray=0
+   CHK L1 good_frames==dFrames : PASS
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : PASS
+   CHK L3 term_frames==dPartial : PASS
+   CHK L4 bare_sop==0 : FAIL
+   CHK L5 fifo_ovf==0 : PASS
+   CHK L6 dPartial<=dDropFull<=dDrop : PASS
+   CHK L7 sop_frames==good+term : PASS
+   CHK L8 stray_words==0 : PASS
+CASE b76_e10 : FE dF=0 dB=0 dCRC=0 dDROP=3 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=8 dPopc=64 dSOP=1 dGood=0 dTerm=0 dTermB=0 dBareSOP=0 dStray=0
+   CHK L1 good_frames==dFrames : PASS
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL
+   CHK L3 term_frames==dPartial : PASS
+   CHK L4 bare_sop==0 : PASS
+   CHK L5 fifo_ovf==0 : PASS
+   CHK L6 dPartial<=dDropFull<=dDrop : PASS
+   CHK L7 sop_frames==good+term : FAIL
+   CHK L8 stray_words==0 : PASS
+   [BARE-SOP] t=35244000 prev frame had no TLAST (orphan run) cur_popc=64
+   [BARE-SOP] t=35860000 prev frame had no TLAST (orphan run) cur_popc=64
+CASE a200_e16 : FE dF=1 dB=64 dCRC=0 dDROP=2 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=16 dPopc=124 dSOP=2 dGood=1 dTerm=0 dTermB=0 dBareSOP=2 dStray=0
+   CHK L1 good_frames==dFrames : PASS
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL
+   CHK L3 term_frames==dPartial : PASS
+   CHK L4 bare_sop==0 : FAIL
+   CHK L5 fifo_ovf==0 : PASS
+   CHK L6 dPartial<=dDropFull<=dDrop : PASS
+   CHK L7 sop_frames==good+term : FAIL
+   CHK L8 stray_words==0 : PASS
+   [BARE-SOP] t=42196000 prev frame had no TLAST (orphan run) cur_popc=64
+CASE a200_e24 : FE dF=1 dB=64 dCRC=0 dDROP=2 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=16 dPopc=124 dSOP=2 dGood=1 dTerm=0 dTermB=0 dBareSOP=1 dStray=0
+   CHK L1 good_frames==dFrames : PASS
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL
+   CHK L3 term_frames==dPartial : PASS
+   CHK L4 bare_sop==0 : FAIL
+   CHK L5 fifo_ovf==0 : PASS
+   CHK L6 dPartial<=dDropFull<=dDrop : PASS
+   CHK L7 sop_frames==good+term : FAIL
+   CHK L8 stray_words==0 : PASS
+   [BARE-SOP] t=48532000 prev frame had no TLAST (orphan run) cur_popc=72
+CASE a200_e32 : FE dF=1 dB=64 dCRC=0 dDROP=2 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=17 dPopc=132 dSOP=2 dGood=1 dTerm=0 dTermB=0 dBareSOP=1 dStray=0
+   CHK L1 good_frames==dFrames : PASS
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL
+   CHK L3 term_frames==dPartial : PASS
+   CHK L4 bare_sop==0 : FAIL
+   CHK L5 fifo_ovf==0 : PASS
+   CHK L6 dPartial<=dDropFull<=dDrop : PASS
+   CHK L7 sop_frames==good+term : FAIL
+   CHK L8 stray_words==0 : PASS
+   [BARE-SOP] t=54196000 prev frame had no TLAST (orphan run) cur_popc=64
+CASE a200_r100 : FE dF=2 dB=128 dCRC=0 dDROP=1 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=24 dPopc=184 dSOP=3 dGood=2 dTerm=0 dTermB=0 dBareSOP=1 dStray=0
+   CHK L1 good_frames==dFrames : PASS
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL
+   CHK L3 term_frames==dPartial : PASS
+   CHK L4 bare_sop==0 : FAIL
+   CHK L5 fifo_ovf==0 : PASS
+   CHK L6 dPartial<=dDropFull<=dDrop : PASS
+   CHK L7 sop_frames==good+term : FAIL
+   CHK L8 stray_words==0 : PASS
+   [BARE-SOP] t=60532000 prev frame had no TLAST (orphan run) cur_popc=64
+CASE a200_r140 : FE dF=2 dB=128 dCRC=0 dDROP=1 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=24 dPopc=184 dSOP=3 dGood=2 dTerm=0 dTermB=0 dBareSOP=1 dStray=0
+   CHK L1 good_frames==dFrames : PASS
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL
+   CHK L3 term_frames==dPartial : PASS
+   CHK L4 bare_sop==0 : FAIL
+   CHK L5 fifo_ovf==0 : PASS
+   CHK L6 dPartial<=dDropFull<=dDrop : PASS
+   CHK L7 sop_frames==good+term : FAIL
+   CHK L8 stray_words==0 : PASS
+CASE a1500 : FE dF=0 dB=0 dCRC=0 dDROP=3 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=8 dPopc=64 dSOP=1 dGood=0 dTerm=0 dTermB=0 dBareSOP=0 dStray=0
+   CHK L1 good_frames==dFrames : PASS
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL
+   CHK L3 term_frames==dPartial : PASS
+   CHK L4 bare_sop==0 : PASS
+   CHK L5 fifo_ovf==0 : PASS
+   CHK L6 dPartial<=dDropFull<=dDrop : PASS
+   CHK L7 sop_frames==good+term : FAIL
+   CHK L8 stray_words==0 : PASS
+   [BARE-SOP] t=84716000 prev frame had no TLAST (orphan run) cur_popc=64
+CASE a200_x : FE dF=0 dB=0 dCRC=0 dDROP=3 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=8 dPopc=64 dSOP=1 dGood=0 dTerm=0 dTermB=0 dBareSOP=1 dStray=0
+   CHK L1 good_frames==dFrames : PASS
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL
+   CHK L3 term_frames==dPartial : PASS
+   CHK L4 bare_sop==0 : FAIL
+   CHK L5 fifo_ovf==0 : PASS
+   CHK L6 dPartial<=dDropFull<=dDrop : PASS
+   CHK L7 sop_frames==good+term : FAIL
+   CHK L8 stray_words==0 : PASS
+TOTAL: dWords=195 dPopc=1528 dSOP=22 dGood=11 dTerm=0 dBareSOP=10 | F=14 B=1088 DROP=25 DropFull=0 Partial=0 OrphanB=0 OVF=0 WORDS_OUT=195
+   CHK G1 words_out_counter==observed_words : PASS
+   CHK G2 good_frames==stat_frames : FAIL
+   CHK G3 popc==bytes-4*frames+orphanB : FAIL
+   CHK G4 term_frames==partial : PASS
+   CHK G5 no bare sop : FAIL
+   CHK G6 fifo_ovf==0 : PASS
+   CHK G7 open_frame==0 (ÿÿÿäÿ¥ TLASTÿÿÿ¶ÿÿ¾) : FAIL
+   CHK G8 drop_partial<=drop_full<=drop : PASS
+F4_GATE: FAIL (38 æ¡åˆ¤æ®ä¸æˆç«‹)
+F4_DONE
+$finish called at time : 92708 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/tb/tb_mac_rx_f4.v" Line 265
+exit
+INFO: [Common 17-206] Exiting xsim at Tue Sep 29 10:09:39 2026...
+F4-GATE-RESULT: FAIL 

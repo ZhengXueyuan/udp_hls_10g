@@ -48,15 +48,42 @@
 //   `occ` 只参与开播节流的判断 ⇒ 无行为路径受影响。判据 B3/B4 顺带证明"没有帧被误处理"。
 //   (若将来给本门加"注入真帧"的用例, 必须先复算这条下溢对 start_play 的影响。)
 //
+// ---- P6b 追加 (判据 G/H): 四个**新仪表**的增量逻辑 ----
+//   全链门 (tb_p6e_pcie_wrapper.v) 把 29 个字 force 成常数 ⇒ 它只证明"接到哪一路"。
+//   P6b 的 W26/W27/W28/W29/W30/W31 若只靠全链门, 就没有任何一条门回答
+//   "它在什么条件下涨、涨多少" ⇒ 未连接输入被综合钳 0 与"从未触发"在读上不可区分
+//   (工程铁律 6①)。本节驱动**真事件**并断言**可独立复算**的读数:
+//     G (TX 侧): 从 DP 侧连续灌字 ⇒ u_txcdc 必然填满 (mac_tx_64 的消耗率是 1 字/8 拍 gmii,
+//                而 DP 的写入率是 1 字/拍) ⇒ **W28 必须恰好 = DEPTH = 256** (峰值贴深度),
+//                W29 (DP 在等线) 必须 > 0 且 <= 灌字拍数。
+//     H (RX 侧): 从 FE 侧连续灌字 + 把 DP 消费者钉住 (vs_tready=0) ⇒ u_rxcdc 填满 ⇒
+//                **W27 必须恰好 = 256**、**W26 (满拍数) > 0**; 松开后全部排空 ⇒
+//                **W31 == 8 × W30** (每字 tkeep=8'hFF ⇒ 每字 8 字节; 每字 tlast=1 ⇒ 每帧 1 字)
+//                —— 这正是 P6B_SPEC §7.3 那条恒等式 (Σpopc+4×帧 = 内容+4×帧) 的缩影。
+//   ⚠️ 本节 force 的是 **u_rxcdc / u_txcdc 两侧的 wrapper 级握手线** (rxsrc_* / txsrc_* /
+//      vs_tready)。打生产者 (u_mac_rx / u_tx_arb / u_classify 的输出端口) 与打这几根线
+//      在网表上是**同一根 net** (端口连接不产生新 net), 所以"生产者↔线断开"这一类错
+//      在本节仍会被抓到 (G0/H0 的"有确定电平 + 跟着 force 走"探针就是为它设的)。
 // 依赖替身 sim/p6e_pcie/xdma_0_sim_stub.v  |  跑法: run_tb_p6e_pcie_counters.bat
-//   (编译时须定义 PCIE_OBS + DEV_USP + APP_MODE, 与真实构建一致)
+//   (编译时须定义 PCIE_OBS + DEV_USP + APP_MODE + **P6B_SIM_CLKGEN**, 与真实构建一致;
+//    后者只影响 clk_gen_p6b 走行为级模型 —— 综合路径仍是真 IBUFDS/MMCM)
 //=============================================================================
 module tb_p6e_pcie_counters;
+
+    // ⚠️⚠️ **P6b: 本门的驱动/计数窗口必须用 `u_dut.dp_clk` (156.25MHz), 不是 gmii_clk**。
+    //   `srx_hls_bytes` / `hr_cnt` 随数据面搬到了 dp_clk 域 ⇒ 用 gmii 拍数去驱一个
+    //   dp 域的计数器, 读回值会**恰好 ×1.25** (实测: 期望 200 得 250 / 期望 150 得 188;
+    //   250 = 200×1.25 与 188 ≈ 150×1.25 逐一对得上 —— 这本身就是"计数器确实换了域"的证据)。
+    //   ⚠️ 这条是"门与板跑两个配置"的又一种形态: 门里的时间基准也必须跟着域走。
 
     // 驱动拍数 = 期望增量 (单一定义: 断言直接用这三个数, 不出现魔数)
     localparam integer N_RX = 200;   // B: tvalid&&tready 同时为高的拍数
     localparam integer N_NG = 100;   // C: 只 tvalid / 只 tready 的拍数 (期望增量 0)
     localparam integer N_HR = 150;   // D: hls_rst_n 低电平拍数
+    // ---- P6b 判据 G/H ----
+    localparam integer N_TXPSH = 400;   // G: 从 DP 侧灌进 u_txcdc 的拍数 (>DEPTH 即可填满)
+    localparam integer N_RXPSH = 400;   // H: 从 FE 侧灌进 u_rxcdc 的拍数 (>DEPTH 即可填满)
+    localparam integer CDC_DEPTH = 256; // 两个 FIFO 的 DEPTH (与 wrapper 的 .DEPTH 同值)
 
     reg        reset_n = 0;
     reg        phy1_rxc = 0;
@@ -70,10 +97,16 @@ module tb_p6e_pcie_counters;
     reg        pcie_sys_clk_p = 0, pcie_sys_clk_n = 1;
     wire [3:0] pcie_txp, pcie_txn;
     reg  [3:0] pcie_rxp = 0, pcie_rxn = 0;
+    // P6b: 数据面时钟源 (核心板 Y1 = 100.000000MHz 差分有源晶振)
+    reg        sys_clk_p = 0, sys_clk_n = 1;
 
     always #4 phy1_rxc = ~phy1_rxc;                                    // 125MHz = 1G 的 RXC
     always #5 pcie_sys_clk_p = ~pcie_sys_clk_p;                        // 100MHz 差分参考钟
     always #5 pcie_sys_clk_n = ~pcie_sys_clk_n;
+    always #5 sys_clk_p = ~sys_clk_p;                                  // Y1 = 100MHz
+    // ⚠️ sys_clk_n 必须与 sys_clk_p **反相** (真 IBUFDS 是差分输入; 对抗审查 F3-3):
+    //    同相驱动在 P6B_SIM_CLKGEN 的行为级旁路下无害, 但谁把旁路关掉就会得到"没有时钟"。
+    always #5 sys_clk_n = ~sys_clk_p;
 
     // 端口表 = DEV_USP + PCIE_OBS 的组合 (与 build_p6e_ku5p.tcl 的 verilog_define 一致)
     wrapper_p4 u_dut (
@@ -94,7 +127,9 @@ module tb_p6e_pcie_counters;
         .pcie_txp       (pcie_txp),
         .pcie_txn       (pcie_txn),
         .pcie_rxp       (pcie_rxp),
-        .pcie_rxn       (pcie_rxn)
+        .pcie_rxn       (pcie_rxn),
+        .sys_clk_p      (sys_clk_p),
+        .sys_clk_n      (sys_clk_n)
     );
 
     integer    fails = 0;
@@ -104,6 +139,8 @@ module tb_p6e_pcie_counters;
     reg [31:0] w16, w17, w5, w0, w19;
     reg [31:0] w16_p, w17_p, w5_p, w0_p, w19_p;    // _p = previous (上一相位的读数)
     reg [31:0] w16_base, w17_base;                 // 基线 (判据 F 的总账参照)
+    // ---- P6b 判据 G/H 的读数 ----
+    reg [31:0] w26v, w27v, w28v, w29v, w30v, w31v, w0v;
 
     task chk(input [255:0] name, input [31:0] got, input [31:0] exp);
         begin
@@ -153,7 +190,7 @@ module tb_p6e_pcie_counters;
         // ================= 判据 0: 前置 —— 读数通路与"线有驱动源" =================
         $display("  --- 判据 0: 前置 (读数通路 + 被 force 的线必须有驱动源) ---");
         u_dut.u_pcie_xdma.axil_read(32'h00, v); chk("0a MAGIC (read path self-check)", v, 32'h50360001);
-        u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("0b BUILD_ID (24-word integrated = 4)", v, 32'h00000004);
+        u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("0b BUILD_ID (36-word P6b+F4 = 6)", v, 32'h00000006);
         // 0c: `hls_rx_tready` 是唯一只能打 wrapper 线的握手信号 ⇒ 先证明它有确定电平。
         //     悬空/被优化掉的线在 xsim 里是 z, 而 force 会让它看起来"正常" ⇒ 专抓这类假 PASS。
         if ((u_dut.hls_rx_tready === 1'b0) || (u_dut.hls_rx_tready === 1'b1))
@@ -175,10 +212,10 @@ module tb_p6e_pcie_counters;
         // ================= 判据 B: 正证据 —— 恰好 N_RX 拍真握手 ⇒ W16 恰好 +N_RX ========
         // force 落在 **negedge** 上, 数 **posedge** 拍数 ⇒ 计数与 force 窗口严格对齐。
         $display("  --- 判据 B: 正证据 (tvalid&&tready 同时为高 %0d 拍) ---", N_RX);
-        @(negedge u_dut.gmii_clk);
+        @(negedge u_dut.dp_clk);
         force u_dut.u_slow_rx.hls_rx_tvalid = 1'b1;   // 生产者节点 (slow_rx_adp 输出)
         force u_dut.hls_rx_tready           = 1'b1;   // 生产者是 HLS IP ⇒ 只能打 wrapper 线
-        repeat (5) @(posedge u_dut.gmii_clk);
+        repeat (5) @(posedge u_dut.dp_clk);
         // B0: force 生效的**直接证据** = wrapper 那根线必须跟着生产者的 force 走。
         //     若线没接在这个生产者上 (F1 那一类错), 这里当场抓到。
         if (u_dut.hls_rx_tvalid === 1'b1)
@@ -188,8 +225,8 @@ module tb_p6e_pcie_counters;
                      u_dut.hls_rx_tvalid);
             fails = fails + 1;
         end
-        repeat (N_RX - 5) @(posedge u_dut.gmii_clk);
-        @(negedge u_dut.gmii_clk);
+        repeat (N_RX - 5) @(posedge u_dut.dp_clk);
+        @(negedge u_dut.dp_clk);
         release u_dut.u_slow_rx.hls_rx_tvalid;        // net: release 立刻回到 !o_empty (=0) ✓
         release u_dut.hls_rx_tready;
         snap_read;
@@ -206,11 +243,11 @@ module tb_p6e_pcie_counters;
         // ================= 判据 C: 负对照 —— 增量条件是 AND 不是 OR =================
         // C1 只 tvalid: 把条件写成 `if (tvalid)` 的实现在这里当场 +N_NG ⇒ FAIL。
         $display("  --- 判据 C1: 只 tvalid (tready=0) %0d 拍 ⇒ 不许计数 ---", N_NG);
-        @(negedge u_dut.gmii_clk);
+        @(negedge u_dut.dp_clk);
         force u_dut.u_slow_rx.hls_rx_tvalid = 1'b1;
         force u_dut.hls_rx_tready           = 1'b0;
-        repeat (N_NG) @(posedge u_dut.gmii_clk);
-        @(negedge u_dut.gmii_clk);
+        repeat (N_NG) @(posedge u_dut.dp_clk);
+        @(negedge u_dut.dp_clk);
         release u_dut.u_slow_rx.hls_rx_tvalid;
         release u_dut.hls_rx_tready;
         snap_read;
@@ -219,11 +256,11 @@ module tb_p6e_pcie_counters;
 
         // C2 只 tready: 把条件写成 `if (tready)` 的实现在这里当场 +N_NG ⇒ FAIL。
         $display("  --- 判据 C2: 只 tready (tvalid=0) %0d 拍 ⇒ 不许计数 ---", N_NG);
-        @(negedge u_dut.gmii_clk);
+        @(negedge u_dut.dp_clk);
         force u_dut.u_slow_rx.hls_rx_tvalid = 1'b0;
         force u_dut.hls_rx_tready           = 1'b1;
-        repeat (N_NG) @(posedge u_dut.gmii_clk);
-        @(negedge u_dut.gmii_clk);
+        repeat (N_NG) @(posedge u_dut.dp_clk);
+        @(negedge u_dut.dp_clk);
         release u_dut.u_slow_rx.hls_rx_tvalid;
         release u_dut.hls_rx_tready;
         snap_read;
@@ -243,9 +280,9 @@ module tb_p6e_pcie_counters;
         //   (打 **net** 没有这个问题: net 一 release 就回到连续赋值的值 —— 上面 B 相位就是 net。)
         //   ⇒ 以后凡是要 force **寄存器**, 都要问一句"它在空闲态有过程赋值吗?", 没有就必须推回。
         $display("  --- 判据 D: 正证据 (hls_rst_n 低 %0d 拍) ---", N_HR);
-        @(negedge u_dut.gmii_clk);
+        @(negedge u_dut.dp_clk);
         force u_dut.u_slow_rx.hls_rst_n_r = 1'b0;      // 生产者节点 (slow_rx_adp 看门狗寄存器)
-        repeat (5) @(posedge u_dut.gmii_clk);
+        repeat (5) @(posedge u_dut.dp_clk);
         // D0: 同 B0 —— 生产者被拉低后 wrapper 那根线必须跟着低 (连接证据)
         if (u_dut.hls_rst_n === 1'b0)
             $display("  [PASS] D0 producer force 传到 wrapper 线 (hls_rst_n = 0)");
@@ -254,10 +291,10 @@ module tb_p6e_pcie_counters;
                      u_dut.hls_rst_n);
             fails = fails + 1;
         end
-        repeat (N_HR - 5) @(posedge u_dut.gmii_clk);
-        @(negedge u_dut.gmii_clk);
+        repeat (N_HR - 5) @(posedge u_dut.dp_clk);
+        @(negedge u_dut.dp_clk);
         force  u_dut.u_slow_rx.hls_rst_n_r = 1'b1;     // ← 显式推回空闲值 (见上面的 ⚠️⚠️)
-        @(negedge u_dut.gmii_clk);
+        @(negedge u_dut.dp_clk);
         release u_dut.u_slow_rx.hls_rst_n_r;
         snap_read;
         show("D after watchdog-low");
@@ -267,7 +304,7 @@ module tb_p6e_pcie_counters;
         // ================= 判据 E: release 后 W17 必须停 =================
         // (证明它数的是"低电平拍数", 不是"某个自由计数")
         $display("  --- 判据 E: hls_rst_n 回到高 ⇒ W17 停涨 ---");
-        repeat (100) @(posedge u_dut.gmii_clk);
+        repeat (100) @(posedge u_dut.dp_clk);
         snap_read;
         show("E after release");
         chk("E1 W17 delta == 0 (no count while high)", w17 - w17_p, 0);
@@ -283,7 +320,93 @@ module tb_p6e_pcie_counters;
         chk("F1 W16 total delta == N_RX", w16 - w16_base, N_RX);
         chk("F2 W17 total delta == N_HR", w17 - w17_base, N_HR);
 
-        if (fails == 0) $display("PASS_ALL  tb_p6e_pcie_counters: W16/W17 增量逻辑全过");
+        // ================= 判据 G: TX 侧新仪表 (W28 峰值 / W29 等线拍数) =================
+        // 读回的 6 个新字 (只用一次, 单独取)
+        $display("  --- 判据 G: 从 DP 侧灌 %0d 拍 ⇒ u_txcdc 必满 ⇒ W28 恰好 = DEPTH ---", N_TXPSH);
+        @(negedge u_dut.dp_clk);
+        force u_dut.txsrc_tvalid = 1'b1;              // u_tx_arb 的输出 net (DP 侧生产者)
+        force u_dut.txsrc_tdata  = 64'h0123456789ABCDEF;
+        force u_dut.txsrc_tkeep  = 8'hFF;
+        force u_dut.txsrc_tlast  = 1'b0;
+        repeat (5) @(posedge u_dut.dp_clk);
+        if (u_dut.txsrc_tvalid === 1'b1)
+            $display("  [PASS] G0 txsrc_tvalid 有确定电平且跟着 force 走 (= 1) ⇒ 线有驱动源");
+        else begin
+            $display("  [FAIL] G0 txsrc_tvalid = %b ⇒ 线无驱动源 (连接断/被优化)", u_dut.txsrc_tvalid);
+            fails = fails + 1;
+        end
+        repeat (N_TXPSH - 5) @(posedge u_dut.dp_clk);
+        @(negedge u_dut.dp_clk);
+        release u_dut.txsrc_tvalid;
+        release u_dut.txsrc_tdata;
+        release u_dut.txsrc_tkeep;
+        release u_dut.txsrc_tlast;
+        repeat (50) @(posedge u_dut.dp_clk);          // 让指针同步/写域占用稳定下来
+        snap_take(ok_r);
+        u_dut.u_pcie_xdma.axil_read(32'h90, v); w28v = v;   // W28 {16'd0,txcdc_occ_max}
+        u_dut.u_pcie_xdma.axil_read(32'h94, v); w29v = v;   // W29 txwire_stall_cycles
+        $display("  [INFO] G 读数: W28=%0d W29=%0d", w28v, w29v);
+        chk("G1 W28 == DEPTH (灌满后峰值恰好贴深度)", w28v & 32'hFFFF, CDC_DEPTH);
+        if (w29v > 0 && w29v <= N_TXPSH)
+            $display("  [PASS] G2 W29 = %0d (>0 且 <= 灌字拍数 %0d) ⇒ DP 确实被线速压住", w29v, N_TXPSH);
+        else begin
+            $display("  [FAIL] G2 W29 = %0d 不在 (0, %0d] 内", w29v, N_TXPSH);
+            fails = fails + 1;
+        end
+
+        // ================= 判据 H: RX 侧新仪表 (W26 满拍数 / W27 峰值 / W30 帧数 / W31 字节数) ==
+        // 消费者钉住: vs_tready=0 ⇒ vlan_strip 收 1 个字之后 od_free=0 ⇒ u_rxcdc 只进不出。
+        $display("  --- 判据 H: 从 FE 侧灌 %0d 拍 + 钉住 DP 消费者 ⇒ u_rxcdc 必满 ---", N_RXPSH);
+        force u_dut.vs_tready = 1'b0;                 // u_classify 的输出 net (DP 侧消费者)
+        @(negedge u_dut.dp_clk);
+        force u_dut.rxsrc_tvalid = 1'b1;              // u_mac_rx 的输出 net (FE 侧生产者)
+        force u_dut.rxsrc_tdata  = 64'hFEDCBA9876543210;
+        force u_dut.rxsrc_tkeep  = 8'hFF;             // 每字 8 字节 (W31 的口径: Σpopc)
+        force u_dut.rxsrc_tlast  = 1'b1;              // 每字一帧 (W30 的口径: TLAST 数)
+        repeat (5) @(posedge u_dut.dp_clk);
+        if (u_dut.rxsrc_tvalid === 1'b1 && u_dut.vs_tready === 1'b0)
+            $display("  [PASS] H0 rxsrc_tvalid/vs_tready 有确定电平且跟着 force 走");
+        else begin
+            $display("  [FAIL] H0 rxsrc_tvalid=%b vs_tready=%b ⇒ 有无驱动源的线",
+                     u_dut.rxsrc_tvalid, u_dut.vs_tready);
+            fails = fails + 1;
+        end
+        repeat (N_RXPSH - 5) @(posedge u_dut.dp_clk);
+        @(negedge u_dut.dp_clk);
+        release u_dut.rxsrc_tvalid;
+        release u_dut.rxsrc_tdata;
+        release u_dut.rxsrc_tkeep;
+        release u_dut.rxsrc_tlast;
+        snap_take(ok_r);
+        u_dut.u_pcie_xdma.axil_read(32'h88, v); w26v = v;   // W26 rxcdc_full_cycles
+        u_dut.u_pcie_xdma.axil_read(32'h8c, v); w27v = v;   // W27 {16'd0,rxcdc_occ_max}
+        $display("  [INFO] H 读数(灌满后): W26=%0d W27=%0d", w26v, w27v);
+        chk("H1 W27 == DEPTH (灌满后峰值恰好贴深度)", w27v & 32'hFFFF, CDC_DEPTH);
+        if (w26v > 0)
+            $display("  [PASS] H2 W26 = %0d (>0: FIFO 满过, 满拍数被记下来)", w26v);
+        else begin
+            $display("  [FAIL] H2 W26 = 0 ⇒ 满载事件没被计数 (未连接输入会被综合钳 0)");
+            fails = fails + 1;
+        end
+        // 松开消费者 ⇒ 全部排空 ⇒ 读侧的两个锚点必须自洽: W31 == 8 * W30
+        release u_dut.vs_tready;
+        repeat (4000) @(posedge u_dut.dp_clk);
+        snap_take(ok_r);
+        u_dut.u_pcie_xdma.axil_read(32'h98, v); w30v = v;   // W30 rxcdc_out_frames
+        u_dut.u_pcie_xdma.axil_read(32'h9c, v); w31v = v;   // W31 rxcdc_out_bytes
+        u_dut.u_pcie_xdma.axil_read(32'h20, v); w0v  = v;   // W0 (不该涨: 没经过 mac_rx)
+        $display("  [INFO] H 读数(排空后): W30=%0d W31=%0d W0=%0d", w30v, w31v, w0v);
+        if (w30v >= CDC_DEPTH)
+            $display("  [PASS] H3 W30 = %0d >= DEPTH ⇒ 读侧 TLAST 计数与灌满一致", w30v);
+        else begin
+            $display("  [FAIL] H3 W30 = %0d < DEPTH=%0d (深度都灌满了, 读侧帧数不该更少)",
+                     w30v, CDC_DEPTH);
+            fails = fails + 1;
+        end
+        chk("H4 W31 == 8 * W30 (每字 tkeep=8'hFF ⇒ 逐字节等式, §7.3 的缩影)", w31v, w30v * 8);
+        chk("H5 W0 == 0 (本相位不经过 mac_rx ⇒ 收帧锚点不该动)", w0v, 0);
+
+        if (fails == 0) $display("PASS_ALL  tb_p6e_pcie_counters: W16/W17 + W26/W27/W28/W29/W30/W31 增量逻辑全过");
         else            $display("FAIL      tb_p6e_pcie_counters: %0d 项失败", fails);
         $display("=== done ===");
         $finish;

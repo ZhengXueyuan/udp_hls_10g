@@ -1,6 +1,8 @@
 @echo off
 REM run_tb_p6e_pcie.bat - P6e integrated design: REAL-wrapper full-chain gate (project trap 8)
-REM   compile defines MUST match the real build: PCIE_OBS + DEV_USP + APP_MODE
+REM   compile defines MUST match the real build: PCIE_OBS + DEV_USP + APP_MODE + DP_156MHZ
+REM   P6B_SIM_CLKGEN: P6b only -- makes clk_gen_p6b use its behavioural clock model in sim
+REM   (the real build never defines it, so IBUFDS/MMCME4_BASE is what gets synthesised)
 REM   NOTE: cmd does not glob *.v -- the file list is generated into files.f
 REM   from Git Bash: cmd //c 'D:\repo\XCKU5PMini\udp_hls_10g\sim\p6e_pcie\run_tb_p6e_pcie.bat'
 setlocal
@@ -16,8 +18,8 @@ echo %ROOT%\board\uart_dbg.v                                  >> files.f
 echo %ROOT%\_proj_pcie\rtl\axi_regs.v                         >> files.f
 echo %~dp0xdma_0_sim_stub.v                                   >> files.f
 echo %~dp0tb_p6e_pcie_wrapper.v                               >> files.f
-call %XV%\xvlog.bat -work xil_defaultlib -d PCIE_OBS -d DEV_USP -d APP_MODE -i %ROOT%\rtl -i %ROOT%\board -f files.f > xvlog_p6e.log 2>&1 || (type xvlog_p6e.log & exit /b 1)
-call %XV%\xvlog.bat -d PCIE_OBS -d DEV_USP -d APP_MODE -work xil_defaultlib "%XV%\..\data\verilog\src\glbl.v" >> xvlog_p6e.log 2>&1 || (type xvlog_p6e.log & exit /b 1)
+call %XV%\xvlog.bat -work xil_defaultlib -d PCIE_OBS -d DEV_USP -d APP_MODE -d DP_156MHZ -d P6B_SIM_CLKGEN -i %ROOT%\rtl -i %ROOT%\board -f files.f > xvlog_p6e.log 2>&1 || (type xvlog_p6e.log & exit /b 1)
+call %XV%\xvlog.bat -d PCIE_OBS -d DEV_USP -d APP_MODE -d DP_156MHZ -d P6B_SIM_CLKGEN -work xil_defaultlib "%XV%\..\data\verilog\src\glbl.v" >> xvlog_p6e.log 2>&1 || (type xvlog_p6e.log & exit /b 1)
 findstr /I /C:"implicitly" xvlog_p6e.log >NUL && (echo IMPLICIT-DECL-FAIL & findstr /I /C:"implicitly" xvlog_p6e.log & exit /b 1)
 findstr /C:"10-3091" xvlog_p6e.log >NUL && (echo BITWIDTH-MISMATCH-FAIL & findstr /C:"10-3091" xvlog_p6e.log & exit /b 1)
 findstr /I /C:"ERROR" xvlog_p6e.log >NUL && (echo XVLOG-ERROR-FAIL & findstr /I /C:"ERROR" xvlog_p6e.log & exit /b 1)

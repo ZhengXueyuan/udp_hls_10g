@@ -7,11 +7,14 @@
 //   "复位有没有接对" 这类错在单元门里完全隐身 (P5a W1 / P5e-T2 两次血的教训:
 //   子模块 TB 全绿, 板上却是静默故障)。
 //
-// 本门怎么抓: 把数据面那 23 路计数源用 `force` 打成**互不相同的常数**, 然后**从 AXI 侧**
-//   把 24 个字读回来, 逐字比对常数 ⇒ 任何"接错一路"都会当场现形。
+// 本门怎么抓: 把数据面那 29 路计数源用 `force` 打成**互不相同的常数**, 然后**从 AXI 侧**
+//   把 36 个字读回来, 逐字比对常数 ⇒ 任何"接错一路"都会当场现形。
+//   ⚠️ P6b 起快照是**两个域的两束** (FE 10 字 + DP 22 字) 经 rtl/snap_seq.v 链式触发拼成
+//      32 字 —— 本门因此额外承担"两束的索引表抄错"的检测 (那是新的第 ⑦ 处扩窗风险点,
+//      lint 完全看不见), 逐字读回是唯一手段。
 //   (gmii_free 那一路故意**不 force**: 它是自由计数器, 用"两次快照之间必须递增"来验它 ——
 //    既证明它接对了, 又证明 gmii 域在仿真里真的在跑。)
-//   ⚠️ 逐字比对的**地址必须覆盖到最后一个字** (0x7C): 只验前一半的话, "读侧选字位宽截断"
+//   ⚠️ 逐字比对的**地址必须覆盖到最后一个字** (0x9C): 只验前一半的话, "读侧选字位宽截断"
 //      (高地址回绕读低地址的字) 这类错会从门里逃逸 —— 24 字版扩窗前就是靠这一点抓到的。
 //
 // ⭐⭐ force 的目标必须是**生产者节点** (2026-09-29 审查 F1 修 —— 本门最大的覆盖缺口):
@@ -30,6 +33,9 @@
 //       含"只 tvalid / 只 tready 都不许计数"的负对照)。本门只负责
 //       "这两路确实落在快照的 W16/W17 位置上" —— 两条门各验一半, 别张冠李戴。
 //     · W5 `gmii_free` 完全不 force (见上一条)。
+//     · W24 `dp_free` / W25 `mmcm_locked` 也**完全不 force** (P6b 新增): 它们是"数据面
+//       真的跑在 156.25MHz 独立时钟上"的**功能正证据** —— 判据 5b 用两次快照的
+//       ΔW24/ΔW5 比值验 (两个自由计数、两个域, 比值必须 ≈ 156.25/125 = 1.25)。
 //
 // 门里还有: AXI 读通路 (MAGIC/BUILD_ID = 合体版 24 字 = 4)、触发/done 协议、字冻结、
 //   未实现地址 SLVERR、HW_STATUS 的 user_lnk_up。
@@ -52,13 +58,20 @@ module tb_p6e_pcie_wrapper;
     reg        pcie_sys_clk_p = 0, pcie_sys_clk_n = 1;
     wire [3:0] pcie_txp, pcie_txn;
     reg  [3:0] pcie_rxp = 0, pcie_rxn = 0;
+    // P6b: 数据面时钟源 (核心板 Y1 = 100.000000MHz 差分有源晶振, T25/U25)
+    reg        sys_clk_p = 0, sys_clk_n = 1;
 
     always #4 phy1_rxc = ~phy1_rxc;                                    // 125MHz = 1G 的 RXC
     always #5 pcie_sys_clk_p = ~pcie_sys_clk_p;                        // 100MHz 差分参考钟
     always #5 pcie_sys_clk_n = ~pcie_sys_clk_n;
+    always #5 sys_clk_p = ~sys_clk_p;                                  // Y1 = 100MHz (周期 10ns)
+    // ⚠️ sys_clk_n 必须与 sys_clk_p **反相** (真 IBUFDS 是差分输入; 对抗审查 F3-3):
+    //    同相驱动在 P6B_SIM_CLKGEN 的行为级旁路下无害, 但谁把旁路关掉就会得到"没有时钟"。
+    always #5 sys_clk_n = ~sys_clk_p;
 
     // ⚠️ 端口表 = DEV_USP + PCIE_OBS 的组合 (与 build_p6e_ku5p.tcl 的 verilog_define 一致):
-    //    DEV_USP ⇒ 没有 fpga_gclk; PCIE_OBS ⇒ 有 4 个 PCIe 口
+    //    DEV_USP ⇒ 没有 fpga_gclk; PCIE_OBS ⇒ 有 4 个 PCIe 口 + sys_clk_p/n
+//    (P6b: sys_clk_p/n 包在 `ifdef PCIE_OBS 内 —— P6a 那条分支仍是单域, 见 P6B_SPEC §B-B2)
     wrapper_p4 u_dut (
         .reset_n        (reset_n),
         .phy1_rxc       (phy1_rxc),
@@ -77,12 +90,16 @@ module tb_p6e_pcie_wrapper;
         .pcie_txp       (pcie_txp),
         .pcie_txn       (pcie_txn),
         .pcie_rxp       (pcie_rxp),
-        .pcie_rxn       (pcie_rxn)
+        .pcie_rxn       (pcie_rxn),
+        .sys_clk_p      (sys_clk_p),
+        .sys_clk_n      (sys_clk_n)
     );
 
     integer    fails = 0;
     integer    k, ok_r, gen0;
     reg [31:0] v, v5a, v5b, a0, b0;
+    reg [31:0] v24a, v24b;      // P6b: W24 (数据面自由计数)
+    integer    d5, d24;         // P6b: 判据 5b 的增量
 
     task chk(input [255:0] name, input [31:0] got, input [31:0] exp);
         begin
@@ -111,7 +128,7 @@ module tb_p6e_pcie_wrapper;
 
         $display("  --- 判据 1-3: AXI 读通路 (替身主机 → wrapper 内 axi_regs) ---");
         u_dut.u_pcie_xdma.axil_read(32'h00, v); chk("1  MAGIC", v, 32'h50360001);
-        u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("2  BUILD_ID (合体版 24 字=4)", v, 32'h00000004);
+        u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("2  BUILD_ID (P6b+F4 双域 36 字=6)", v, 32'h00000006);
         u_dut.u_pcie_xdma.axil_read(32'h14, v); chk("3  MARKER", v, 32'hDEADBEEF);
         // HW_STATUS 字段: [7:5]=msi_vec_w [4]=msi_enable [3]=user_lnk_up [2:0]=0
         u_dut.u_pcie_xdma.axil_read(32'h10, v);
@@ -130,10 +147,37 @@ module tb_p6e_pcie_wrapper;
         if (v5b > v5a) $display("  [PASS] 5  gmii 域自由计数在跑 (快照 CDC 真的在搬数)");
         else begin $display("  [FAIL] 5  W5 没递增 (gmii 域死了或 W5 接错)"); fails = fails + 1; end
 
+        // ---- 判据 5b (P6b 新增): **两个域真在两个不同频率上** ----
+        // W24 = dp_free (156.25MHz 域) / W5 = gmii_free (125MHz 域), 都不 force。
+        // 同一次快照的比值 —— 两个自由计数、两个域 ⇒ 比值必须 ≈ 156.25/125 = 1.25。
+        // ⚠️ 这条是本门唯一**不靠 force** 就能证明"数据面确实搬到了新域"的判据;
+        //    只改 Clock Summary / 只加一条空约束是骗不过它的 (它是功能读数)。
+        $display("  --- 判据 5b: W24(dp 域) / W5(fe 域) 的增量比必须 ≈ 1.25 ---");
+        snap_take(ok_r); u_dut.u_pcie_xdma.axil_read(32'h34, v5a);
+                         u_dut.u_pcie_xdma.axil_read(32'h80, v24a);
+        repeat (4000) @(posedge phy1_rxc);
+        snap_take(ok_r); u_dut.u_pcie_xdma.axil_read(32'h34, v5b);
+                         u_dut.u_pcie_xdma.axil_read(32'h80, v24b);
+        d5  = v5b  - v5a;
+        d24 = v24b - v24a;
+        $display("  [INFO] W5(fe)=%0d->%0d (Δ%0d)  W24(dp)=%0d->%0d (Δ%0d)", v5a, v5b, d5, v24a, v24b, d24);
+        if (d5 == 0) begin
+            $display("  [FAIL] 5b ΔW5 = 0 (前端域停摆 ⇒ 比值无意义)"); fails = fails + 1;
+        end else if ((d24 > (d5*124)/100) && (d24 < (d5*126)/100))
+            $display("  [PASS] 5b ΔW24/ΔW5 = %0d/%0d = %.4f ∈ [1.24, 1.26] ⇒ 数据面跑在 156.25MHz (1.25×125MHz)",
+                     d24, d5, d24 * 1.0 / d5);
+        else begin
+            $display("  [FAIL] 5b ΔW24/ΔW5 = %.4f 不在 [1.24, 1.26]: **数据面没跑在 156.25MHz**",
+                     d24 * 1.0 / d5);
+            fails = fails + 1;
+        end
+        // W25 = {31'd0, mmcm_locked}: 不 force ⇒ 直接读, 必须是 1
+        u_dut.u_pcie_xdma.axil_read(32'h84, v); chk("5c W25 = mmcm_locked == 1 (DP 时钟源锁定)", v, 32'd1);
+
         // ---- 判据 6: 24 个字的**逐路映射** (核心: 把源打成互不相同的常数再读回来) ----
         // ⭐ force 目标 = **生产者节点** (子模块例化点的端口名), 不是 wrapper 级线 ——
         //    原理与实测证据见文件头注释「force 的目标必须是生产者节点」。加新字照抄此模式。
-        $display("  --- 判据 6: 快照 24 字逐路映射 (源 force 成常数) ---");
+        $display("  --- 判据 6: 快照 32 字逐路映射 (源 force 成常数; 29 路 force + 3 路活体) ---");
         force u_dut.u_mac_rx.stat_frames      = 32'h11111111;   // W0  MAC 收帧
         force u_dut.u_mac_rx.stat_bytes       = 32'h22222222;   // W1  MAC 收字节
         force u_dut.wl_last                   = 16'hABCD;       // W2  (wrapper 自己的锁存寄存器, 见头注释)
@@ -161,14 +205,29 @@ module tb_p6e_pcie_wrapper;
         force u_dut.u_mac_tx.stat_abort       = 32'h15161718;   // W21 MAC 帧内中止
         force u_dut.u_tcp_rx.stat_pass        = 32'h191A1B1C;   // W22 TCP fast path 接受帧
         force u_dut.u_tcp_rx.stat_drop_nonmatch = 32'h1D1E1F20; // W23 TCP fast path nonmatch
-        // gmii_free (W5) 故意不 force (判据 5/7 已用活性与冻结验过)
+        // ---- F4 新增的 4 路 (W32..W35, 全在 FE 束) ----
+        force u_dut.u_mac_rx.stat_drop_partial = 32'h35363738;   // W32 C10 必需
+        force u_dut.u_mac_rx.stat_orphan_bytes = 32'h393A3B3C;   // W33 C10 必需
+        force u_dut.u_mac_rx.stat_drop_full    = 32'h3D3E3F40;   // W34 健康位
+        force u_dut.u_mac_rx.stat_fifo_ovf     = 32'h41424344;   // W35 恒 0 健康位
+        // ---- P6b 新增的 6 路 (W26/W27/W28/W29/W30/W31) ----
+        force u_dut.rxcdc_full_cycles         = 32'h21222324;   // W26 RX FIFO 满拍数 (FE)
+        force u_dut.rxcdc_occ_max             = 16'h2526;       // W27 RX FIFO 占用峰值 (FE)
+        force u_dut.txcdc_occ_max             = 16'h2728;       // W28 TX FIFO 占用峰值 (DP)
+        force u_dut.txwire_stall_cycles       = 32'h292A2B2C;   // W29 DP 在等线拍数 (DP)
+        force u_dut.rxcdc_out_frames          = 32'h2D2E2F30;   // W30 RX FIFO 读侧 TLAST 数 (DP)
+        force u_dut.rxcdc_out_bytes           = 32'h31323334;   // W31 RX FIFO 读侧 Σpopc (DP)
+        // gmii_free (W5) / dp_free (W24) / mmcm_locked (W25) 故意不 force
+        // (判据 5/5b/5c 已用活性、域比值与锁定位验过 —— "活体"比常数更强)
         repeat (10) @(posedge phy1_rxc);                     // 让 force 生效于 gmii 域
-        // 诊断: force 到底落在哪根线上 —— 新加的 8 路曾读回 zzzz, 用这行区分
-        // "force 没落上" vs "快照路径没接对" (打印新 8 字所占的那 256 位 = 最高位段)
+        // 诊断: force 到底落在哪根线上 —— 新加的字曾读回 zzzz, 用这行区分
+        // "force 没落上" vs "快照路径没接对" (打印两束的最高位段)
         // (F1 改打生产者后, 这里读的 wrapper 线是**被生产者驱动**的: 它显示 Z/z 就说明
         //  生产者没接上 — 这正是打线时看不见、打生产者后才看得见的那一类错。)
-        $display("  [DBG] 源: rx_stat_frames=%h mac_tx_frames=%h hr_cnt=%h | snap_src[767:512]=%h",
-                 u_dut.rx_stat_frames, u_dut.mac_tx_frames, u_dut.hr_cnt, u_dut.snap_src[767:512]);
+        $display("  [DBG] 源: rx_stat_frames=%h mac_tx_frames=%h rxcdc_out_bytes=%h",
+                 u_dut.rx_stat_frames, u_dut.mac_tx_frames, u_dut.rxcdc_out_bytes);
+        $display("  [DBG] fe_src[319:256]=%h  dp_src[191:128]=%h",
+                 u_dut.fe_src[319:256], u_dut.dp_src[191:128]);
         snap_take(ok_r);
         u_dut.u_pcie_xdma.axil_read(32'h20, v); chk("6 W0 = rx_stat_frames",  v, 32'h11111111);
         u_dut.u_pcie_xdma.axil_read(32'h24, v); chk("6 W1 = rx_stat_bytes",   v, 32'h22222222);
@@ -195,6 +254,20 @@ module tb_p6e_pcie_wrapper;
         u_dut.u_pcie_xdma.axil_read(32'h74, v); chk("6 W21 = tx_stat_abort",  v, 32'h15161718);
         u_dut.u_pcie_xdma.axil_read(32'h78, v); chk("6 W22 = rx_stat_pass",   v, 32'h191A1B1C);
         u_dut.u_pcie_xdma.axil_read(32'h7c, v); chk("6 W23 = rx_stat_nonmatch", v, 32'h1D1E1F20);
+        // ---- P6b 新增的 8 个字 (W24/W25 不 force, 见上) ----
+        u_dut.u_pcie_xdma.axil_read(32'h88, v); chk("6 W26 = rxcdc_full_cycles",   v, 32'h21222324);
+        u_dut.u_pcie_xdma.axil_read(32'h8c, v); chk("6 W27 = {16'd0,rxcdc_occ_max}", v, 32'h00002526);
+        u_dut.u_pcie_xdma.axil_read(32'h90, v); chk("6 W28 = {16'd0,txcdc_occ_max}", v, 32'h00002728);
+        u_dut.u_pcie_xdma.axil_read(32'h94, v); chk("6 W29 = txwire_stall_cycles", v, 32'h292A2B2C);
+        u_dut.u_pcie_xdma.axil_read(32'h98, v); chk("6 W30 = rxcdc_out_frames",    v, 32'h2D2E2F30);
+        u_dut.u_pcie_xdma.axil_read(32'h9c, v); chk("6 W31 = rxcdc_out_bytes",     v, 32'h31323334);
+        // ---- F4 的 4 个新字 (W32..W35) ----
+        u_dut.u_pcie_xdma.axil_read(32'hA0, v); chk("6 W32 = stat_drop_partial (C10)", v, 32'h35363738);
+        u_dut.u_pcie_xdma.axil_read(32'hA4, v); chk("6 W33 = stat_orphan_bytes (C10)", v, 32'h393A3B3C);
+        u_dut.u_pcie_xdma.axil_read(32'hA8, v); chk("6 W34 = stat_drop_full",          v, 32'h3D3E3F40);
+        u_dut.u_pcie_xdma.axil_read(32'hAC, v); chk("6 W35 = stat_fifo_ovf (恒 0 健康位)", v, 32'h41424344);
+        // ⚠️ W24/W25 用**活体**判据 (不 force): 见判据 5b/5c —— 它们证明"这两路确实接在
+        //    数据面域的自由计数与 LOCKED 上", 比灌常数更强。
 
         // ---- 判据 7: 未触发时 24 个字必须冻结 (读窗口原子性) ----
         // ⚠️ 2026-09-29 审查 F7 修: 这里原来读 **W0 (0x20)**, 而 W0 在本门里被 force 成常数
@@ -221,12 +294,12 @@ module tb_p6e_pcie_wrapper;
         //    那是 **XDMA 的 AXI-Lite 主机**在错误响应时填的数据, 不是 axi_regs 的行为
         //    (axi_regs 的读 mux 对未实现地址给 0 + rresp=SLVERR)。替身不模仿 XDMA 那一段,
         //    所以本门只能验 rresp —— 两边各验自己能验的那一半, 别把结论张冠李戴。
-        // ⚠️ 24 字快照把 0x20-0x7C 全占了 (word 31 = 0x7C) ⇒ 未实现地址 = word 33 = **0x84**
-        //    (随地图扩张挪过: 0x18 -> 0x44 -> 0x60 -> 0x84)。
+        // ⚠️ 32 字快照把 0x20-0x9C 全占了 (word 43 = 0xAC) ⇒ 未实现地址 = word 44 = **0xB0**
+        //    (随地图扩张挪过: 0x18 -> 0x44 -> 0x60 -> 0x84 -> 0xA0 -> 0xB0)。
         //    绝不能用 ≥0x100 的地址: `ar_word = araddr[7:2]` 6 位 ⇒ 每 256 字节回绕
         //    (0x100 别名到 MAGIC ⇒ 假 PASS 于"读出的不是 0xffffffff"这类判据)。
-        u_dut.u_pcie_xdma.axil_read(32'h84, v);
-        chk("9  未实现地址 0x84 ⇒ rresp = SLVERR", {30'd0, u_dut.u_pcie_xdma.last_rresp}, 32'd2);
+        u_dut.u_pcie_xdma.axil_read(32'hB0, v);
+        chk("9  未实现地址 0xB0 ⇒ rresp = SLVERR", {30'd0, u_dut.u_pcie_xdma.last_rresp}, 32'd2);
 
         // ⚠️ release 的层次名必须与上面 force 的目标**逐字一致** (坑 22: 名字不一致时
         //    xelab 直接报 "not declared under prefix"; 但漏 release 是**静默**的 —— 后续判据
@@ -254,6 +327,16 @@ module tb_p6e_pcie_wrapper;
         release u_dut.u_mac_tx.stat_abort;
         release u_dut.u_tcp_rx.stat_pass;
         release u_dut.u_tcp_rx.stat_drop_nonmatch;
+        release u_dut.u_mac_rx.stat_drop_partial;
+        release u_dut.u_mac_rx.stat_orphan_bytes;
+        release u_dut.u_mac_rx.stat_drop_full;
+        release u_dut.u_mac_rx.stat_fifo_ovf;
+        release u_dut.rxcdc_full_cycles;
+        release u_dut.rxcdc_occ_max;
+        release u_dut.txcdc_occ_max;
+        release u_dut.txwire_stall_cycles;
+        release u_dut.rxcdc_out_frames;
+        release u_dut.rxcdc_out_bytes;
 
         if (fails == 0) $display("PASS_ALL  tb_p6e_pcie_wrapper: 全链门全过");
         else            $display("FAIL      tb_p6e_pcie_wrapper: %0d 项失败", fails);

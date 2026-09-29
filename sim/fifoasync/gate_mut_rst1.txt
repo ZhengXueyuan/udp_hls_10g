@@ -1,0 +1,88 @@
+SHA256 �� D:\repo\XCKU5PMini\udp_hls_10g\rtl\fifo_async.v ��ϣ:
+8019411f53f807dc50190fb54d4946fda935fafb711a1a633ca6ccea3b1f8b17
+CertUtil: -hashfile ����ɹ���ɡ�
+SHA256 �� D:\repo\XCKU5PMini\udp_hls_10g\tb\tb_fifo_async.v ��ϣ:
+6c3491e24589e727a451766a2cd12758be1b00cdcca6d57f745d2ad56f2201e2
+CertUtil: -hashfile ����ɹ���ɡ�
+run at 2026/09/29 �ܶ�  9:45:26.13 
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Tue Sep 29 09:47:28 2026
+# Process ID         : 2092
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/sim/fifoasync/case_mut_rst1
+# Command line       : xsim.exe -log xsim_mut_rst1.log -mode tcl -source {xsim.dir/tb_fifo_async/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/sim/fifoasync/case_mut_rst1/xsim_mut_rst1.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/sim/fifoasync/case_mut_rst1\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 38509 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_fifo_async/xsim_script.tcl
+# xsim {tb_fifo_async} -testplusarg C_RESET -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+FIFO_ASYNC TB: case=RESET WH=5 RH=4 T_wr=8000ps T_rd=6400ps
+== case RESET: 空复位 / 满复位 / 在途两侧复位 / 单侧复位(脏) / 重新对齐 ==
+  ok: RESET1 前置: 排空完成
+  ok: RESET1: 空 FIFO 复位后 empty=1 / full=0
+  ok: RESET1: 复位不产生任何幽灵读写
+  ok: RESET2: 四实例都灌到 full=1
+  ok: RESET2: 灌满后复位 ⇒ empty=1/full=0
+  ok: RESET2: 复位丢弃全部在途数据 (复位后读不出任何字)
+  ok: RESET3: 在途复位后仍能排空 (无挂死)
+  ok: RESET3: 在途两侧复位后逐字干净 (在途数据全丢, 无旧字重现)
+  ok: RESET3: 复位后流量正常恢复 (正证据)
+  ok: RESET4 前置: 脏窗口快照已取
+  ok: RESET4 前置(A): 读指针非零且未读数非零 (否则本项无判别力)
+  ok: RESET4 前置(C): 读指针非零且未读数非零
+  info: RESET4 快照 A: W=29 qcnt=14 R=15 | C: W=7 qcnt=2 R=5
+  info: RESET4 脏排空 A 弹数 P=29 (期望 == W=29; 真实未读只有 14) | C 弹数 7 (期望 7)
+  ok: RESET4: 只复位读侧 ⇒ 弹出数 == 写指针 W (指针错位实锤)
+  ok: RESET4: 弹出数 != 真实未读数 (多弹 = 静默脏数据)
+  ok: RESET4: C 实例(深度4)同样多弹 == W != qcnt
+  ok: RESET4: 脏窗口确实弹出了字 (正证据)
+  ok: RESET5 前置: 脏窗口快照已取
+  ok: RESET5 前置(A): 读指针非零且未读数非零 (否则本项无判别力)
+  ok: RESET5 前置(C): 读指针非零且未读数非零
+  info: RESET5 快照 A: W=16 qcnt=14 R=2 head_seq=1162 | C: W=4 qcnt=2
+  info: RESET5 脏灌 A PW=18 (期望 R+DEPTH=18; 真实空位 2; 超标 16) | C PW=6 (期望 6, 真实空位 2)
+  ok: RESET5: 只复位写侧 ⇒ 灌满字数 == R+DEPTH (指针错位实锤)
+  ok: RESET5: 写入数 > 真实空位 (覆盖了未读字)
+  ok: RESET5: C 实例(深度4)同样多写 == R+DEPTH
+  ok: RESET5: 被覆盖的未读字读出时 seq 已变 (内容实锤损坏)
+  ok: RESET6: 重新对齐复位后逐字干净 (恢复可用)
+  ok: RESET6: 恢复后流量正常 (正证据)
+
+== 判据表 (每实例) ==
+  inst WIDTH/DEPTH/FWFT   写    读   比较  内容错  灰码违规/验证  占用max/min  full挡/empty挡  fullUp/emptyUp  队列余
+  A    72/16/FWFT=1     465 465 700 0 0/2161 16/0 1/625 1/37 0
+  B    72/16/FWFT=0     450 450 450 0 0/2100 16/0 0/614 0/17 0
+  C    40/4/FWFT=1      311 311 488 0 0/1403 4/0 152/772 123/141 0
+  D    40/4/FWFT=0      306 306 306 0 0/1372 4/0 155/745 122/138 0
+  ok: 通用1: 四实例内容错 0 (无丢失/重复/重排)
+  ok: 通用2: 四实例都真做过 dout 对拍 (比较数 > 0)
+  ok: 通用3: 四实例都真有被接受的写
+  ok: 通用4: 四实例都真有弹出
+  ok: 通用5: 灰码监视零违规
+  ok: 通用6: 灰码监视真有被验证的指针变化 (判据非空)
+  ok: 通用7: 收尾时 写-读 == 0 (排空后队列空)
+  [P6b] 占用探针: A occ_w_max=31/occ_r_max=31 (金标准 occ_max=16) | C occ_w_max=7/occ_r_max=7 (金标准 occ_max=4)
+  ok: P6b-1: 写域占用探针峰值 >= 金标准真实峰值 (A/C)
+  ok: P6b-2: 探针非空 (真有占用过 ⇒ 探针不是恒 0 的未连接线)
+  ok: P6b-3: 探针硬界 (占用永不 > DEPTH; 独立计数, 不计入 o_err)
+
+FIFO_ASYNC_GATE: PASS_ALL (case=RESET)
+$finish called at time : 92419750 ps : File "D:/repo/XCKU5PMini/udp_hls_10g/tb/tb_fifo_async.v" Line 906
+exit
+INFO: [Common 17-206] Exiting xsim at Tue Sep 29 09:47:30 2026...

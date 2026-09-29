@@ -1,0 +1,65 @@
+SHA256 �� D:\repo\XCKU5PMini\udp_hls_10g\rtl\fifo_async.v ��ϣ:
+898fa9a303ac3b01896e0bfea116f3fe8433e4fb62bb3e6a97b9a0ff30d19f75
+CertUtil: -hashfile ����ɹ���ɡ�
+SHA256 �� D:\repo\XCKU5PMini\udp_hls_10g\tb\tb_fifo_async.v ��ϣ:
+5a558e18b809821189ada78923a9eada4e57cc3c8ea4530888a7a302093651ee
+CertUtil: -hashfile ����ɹ���ɡ�
+run at 2026/09/29 �ܶ� 11:59:28.71 
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Tue Sep 29 11:59:37 2026
+# Process ID         : 25944
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/sim/fifoasync/case_wrfast
+# Command line       : xsim.exe -log xsim_wrfast.log -mode tcl -source {xsim.dir/tb_fifo_async/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/sim/fifoasync/case_wrfast/xsim_wrfast.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/sim/fifoasync/case_wrfast\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 37718 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_fifo_async/xsim_script.tcl
+# xsim {tb_fifo_async} -testplusarg C_WRFAST -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+FIFO_ASYNC TB: case=WRFAST WH=4 RH=400 T_wr=6400ps T_rd=640000ps
+== case WRFAST(100:1): 金标准对拍 (随机占空比, 不同周期) ==
+  ok: BAL: 排空完成 (四实例)
+  ok: WRFAST: 写侧确实被 full 挡过 (100:1 下必然)
+  ok: WRFAST: 占用到过 DEPTH
+
+== 判据表 (每实例) ==
+  inst WIDTH/DEPTH/FWFT   写    读   比较  内容错  灰码违规/验证  占用max/min  full挡/empty挡  fullUp/emptyUp  队列余
+  A    72/16/FWFT=1     210 210 311 0 0/420 16/0 22072/5986 196/1 0
+  B    72/16/FWFT=0     196 196 196 0 0/392 16/0 22302/5986 182/1 0
+  C    40/4/FWFT=1      197 197 300 0 0/394 4/0 22324/5997 195/1 0
+  D    40/4/FWFT=0      191 191 191 0 0/382 4/0 22391/5995 189/1 0
+  ok: 通用1: 四实例内容错 0 (无丢失/重复/重排)
+  ok: 通用2: 四实例都真做过 dout 对拍 (比较数 > 0)
+  ok: 通用3: 四实例都真有被接受的写
+  ok: 通用4: 四实例都真有弹出
+  ok: 通用5: 灰码监视零违规
+  ok: 通用6: 灰码监视真有被验证的指针变化 (判据非空)
+  [F-1] 拒写探针: A ovf=22072/独立挡写=22072 | B 22302/22302 | C 22324/22324 | D 22391/22391
+  ok: F1-1: DUT 拒写计数 == 门自己的挡写计数 (±2; 探针被拿掉/恒 0 会立刻 FAIL)
+  ok: F1-2: 探针有非零正证据 (真数到过被拒的写)
+  ok: 通用7: 收尾时 写-读 == 0 (排空后队列空)
+  [P6b] 占用探针: A occ_w_max=16/occ_r_max=16 (金标准 occ_max=16) | C occ_w_max=4/occ_r_max=4 (金标准 occ_max=4)
+  ok: P6b-1: 写域占用探针峰值 >= 金标准真实峰值 (A/C)
+  ok: P6b-2: 探针非空 (真有占用过 ⇒ 探针不是恒 0 的未连接线)
+  ok: P6b-3: 探针硬界 (占用永不 > DEPTH; 独立计数, 不计入 o_err)
+
+FIFO_ASYNC_GATE: PASS_ALL (case=WRFAST)
+$finish called at time : 4084109350 ps : File "D:/repo/XCKU5PMini/udp_hls_10g/tb/tb_fifo_async.v" Line 963
+exit
+INFO: [Common 17-206] Exiting xsim at Tue Sep 29 11:59:42 2026...

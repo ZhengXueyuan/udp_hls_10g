@@ -1,0 +1,77 @@
+SHA256 �� D:\repo\XCKU5PMini\udp_hls_10g\rtl\fifo_async.v ��ϣ:
+898fa9a303ac3b01896e0bfea116f3fe8433e4fb62bb3e6a97b9a0ff30d19f75
+CertUtil: -hashfile ����ɹ���ɡ�
+SHA256 �� D:\repo\XCKU5PMini\udp_hls_10g\tb\tb_fifo_async.v ��ϣ:
+5a558e18b809821189ada78923a9eada4e57cc3c8ea4530888a7a302093651ee
+CertUtil: -hashfile ����ɹ���ɡ�
+run at 2026/09/29 �ܶ� 11:59:28.71 
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Tue Sep 29 11:59:50 2026
+# Process ID         : 26024
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/sim/fifoasync/case_bound
+# Command line       : xsim.exe -log xsim_bound.log -mode tcl -source {xsim.dir/tb_fifo_async/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/sim/fifoasync/case_bound/xsim_bound.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/sim/fifoasync/case_bound\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 37742 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_fifo_async/xsim_script.tcl
+# xsim {tb_fifo_async} -testplusarg C_BOUND -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+FIFO_ASYNC TB: case=BOUND WH=4 RH=4 T_wr=6400ps T_rd=6400ps
+== case BOUND: 灌满 / 排空 / 空态常读 / 1:1 高速两端捶打 ==
+  ok: BOUND1: 灌到 full=1
+  ok: BOUND1: full 期间写被严格挡住 (计数不再增)
+  ok: BOUND1: 占用极值 == DEPTH (真的到过满)
+  ok: BOUND1: 存在被 full 挡掉的写 (正证据)
+  ok: BOUND2: 排空完成
+  ok: BOUND2: 满→空最速排空时 full 撤销延迟有界 (实测 25200ps, 上界 6*T_wr=38400ps)
+  ok: BOUND2: 占用到过 0
+  ok: BOUND2: 空态下常读弹不出任何字
+  ok: BOUND2: 存在空态被忽略的读 (正证据)
+  info: BOUND3 期间 A: full 上升 54 次, empty 上升 130 次 (C: 658 / 629)
+  ok: BOUND3: 1:1 捶打期间 full 上升 >= 5 次
+  ok: BOUND3: 1:1 捶打期间 empty 上升 >= 5 次
+  ok: BOUND3: 小深度实例 (D=4) 两端都撞过 >= 5 次
+  info: BOUND3 期间 full&&empty 同时为 1 的拍数 = 0 (DEPTH>=4 且同步只 2 级时该角落不可达: 排空 DEPTH 个字必然慢于 full 撤销)
+  ok: BOUND3: 收尾排空完成
+
+== 判据表 (每实例) ==
+  inst WIDTH/DEPTH/FWFT   写    读   比较  内容错  灰码违规/验证  占用max/min  full挡/empty挡  fullUp/emptyUp  队列余
+  A    72/16/FWFT=1     2400 2400 4049 0 0/4800 16/0 285/786 56/132 0
+  B    72/16/FWFT=0     2396 2396 2396 0 0/4792 16/0 392/709 166/68 0
+  C    40/4/FWFT=1      1674 1674 3035 0 0/3348 4/0 1049/1450 658/630 0
+  D    40/4/FWFT=0      1699 1699 1699 0 0/3398 4/0 1044/1426 699/671 0
+  ok: 通用1: 四实例内容错 0 (无丢失/重复/重排)
+  ok: 通用2: 四实例都真做过 dout 对拍 (比较数 > 0)
+  ok: 通用3: 四实例都真有被接受的写
+  ok: 通用4: 四实例都真有弹出
+  ok: 通用5: 灰码监视零违规
+  ok: 通用6: 灰码监视真有被验证的指针变化 (判据非空)
+  [F-1] 拒写探针: A ovf=285/独立挡写=285 | B 392/392 | C 1049/1049 | D 1044/1044
+  ok: F1-1: DUT 拒写计数 == 门自己的挡写计数 (±2; 探针被拿掉/恒 0 会立刻 FAIL)
+  ok: F1-2: 探针有非零正证据 (真数到过被拒的写)
+  ok: 通用7: 收尾时 写-读 == 0 (排空后队列空)
+  [P6b] 占用探针: A occ_w_max=16/occ_r_max=16 (金标准 occ_max=16) | C occ_w_max=4/occ_r_max=4 (金标准 occ_max=4)
+  ok: P6b-1: 写域占用探针峰值 >= 金标准真实峰值 (A/C)
+  ok: P6b-2: 探针非空 (真有占用过 ⇒ 探针不是恒 0 的未连接线)
+  ok: P6b-3: 探针硬界 (占用永不 > DEPTH; 独立计数, 不计入 o_err)
+
+FIFO_ASYNC_GATE: PASS_ALL (case=BOUND)
+$finish called at time : 84067750 ps : File "D:/repo/XCKU5PMini/udp_hls_10g/tb/tb_fifo_async.v" Line 963
+exit
+INFO: [Common 17-206] Exiting xsim at Tue Sep 29 11:59:52 2026...

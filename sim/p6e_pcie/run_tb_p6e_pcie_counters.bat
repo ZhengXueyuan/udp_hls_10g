@@ -23,8 +23,8 @@ echo %ROOT%\board\uart_dbg.v                                  >> files.f
 echo %ROOT%\_proj_pcie\rtl\axi_regs.v                         >> files.f
 echo %~dp0xdma_0_sim_stub.v                                   >> files.f
 echo %~dp0tb_p6e_pcie_counters.v                              >> files.f
-call %XV%\xvlog.bat -work xil_defaultlib -d PCIE_OBS -d DEV_USP -d APP_MODE -i %ROOT%\rtl -i %ROOT%\board -f files.f > xvlog_p6e_cnt.log 2>&1 || (type xvlog_p6e_cnt.log & exit /b 1)
-call %XV%\xvlog.bat -d PCIE_OBS -d DEV_USP -d APP_MODE -work xil_defaultlib "%XV%\..\data\verilog\src\glbl.v" >> xvlog_p6e_cnt.log 2>&1 || (type xvlog_p6e_cnt.log & exit /b 1)
+call %XV%\xvlog.bat -work xil_defaultlib -d PCIE_OBS -d DEV_USP -d APP_MODE -d DP_156MHZ -d P6B_SIM_CLKGEN -i %ROOT%\rtl -i %ROOT%\board -f files.f > xvlog_p6e_cnt.log 2>&1 || (type xvlog_p6e_cnt.log & exit /b 1)
+call %XV%\xvlog.bat -d PCIE_OBS -d DEV_USP -d APP_MODE -d DP_156MHZ -d P6B_SIM_CLKGEN -work xil_defaultlib "%XV%\..\data\verilog\src\glbl.v" >> xvlog_p6e_cnt.log 2>&1 || (type xvlog_p6e_cnt.log & exit /b 1)
 findstr /I /C:"implicitly" xvlog_p6e_cnt.log >NUL && (echo IMPLICIT-DECL-FAIL & findstr /I /C:"implicitly" xvlog_p6e_cnt.log & exit /b 1)
 findstr /C:"10-3091" xvlog_p6e_cnt.log >NUL && (echo BITWIDTH-MISMATCH-FAIL & findstr /C:"10-3091" xvlog_p6e_cnt.log & exit /b 1)
 findstr /I /C:"ERROR" xvlog_p6e_cnt.log >NUL && (echo XVLOG-ERROR-FAIL & findstr /I /C:"ERROR" xvlog_p6e_cnt.log & exit /b 1)

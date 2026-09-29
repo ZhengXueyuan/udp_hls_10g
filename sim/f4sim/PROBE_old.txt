@@ -1,0 +1,154 @@
+# xsim {tb_f4} -testplusarg NODRAIN -autoloadwcfg -runall
+NODRAIN 终态: SOP=44 TLAST=28 TERM=0 open_frame=0 term_pend=0 ovf=0 drop_partial=0
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Tue Sep 29 12:07:52 2026
+# Process ID         : 19524
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/sim/f4sim/rd_old
+# Command line       : xsim.exe -log xs_f4.log -mode tcl -source {xsim.dir/tb_f4/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/sim/f4sim/rd_old/xs_f4.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/sim/f4sim/rd_old\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 44845 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_f4/xsim_script.tcl
+# xsim {tb_f4} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+F4 TB: nstim=13314 ncase=20
+CASE A14_k00 : FE dF=3 dB=164 dCRC=0 dDROP=0 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=20 dPopc=152 dSOP=3 dGood=3 dTerm=0 dTermB=0 dBareSOP=0 dStray=0
+CASE A14_k08 : FE dF=3 dB=164 dCRC=0 dDROP=0 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=20 dPopc=152 dSOP=3 dGood=3 dTerm=0 dTermB=0 dBareSOP=0 dStray=0
+CASE A14_k16 : FE dF=3 dB=164 dCRC=0 dDROP=0 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=20 dPopc=152 dSOP=3 dGood=3 dTerm=0 dTermB=0 dBareSOP=0 dStray=0
+   [drop]  t=16884000 state=3 fbytes=64 bcnt=4 hwv=0 first_done=1 full=1 full_next=0 wptr=14 rptr=6 | stat_drop=1 frames=11 bytes=592 dpart=0
+CASE A14_k24 : FE dF=2 dB=100 dCRC=0 dDROP=1 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=18 dPopc=140 dSOP=3 dGood=2 dTerm=0 dTermB=0 dBareSOP=0 dStray=0
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL (A14_k24)
+   CHK L7 sop_frames==good+term : FAIL (A14_k24)
+   [BARE-SOP] t=20404000 prev frame had no TLAST (orphan run) cur_popc=48
+   [drop]  t=21876000 state=3 fbytes=64 bcnt=4 hwv=0 first_done=1 full=1 full_next=0 wptr=0 rptr=8 | stat_drop=2 frames=13 bytes=692 dpart=0
+CASE A14_long : FE dF=2 dB=100 dCRC=0 dDROP=1 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=18 dPopc=140 dSOP=3 dGood=2 dTerm=0 dTermB=0 dBareSOP=1 dStray=0
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL (A14_long)
+   CHK L4 bare_sop==0 : FAIL (A14_long)
+   CHK L7 sop_frames==good+term : FAIL (A14_long)
+   [drop]  t=25892000 state=3 fbytes=82 bcnt=6 hwv=0 first_done=1 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=3 frames=13 bytes=692 dpart=0
+   [drop]  t=26204000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=4 frames=13 bytes=692 dpart=0
+   [BARE-SOP] t=26860000 prev frame had no TLAST (orphan run) cur_popc=48
+   [BARE-SOP] t=26924000 prev frame had no TLAST (orphan run) cur_popc=64
+CASE B200_k00 : FE dF=1 dB=64 dCRC=0 dDROP=2 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=16 dPopc=124 dSOP=2 dGood=1 dTerm=0 dTermB=0 dBareSOP=2 dStray=0
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL (B200_k00)
+   CHK L4 bare_sop==0 : FAIL (B200_k00)
+   CHK L7 sop_frames==good+term : FAIL (B200_k00)
+   [drop]  t=31252000 state=3 fbytes=82 bcnt=6 hwv=0 first_done=1 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=5 frames=14 bytes=756 dpart=0
+   [drop]  t=31564000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=6 frames=14 bytes=756 dpart=0
+   [BARE-SOP] t=32244000 prev frame had no TLAST (orphan run) cur_popc=64
+CASE B200_k08 : FE dF=1 dB=64 dCRC=0 dDROP=2 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=16 dPopc=124 dSOP=2 dGood=1 dTerm=0 dTermB=0 dBareSOP=1 dStray=0
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL (B200_k08)
+   CHK L4 bare_sop==0 : FAIL (B200_k08)
+   CHK L7 sop_frames==good+term : FAIL (B200_k08)
+   [drop]  t=36612000 state=3 fbytes=82 bcnt=6 hwv=0 first_done=1 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=7 frames=15 bytes=820 dpart=0
+   [drop]  t=36924000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=8 frames=15 bytes=820 dpart=0
+   [BARE-SOP] t=37604000 prev frame had no TLAST (orphan run) cur_popc=64
+CASE B200_k16 : FE dF=1 dB=64 dCRC=0 dDROP=2 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=16 dPopc=124 dSOP=2 dGood=1 dTerm=0 dTermB=0 dBareSOP=1 dStray=0
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL (B200_k16)
+   CHK L4 bare_sop==0 : FAIL (B200_k16)
+   CHK L7 sop_frames==good+term : FAIL (B200_k16)
+   [drop]  t=41972000 state=3 fbytes=82 bcnt=6 hwv=0 first_done=1 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=9 frames=16 bytes=884 dpart=0
+   [drop]  t=42284000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=10 frames=16 bytes=884 dpart=0
+   [BARE-SOP] t=42964000 prev frame had no TLAST (orphan run) cur_popc=64
+CASE B200_k24 : FE dF=1 dB=64 dCRC=0 dDROP=2 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=16 dPopc=124 dSOP=2 dGood=1 dTerm=0 dTermB=0 dBareSOP=1 dStray=0
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL (B200_k24)
+   CHK L4 bare_sop==0 : FAIL (B200_k24)
+   CHK L7 sop_frames==good+term : FAIL (B200_k24)
+   [drop]  t=47332000 state=3 fbytes=82 bcnt=6 hwv=0 first_done=1 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=11 frames=17 bytes=948 dpart=0
+   [drop]  t=47644000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=12 frames=17 bytes=948 dpart=0
+   [drop]  t=48316000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=13 frames=17 bytes=948 dpart=0
+CASE B200_x : FE dF=0 dB=0 dCRC=0 dDROP=3 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=8 dPopc=64 dSOP=1 dGood=0 dTerm=0 dTermB=0 dBareSOP=0 dStray=0
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL (B200_x)
+   CHK L7 sop_frames==good+term : FAIL (B200_x)
+   [drop]  t=52692000 state=3 fbytes=82 bcnt=6 hwv=0 first_done=1 full=1 full_next=0 wptr=0 rptr=8 | stat_drop=14 frames=17 bytes=948 dpart=0
+   [drop]  t=53004000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=0 rptr=8 | stat_drop=15 frames=17 bytes=948 dpart=0
+   [drop]  t=53676000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=0 rptr=8 | stat_drop=16 frames=17 bytes=948 dpart=0
+   [BARE-SOP] t=53884000 prev frame had no TLAST (orphan run) cur_popc=64
+CASE B200_y : FE dF=0 dB=0 dCRC=0 dDROP=3 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=8 dPopc=64 dSOP=1 dGood=0 dTerm=0 dTermB=0 dBareSOP=1 dStray=0
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL (B200_y)
+   CHK L4 bare_sop==0 : FAIL (B200_y)
+   CHK L7 sop_frames==good+term : FAIL (B200_y)
+   [drop]  t=58052000 state=3 fbytes=82 bcnt=6 hwv=0 first_done=1 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=17 frames=17 bytes=948 dpart=0
+   [drop]  t=58364000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=18 frames=17 bytes=948 dpart=0
+   [BARE-SOP] t=59004000 prev frame had no TLAST (orphan run) cur_popc=64
+   [BARE-SOP] t=59188000 prev frame had no TLAST (orphan run) cur_popc=64
+CASE C500_k00 : FE dF=1 dB=64 dCRC=0 dDROP=2 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=16 dPopc=124 dSOP=2 dGood=1 dTerm=0 dTermB=0 dBareSOP=2 dStray=0
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL (C500_k00)
+   CHK L4 bare_sop==0 : FAIL (C500_k00)
+   CHK L7 sop_frames==good+term : FAIL (C500_k00)
+   [drop]  t=63556000 state=3 fbytes=82 bcnt=6 hwv=0 first_done=1 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=19 frames=18 bytes=1012 dpart=0
+   [drop]  t=63868000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=20 frames=18 bytes=1012 dpart=0
+   [BARE-SOP] t=64692000 prev frame had no TLAST (orphan run) cur_popc=64
+CASE C500_k08 : FE dF=1 dB=64 dCRC=0 dDROP=2 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=16 dPopc=124 dSOP=2 dGood=1 dTerm=0 dTermB=0 dBareSOP=1 dStray=0
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL (C500_k08)
+   CHK L4 bare_sop==0 : FAIL (C500_k08)
+   CHK L7 sop_frames==good+term : FAIL (C500_k08)
+   [drop]  t=69060000 state=3 fbytes=82 bcnt=6 hwv=0 first_done=1 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=21 frames=19 bytes=1076 dpart=0
+   [drop]  t=69372000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=22 frames=19 bytes=1076 dpart=0
+   [BARE-SOP] t=70196000 prev frame had no TLAST (orphan run) cur_popc=64
+CASE C500_k16 : FE dF=1 dB=64 dCRC=0 dDROP=2 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=16 dPopc=124 dSOP=2 dGood=1 dTerm=0 dTermB=0 dBareSOP=1 dStray=0
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL (C500_k16)
+   CHK L4 bare_sop==0 : FAIL (C500_k16)
+   CHK L7 sop_frames==good+term : FAIL (C500_k16)
+   [drop]  t=74564000 state=3 fbytes=82 bcnt=6 hwv=0 first_done=1 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=23 frames=20 bytes=1140 dpart=0
+   [drop]  t=74876000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=24 frames=20 bytes=1140 dpart=0
+   [BARE-SOP] t=75700000 prev frame had no TLAST (orphan run) cur_popc=64
+CASE C500_k24 : FE dF=1 dB=64 dCRC=0 dDROP=2 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=16 dPopc=124 dSOP=2 dGood=1 dTerm=0 dTermB=0 dBareSOP=1 dStray=0
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL (C500_k24)
+   CHK L4 bare_sop==0 : FAIL (C500_k24)
+   CHK L7 sop_frames==good+term : FAIL (C500_k24)
+   [drop]  t=80068000 state=3 fbytes=82 bcnt=6 hwv=0 first_done=1 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=25 frames=21 bytes=1204 dpart=0
+   [drop]  t=80380000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=26 frames=21 bytes=1204 dpart=0
+   [BARE-SOP] t=81204000 prev frame had no TLAST (orphan run) cur_popc=64
+CASE C500_k32 : FE dF=1 dB=64 dCRC=0 dDROP=2 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=16 dPopc=124 dSOP=2 dGood=1 dTerm=0 dTermB=0 dBareSOP=1 dStray=0
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL (C500_k32)
+   CHK L4 bare_sop==0 : FAIL (C500_k32)
+   CHK L7 sop_frames==good+term : FAIL (C500_k32)
+   [drop]  t=85572000 state=3 fbytes=82 bcnt=6 hwv=0 first_done=1 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=27 frames=22 bytes=1268 dpart=0
+   [drop]  t=85884000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=28 frames=22 bytes=1268 dpart=0
+   [BARE-SOP] t=86708000 prev frame had no TLAST (orphan run) cur_popc=64
+CASE C120_k00 : FE dF=1 dB=64 dCRC=0 dDROP=2 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=16 dPopc=124 dSOP=2 dGood=1 dTerm=0 dTermB=0 dBareSOP=1 dStray=0
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL (C120_k00)
+   CHK L4 bare_sop==0 : FAIL (C120_k00)
+   CHK L7 sop_frames==good+term : FAIL (C120_k00)
+   [drop]  t=91076000 state=3 fbytes=82 bcnt=6 hwv=0 first_done=1 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=29 frames=23 bytes=1332 dpart=0
+   [drop]  t=91388000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=30 frames=23 bytes=1332 dpart=0
+   [BARE-SOP] t=92212000 prev frame had no TLAST (orphan run) cur_popc=64
+CASE C120_k08 : FE dF=1 dB=64 dCRC=0 dDROP=2 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=16 dPopc=124 dSOP=2 dGood=1 dTerm=0 dTermB=0 dBareSOP=1 dStray=0
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL (C120_k08)
+   CHK L4 bare_sop==0 : FAIL (C120_k08)
+   CHK L7 sop_frames==good+term : FAIL (C120_k08)
+   [drop]  t=96580000 state=3 fbytes=82 bcnt=6 hwv=0 first_done=1 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=31 frames=24 bytes=1396 dpart=0
+   [drop]  t=96892000 state=3 fbytes=20 bcnt=7 hwv=0 first_done=0 full=1 full_next=0 wptr=8 rptr=0 | stat_drop=32 frames=24 bytes=1396 dpart=0
+   [BARE-SOP] t=97716000 prev frame had no TLAST (orphan run) cur_popc=64
+CASE C120_k16 : FE dF=1 dB=64 dCRC=0 dDROP=2 dDropFull=0 dPartial=0 dOrphanB=0 dOvf=0 | DP dWords=16 dPopc=124 dSOP=2 dGood=1 dTerm=0 dTermB=0 dBareSOP=1 dStray=0
+   CHK L2 popc==dBytes-4*dFrames+dOrphanB : FAIL (C120_k16)
+   CHK L4 bare_sop==0 : FAIL (C120_k16)
+   CHK L7 sop_frames==good+term : FAIL (C120_k16)
+CASE(last,nodrain,排空后) : FE dF=3 dB=210 dDROP=0 dPartial=0 dOrphanB=0 | DP dGood=3 dTerm=0 dBareSOP=0
+TOTAL: dWords=330 dPopc=2550 dSOP=44 dGood=28 dTerm=0 dTermBadFlag=0 dBareSOP=16 | F=28 B=1670 DROP=32 DropFull=0 Partial=0 OrphanB=0 OVF=0 WORDS_OUT=330
+   CHK G3 popc==bytes-4*frames+orphanB : FAIL ()
+   CHK G5 no bare sop : FAIL ()
+CHKSUM L1=22/22 L2=4/21 L3=21/21 L4=6/21 L5=20/20 L6=20/20 L7=5/21 L8=19/19 L9=20/20
+F4_GATE: FAIL (48 条判据不成立)
+F4_DONE
+$finish called at time : 111508 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/tb/tb_mac_rx_f4.v" Line 350
+exit
+INFO: [Common 17-206] Exiting xsim at Tue Sep 29 12:07:54 2026...
+F4-GATE-RESULT: FAIL 
