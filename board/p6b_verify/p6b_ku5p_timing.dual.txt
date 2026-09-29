@@ -1,0 +1,43 @@
+####################################################################################################
+# P6b 时序闸: D:\repo\XCKU5PMini\udp_hls_10g\board\p6b_ku5p_timing.rpt
+# 溯源: Vivado v.2025.2 (win64) Build 6299465 Fri Nov 14 19:35:11 GMT 2025 | Design=wrapper_p4 | Device=xcku5p-ffvb676 | State=Routed
+#       生成时间: Tue Sep 29 10:51:10 2026
+# 判据2 语义: --expect dual  (硬判双域)
+####################################################################################################
+
+  [时钟族自动发现] 周期落在 [5.0, 9.0] ns 的时钟 (由周期反查网名):
+    ~8.000ns 族 (=125.00 MHz, 前端)     : gmii_clk, phy1_rxc, u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4..., u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4... …(共 7 个网名, 余略)
+    ~6.400ns 族 (=156.25 MHz, 数据面) : g_hw.clk_out0
+    该带内全部周期: 6.400, 8.000
+    [旁证] family 时钟都在 Intra Clock Table 里有端点行 ⇒ 双域不是空约束 ✓
+
+  [PASS] 判据2 判据=双域存在性 (前端 ~8.000ns + 数据面 ~6.400ns) | 期望=两个域都在 | 实测=~8.000ns 与 ~6.400ns 域都在
+
+  [PASS] 判据1a 判据=setup 失败端点数 | 期望=0 | 实测=0 / 220748 端点
+  [PASS] 判据1b 判据=hold  失败端点数 | 期望=0 | 实测=0 / 220748 端点
+
+  [PASS] 判据4a 判据=setup WNS 与失败端点数**联合** | 期望=两者同时成立 | 实测=WNS=+0.373 且失败端点=0 ⇒ 双边同时成立
+  [PASS] 判据4b 判据=hold  WHS 与失败端点数**联合** | 期望=两者同时成立 | 实测=WNS=+0.010 且失败端点=0 ⇒ 双边同时成立
+  [PASS] 判据4c 判据=WPWS 与失败端点数**联合** | 期望=两者同时成立 | 实测=WPWS=+0.000 且失败端点=0 ⇒ 双边同时成立
+
+  [PASS] 判据3a 判据=IDDRE1/C|CB Min-Period 违例数 | 期望=0 | 实测=0
+         (闸 G = 整设计按 6.400ns 约束那次, 产生了这批 required=8.000ns 的 HDIO 器件上限违例; P6b 双约束下必须为 0)
+  [PASS] 判据3b 判据=Min-Period 违例总数 (含 OSERDESE3/CLK 等) | 期望=0 | 实测=0
+  [PASS] 判据3c 判据=Pulse-Width 违例总数 (Min Period + Low/High Pulse Width) | 期望=0 | 实测=0
+  [WARN] 判据3d 有 1 条 IDDRE1 Min-Period 的 slack **恰好 0.000** (贴边, 不是违例, 但一点余量都没有)
+  [INFO] 与总表对账: 总表 TPWS Failing Endpoints=0, 本工具点名的不同引脚数=0 ⇒ 一致
+
+  [PASS] 判据5 判据=报告自述总判 | 期望='All user specified timing constraints are met.' | 实测=约束全满足
+
+----------------------------------------------------------------------------------------------------
+汇总 (按判据号):
+  [PASS] 判据1a  setup 失败端点 0
+  [PASS] 判据1b  hold 失败端点 0
+  [PASS] 判据2   ~8.000ns 与 ~6.400ns 域都在
+  [PASS] 判据3   Pulse-Width/Min-Period 违例 0 条 (解析 17 张表 / 42 行)
+  [PASS] 判据4a  WNS=+0.373 且失败端点=0 ⇒ 双边同时成立
+  [PASS] 判据4b  WNS=+0.010 且失败端点=0 ⇒ 双边同时成立
+  [PASS] 判据4c  WPWS=+0.000 且失败端点=0 ⇒ 双边同时成立
+  [PASS] 判据5   报告自述 constraints met
+----------------------------------------------------------------------------------------------------
+TIMING-OK: FAIL=0 PASS=8 N/A=0

@@ -1,0 +1,23 @@
+# P6b 时序闸区分能力自证 (run_controls.py)
+#
+# 每一行 = 一次真实的工具调用; 产物 = 同名 .txt (原始 stdout)。
+# 判据: 退出码 与 期望一致, 且期望出现的串出现 / 禁止出现的串不出现。
+# 重跑: python board/p6b_verify/run_controls.py
+# 输入: 仓里已有的真实报告 (board/p6e_ku5p_timing.rpt / p6a_ku5p_verify/*) +
+#       path/*.rpt (人工构造的病理样本, 由本脚本一键重建, 删了也没关系)
+
+  [OK  ] pos_p6e_8ns.auto           --expect auto   rc=0 (期望 0)  p6e_ku5p_timing.rpt
+  [OK  ] pos_p6e_8ns.single         --expect single rc=0 (期望 0)  p6e_ku5p_timing.rpt
+  [OK  ] pos_p6e_8ns.dual_teeth     --expect dual   rc=1 (期望 1)  p6e_ku5p_timing.rpt
+  [OK  ] pos_synth_dual.dual        --expect dual   rc=0 (期望 0)  SYNTH_dual_ok.rpt
+  [OK  ] pos_synth_dual.auto        --expect auto   rc=0 (期望 0)  SYNTH_dual_ok.rpt
+  [OK  ] neg_p6a_t6p4.auto          --expect auto   rc=1 (期望 1)  p6a_t6p4_timing_summary_routed.rpt
+  [OK  ] neg_p6a_t6p4.dual          --expect dual   rc=1 (期望 1)  p6a_t6p4_timing_summary_routed.rpt
+  [OK  ] neg_path_setup_fail1.auto  --expect auto   rc=1 (期望 1)  path_setup_fail1.rpt
+  [OK  ] neg_path_hold_fail2.auto   --expect auto   rc=1 (期望 1)  path_hold_fail2.rpt
+  [OK  ] neg_path_clock5ns.auto     --expect auto   rc=1 (期望 1)  path_clock_5ns.rpt
+  [OK  ] neg_path_verdict.auto      --expect auto   rc=1 (期望 1)  path_verdict_notmet.rpt
+  [OK  ] extra_p6a_t8p0.auto        --expect auto   rc=0 (期望 0)  p6a_t8p0_timing_summary_routed.rpt
+  [OK  ] extra_p6e_verify.auto      --expect auto   rc=0 (期望 0)  p6e_timing_summary.routed.rpt
+
+对照结论: 13/13 条符合期望 => 闸有区分能力

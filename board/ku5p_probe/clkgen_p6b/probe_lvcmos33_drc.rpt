@@ -1,0 +1,80 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2025.2 (win64) Build 6299465 Fri Nov 14 19:35:11 GMT 2025
+| Date         : Tue Sep 29 09:34:57 2026
+| Host         : xyz-intel running 64-bit major release  (build 9200)
+| Command      : report_drc -file D:/repo/XCKU5PMini/udp_hls_10g/board/ku5p_probe/clkgen_p6b/probe_lvcmos33_drc.rpt
+| Design       : probe_design
+| Device       : xcku5p-ffvb676-1-e
+| Speed File   : -1
+| Design State : Synthesized
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+Report DRC
+
+Table of Contents
+-----------------
+1. REPORT SUMMARY
+2. REPORT DETAILS
+
+1. REPORT SUMMARY
+-----------------
+            Netlist: probe_design
+          Floorplan: design_1
+      Design limits: <entire design considered>
+           Ruledeck: default
+             Max checks: <unlimited>
+             Checks found: 7
++-------------+------------------+--------------------------+--------+
+| Rule        | Severity         | Description              | Checks |
++-------------+------------------+--------------------------+--------+
+| BIVB-1      | Error            | Bank IO standard Support | 1      |
+| PLCK-87     | Error            | Clock Placer Checks      | 1      |
+| PLHDIO-5    | Error            | HDIO DRC Checks          | 1      |
+| PLIOSTD-3   | Error            | IOSTANDARD violations    | 2      |
+| IOSTDTYPE-1 | Critical Warning | IOStandard Type          | 2      |
++-------------+------------------+--------------------------+--------+
+
+2. REPORT DETAILS
+-----------------
+BIVB-1#1 Error
+Bank IO standard Support  - IOBank:65
+Bank 65 has incompatible IO(s) because: The LVCMOS33 I/O standard is not supported for banks of type High Performance.  Move the following ports or change their properties:  
+clk_p
+Related violations: <none>
+
+PLCK-87#1 Error
+Clock Placer Checks  
+IO/clock placer failed to collectively place all IOs and clock instances. This is likely due to design requirements or user constraints specified in the constraint file such as IO standards, bank/voltage/DCI/VREF specifications, together with the part and package being used for the implementation. Please check the above for any possible conflicts.
+
+Related violations: <none>
+
+PLHDIO-5#1 Error
+HDIO DRC Checks  
+The following IO terminals need to be placed in HIGH_DENSITY IO banks (based on their IO standards), but they are incorrectly locked to non-HIGH_DENSITY IO banks. Please review and update the LOC constraints:
+clk_n
+clk_p
+
+Related violations: <none>
+
+PLIOSTD-3#1 Error
+IOSTANDARD violations  
+Illegal IOStandard configured for port clk_n. I/O port clk_n is differential, but has single-ended IOStandard value LVCMOS33
+Related violations: <none>
+
+PLIOSTD-3#2 Error
+IOSTANDARD violations  
+Illegal IOStandard configured for port clk_p. I/O port clk_p is differential, but has single-ended IOStandard value LVCMOS33
+Related violations: <none>
+
+IOSTDTYPE-1#1 Critical Warning
+IOStandard Type  
+I/O port clk_n is Differential but has an IOStandard of LVCMOS33 which can only support Single-Ended
+Related violations: <none>
+
+IOSTDTYPE-1#2 Critical Warning
+IOStandard Type  
+I/O port clk_p is Differential but has an IOStandard of LVCMOS33 which can only support Single-Ended
+Related violations: <none>
+
+

@@ -136,7 +136,18 @@
 // 帧 = 10 位: start(0) d0..d7 stop(1), 每位 BIT_LAST+1 拍; 空闲线高。
 //-------------------------------------------------------------------------
 module uart_tx_9600 #(
+    // P6b: 消费者 (u_dbg_line) 搬到 156.25MHz 数据面域 => 同波特率需 x1.25。
+    // 只在 P6b 构建 (PCIE_OBS) 生效; 默认构建保持旧值 (逐位不变契约)。
+// ⚠️ `DP_156MHZ = 「本设计的数据面跑在 156.25MHz 独立域」—— 时间常数必须跟着域走。
+//    为什么不用 PCIE_OBS 当守卫 (对抗审查 F1): 那个宏的语义是"例化 PCIe 观测通道",
+//    与时钟域**无关**; 拿它守卫时间常数 = 把两个无关开关绑成一根线 (一个语义完全
+//    无关的宏控制 UART 波特率/RTO/FIN 超时), 下次有人"要 PCIe 窗口但数据面仍 125MHz"
+//    就会静默拿到 8 个错常数。构建侧: board/build_p6b_ku5p.tcl (+ 被取代的 build_p6e) 定义它。
+`ifdef DP_156MHZ
+    parameter [13:0] BIT_LAST = 14'd16275      // 每比特拍数-1 (156.25MHz@9600)
+`else
     parameter [13:0] BIT_LAST = 14'd13020      // 每比特拍数-1 (125MHz@9600)
+`endif
 ) (
     input  wire       clk,
     input  wire       rst_n,
@@ -190,8 +201,13 @@ endmodule
 //   tid=0) — 把 64:1 环 mux 从字符组合路径上摘掉, 见 line_char/tr_char。
 //-------------------------------------------------------------------------
 module dbg_line_tx #(
+`ifdef DP_156MHZ
+    parameter [13:0] BIT_LAST = 14'd16275,           // 每比特拍数-1 @156.25MHz
+    parameter [29:0] GAP_LAST = 30'd781_249_999      // 行间 5s-1 @156.25MHz
+`else
     parameter [13:0] BIT_LAST = 14'd13020,           // 每比特拍数-1 @125MHz
     parameter [29:0] GAP_LAST = 30'd624_999_999      // 行间 5s-1 @125MHz
+`endif
 ) (
     input  wire        clk,
     input  wire        rst_n,

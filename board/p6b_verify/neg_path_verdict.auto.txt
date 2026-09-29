@@ -1,0 +1,45 @@
+####################################################################################################
+# P6b 时序闸: D:\repo\XCKU5PMini\udp_hls_10g\board\p6b_verify\path\path_verdict_notmet.rpt
+# 溯源: Vivado v.2025.2 (win64) Build 6299465 Fri Nov 14 19:35:11 GMT 2025 | Design=wrapper_p4 | Device=xcku5p-ffvb676 | State=Routed
+#       生成时间: Tue Sep 29 03:32:18 2026
+# 判据2 语义: --expect auto  (⭐ P6b 验收必须用 dual)
+####################################################################################################
+
+  [时钟族自动发现] 周期落在 [5.0, 9.0] ns 的时钟 (由周期反查网名):
+    ~8.000ns 族 (=125.00 MHz, 前端)     : gmii_clk, phy1_rxc, u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4..., u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4... …(共 7 个网名, 余略)
+    ~6.400ns 族 (=156.25 MHz, 数据面) : (无)
+    该带内全部周期: 8.000
+    [旁证] family 时钟都在 Intra Clock Table 里有端点行 ⇒ 双域不是空约束 ✓
+    [N/A 理由] auto: 该带内只有 1 个周期 ⇒ 判定为**单域报告** ⇒ 判据2 不适用
+    ⚠️⚠️ **若这是 P6b 验收, 这个 N/A 会掩盖「数据面没搬到 156.25MHz」⇒ 必须 `--expect dual` 重跑, 届时本项 FAIL**
+
+  [N/A] 判据2 判据=双域存在性 (前端 ~8.000ns + 数据面 ~6.400ns) | 期望=两个域都在 | 实测=单域报告 (family 周期: 8.000)
+
+  [PASS] 判据1a 判据=setup 失败端点数 | 期望=0 | 实测=0 / 191263 端点
+  [PASS] 判据1b 判据=hold  失败端点数 | 期望=0 | 实测=0 / 191263 端点
+
+  [PASS] 判据4a 判据=setup WNS 与失败端点数**联合** | 期望=两者同时成立 | 实测=WNS=+0.457 且失败端点=0 ⇒ 双边同时成立
+  [PASS] 判据4b 判据=hold  WHS 与失败端点数**联合** | 期望=两者同时成立 | 实测=WNS=+0.010 且失败端点=0 ⇒ 双边同时成立
+  [PASS] 判据4c 判据=WPWS 与失败端点数**联合** | 期望=两者同时成立 | 实测=WPWS=+0.000 且失败端点=0 ⇒ 双边同时成立
+
+  [PASS] 判据3a 判据=IDDRE1/C|CB Min-Period 违例数 | 期望=0 | 实测=0
+         (闸 G = 整设计按 6.400ns 约束那次, 产生了这批 required=8.000ns 的 HDIO 器件上限违例; P6b 双约束下必须为 0)
+  [PASS] 判据3b 判据=Min-Period 违例总数 (含 OSERDESE3/CLK 等) | 期望=0 | 实测=0
+  [PASS] 判据3c 判据=Pulse-Width 违例总数 (Min Period + Low/High Pulse Width) | 期望=0 | 实测=0
+  [WARN] 判据3d 有 1 条 IDDRE1 Min-Period 的 slack **恰好 0.000** (贴边, 不是违例, 但一点余量都没有)
+  [INFO] 与总表对账: 总表 TPWS Failing Endpoints=0, 本工具点名的不同引脚数=0 ⇒ 一致
+
+  [FAIL] 判据5 判据=报告自述总判 | 期望='All user specified timing constraints are met.' | 实测='Timing constraints are not met.'
+
+----------------------------------------------------------------------------------------------------
+汇总 (按判据号):
+  [PASS] 判据1a  setup 失败端点 0
+  [PASS] 判据1b  hold 失败端点 0
+  [N/A ] 判据2   单域报告 (family 周期: 8.000)
+  [PASS] 判据3   Pulse-Width/Min-Period 违例 0 条 (解析 15 张表 / 36 行)
+  [PASS] 判据4a  WNS=+0.457 且失败端点=0 ⇒ 双边同时成立
+  [PASS] 判据4b  WNS=+0.010 且失败端点=0 ⇒ 双边同时成立
+  [PASS] 判据4c  WPWS=+0.000 且失败端点=0 ⇒ 双边同时成立
+  [FAIL] 判据5   报告自述 constraints NOT met
+----------------------------------------------------------------------------------------------------
+TIMING-FAIL: FAIL=1 PASS=6 N/A=1 ⇒ **上板前必须先解决** (违例的接收端可能正好在读数通路上)

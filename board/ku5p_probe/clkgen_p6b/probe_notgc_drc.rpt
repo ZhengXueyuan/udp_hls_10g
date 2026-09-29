@@ -1,0 +1,63 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2025.2 (win64) Build 6299465 Fri Nov 14 19:35:11 GMT 2025
+| Date         : Tue Sep 29 09:35:50 2026
+| Host         : xyz-intel running 64-bit major release  (build 9200)
+| Command      : report_drc -file D:/repo/XCKU5PMini/udp_hls_10g/board/ku5p_probe/clkgen_p6b/probe_notgc_drc.rpt
+| Design       : probe_design
+| Device       : xcku5p-ffvb676-1-e
+| Speed File   : -1
+| Design State : Synthesized
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+Report DRC
+
+Table of Contents
+-----------------
+1. REPORT SUMMARY
+2. REPORT DETAILS
+
+1. REPORT SUMMARY
+-----------------
+            Netlist: probe_design
+          Floorplan: design_1
+      Design limits: <entire design considered>
+           Ruledeck: default
+             Max checks: <unlimited>
+             Checks found: 3
++----------+----------+---------------------------------+--------+
+| Rule     | Severity | Description                     | Checks |
++----------+----------+---------------------------------+--------+
+| PLCK-58  | Error    | Clock Placer Checks             | 1      |
+| DCIRST-1 | Warning  | DCIRESET is required for design | 2      |
++----------+----------+---------------------------------+--------+
+
+2. REPORT DETAILS
+-----------------
+PLCK-58#1 Error
+Clock Placer Checks  
+Sub-optimal placement for a global clock-capable IO pin and BUFG pair.
+Resolution: A dedicated routing path between the two can be used if: (a) The global clock-capable IO (GCIO) is placed on a GCIO capable site (b) The BUFG is placed in the same bank of the device as the GCIO pin. Both the above conditions must be met at the same time, else it may lead to longer and less predictable clock insertion delays.
+ If this sub optimal condition is acceptable for this design, you may use the CLOCK_DEDICATED_ROUTE constraint in the .xdc file to demote this message to a WARNING. However, the use of this override is highly discouraged. These examples can be used directly in the .xdc file to override this clock rule.
+	< set_property CLOCK_DEDICATED_ROUTE FALSE [get_nets u_clkgen/g_hw.u_ibufds/O] >
+
+	Clock Rule: rule_gclkio_bufg
+	Status: FAILED
+	Rule Description: An IOB driving a BUFG must use a GCIO in the same clock region as the BUFG
+
+	u_clkgen/g_hw.u_ibufds/IBUFCTRL_INST (in u_clkgen/g_hw.u_ibufds macro) (IBUFCTRL.O) is locked to N24
+	u_clkgen/g_hw.u_bufg_in (BUFGCE.I) cannot be placed
+
+Related violations: <none>
+
+DCIRST-1#1 Warning
+DCIRESET is required for design  
+IO port clk_n is using DCI IO standard DIFF_POD12_DCI but no DCIRESET primitive is used in the design. Please add a DCIRESET in the design to ensure the proper functionality of this IO. For more information, please consult AR#000038677.
+Related violations: <none>
+
+DCIRST-1#2 Warning
+DCIRESET is required for design  
+IO port clk_p is using DCI IO standard DIFF_POD12_DCI but no DCIRESET primitive is used in the design. Please add a DCIRESET in the design to ensure the proper functionality of this IO. For more information, please consult AR#000038677.
+Related violations: <none>
+
+

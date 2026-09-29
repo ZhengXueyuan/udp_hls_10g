@@ -1,0 +1,93 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 09:27:26 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source clkwiz_oracle.tcl
+# set part_name xcku5p-ffvb676-1-e
+# set root D:/repo/XCKU5PMini/udp_hls_10g/board/ku5p_probe/clkgen_p6b
+# set prj $root/prj_clkwiz
+# file delete -force $prj
+# file mkdir $prj
+# create_project -force -part $part_name $prj/cw
+# create_ip -name clk_wiz -vendor xilinx.com -library ip -version 6.0 -module_name cw_oracle
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository 'C:/AMDDesignTools/2025.2/Vivado/data/ip'.
+INFO: [Device 21-403] Loading part xcku5p-ffvb676-1-e
+create_ip: Time (s): cpu = 00:00:04 ; elapsed = 00:00:05 . Memory (MB): peak = 1719.234 ; gain = 1188.914
+# set_property -dict [list \
+#     CONFIG.PRIM_IN_FREQ              {100.000} \
+#     CONFIG.PRIM_SOURCE               {Differential_clock_capable_pin} \
+#     CONFIG.PRIMITIVE                 {MMCM} \
+#     CONFIG.CLKOUT1_REQUESTED_OUT_FREQ {156.250} \
+#     CONFIG.CLKOUT1_REQUESTED_PHASE    {0.000} \
+#     CONFIG.USE_LOCKED                {true} \
+#     CONFIG.USE_RESET                 {false} \
+# ] [get_ips cw_oracle]
+# puts "########## CLKWIZ ORACLE: 100 MHz -> 156.25 MHz ##########"
+########## CLKWIZ ORACLE: 100 MHz -> 156.25 MHz ##########
+# puts "--- solved CONFIG values (the wizard's own answer) ---"
+--- solved CONFIG values (the wizard's own answer) ---
+# foreach p [lsort [list_property [get_ips cw_oracle]]] {
+#     if {[string match "*MULT*" $p] || [string match "*DIVIDE*" $p] ||
+#         [string match "*VCO*" $p]  || [string match "*ACTUAL_OUT_FREQ*" $p] ||
+#         [string match "*PRIM_IN_FREQ*" $p] || [string match "*CLKOUT1_*FREQ*" $p]} {
+#         puts [format "  %-46s = %s" $p [get_property $p [get_ips cw_oracle]]]
+#     }
+# }
+  CONFIG.CLKOUT1_REQUESTED_OUT_FREQ              = 156.250
+  CONFIG.MMCM_CLKFBOUT_MULT_F                    = 96.875
+  CONFIG.MMCM_CLKOUT0_DIVIDE_F                   = 7.750
+  CONFIG.MMCM_CLKOUT1_DIVIDE                     = 1
+  CONFIG.MMCM_CLKOUT2_DIVIDE                     = 1
+  CONFIG.MMCM_CLKOUT3_DIVIDE                     = 1
+  CONFIG.MMCM_CLKOUT4_DIVIDE                     = 1
+  CONFIG.MMCM_CLKOUT5_DIVIDE                     = 1
+  CONFIG.MMCM_CLKOUT6_DIVIDE                     = 1
+  CONFIG.MMCM_DIVCLK_DIVIDE                      = 8
+  CONFIG.PLL_CLKFBOUT_MULT                       = 4
+  CONFIG.PLL_CLKOUT0_DIVIDE                      = 1
+  CONFIG.PLL_CLKOUT1_DIVIDE                      = 1
+  CONFIG.PLL_CLKOUT2_DIVIDE                      = 1
+  CONFIG.PLL_CLKOUT3_DIVIDE                      = 1
+  CONFIG.PLL_CLKOUT4_DIVIDE                      = 1
+  CONFIG.PLL_CLKOUT5_DIVIDE                      = 1
+  CONFIG.PLL_DIVCLK_DIVIDE                       = 1
+  CONFIG.PRIM_IN_FREQ                            = 100.000
+# if {[catch { generate_target all [get_ips cw_oracle] } err]} {
+#     puts "ORACLE_ERR generate_target: $err"
+# } else {
+#     puts "--- generate_target all OK (wizard accepted these constraints) ---"
+# }
+INFO: [IP_Flow 19-1686] Generating 'Instantiation Template' target for IP 'cw_oracle'...
+INFO: [IP_Flow 19-1686] Generating 'Synthesis' target for IP 'cw_oracle'...
+INFO: [IP_Flow 19-1686] Generating 'Simulation' target for IP 'cw_oracle'...
+INFO: [IP_Flow 19-1686] Generating 'Implementation' target for IP 'cw_oracle'...
+INFO: [IP_Flow 19-1686] Generating 'Change Log' target for IP 'cw_oracle'...
+--- generate_target all OK (wizard accepted these constraints) ---
+# set gv [glob -nocomplain $prj/cw/cw_oracle.srcs/sources_1/ip/cw_oracle/cw_oracle_clk_wiz.v \
+#                     $prj/cw/*.srcs/sources_1/ip/cw_oracle/cw_oracle_clk_wiz.v]
+# puts "--- generated RTL: $gv ---"
+--- generated RTL:  ---
+# foreach f $gv {
+#     set fh [open $f r]
+#     while {[gets $fh line] >= 0} {
+#         if {[string match "*CLKFBOUT_MULT_F*" $line] ||
+#             [string match "*DIVCLK_DIVIDE*" $line]    ||
+#             [string match "*CLKOUT0_DIVIDE_F*" $line] ||
+#             [string match "*CLKOUT1_DIVIDE*" $line]   ||
+#             [string match "*CLKIN1_PERIOD*" $line]    ||
+#             [string match "*MMCME4*" $line]} {
+#             puts "  RTL| $line"
+#         }
+#     }
+#     close $fh
+# }
+# puts "########## CLKWIZ ORACLE DONE ##########"
+########## CLKWIZ ORACLE DONE ##########
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 29 09:27:36 2026...

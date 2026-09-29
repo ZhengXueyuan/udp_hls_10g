@@ -1,0 +1,134 @@
+P4 (local-repo mirror) matrix start Tue Sep 29 09:50:05     2026
+=== GATE chain : cmd //c /d/repo/XCKU5PMini/udp_hls_10g/sim/p4sim_p6b\run_tb_p4_chain.bat
+EXIT=0
+9 RX frames
+memh written
+9 RX frames
+frames RX=9 TX=11 (fast=6 slow=5)  STRIPPED=0 (期望 0, VLAN OFF)
+P4 CHAIN OK
+---
+=== GATE burst200 : cmd //c /d/repo/XCKU5PMini/udp_hls_10g/sim/p4sim_p6b\run_tb_p4_burst.bat 200
+EXIT=0
+STATS_ECO (203, 0)
+STATS_MAC (mac_frames,abort,eend) (411, 0, 0)
+TCBF (293016, 305711913, 305711913, 49152, 65535, 1, 97, 920, 920, 6144, 16384, 1)
+TRUNCS (0, 0)  ECOMAX 182 (注入 at=0 len=8; ECOMAX 上限 182 词)
+STRIPPED 0 (期望 0, VLAN 注入 OFF)
+BURST OK
+---
+=== GATE trunc50 : env TRUNC=50 TRUNCM=8 cmd //c /d/repo/XCKU5PMini/udp_hls_10g/sim/p4sim_p6b\run_tb_p4_burst.bat 200
+EXIT=0
+STATS_ECO (204, 0)
+STATS_MAC (mac_frames,abort,eend) (446, 0, 0)
+TCBF (293016, 305711913, 305711913, 49152, 65535, 1, 97, 920, 920, 6144, 16384, 1)
+TRUNCS (50, 1)  ECOMAX 182 (注入 at=50 len=8; ECOMAX 上限 182 词)
+STRIPPED 0 (期望 0, VLAN 注入 OFF)
+BURST OK
+---
+=== GATE trunc100 : env TRUNC=100 TRUNCM=8 cmd //c /d/repo/XCKU5PMini/udp_hls_10g/sim/p4sim_p6b\run_tb_p4_burst.bat 200
+EXIT=0
+STATS_ECO (204, 0)
+STATS_MAC (mac_frames,abort,eend) (446, 0, 0)
+TCBF (293016, 305711913, 305711913, 49152, 65535, 1, 97, 920, 920, 6144, 16384, 1)
+TRUNCS (100, 1)  ECOMAX 182 (注入 at=100 len=8; ECOMAX 上限 182 词)
+STRIPPED 0 (期望 0, VLAN 注入 OFF)
+BURST OK
+---
+=== GATE halfdrop : env HALFDROP=100 HALFDROPK=990 cmd //c /d/repo/XCKU5PMini/udp_hls_10g/sim/p4sim_p6b\run_tb_p4_burst.bat 200
+EXIT=0
+STATS_ECO (203, 1)
+STATS_MAC (mac_frames,abort,eend) (444, 0, 0)
+TCBF (293016, 305711913, 305711913, 49152, 65535, 1, 97, 920, 920, 6144, 16384, 1)
+TRUNCS (0, 1)  ECOMAX 182 (注入 at=0 len=8; ECOMAX 上限 182 词)
+STRIPPED 0 (期望 0, VLAN 注入 OFF)
+BURST OK
+---
+=== GATE txdrop50 : cmd //c /d/repo/XCKU5PMini/udp_hls_10g/sim/p4sim_p6b\run_tb_p4_burst.bat 200 -1 0 4000 0 0 50
+EXIT=0
+STATS_ECO (203, 0)
+STATS_MAC (mac_frames,abort,eend) (416, 0, 0)
+TCBF (293016, 305711913, 305711913, 49152, 65535, 1, 97, 920, 920, 6144, 16384, 1)
+TRUNCS (0, 0)  ECOMAX 182 (注入 at=0 len=8; ECOMAX 上限 182 词)
+STRIPPED 0 (期望 0, VLAN 注入 OFF)
+BURST OK
+---
+=== GATE gate4096 : cmd //c /d/repo/XCKU5PMini/udp_hls_10g/sim/p4sim_p6b\run_tb_p4_burst.bat 200 -1 0 10
+EXIT=0
+STATS_ECO (203, 0)
+STATS_MAC (mac_frames,abort,eend) (411, 0, 0)
+TCBF (293016, 305711913, 305711913, 49152, 4096, 1, 97, 920, 920, 6144, 16384, 1)
+TRUNCS (0, 0)  ECOMAX 182 (注入 at=0 len=8; ECOMAX 上限 182 词)
+STRIPPED 0 (期望 0, VLAN 注入 OFF)
+BURST OK
+---
+=== GATE dupstorm : cmd //c /d/repo/XCKU5PMini/udp_hls_10g/sim/p4sim_p6b\run_tb_p4_burst.bat 200 0 0 4000 608 dup
+EXIT=0
+STATS_ECO (203, 0)
+STATS_MAC (mac_frames,abort,eend) (455, 0, 0)
+TCBF (274272, 305693169, 305693169, 49152, 65535, 1, 97, 920, 920, 6144, 16384, 1)
+TRUNCS (0, 0)  ECOMAX 182 (注入 at=0 len=8; ECOMAX 上限 182 词)
+STRIPPED 0 (期望 0, VLAN 注入 OFF)
+BURST OK
+---
+=== GATE pcackoob : env PCACKOOB=1 cmd //c /d/repo/XCKU5PMini/udp_hls_10g/sim/p4sim_p6b\run_tb_p4_burst.bat 200
+EXIT=0
+STATS_ECO (203, 0)
+STATS_MAC (mac_frames,abort,eend) (411, 0, 0)
+TCBF (293016, 305711913, 305711913, 49152, 65535, 1, 97, 920, 920, 6144, 16384, 1)
+TRUNCS (0, 0)  ECOMAX 182 (注入 at=0 len=8; ECOMAX 上限 182 词)
+STRIPPED 0 (期望 0, VLAN 注入 OFF)
+BURST OK
+---
+=== GATE vlanchain : cmd //c /d/repo/XCKU5PMini/udp_hls_10g/sim/p4sim_p6b\run_tb_p4_chain_vlan.bat
+EXIT=0
+9 RX frames
+memh written
+VLAN 注入: conn0 数据帧 (data7a/data7b/burst) 加单层 802.1Q tag (TPID 0x8100 + TCI 0)
+9 RX frames
+frames RX=9 TX=11 (fast=6 slow=5)  STRIPPED=2 (期望 2, VLAN ON)
+P4 CHAIN OK
+---
+=== GATE vlanburst : cmd //c /d/repo/XCKU5PMini/udp_hls_10g/sim/p4sim_p6b\run_tb_p4_burst_vlan.bat 200
+EXIT=0
+STATS_ECO (203, 0)
+STATS_MAC (mac_frames,abort,eend) (411, 0, 0)
+TCBF (293016, 305711913, 305711913, 49152, 65535, 1, 97, 920, 920, 6144, 16384, 1)
+TRUNCS (0, 0)  ECOMAX 182 (注入 at=0 len=8; ECOMAX 上限 182 词)
+STRIPPED 202 (期望 202, VLAN 注入 ON)
+BURST OK
+---
+=== GATE stallgate : cmd //c /d/repo/XCKU5PMini/udp_hls_10g/sim/p4sim_p6b\run_tb_p4_chain_stall.bat
+EXIT=0
+memh written
+210 RX frames
+PCSTALL 参数: 阈值=49150 延迟=300 (pcstall.memh); TB 实读 阈值=49150 延迟=300
+PCSTALL 停发拍=141600 会话起点=205489 注入拍=206660 高水位=1235F129 (停发时 12351871); 注入拍 snd_nxt=123512BD snd_una=123512BD
+PCSTALL 终态 snd_nxt=1236CF95 snd_una=1235F129 回卷会话数=3; 停摆后新数据帧 127 (TB 计数 127); 首帧 seq=1235F129 plen=1460
+PCSTALL OK (burst=200, echo 帧 240)
+---
+=== GATE unit_retx : cmd //c D:\repo\XCKU5PMini\udp_hls_10g\sim\retxsim_p6b\run_retx_tb.bat
+EXIT=0
+GRP F (reset consistency)          : PASS
+GRP G (streaming back-to-back reads): PASS
+ALL 7 GROUPS PASS
+$finish called at time : 111486 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/tb/tb_retx_ram.v" Line 251
+exit
+INFO: [Common 17-206] Exiting xsim at Tue Sep 29 10:12:54 2026...
+---
+=== GATE unit_fifo : cmd //c D:\repo\XCKU5PMini\udp_hls_10g\sim\retxsim2_p6b\run_tb_frame_fifo.bat D:\repo\XCKU5PMini\udp_hls_10g\rtl\frame_fifo.v
+EXIT=0
+PASS_ALL  frame_fifo unit: writes A=568139 B=595715 C=616302 pops A=567224 B=591216 C=611802 cycles=750700
+$finish called at time : 7506997 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/tb/tb_frame_fifo.v" Line 488
+run: Time (s): cpu = 00:00:01 ; elapsed = 00:02:02 . Memory (MB): peak = 226.246 ; gain = 0.000
+exit
+INFO: xsimkernel Simulation Memory Usage: 18252 KB (Peak: 18252 KB), Simulation CPU Usage: 121515 ms
+INFO: [Common 17-206] Exiting xsim at Tue Sep 29 10:15:06 2026...
+---
+=== GATE unit_vlan : cmd //c D:\repo\XCKU5PMini\udp_hls_10g\sim\vlansim_p6b\run_tb_vlan_strip.bat
+EXIT=0
+VLAN_STRIP TB PASS (in=1595 words, out=1502 words, vlan frames=66, stripped=66)
+---
+=== GATE unit_uart : cmd //c D:\repo\XCKU5PMini\udp_hls_10g\sim\tbgate_p6b\run_tb_uart_dbg.bat
+EXIT=0
+---
+MATRIX DONE Tue Sep 29 10:15:24     2026

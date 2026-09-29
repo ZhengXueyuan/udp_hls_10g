@@ -1,0 +1,37 @@
+================= snap_cdc gate: NW=32 (P6b bundle size) =================
+  [PASS] 1 基本: 结果 = 请求时刻的位束 (tag=100, 全部 32 字全对)
+  [INFO] 2 相位统计: 旧值 13 次 / 新值 3 次
+  [PASS] 2 相干性: 16 相位全部相干, 且新旧两侧都扫到 (判据非空)
+  [PASS] 3 busy: 连发 3 拍只产生 1 次 valid
+  [PASS] 4 背靠背: 8 次请求 = 8 次 valid, 数据全对
+  [PASS] 5 负对照 A: 撕裂被抓到 1 次 ⇒ 相干性检查确有判别力
+  [PASS] 6 复位回收: 飞行中复位 → 释放后回空闲, 无假 valid
+  [PASS] 6b 复位后恢复正常快照 (tag=601)
+  [INFO] 7 b 时钟停摆: busy 挂高且无 valid (预期行为, 不是故障)
+  [PASS] 7 时钟停摆: 恢复后握手自动补完, 数据正确 (tag=700)
+  [INFO] 负对照 B 首次位混: naive tag=001f54 (该代 src_gen=8021)
+  [PASS] 8a 真 RTL 在 200 次快照中 0 次位混 (源每拍都变)
+  [PASS] 8b 负对照 B: 直通模型在**同一激励**下混了 105/200 次 ⇒ 判据 8a 有判别力
+  [PASS] 9a 复位释放 (clk_b 未起) ⇒ 空闲, 无假 valid/busy
+  [PASS] 9b clk_b 起来后第一次快照正常 (tag=900)
+PASS_ALL  tb_snap_cdc: 6 组正判据 + 2 条负对照 全过
+INFO: [Common 17-206] Exiting xsim at Tue Sep 29 10:22:24 2026...
+================= snap_cdc gate: NW=24 (P6e old size, same TB) =================
+  [PASS] 1 基本: 结果 = 请求时刻的位束 (tag=100, 全部 24 字全对)
+  [INFO] 2 相位统计: 旧值 13 次 / 新值 3 次
+  [PASS] 2 相干性: 16 相位全部相干, 且新旧两侧都扫到 (判据非空)
+  [PASS] 3 busy: 连发 3 拍只产生 1 次 valid
+  [PASS] 4 背靠背: 8 次请求 = 8 次 valid, 数据全对
+  [PASS] 5 负对照 A: 撕裂被抓到 1 次 ⇒ 相干性检查确有判别力
+  [PASS] 6 复位回收: 飞行中复位 → 释放后回空闲, 无假 valid
+  [PASS] 6b 复位后恢复正常快照 (tag=601)
+  [INFO] 7 b 时钟停摆: busy 挂高且无 valid (预期行为, 不是故障)
+  [PASS] 7 时钟停摆: 恢复后握手自动补完, 数据正确 (tag=700)
+  [INFO] 负对照 B 首次位混: naive tag=001f54 (该代 src_gen=8021)
+  [PASS] 8a 真 RTL 在 200 次快照中 0 次位混 (源每拍都变)
+  [PASS] 8b 负对照 B: 直通模型在**同一激励**下混了 103/200 次 ⇒ 判据 8a 有判别力
+  [PASS] 9a 复位释放 (clk_b 未起) ⇒ 空闲, 无假 valid/busy
+  [PASS] 9b clk_b 起来后第一次快照正常 (tag=900)
+PASS_ALL  tb_snap_cdc: 6 组正判据 + 2 条负对照 全过
+INFO: [Common 17-206] Exiting xsim at Tue Sep 29 10:22:28 2026...
+SNAP_CDC_GATE_ALL: OK (NW=32 and NW=24 both PASS_ALL)
