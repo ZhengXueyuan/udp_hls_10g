@@ -294,3 +294,71 @@ _proj_pcie/*.log
 # 审查 agent 的临时实验目录 (119MB 仿真残渣; 正式门已入库为 sim/p6e_pcie/tb_p6e_pcie_counters.v)
 sim/snapcdc/review24/
 sim/snapcdc/review/
+
+# P4 矩阵硬化 (2026-09-29): 工具与证据入库, 每次跑的仿真工作目录是产物
+sim/p4gates/work_*/
+# 负对照夹具 (6.5MB 的外仓替身; 由 _tmp_p4_negctl.py 可重建), 但原始读数保留
+sim/p4gates/evidence/negctl/
+!sim/p4gates/evidence/negctl_*_raw.txt
+!sim/p4sim/matrix_p4dfix.log
+!sim/p4sim/P4_MATRIX_FINGERPRINT_*.txt
+
+# ============================================================================
+# P6b 收尾归档 (2026-09-29): 仿真/构建**产物**的通用排除规则
+#
+# 背景: 本轮盘点时仍有 **209 MB** 未跟踪且未被忽略的条目, 绝大部分躺在各 agent 的
+#   临时目录 (int_scratch/ review_scratch/ audit_scratch/ p6b_final_verify/ …) 里,
+#   主体是 xsim 的编译目录与波形。历史教训: 上一轮有 119 MB 仿真残渣差点进库 (见上)。
+#   本次不再逐个门目录列举, 改按**目录名/扩展名**通用排除。
+#
+# ⚠️ 边界 (写清以免误伤): 本段**只挡产物类扩展名**。
+#   · 已入库的证据 (.txt/.md) 与门驱动 (.bat/.tcl/.py/.sh/.v/*.xdc) **不受影响** ——
+#     本工程靠文本证据存档, 它们必须继续入库。
+#   · .gitignore **不作用于已跟踪文件**, 本段也没有任何 `git rm`; 上面那 30 个已入库的
+#     `*.log` / `sim/tx_*.memh` / `sim/p6a_ku5p/pf/*.f` 照旧跟踪 (实测确认 0 个已跟踪
+#     文件命中本段的任何一条规则)。
+#   · 想入库某个被本段挡住的产物, 用 `git add -f` 或在本文件末尾加 `!` 放行。
+# ============================================================================
+
+# ---- xsim: 编译目录 + 波形 (任何层级) --------------------------------------
+#     此前只逐处列了 sim/ rtl/ board/ 三个 xsim.dir/, 于是 *_scratch/ 下的
+#     xsim.dir/ (内含 xsimk.exe 等, 单个 10 MB 级) 全部漏网 —— 本仓实测漏了 ~150 MB。
+xsim.dir/
+*.wdb
+*.vcd
+*.dmp
+#     (*.log / *.jou / *.pb / *.Xil/ 已有更早的全局规则或 sim/** 规则覆盖)
+
+# ---- 抓包导出 (与上面已有的 *.pcapng / *.etl 同类): 抓包一律不入库 ----------
+*.pcap
+
+# ---- 临时证据目录下的仿真激励/响应向量 -------------------------------------
+#     *_scratch/ 与 p6b_final_verify/ 是**证据目录**(文本读数要入库), 但里面的
+#     .memh 是生成器可重建的激励/响应 (单目录 8 MB 级) ⇒ 只挡这一类。
+#     ⚠️ 不写全局 `*.memh`: sim/tx_*.memh 等是**已跟踪**的黄金向量, 全局规则会挡住
+#     将来对它们的重新登记 (虽然不影响已跟踪文件, 但会误导后人)。
+*_scratch/**/*.memh
+p6b_final_verify/**/*.memh
+
+# ---- Vivado 工程产物 (probe/diag 目录里新建的工程也按此排除) ----------------
+*_prj.runs/
+
+# ---- 已退役的镜像工具链 (2026-09-29 删除, 规则留着防复发) -------------------
+#     _tmp_make_p4mirror.py 生成的"本仓镜像"目录。原件已由路径硬化修好
+#     (sim/p4gates/ + 各自定位的 REPO_ROOT), 镜像本身是"空门"的临时绕道。
+sim/*_p6b/
+
+# ---- ⭐ 放行**归档级**的原始日志 --------------------------------------------------
+#     全局 `*.log` (本文件第 35 行) 会把下面这些也挡在库外, 但它们是**本工程的归档物**:
+#     · p6b_accept_final/*.log  = P6b 板级验收的原始 stdout, P6B_ACCEPT.md §7.1 逐条登记了
+#       sha256 (cb474fbe…/cb3f13dc…), 是"验收确实跑过"的第一手物证;
+#     · board/p6b_verify/*.log  = P6b 四道门 (全链/计数器/snap_seq/snap_cdc/axi_regs/fifo_async)
+#       的 PASS 读数;
+#     · _proj_pcie/smoke_scratch/*.log = 冒烟轮读数, 其中 p6b_smoke_account.log 的
+#       `W0=270 / W6=269` 是 P6B_ACCEPT.md §4.1 唯一一条独立数据 (E4 方向校正的依据)。
+#     ⚠️ **只放行这三个目录** (合计 < 80 KB)。`sim/*/*.log` 那一大批 (xsim 控制台) 仍按产物排除
+#     —— 它们的读数已被提练进同目录的 `*.txt` 判据文件 (如 sim/f4sim/VERDICT_*.txt)。
+!p6b_accept_final/*.log
+!p6b_accept_final/*.err
+!board/p6b_verify/*.log
+!_proj_pcie/smoke_scratch/*.log
