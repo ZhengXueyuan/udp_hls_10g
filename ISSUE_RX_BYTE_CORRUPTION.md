@@ -7,6 +7,13 @@
 **工程**: `D:\repo\ECO\udp_hls_10g` (Kintex-7 XC7K325T, 1G RGMII, 纯 RTL TCP/IP fast-path)
 **发现场合**: P5f (UDP app 通路 1Gbps 线速验收) —— 那个验收**已达标**, 本问题是它的副产品
 
+> ⚠️ **本文件是历史记录 (2026-09-21~27), 路径保留原样**: 那时上面的 `D:\repo\ECO\udp_hls_10g`
+> **就是**当时的开发树 (本仓 2026-09-28 才从那里整体拷贝而来, 那份 checkout 至今仍在)。
+> **本文里所有 `cmd //c 'D:\repo\ECO\udp_hls_10g\...'` 如果照着跑, 跑的是另一个 checkout**
+> (= 真空门史, 见 `P6B_INTEGRATION_REVIEW.md` §5): 换成**你自己的 checkout 根**再跑 ——
+> 门 bat 都已自定位 (从 `%~dp0` 反推 repo root), 命令用**相对仓根**的路径即可
+> (例: 本仓根下 `cmd //c 'sim\p5sim\run_tb_p5_app.bat'`)。
+
 ---
 
 ## 0. 一句话摘要
@@ -204,6 +211,9 @@
 
 ### 6.2 复现命令骨架 (C++, 不用 Python 测速率)
 
+> 📌 历史记录 (当时的开发树 = `D:\repo\ECO\udp_hls_10g`); 若要复跑, 把 `board\run_program_p5.bat`
+> 换成**本仓根**下的相对路径 `cmd //c 'board\run_program_p5.bat'` (bat 自定位)。
+
 ```bash
 # 1) 复位 = 重新烧录
 cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_program_p5.bat'
@@ -395,6 +405,8 @@ python tools/board_p5b_check.py --port COM9
    **7 字节固定滞后** ⇒ 最终**删掉该字段**, 由 `idx` 离线导出。
 
 ### 10.8 板级复现 + 读数口径 (诊断位流)
+
+> 📌 历史记录; 复跑时 `board\run_program_p5_diag.bat` 用**本仓根**下的相对路径即可 (bat 自定位)。
 
 ```bash
 # 0) (可选, 按需提权) 屏蔽内核对板 IP 的 RST
@@ -669,6 +681,8 @@ python tools/rxp_classify.py --line "<整行>"
   **v1 位流仍在 `vivado_prj/p5diag_prj.runs/impl_1/wrapper_p4.bit` (10:05)** —— RTL 改动尚未构建, 故它仍是 v1。
 
 ### 12.6 v2 板级 runbook 与**事先写死的判据**
+
+> 📌 历史记录; 复跑时 `board\run_program_p5_diag.bat` 用**本仓根**下的相对路径即可 (bat 自定位)。
 
 ```bash
 # 1) 复位 = 烧 v2 位流 (每次测量前必做)
@@ -964,6 +978,10 @@ RXPV3 P8 rc=1 vc=1 vx=184 vs=0 vr=184 vn=1 | 冻结值=0 影子=0 wptr=0 rptr=18
 (`vivado_build_p5diag3.log`, 已到 phys_opt)。**尚未烧板, 因而机制的两条分支尚未分开。**
 
 ### 15.2 精确的下一步 (按序, 不要跳)
+
+> 📌 历史记录 (2026-09-27 的 v3 仪器流程); 其中第 2 步的烧录命令若要用,
+> 请用**本仓根**下的相对路径 `cmd //c 'board\run_program_p5_diag.bat'`。
+> ⚠️ 本板 (KU5P) 无 UART、COM9 状态行不可观测 —— 见 `P6E_OBS.md` 与 README 相关注记。
 
 1. **等构建结束** → 读 `p5diag_verify/diag_timing.rpt` 确认 **0 失败端点**。
 2. **烧 v3** → `cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_program_p5_diag.bat'`
@@ -1379,6 +1397,9 @@ P10 真正补上的是**直接的正存在性证明** (同一帧位置上 SW 与
 `'D:\repo\ECO\udp_hls_10g$' 不是内部或外部命令`。**危害是它看起来像门失败** ——
 若不看日志内容就会误判成"改动把门弄红了"。**正解: 单引号 + 写死的全路径, 一门一行, 不要拼路径。**
 (这是 memory 里已记的"双引号触发 MSYS2 路径转换"的**复发**, 新子形态是叠加了命令替换。)
+> 📌 2026-09-29 补: "写死的全路径"在当时对 (那时 ECO 就是开发树), 现在**不要**再写死任何
+> 别的 checkout 的路径 —— 门 bat 已自定位, 在本仓根用**相对路径**一门一行即可;
+> 开关也要用 `-only` (git bash 会把 `/only` 改写成 `C:/Program Files/Git/only`, 同属 MSYS 路径转换)。
 
 ---
 

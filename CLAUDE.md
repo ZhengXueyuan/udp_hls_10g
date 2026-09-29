@@ -86,50 +86,93 @@
 
 ## 验证
 
+> ⚠️ **本节所有命令一律在「本仓根」执行** = 含本 `CLAUDE.md` 的那一层 = `udp_hls_10g` 自己
+> (它就是本工程的 git 仓库根)。**本节的门命令里不含任何绝对仓路径** (唯一例外是下面那行
+> 示范性 `cd`, 它指向**本仓**) —— 门 bat 都已**自定位**, 两种口味:
+> ① 自己从 `%~dp0` 反推 repo root + `p4gate.py selfcheck` tripwire (`sim\p5*`) ;
+> ② 经 `sim\p4gates\p4env.bat` 统一解析 `REPO_ROOT` + `checkpaths` 守卫 (`sim\p4sim\*`)。
+> 反推不到 / 路径越界 ⇒ `[PATHGUARD FAIL]` / `[P4GUARD FAIL]` 退出, 不会闷头编译别的树。
+> 所以用**相对路径**调用即可。
+>
+> **为什么必须这样写 (真空门史)**: 本仓 2026-09-28 从 `D:\repo\ECO\udp_hls_10g` **整体拷贝**而来,
+> 而那份拷贝源**至今仍然活着**。旧写法是 `cd /d/repo/ECO/udp_hls_10g` 再 `cmd //c`
+> **那个仓的绝对路径**指向的是**另一个 checkout** ⇒ 跑起来
+> **编译别人的源码、日志写进别人的仓、还 exit 0** = "空门"/真空门。全仓 364 个文件踩过
+> (243 个真空门), 取证、三层守卫与负对照见 `P6B_INTEGRATION_REVIEW.md` §5 与
+> `PORT_NOTES.md` P6b 收口 §⑤/§⑦。
+>
+> ⭐ **跑门一律走现役入口 `sim/p4gates/run_matrix_p4dfix.bat`** (自定位 + 路径守卫
+> `checkpaths/manifestcheck/scanlog` + 修订指纹 + 每门独立工作目录), **不要再手抄单门 bat 的绝对路径**:
+>
+> ```bash
+> cmd //c 'sim\p4gates\run_matrix_p4dfix.bat'                     # P4 16 门全跑 (~25min)
+> cmd //c 'sim\p4gates\run_matrix_p4dfix.bat' -only stallgate     # 只跑指定门 ('+' 分隔多门)
+> cmd //c 'sim\p4gates\run_matrix_p4dfix.bat' -only chain+unit_vlan
+> bash sim/p4sim/run_matrix_p4dfix.sh -only stallgate             # 同上的 git-bash 入口 (自定位 shim)
+> ```
+> ⚠️ **从 git bash 调用时, 开关必须用「短横线」拼法 `-only` / `-canonical`** ——
+> MSYS 会把 `/only` 改写成 `"C:/Program Files/Git/only"` (2026-09-29 实测: `cmd //c echo /only`
+> 打出来的就是那个路径)。`/only` 只在**纯 cmd 窗口**里可用; git bash 里也可以用
+> `//only` (MSYS 的转义写法, cmd 收到 `/only`) 或直接用上面的 shim。
+>
+> ⭐ **2026-09-29 起: 那个被改写的开关会被 runner 硬失败 (exit 97) 而不是静默丢弃** ——
+> 早先它是**不报错地跑满 16 门**(看着像"跑了很久, 判据没少", 实际你以为只跑一门)。
+> 同源加固: `-only` 无值、以及 `-only <本文件未声明的门名>` (原来跑 0 门还 exit 0) 都改成 97。
+> 理由: "静默干了别的"是本工程最贵的一类缺陷; 而且守卫一贯是**拒绝**而非警告
+> (警告会重新落到"矩阵日志里没人读第 3 行"的老坑)。
+> 退出码: `0` 全过 / `1` 有门失败 / `2` 跑动期间源码被改 (修订漂移 ⇒ 整轮作废) / `97` 前置拒绝。
+> ⚠️ **跑门 ≠ 判门**: 16 门里 `unit_retx` / `unit_fifo` **无条件 `exit 0`**, 要读它们的日志尾。
+
+先在 git bash 里 `cd` 到本仓根 (任选其一; 下面的命令都是**相对本仓根**的):
+
 ```bash
-cd /d/repo/ECO/udp_hls_10g
+cd "$(git rev-parse --show-toplevel)"   # 本仓根 = git 仓库根 (本仓即 udp_hls_10g 自己)
+cd /d/repo/XCKU5PMini/udp_hls_10g       # 或直接给这个 checkout 的绝对路径
+```
+
+```bash
 # P4 全矩阵 16 门 (默认构建回归; 改动数据面后必跑)
-bash sim/p4sim/run_matrix_p4dfix.sh
+cmd //c 'sim\p4gates\run_matrix_p4dfix.bat'      # 现役入口; sh 版 = bash sim/p4sim/run_matrix_p4dfix.sh
 # P5 app 门 (APP_MODE)
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_app.bat'      # 1MB 图案逐字节
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_wrapper.bat'  # wrapper APP_MODE 全链 (接线错误只有它能抓)
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_status.bat'   # 220 字符状态行
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_adv.bat' reconn_fast   # 对抗集 (len/b2b/wnd/fin/findrop/abort/evfifo/reconn_fast/reconn_slow/multi/accmgn)
+cmd //c 'sim\p5sim\run_tb_p5_app.bat'      # 1MB 图案逐字节
+cmd //c 'sim\p5sim\run_tb_p5_wrapper.bat'  # wrapper APP_MODE 全链 (接线错误只有它能抓)
+cmd //c 'sim\p5sim\run_tb_p5_status.bat'   # 220 字符状态行
+cmd //c 'sim\p5sim\run_tb_p5_adv.bat' reconn_fast   # 对抗集 (len/b2b/wnd/fin/findrop/abort/evfifo/reconn_fast/reconn_slow/multi/accmgn)
 # P5b 流控闭环门 (独立单元门 + 全链慢消费者门)
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_fc.bat'       # tb_app_fc: 池/右沿算术边界/回绕/事件撞车 (110 项)
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_flow.bat'     # 512KB 慢消费者 + 对端灌数据 (占用/右沿/零重传)
+cmd //c 'sim\p5sim\run_tb_p5_fc.bat'       # tb_app_fc: 池/右沿算术边界/回绕/事件撞车 (110 项)
+cmd //c 'sim\p5sim\run_tb_p5_flow.bat'     # 512KB 慢消费者 + 对端灌数据 (占用/右沿/零重传)
 # P5c 关闭语义门
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_app.bat' close  # 关闭语义门 (FIN/RTO 重发/RST+fence/同时关闭/超时)
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5close\run_tb_tcp_close.bat' # 定向证伪门 (G1 FIN 重推死锁 / G9 回卷洪水)
+cmd //c 'sim\p5sim\run_tb_p5_app.bat' close  # 关闭语义门 (FIN/RTO 重发/RST+fence/同时关闭/超时)
+cmd //c 'sim\p5close\run_tb_tcp_close.bat' # 定向证伪门 (G1 FIN 重推死锁 / G9 回卷洪水)
 # P5d 多连接门 (3 连接并发大流量 + 慢消费者 + 并发 close; 分池/动态裕度/物理界)
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5d_multi\run_tb_p5_multi.bat' main            # 判据 ①-⑨ (exit=0)
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5d_multi\run_tb_p5_multi.bat' neg_wq          # 负对照: 不分池 ⇒ ① FAIL (期望 1)
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5d_multi\run_tb_p5_multi.bat' neg_mgn         # 负对照: 裕度 4096 ⇒ ④ FAIL (期望 1)
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5d_multi\run_tb_p5_multi.bat' neg_mgn0        # 负对照: 裕度 0 ⇒ ⑦ FAIL (期望 1)
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5d_multi\run_tb_p5_multi.bat' known_idle_fifo # 长只写后首读逐字节守卫 (TB 激励竞争的常驻回归; 曾误判为 frame_fifo 预存缺陷)
+cmd //c 'sim\p5d_multi\run_tb_p5_multi.bat' main            # 判据 ①-⑨ (exit=0)
+cmd //c 'sim\p5d_multi\run_tb_p5_multi.bat' neg_wq          # 负对照: 不分池 ⇒ ① FAIL (期望 1)
+cmd //c 'sim\p5d_multi\run_tb_p5_multi.bat' neg_mgn         # 负对照: 裕度 4096 ⇒ ④ FAIL (期望 1)
+cmd //c 'sim\p5d_multi\run_tb_p5_multi.bat' neg_mgn0        # 负对照: 裕度 0 ⇒ ⑦ FAIL (期望 1)
+cmd //c 'sim\p5d_multi\run_tb_p5_multi.bat' known_idle_fifo # 长只写后首读逐字节守卫 (TB 激励竞争的常驻回归; 曾误判为 frame_fifo 预存缺陷)
 # P5d 定向门 (单元级; 均需 -d APP_MODE)
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5d_d1\run_tb_p5d_d1.bat'     # D1: abort 请求窗 (rst_req) + 残余 F 项 ESTAB 状态门 + 释放
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5e_win\run_tb_p5e_win.bat'   # 0 载荷 opener 窄窗 (pipe 残余字跨会话 ⇒ 零负载泄漏)
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5c_t3\run_tb_p5c_fence.bat'  # abort fence 单元门 (F1-F5; D1 后判据不变、激励按真链路修正)
+cmd //c 'sim\p5d_d1\run_tb_p5d_d1.bat'     # D1: abort 请求窗 (rst_req) + 残余 F 项 ESTAB 状态门 + 释放
+cmd //c 'sim\p5e_win\run_tb_p5e_win.bat'   # 0 载荷 opener 窄窗 (pipe 残余字跨会话 ⇒ 零负载泄漏)
+cmd //c 'sim\p5c_t3\run_tb_p5c_fence.bat'  # abort fence 单元门 (F1-F5; D1 后判据不变、激励按真链路修正)
 # P5e-T1 UDP 分流器单元门 + P5e-T3 UDP app 门 (自检式, 无 Python)
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5udp\run_tb_udp_split.bat'   # T1: 分流/反压/透传保真/坏帧整帧丢弃
+cmd //c 'sim\p5udp\run_tb_udp_split.bat'   # T1: 分流/反压/透传保真/坏帧整帧丢弃
 # P5e-T2 UDP app TX 单元门 + 真 wrapper 门
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5e_t2\run_tb_udp_tx_guard.bat'    # T2: peer 门 / PLEN_MAX 守卫 (+ 内置负对照)
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5e_t2\run_tb_p5e_t2_wrapper.bat'  # T2: 真 wrapper 全链 (含 implicit DRC 检查)
+cmd //c 'sim\p5e_t2\run_tb_udp_tx_guard.bat'    # T2: peer 门 / PLEN_MAX 守卫 (+ 内置负对照)
+cmd //c 'sim\p5e_t2\run_tb_p5e_t2_wrapper.bat'  # T2: 真 wrapper 全链 (含 implicit DRC 检查)
 # P5e-T3/T4/T5 UDP 演示 app 门 (独立目录; 4 个负对照 + 1 个"期望 FAIL"负对照)
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5e_udp\run_tb_app_udp.bat' pos        # 正例: 图案/学习/边界/突发 (exit 0)
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5e_udp\run_tb_app_udp.bat' splitoff   # 负: 拆分器关 ⇒ app 0 帧 + HLS 见 echo
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5e_udp\run_tb_app_udp.bat' portout    # 负: 端口过滤外 ⇒ 仍走 HLS
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5e_udp\run_tb_app_udp.bat' badcrc     # 负: 坏 FCS ⇒ 整帧丢 + stat_drop_crc
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5e_udp\run_tb_app_udp.bat' nopeer     # 负: peer 表空 ⇒ TX 零帧
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5e_udp\run_tb_app_udp.bat' neglearn   # 负对照 (**期望 exit 1**): 学习源钉 0
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5e_udp\run_tb_p5e_udp_wrapper.bat'    # T5: 真 wrapper 全链 UDP 收发 + DRC
+cmd //c 'sim\p5e_udp\run_tb_app_udp.bat' pos        # 正例: 图案/学习/边界/突发 (exit 0)
+cmd //c 'sim\p5e_udp\run_tb_app_udp.bat' splitoff   # 负: 拆分器关 ⇒ app 0 帧 + HLS 见 echo
+cmd //c 'sim\p5e_udp\run_tb_app_udp.bat' portout    # 负: 端口过滤外 ⇒ 仍走 HLS
+cmd //c 'sim\p5e_udp\run_tb_app_udp.bat' badcrc     # 负: 坏 FCS ⇒ 整帧丢 + stat_drop_crc
+cmd //c 'sim\p5e_udp\run_tb_app_udp.bat' nopeer     # 负: peer 表空 ⇒ TX 零帧
+cmd //c 'sim\p5e_udp\run_tb_app_udp.bat' neglearn   # 负对照 (**期望 exit 1**): 学习源钉 0
+cmd //c 'sim\p5e_udp\run_tb_p5e_udp_wrapper.bat'    # T5: 真 wrapper 全链 UDP 收发 + DRC
 # 板级: 同四元组重连验收 (D6)
 C:/Users/zhxue/anaconda3/python.exe tools/pc_p5d_reconn_test.py --rounds 5 --gap 0.6   # 判别性轮间隔; 判据: 全部轮次建连+传输成功
 # 构建与烧录
-cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_build_p4.bat'    # 默认 (echo)
-cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_build_p5.bat'    # APP_MODE (app 接口)
-cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_program_p4.bat'  # / run_program_p5.bat
+cmd //c 'board\run_build_p4.bat'    # 默认 (echo)
+cmd //c 'board\run_build_p5.bat'    # APP_MODE (app 接口)
+cmd //c 'board\run_program_p4.bat'  # / run_program_p5.bat
 # 板级测试工具 (合成对端, 绕过内核栈; 先 fw_block.ps1 屏蔽内核)
 tools/cpp_peer/peer.exe --iface '\Device\NPF_{...}' --bytes 16777216          # echo 吞吐
 tools/cpp_peer/peer.exe --iface '\Device\NPF_{...}' --rx-only --expect-pattern 1048576  # app 图案校验

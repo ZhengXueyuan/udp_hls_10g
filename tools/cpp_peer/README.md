@@ -48,12 +48,17 @@ g++ -O2 -std=c++17 -static peer.cpp -o peer.exe -lws2_32 C:/Windows/System32/wpc
 
 ## 2. 构建
 
+> ⚠️ 在**本仓根** (= 含 `CLAUDE.md` 的那一层) 执行; 路径**相对本仓根**即可。
+> 别写成 `D:\repo\ECO\udp_hls_10g\...` —— 那是本仓 2026-09-28 拷贝之前的开发树
+> (那份 checkout 仍在), 照着跑会编**另一个仓**的源码 (= 真空门, 见
+> `P6B_INTEGRATION_REVIEW.md` §5)。
+
 ```bash
 # cmd
-D:\repo\ECO\udp_hls_10g\tools\cpp_peer\build.bat
+tools\cpp_peer\build.bat
 
 # Git Bash
-cmd //c 'D:\repo\ECO\udp_hls_10g\tools\cpp_peer\build.bat'
+cmd //c 'tools\cpp_peer\build.bat'
 ```
 
 产出 `tools/cpp_peer/peer.exe`，并自动列出可见抓包设备。

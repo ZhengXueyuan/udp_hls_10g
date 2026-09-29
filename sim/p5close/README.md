@@ -6,10 +6,13 @@
 
 ## 怎么跑
 
-一条命令:
+一条命令 (**在「本仓根」= 含 `CLAUDE.md` 的那一层执行**; 本 bat 已自定位
+—— 从 `%~dp0` 反推 repo root, 反推不到就 `[PATHGUARD FAIL]` 退出; 命令里的路径**相对本仓根**,
+不要写成别的 checkout 的绝对路径 —— 本仓 2026-09-28 才从 `D:\repo\ECO\udp_hls_10g` 拷贝而来,
+那份拷贝源还活着, 写绝对路径会"跑门跑成另一个 checkout"= 真空门):
 
 ```
-cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5close\run_tb_tcp_close.bat'
+cmd //c 'sim\p5close\run_tb_tcp_close.bat'
 ```
 
 退出码:

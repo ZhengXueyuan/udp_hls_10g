@@ -1642,6 +1642,11 @@ $fscanf 读 N/M, gen_stim_p4_chain.py read_trunc() 读同一文件 — 注入点
   无尽帧在此现行)。
 
 **门命令 (Git Bash)**:
+> 📌 **历史记录, 保留原样**: 本节写于 2026-09-12, 那时 `D:\repo\ECO\udp_hls_10g`
+> **就是**当时的开发树 (本仓 2026-09-28 才从那里整体拷贝而来, 那份 checkout 仍在)
+> ⇒ 现在照抄这些绝对路径会跑**另一个 checkout** (= 真空门)。
+> **现役自定位跑法**: 在本仓根执行 `cmd //c 'sim\p4gates\run_matrix_p4dfix.bat'`
+> (sh 版 `bash sim/p4sim/run_matrix_p4dfix.sh`); 单门 = `cmd //c 'sim\p4sim\run_tb_p4_burst.bat 200'`。
 ```bash
 cd /d/repo/ECO/udp_hls_10g/sim/p4sim
 TRUNC=100 TRUNCM=8 cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p4sim\run_tb_p4_burst.bat 200'  # 截断门
@@ -1700,7 +1705,8 @@ ack==S+M (dup-ACK 证据); ④echo 无合并: 单帧 plen<=1460 且 ECOMAX<=182;
 trunc 修复落 RTL 后的完整回归: **19 次跑 = 17 PASS / 2 FAIL (同一用例复现两次)**。
 每次跑 = gen_stim 生成 + xvlog/xelab/xsim + burstcheck/check 判据全链。
 日志: `sim/p4sim/p6logs/*.log`; FAIL 用例另存 `17_xsim_run.log` / `17_resp.memh` /
-`17_stim_data.memh` / `17_payload_map.json`。命令形式 (Git Bash):
+`17_stim_data.memh` / `17_payload_map.json`。命令形式 (Git Bash,**历史记录**: 那时 ECO 就是
+开发树; 现役 = 本仓根下 `cmd //c 'sim\p4sim\run_tb_p4_burst.bat <参数>'`):
 `cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p4sim\run_tb_p4_burst.bat <参数>'`。
 
 | # | 命令 (bat 参数) | 结果 | 关键数 |
@@ -1842,7 +1848,8 @@ emit_u.terr=1, 挡新帧首字 1 拍) → echo 以坏帧判定回卷 (现有机�
 resp 新行 `HALFD <n> <k> <fired> <tdstk_max>` :794 + `$display` :800);
 `sim/p4sim/run_tb_p4_burst.bat` :52-61 (HALFDROP/HALFDROPK → memh); `run_tb_p4_chain.bat` :9-10 (chain 门删 memh)。
 
-**注入命令 (Git Bash)**:
+**注入命令 (Git Bash)** (**历史记录**: 那时 ECO 就是开发树; 现役 = 本仓根下
+`HALFDROP=100 HALFDROPK=990 cmd //c 'sim\p4sim\run_tb_p4_burst.bat 200'`):
 ```
 HALFDROP=100 HALFDROPK=990 cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p4sim\run_tb_p4_burst.bat 200'
 ```
@@ -2686,6 +2693,10 @@ BIT_LAST=13 + 位中点采样 + 逐字符按 start 沿重对齐 + 二进制写�
    写成 0x0D0A (多一个 CR), 必须 "wb"。
 
 **P5a 门命令 (Git Bash)**:
+> 📌 **历史记录, 保留原样**: 本节写于 2026-09-19, 那时 `D:\repo\ECO\udp_hls_10g`
+> **就是**当时的开发树 (本仓 2026-09-28 才从那里整体拷贝而来) ⇒ 照抄这些绝对路径
+> 会跑**另一个 checkout** (= 真空门)。**现役自定位跑法**: 在本仓根执行
+> `cmd //c 'sim\p5sim\run_tb_p5_app.bat'` / `bash sim/p4sim/run_matrix_p4dfix.sh`。
 ```bash
 cd /d/repo/ECO/udp_hls_10g/sim/p5sim
 cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p5sim\run_tb_p5_app.bat'          # 默认门 (~2min)
@@ -4144,3 +4155,232 @@ report_clock_interaction + 时序/资源, 全只读)。
 
 **另一条闭合**: 默认构建 **P4 回归矩阵 16 门全过 (rc=0)** —— 本轮全部改动 (24 字扩窗 + 门调整 +
 文档) 未破坏默认构建 (审查 agent 留的"没跑 P4 矩阵"这条未核实项就此闭合)。
+⚠️ **这条后来被勘误了**：那次"16 门全过"的物证躺在 **ECO 仓**里（跑的是另一个 checkout）——
+见下面 2026-09-29 P6b 收口 一节的 **⑥ 勘误**。
+
+---
+
+## 2026-09-29 P6b 收口: 数据面 125MHz → **156.25MHz** (双时钟域 + 手写异步 FIFO) — 板级正式验收 35/35 + 四个缺陷修复 + 一个"空门"元问题
+
+> **归档索引**（本节是里程碑日志；判据的逐条推导与复现步骤在别的文件，别在这里找）：
+> `P6B_SUMMARY.md`（一页式总览）· `P6B_SPEC.md`（施工规格 + 勘误节）· `P6B_ACCEPT.md`（**板级验收原始记录**）·
+> `P6B_CDC_AUDIT.md`（跨域审计 + F-1/F-2/F-3）· `P6B_REVIEW.md`（对抗审查 F1–F13 + 附录 R 的 F4 复核）·
+> `P6B_INTEGRATION_REVIEW.md`（集成与"空门"核实）· `P6E_OBS.md`（**36 字寄存器表**，现役）·
+> `sim/p4gates/evidence/`（P4 硬化与负对照的全部原始读数）· `p6b_accept_final/`（验收归档物）。
+
+### ① 目标与最终形状
+
+`P6B_SPEC` 的边界裁决 = **方案 A**：**前端留 125MHz、数据面整体搬 156.25MHz**，两者之间只留
+**两个异步边界**（RX 一个 / TX 一个），用**新写的手写异步 FIFO** `rtl/fifo_async.v`（灰码指针 + 两级同步，
+DEPTH=256 / FWFT=1）跨域；时钟由 `rtl/clk_gen_p6b.v` 从核心板 **Y1 100MHz** 经 MMCM ×1.5625 产生
+（**不是**从 PHY 的 RXC 倍频 —— 那条路的结构性否决见 `P6B_SPEC §2.1`）。两束快照用 `rtl/snap_seq.v` 做
+**链式触发**（FE 先 → DP 后）以保住跨域判据的**方向性**。
+
+**结果**：`board/build_p6b_final_ku5p.tcl` 产出的位流在板上跑通 —— 1G 图案通路 **956.0 Mbps**
+（= 1G 线速上限 957.1 的 **99.9%**），数据面实测 **156.2585 MHz** 与前端 **125.0061 MHz** 双域并存。
+
+### ② 板级验收读数（**正式验收 35 条判据全 PASS**；原件 = `P6B_ACCEPT.md`）
+
+| 项 | 读数 | 出处 |
+|---|---|---|
+| 位流 | `sha256 = c17700868b08170865f4a4ae0292ebb636aed03070e2875f6dbb005123a948ca`（`BUILD_ID=6`） | `P6B_ACCEPT.md` §1.1 |
+| 时序 | `WNS +0.168 / WHS +0.010 / WPWS 0.000`，**0 失败端点** | 同上 §1.2 |
+| 数据面频率 | **156.2585 MHz**（`W24` / 真实墙钟，12.188566 s 窗口） | 同上 B2b |
+| 前端对照 | **125.0061 MHz**（`W5`，**同一窗口** ⇒ 两域确实不同频） | 同上 B3 |
+| 图案速率 | **956.0 Mbps**；网卡硬件计数独立复核 **956.3**（偏差 0.03%）；tcpdump 离线**逐字节** 1999/1999 | 同上 D1/D2/D3 |
+| ping | 5/5（rtt avg 0.091 ms）· 20/20（`-i 0.05`） | 同上 C1/C2 |
+| 守恒律（停机态） | `W30 == W0 + W32`（147==147）· `W31 == W1 − 4·W0 + W33`（21235==21235） | 同上 E1a/E1b/E8 |
+| 验收总计 | **42 条 PASS 记录 / 0 FAIL / 0 SKIP / 0 NOTE** | 同上 §0 |
+
+⚠️ **引用冒烟轮的数字必须注明位流**：冒烟轮（11:14–11:25）烧的是 **`03f9c6d0…fe5a0d`（过期位流，
+不含 F-1/F-2 修复）** ⇒ 它的"逐字节判据 FAIL"是**工具天花板**（C++/socket 口径只交付 3858/855,930 帧），
+不是板子缺陷；正式验收换用 **tcpdump + 离线代数**这条独立路径才判得了。两个位流的 sha256 对照表
+在 `P6B_ACCEPT.md` §1.1，**别把两轮的读数混着引**。
+
+### ③ 本轮修的四个缺陷（**其中两个早于 P6b 就存在**）+ 一个修复自身引入的缺陷
+
+| # | 一句话根因 | 修法 | 判据归属（**哪个读数是它的牙**） |
+|---|---|---|---|
+| **F4(a)**（🔴 高，**P6b 前就有**）| `mac_rx_64` 的丢帧分支在**已经 push 过字之后**才丢 ⇒ 流里留下**孤儿字**（有 `popc`、无 TLAST）⇒ `W31` 永久多算、下游只能靠"下一个 SOP"兜底重同步 | 新增 **TERM 收尾字**（`tdata=0, tkeep=8'h00, tlast=1, tuser=0, tcrs=0, terr=1`）+ `term_pend` 优先门 ⇒ 每个 SOP 与下一个 SOP 之间**恰一个** TLAST | **W32/W33/W34**（新计数器）+ 结构式 `W30==W0+W32` / `W31==W1−4·W0+W33`（`rtl/mac_rx_64.v:50` 明文）；E7/E8d 全 0 |
+| **F4(b)**（🔴 高，**P6b 前就有**，更严重）| 帧尾那一拍的 `push` 决策用的是**寄存器化的 `full`**（FIFO 7/8，判得"对"）⇒ `stat_frames`/`stat_bytes` **谎报成功**；而**同一拍**完成字的 push 把 `wptr` 推到满，**下一拍** `fifo_sync` 的 `wr && !full` 判假 ⇒ **TLAST 字被静默丢弃**（`fifo_sync` 无溢出保护）| 空间门一律换成 `fifo_sync.full_next`（**下一拍满的精确预测**，含在飞写与本拍读）：`push_ok = !full_next`；并给 `fifo_sync` 加 `ovf_pulse` 自检回读 | **W35**（`rx_stat_fifo_ovf`，**结构上恒 0**，非 0 = 修复失效）+ 逐拍轨迹（`P6B_REVIEW.md` §3.4）；`sim/f4sim/` 的门 + `tb/tb_mac_rx_f4.v` |
+| **F4-2**（🟠，**修 F4 时自己引入的**，被对抗复核抓到）| `hwv && !push_ok` 时**无条件**进 `S_TERM`，而 `term_pend` 只在 `first_done` 时置 ⇒ **`term_pend==0` 空入 `S_TERM`** ⇒ 下一个（空间充足、完全正常的）帧被吞掉并计成丢帧 | **一行**：`state <= first_done ? S_TERM : S_IDLE;`（`rtl/mac_rx_64.v:250-261`）| `P6B_REVIEW.md` **附录 R.4** 的 A/B（同一激励、同一 tready 表）：修复前 `frames=1 drop=2` → 修复后 `frames=2 drop=1`（**白丢的那一帧回来了**）。⚠️ **原门永远测不到它**：`tools/gen_f4_stim.py` 的帧尺寸最小 = 60 ⇒ 该分支覆盖率 0（**"同一个 agent 写门又写修复"的缺口，只能靠独立复核补**）|
+| **F-2**（🟠 中，**P6b 前就有**）| `mac_tx_64` 帧内中止（源断供）后**残字被当成新帧的开头发出去** ⇒ 线上出现一个 **FCS 完全正确的"幽灵帧"**，载荷是被中止帧的**中段残字**（对端无法分辨）| 新增 **`S_FLUSH`** 状态（唯一入口 = `S_DATA` 的 `!fempty` 中止分支）：中止后**一个字都不发**，逐字弹掉输入 FIFO 直到吞掉**本帧自己的 TLAST**，再等够 IFG 12 字节才回 `S_IDLE`；新增 `stat_flush_words/stat_flush_done`。**时序要点**：判据必须是 `frd && !fempty && fdout[0]`（本拍真弹且弹的就是 TLAST），用"上一拍看到的 tlast"会多弹一个字 | `audit_scratch/t3_txcdc/`：**幽灵帧 0**（撤回修复 ⇒ **FAIL**）；**无中止路径指纹逐位不变**（`33f82978` 修前/修后相同 + flush 计数器为 0 = 冲刷从未运行的正证据）；E3 的 `W20−W7 ∈{0,1}` **且** `W21==0` |
+| **F-1**（🟠 中，P6b 期新写模块的契约漏洞）| `fifo_async` 的 `full` 在**写域复位释放窗口**里读 0（复位值），而此时的 `wr_en` 被**静默丢弃**（无写入、无计数、无探针）⇒ `!full` 这个唯一闸门在此期间不可信；`fifo_sync` 有 `ovf_pulse` 自检，`fifo_async` **什么都没有** | 新增 **`ovf_pulse` + `ovf_cnt`** 端口（与 `fifo_sync` 的 `ovf_pulse` **同形同义**）：**拒写不再静默**，`ovf_cnt` 恒 0 才叫"无丢字" | `sim/fifoasync/run_all.bat` 的 **12 个基础门 + 7 个变异**；关键负对照 `run_mut_noovf.bat`（把 `ovf_pulse` 钉 0 = **撤回 F-1 修复**）实测 **FAIL（3 条判据不成立）**；`audit_scratch/t4_reset/` 的实测 `model_acc=3999 vs dut_acc=3996`（3 字静默丢弃）|
+
+⚠️ **F-1 的板级缺口没有闭环**（**必须记，否则后人会以为它已经可观测**）：`rtl/fifo_async.v` 有了探针，
+但 `board/wrapper_p4.v` 的两个例化 `.ovf_cnt()` **悬空**、快照字里**没有**对应字 ⇒ 板上仍**无法归因 CDC
+FIFO 自身的丢字**。板上的 `W35` 是 `mac_rx_64` **内部那个 8 深 `fifo_sync`** 的拒写数，**是另一个 FIFO**。
+**F-1 当前也不是活缺陷**（可达性论证：RX 侧最早 push 在复位释放后 ≥19 个 gmii 拍；TX 侧功能逻辑的释放
+含 `~locked` ⇒ 恒不早于 FIFO 写域释放），但它把"不丢字"押在一个**隐含时序假设**上。
+
+**F4/F4-2 的连带修正（"把缺陷当金标准"）**：`tools/gen_stim_tx.py` 的参考模型**把 F-2 缺陷写进了期望**
+（"残余 2 词开新帧"）⇒ `abort` 模式的门在修复后反而变红。已按 `S_FLUSH` 同形更新（现 `md5 b4ee17da…`，
+旧版留档 `audit_scratch/tools_orig/`）；`main` 模式**逐字节不变**（改前/改后模型相同 = 无扰动证据）。
+⚠️ 同类地雷（**未改，已报备**）：`sim/run_tb_tx.bat` 里仍写着 `cd /d D:\repo\ECO\udp_hls_10g\sim`
+（**另一个 checkout**）—— `audit_scratch/regress_mactx.py` 用自定位路径绕过了它。
+
+### ④ F-3：**已知限制，未修**（触发条件 / 后果 / 为什么三种接线都无解）
+
+**现象**：两个 CDC FIFO 的复位**只接板级 `reset_n`**，而数据面功能逻辑接 `dp_rst_n`
+（`clk_gen_p6b` 产生，**`locked` 参与**：`rst_async = (~locked_raw) | rst_ext`）⇒ **MMCM 失锁/重锁**时
+DP 功能逻辑重启，而 FIFO 的**指针与内容保留** ⇒ DP 侧会在**帧中**重启。
+
+**实测（`audit_scratch/t9_f3restart/`，三种接线都跑了，不是推断）**：
+
+| 变体 | 重启后首个交付帧 | `stale_words` | 带 `tcrs=1` 的截断帧 | 契约 |
+|---|---|---|---|---|
+| A 现行（两侧都只接 `reset_n`） | 40B **片段**（帧3 偏移24） | 0 | **1** | 合规 |
+| B 只复位读侧（= 规格书的**字面建议**） | 帧0 完整 ⇒ **帧0/1/2 被重复投递** | **26** | 0 | **违反硬契约** |
+| C 两侧同源同拍复位（FIFO 清空） | 48B **片段**（帧3 偏移16） | 0 | **1** | 合规 |
+
+⇒ **结论**：① **三种接线都会让 DP 在重启后交付一个"帧中截断的片段，且携带原帧 `tcrs=1`"**
+（= 截断帧被当 FCS 有效帧交付）—— **F-3 的危害在接线层面无解**；② **字面建议（只把读侧接 `dp_rst_n`）
+必须不做**（实测把**已被消费的整帧重新投递**）；③ 变体 C 另外观测到 FE 侧 8 帧丢弃 + DP 只消费 9 字
+（机制 = 复位窗口内 FIFO 写侧 `full_r=1` ⇒ `m_tready=0` ⇒ FE 内部 8 深 FIFO 填满 ⇒ `mac_rx` 按既有语义
+**整帧丢并计数** ⇒ 是**设计内的背压丢帧路径**，有计数、可归因，**不是** F-1 同类的新漏洞）。
+**根因** = **DP 侧没有"以 SOP 为界"的重启重同步**（FIFO 无法提供帧对齐信息）。
+**后果有界**：**丢/重一帧**（不会持续坏下去）；进不了 fast 路（`rx_classify` 完全不用 `tuser`，片段起点
+是帧中 ⇒ ethertype 是垃圾 ⇒ 一律走慢路径）⇒ 危害是"**坏帧带 `tcrs=1`，FCS 保护在 MAC 边界被击穿**，
+靠下游解析器兜底"，**不是**"垃圾载荷进数据面"。
+**真正的收口方向**（超出当时授权，**建议单列任务**）：(i) 让 DP 侧重启后**等 `tuser` 才开帧**
+（`vlan_strip`/`rx_classify` 加入口门控）；(ii) 把 `mac_rx_64` 也纳入"同源同拍复位"。
+**本轮未改 `board/wrapper_p4.v`**（保持 `03e76507605f88acf2847dc5101eca14` 不变）。
+
+### ⑤ 元问题：全仓 **243 个"真空门"**（跑起来测的是**另一个 checkout**）
+
+**发现**：全仓 **364 个代码文件**的**活行**里含指向 `D:/repo/ECO/udp_hls_10g` 的绝对路径；
+其中 **243 个是"真空门"**（`empty gate` 类：**跑起来编译的是另一个 checkout 的源码、
+日志写进另一个 checkout 的仓、然后 exit 0**）。本仓是 2026-09-28 从 `D:\repo\ECO\udp_hls_10g`
+整体拷贝来的，**拷贝之后**这些硬编码路径就全变成了空门。
+
+**修**：**340 个已修 / 1 个只留注释（历史）/ 23 个未修**（23 个全是 Python（手工）与 1 个 `.ps1`，
+逐条清单在 `sim/p4gates/evidence/inventory_eco_class.txt`，**没修的原因与位置都写在那张表里**；
+机器可读的扫描结果 = `sweep_summary.txt` / `sweep_code_files.txt` / `sweep_absolute_paths.txt`）。
+
+**守卫三层（+一层事后扫描），全部装在 `sim/p4gates/` 的自定位工具链上**：
+
+| # | 守卫 | 位置 | 挡什么 |
+|---|---|---|---|
+| 1 | **根守卫** `guard` | `sim/p4gates/p4env.bat`（`REPO_ROOT` 由**脚本自身位置**推导 `%~dp0..\..`）| 配置的根**不含本 checkout** ⇒ 拒绝运行（`REQUIRED_MARKERS` 逐项列出缺哪个文件）|
+| 2 | **路径边界** `checkpaths` | 每个门 `xvlog` **之前**的 PROLOGUE | 任何路径/manifest 条目**解析到根之外**或不存在 ⇒ 拒绝（外来路径永远编不进去）|
+| 3 | **绊线** `selfcheck`（**243 个**） | 各门 `.bat` 头部 | 该 `.bat` 的**活行**若指向仓外 ⇒ **拒绝运行** |
+| 4 | **事后扫描** `scanlog` | 每个门跑完之后 | 编译/仿真日志里出现根外绝对路径 ⇒ 硬失败（防"溜过前置检查"）|
+| — | **修订指纹** `fingerprint` | 跑前 + 跑后各一次 | 235 个文件（编译集 + 生成器 + bats）**逐字节**比对；跑期间源码被改动 ⇒ `REVISION DRIFT` 并**作废整轮** |
+
+**负对照（证明守卫有牙 —— 这也是 ⑨-3 那条教训的来源）**：`sim/p4gates/evidence/negctl/` 里放了
+**外仓替身夹具**（`foreign` = 把工具链复制一份、其中某个门**故意重新硬编码** ECO 路径；`notarepo` = 只做根目录）。
+原始读数：`negctl_A_raw.txt` 的 **A1**（根配成 `D:\repo\ECO\udp_hls_10g`）⇒
+`[P4GUARD FAIL] REFUSING ... 'empty gate' mode`，`RC=1`；**A2**（根配成父目录 `D:\repo\XCKU5PMini`）⇒
+列出 7 个缺失 marker 后 FAIL；**B**（门自己重新硬编码）⇒ 被拦下，`EXIT=97`。
+⇒ **不装守卫的话这些都会 exit 0**。
+
+### ⑥ 勘误：提交 **`a31c86b`** 的"P4 默认构建矩阵 16 门全过"**实际跑在 ECO 树上**
+
+- 那次"16 门全过"的**物证躺在另一个仓**：ECO 的 `sim/p4sim/matrix_p4dfix.log`
+  `start Tue Sep 29 03:58:35` / `MATRIX DONE Tue Sep 29 04:23:11`（mtime 09-29 04:23），
+  而提交 `a31c86b` 的时间是 09-29 04:27。
+- 那时 ECO 树 = **干净工作区 @ `a719030`**（本仓 HEAD 的第 27 代祖先），且其中
+  **`rtl/frame_fifo.v` 比本仓还旧一版**；**真正需要回归的 4 个文件**（`rtl/fifo_sync.v` /
+  `rtl/mac_rx_64.v` / `rtl/slow_rx_adp.v` / `rtl/tcp_tx_frame.v`，都是当时本仓工作区的未提交改动）
+  **根本没进那次运行**（逐文件用 git blob 比对：P4 各门编译的 23 个源文件里 22 个相同、1 个不同；
+  HLS 输出目录 176/176 相同 —— 细节见 `P6B_INTEGRATION_REVIEW.md` §5.1）。
+- ⇒ **这一次的"16 门全过"是空门**，**不能**作为"P4 默认构建没被碰过"的证据。
+- ✅ **历史（P6b 之前）的 P4 矩阵证据不受影响**：拷贝之前 ECO 就是当时的开发树，那时它不是空门。
+  受影响的**只有"拷贝之后仍然引用这条命令"的说法** ⇒ 就是 `a31c86b`，以及本仓里那份
+  **看起来是证据、实际是 09-27 陈旧数据**的 `sim/p4sim/matrix_p4dfix.log`（**更毒**：谁去读它，
+  读到的是别的仓两天前的读数）。
+
+### ⑦ 本仓 P4 矩阵的**当前**状态（诚实版，**含一条在飞的实验**）
+
+| 时间 | 事件 | 读数 / 判定 |
+|---|---|---|
+| 11:46 | 硬化后的矩阵**首次全跑**（本仓根） | ⚠️ `vlanburst EXIT=1` / `stallgate EXIT=1` **且** `[P4GUARD FAIL] REVISION DRIFT: sources changed while the matrix ran` ⇒ **整轮作废**（不是"两个门坏了"）。见 `evidence/matrix_full_run_console.txt` |
+| 11:59 / 12:01 | 两个可疑门**单独重跑** | `canonical_vlanburst.txt` = `BURST OK` / `VLANBURST_RC=0`；`canonical_stallgate.txt` = `PCSTALL OK` / `STALLGATE_RC=0` ⇒ **那两个 EXIT=1 是并发产物**（编辑与运行重叠）。另有 `rerun_two_gates_isolated.txt` / `rerun_stallgate_isolated.txt` |
+| 12:07 | 再跑一轮 | ✅ **`matrix_freeze_verdict.txt`：`VERDICT: FROZEN`** —— 235 个被哈希的文件在跑前/跑后**逐字节相同**，日志绑定到修订 `DIGEST_ALL(content)=921d62d9…`（`DIGEST_COMPILE=9e58dc58…` / `FILES=201`）⇒ **"修订绑定"这条结构性缺口已闭合** |
+| **13:21–** | **"无并发"复跑（正在跑）** | ⏳ **另一 agent 在飞行中**（`sim/p4gates/work_20260929_132056/`，目的是判定"并发是否曾影响结果"）⇒ **本文件不替它下结论** |
+
+⚠️ **"跑门 ≠ 判门"（本轮最便宜的一条教训）**：矩阵 16 门里有 **2 门
+（`unit_retx` / `unit_fifo`）无条件 `exit 0`**（它们的 `.bat` 以 `type xsim*.log` 结尾）
+⇒ **"16 门 EXIT=0"并不等于"16 条判据被判定过"**，这两个门必须**读控制台尾部**才算判过。
+`sim/p4gates/run_matrix_p4dfix.bat:104-105` 的头注释已经把这条写在脸上，
+但**任何自动化汇总都必须显式处理它**，否则会得到"全绿"的假象。
+
+### ⑧ `u_dbg_line`：**48 位无同步穿越**（已知，**本板不可观测** ⇒ 不修）
+
+设计把 `u_dbg_line`（P4 诊断 UART 状态行）搬进了 DP 域，于是它从 FE 域**直接组合读**了两束**未同步**的
+总线：`u_mac_rx/dbg_stat_words_out_reg[31:0]`（32 位）+ `wl_last_lat_reg[15:0]`（16 位）= **48 位**。
+`board/p6b_final_ku5p_cdc.rpt` 里这 48 条全是 **CDC-15 Warning（Clock enable controlled CDC structure）**
+—— 即"**这不被工具认成同步器**"，只按一般跨域结构告警（该报告 1324 条 CDC-15、223 条 CDC-1 Critical）。
+
+**为什么可以放着**：`u_dbg_line` 的唯一输出 `uart_txd` 虽然**在 XDC 里有引脚**（`AD15`，借厂商
+`io_nor[]` 的空闲脚，`board/ku5p_p6a_t8p0.xdc:57`），但 **KU5P 这块板上没有 UART**（无 CH340/CP210x/
+FTDI/MAX3232、无 USB 口、无调试排针；见 `../XCKU5PMini/CLAUDE.md`「板上没有 UART」）⇒
+**这条通路的输出在本板上物理不可观测**，它坏了也**不会**污染任何数据面/功能通路
+（"诊断行字符错乱"是唯一可能的后果）。
+⚠️ **若将来给这块板接上 UART 并把它当观测通道，这 48 位必须先过同步器**（或改成快照字）——
+**别在没同步的情况下把它当读数用**。
+
+### ⑨ 本轮三条教训（写给下一个 agent）
+
+1. **"跑门 ≠ 判门"**：见 ⑦。门"退出码 0"可能只是**它没判**（`type xsim*.log` 结尾的门；
+   判据打印与判据结果脱节的门 —— 本工程历史上有过"固定文案"：`P6E_OBS.md` §七·补2 记着一次
+   "5/5 全通的那轮照样打印'慢路径没回 ARP'"）。
+   **纪律**：汇总前先看这个门**判据本身**有没有跑（证据非空自检：`checks>0` / `refw>0` / `stat_drop>0`）。
+2. **并发 agent 的文件所有权必须互斥**（本轮吃了两次）：
+   ① 11:46 的矩阵跑与源码编辑重叠 ⇒ `REVISION DRIFT` 整轮作废（**编辑者以为门红了，其实是自己踩的**）；
+   ② F-1 的探针被另一个 agent 改动（`rtl/fifo_async.v` md5 从 `1c21c024…` 变成 `11e8d82a…`，
+   `P6B_CDC_AUDIT.md` **A.4** 专门留了"**版本提示（审计时效）**"）；同族还有 `P6B_REVIEW.md` 头部的
+   "时间戳与自我更正（必读）"与 **F3**（审查到一半时施工方已修好）。
+   **纪律**：① **构建/仿真期间不得改动被构建的源码**（本工程既有坑的加强版）；② 交接时**必须留
+   md5/sha256**；③ 凡与"当前文件内容"绑定的结论都要**标注时效**（行号会漂）。
+   ⚠️ **同族但更隐蔽的一条（2026-09-29 TL 裁定已合并，此前的"两说未合并"作废）**：
+   `SNAP_STATUS.done` 是 **sticky** 的 ⇒ 它只证明"完成过至少一次"，**不证明"这一代是我的"**
+   ⇒ 有**并发触发**时，"触发—锁存—读全"三步无法靠 `done` 自证 ⇒ `snap()` 必须用
+   **`gen` 恰好 +1** 自证。⇒ 守卫**必需且保留**。
+   ⚠️ **但归因要改写**：本文件早先与 `P6B_ACCEPT.md` §7.4 都把"并发读者会互相污染（计数冻结）"
+   记为**当日实测踩到** —— **那是错的归因**。那次"计数冻结 / 读数全部作废"的真凶是**该脚本
+   自己的变量名撞车**（`$T` 被复用作已跑秒数 ⇒ `$T/reg_rw` 不存在 ⇒ 所有读静默失败 ⇒ 空读
+   被 `$(( ))` 当 0），见提交 `b91f763`。
+   ⇒ **正确的说法（三处已同步改口）**：`gen+1` 守卫逮的是**代际混淆**（读到别人那一代），
+   **不是**"计数冻结"；后者是脚本 bug 的症状，与并发无关。**不要再把那条实测当并发的证据引用。**
+3. **批量装守卫之前必须先跑负对照**（否则你不知道守卫是"挡得住"还是"永远绿"）：
+   本轮的做法 = 造 **`negctl/foreign` 外仓替身夹具**（一个故意重新硬编码 ECO 路径的门 + 一个非仓目录），
+   读数落在 `negctl_A_raw.txt` / `negctl_B_raw.txt`（`RC=1` / `EXIT=97`，**没守卫的话这些都 exit 0**）。
+   同一条纪律在**时序闸**上也做了一遍：`board/p6b_verify/CONTROLS.txt` = **13/13 条**正/负样本符合期望
+   （含 5 个人造病理报告 `path/neg_path_*.rpt`，由 `run_controls.py` 一键重建），
+   才敢说"闸有区分能力"。
+
+### ⑩ 本轮新增 / 退役的文件（索引）
+
+**新增**：`rtl/clk_gen_p6b.v` · `rtl/fifo_async.v` · `rtl/snap_seq.v` · `tb/tb_clk_gen_p6b.v` ·
+`tb/tb_fifo_async.v` · `tb/tb_snap_seq.v` · `tb/tb_mac_rx_f4.v` · `tb/tb_f4_chain.v` ·
+`board/ku5p_p6b_sysclk.xdc` · `board/ku5p_p6b_cdc.xdc` · `board/build_p6b_ku5p.tcl` ·
+`board/build_p6b_final_ku5p.tcl` · `board/check_p6b_timing.py` · `sim/fifoasync/` · `sim/clkgen/` ·
+`sim/snapseq/` · `sim/f4sim/` · `sim/f4chain/` · `sim/p4gates/`（P4 硬化工具链 + 证据）·
+`_proj_pcie/p6b_accept.sh` + `p6b_smoke_*` · `p6b_accept_final/`（**验收归档**）· `board/p6b_verify/` ·
+`P6B_*.md`。（另有 `audit_scratch/` `review_scratch/` `int_scratch/` 三个**审查/审计 agent 的原始证据目录**，
+按纪律**保留**；它们的 `.txt` 读数与 TB 源码要入库，`xsim.dir/`/`*.wdb`/`*.memh` 等产物已由 `.gitignore` 排除
+—— 见 `P6B_COMMIT_PLAN.md`。）
+
+**已退役（2026-09-29；理由 = 原件已由路径硬化修好，镜像本身是"空门"的临时绕道）**：
+`_tmp_make_p4mirror.py` · `sim/p4sim_p6b/` · `sim/retxsim_p6b/` · `sim/retxsim2_p6b/` ·
+`sim/vlansim_p6b/` · `sim/tbgate_p6b/`（合计 **~39 MB**）。**退役前逐条确证**：
+① 硬化后的矩阵 runner（`sim/p4gates/run_matrix_p4dfix.bat:112-127`）用的是**原件**
+（`sim\p4sim\…` / `sim\retxsim\…` / `sim\retxsim2\…` / `sim\vlansim\…` / `sim\tbgate\…`），**不是**镜像目录；
+② `paths.txt` 的 `FINGERPRINT_GLOBS` 只哈希原件（⇒ 删镜像**不改**矩阵指纹）；
+③ 唯一有独立价值的 `sim/p4sim_p6b/matrix_p4_p6b.log` 与归档副本
+`board/p6b_verify/p4_matrix_local_repo.log` **md5 逐字节相同**（`a8079bfc4398dcf1ef1612ed5a147eea`）；
+④ 全仓**活代码**里对镜像的引用 = **0**（只剩 `int_scratch/chk_mirror.py` 这个**审查用的核对脚本**，
+它因此不能再跑 —— 但它的结论已固化在 `P6B_INTEGRATION_REVIEW.md` §5.2：「镜像脚本忠实：9 个镜像 bat
+逆向还原后与原件**逐字节相同**、`XCKU5PMini` 出现 26/26/26/26/26/3/1/3/1 次、**ECO 残留 0 处**」）；
+⑤ 另加了 `.gitignore` 规则 `sim/*_p6b/` **防复发**。
+
+**保留未删（说明理由）**：
+- `_tmp_p4_gates_harden.py` —— **唯一可执行**的路径硬化迁移记录（`pathfix_applied.txt` /
+  `pathfix_dryrun.txt` 两份 39 KB 证据的**生成器**；`inventory_eco_class.txt` 与 `sweep_*.txt` 也由同批工具产出）。
+  再跑它会**失败退出**（每步都断言命中计数 ⇒ 已迁移的树必然不命中）⇒ **不是**静默危险的脚本。
+  ⚠️ 它本身仍是"23 个未修"之一（Python（手工）类），**保留 = 明知而未修，不是遗漏**。
+- `sim/p4gates/` —— **硬化层本体**（`p4env.bat` / `p4gate.py` / `paths.txt` / `run_matrix_p4dfix.bat` /
+  各 `*_src.f` / `evidence/`），**当前构建窗口正在用它跑矩阵**。
+- `board/ku5p_probe/clkgen_p6b/` —— clk_wiz MMCM **预言机**与引脚探针的原始读数（`*.rpt`/`*.txt`/`*.png`，
+  含 `cw_oracle.xci` 与其生成物）；**不是**仿真残渣，**未加忽略规则**。

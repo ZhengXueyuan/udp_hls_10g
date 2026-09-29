@@ -37,13 +37,18 @@
 
 ## 1. 构建与烧录
 
+> ⚠️ 命令在**本仓根** (= 含 `CLAUDE.md` 的那一层) 执行, 路径**相对本仓根**。
+> 两个 bat 都已自定位 (`%~dp0` 反推 repo root, 反推不到即 `[PATHGUARD FAIL]`)。
+> **别照抄 `D:\repo\ECO\udp_hls_10g\...`** —— 那是本仓 2026-09-28 拷贝之前的开发树
+> (那份 checkout 仍在) ⇒ 会去**另一个 checkout** 构建 = 真空门 (见 `P6B_INTEGRATION_REVIEW.md` §5)。
+
 ```bash
 # 构建 (综合+实现+位流, ~10-20 分钟)
-cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_build.bat'
-# 产物: D:\repo\ECO\udp_hls_10g\vivado_prj\udp_loop_phy1.runs\impl_1\wrapper_1g.bit
+cmd //c 'board\run_build.bat'
+# 产物: <本仓根>\vivado_prj\udp_loop_phy1.runs\impl_1\wrapper_1g.bit
 
 # 烧录 (JTAG 1MHz; 板子需已上电, JTAG 已连)
-cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_program.bat'
+cmd //c 'board\run_program.bat'
 ```
 
 - 构建成功判据: 日志 `===== BITSTREAM DONE =====`。
@@ -133,7 +138,8 @@ pktmon etl2txt PktMon.etl -v -o cap.txt
 **对照实验 (区分设计问题 vs 物理链路问题, 最快手段)**: 烧 `udp_hls_eco` 的
 demo 位流 (同板同线) — 它每秒发 1 帧 ARP 广播 (demo 克隆生成器)。若 demo
 位流 PC 可见而本工程零帧 → 设计问题; 若 demo 也零帧 → 物理链路 (网线/网卡/
-PHY 配置)。demo 位流路径:
+PHY 配置)。demo 位流路径 (**注意这是 `udp_hls_eco` —— K7 ECO 板的另一个工程, 不是本仓;
+路径保留为绝对路径是有意的, 它本来就在本仓之外, 不是"空门"**):
 `D:\repo\ECO\udp_hls_eco\vivado_prj\udp_dual_phy1g2.runs\impl_1\wrapper_1g.bit`
 (注意该 bitstream 含 demo 生成器, 烧录后 PC 每秒应收到 ARP 广播)。
 

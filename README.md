@@ -10,6 +10,25 @@ Kintex-7 XC7K325T 纯硬件 TCP/IP 数据面: 64bit 字流 @125MHz, 当前 1G RG
 **P6 (10G 提速) 经用户裁决停止, 未做** —— 调研结论作为交接记录存档 (见"遗留"; 定性与
 6 块工作、K1-K6 前置实验、三个决策点、两个阻断级风险、工期更正都在那里)。
 
+> ### ⭐ P6b 已收口 (2026-09-29) —— 数据面已搬 156.25MHz, **在 XCKU5P 上通过板级正式验收**
+>
+> 下面的 "状态 (2026-09-21)" 与 "遗留 → P6" 两节是**当时的记录**（目标板还是 K7），
+> **现状**以这三份为准：
+>
+> | 想知道什么 | 看哪份 |
+> |---|---|
+> | **一页式总览**（目标 / 改了什么 / 关键数字 / 证据地图 / 已知限制）| **`P6B_SUMMARY.md`** ← **先读这个** |
+> | **板级验收的原始记录**（35 条判据、位流 sha256、复现步骤、未覆盖项）| **`P6B_ACCEPT.md`** |
+> | 板级观测通道怎么用（**36 字**寄存器表 + 判据变更）| **`P6E_OBS.md`** |
+> | 施工规格（**含 §0.4 勘误**：索引表错误 / as-built 偏离）| `P6B_SPEC.md` |
+> | 跨域审计（F-1/F-2/F-3）、对抗审查（F1–F13）、集成与"空门"核实 | `P6B_CDC_AUDIT.md` / `P6B_REVIEW.md` / `P6B_INTEGRATION_REVIEW.md` |
+> | 里程碑日志与教训 | `PORT_NOTES.md` 的 "2026-09-29 P6b 收口" 一节 |
+>
+> **一句话读数**：1G 图案通路 **956.0 Mbps**（线速 957.1 的 99.9%）· 数据面 **156.2585 MHz**
+> 与前端 **125.0061 MHz** 双域并存 · 同批修掉两个**早于 P6b 就存在**的数据通路缺陷（F4 / F-2）。
+> ⚠️ **本文件的"验证"一节里的 `D:\repo\ECO\udp_hls_10g\...` 命令是"空门"形态**
+> （跑起来编的是**另一个 checkout**）—— 见下面该节顶部的警示。
+
 | 里程碑 | 内容 | 状态 |
 |---|---|---|
 | P0 | MAC RX/TX 64bit 字流 + 接口规范 | ✅ 板级 PASS |
@@ -66,7 +85,7 @@ Kintex-7 XC7K325T 纯硬件 TCP/IP 数据面: 64bit 字流 @125MHz, 当前 1G RG
 **slow path (HLS 协议栈 IP, ap_ctrl_none @125MHz)**:
 - ARP / ICMP echo / IGMP / UDP echo (8080) / TCP SYN-FIN-RST 握手 (服务端被动打开) +
   DHCP DISCOVER / UDP HELLO 周期自发行文
-- HLS cfg 通道 (wscale/窗口) → CAM/TCB; 看门狗 (饥饿超时 64 拍复位脉冲) 防 HLS 死锁
+- HLS cfg 通道 (wscale/窗口) → CAM/TCB; 看门狗 (饥饿超时 64 拍复位脉冲; **P6b 构建 (DP_156MHZ) 下是 80 拍** —— 同一墙钟 512ns, 见 P6B_SPEC §5.1) 防 HLS 死锁
 
 ## 协议功能全景 (P4c 收官)
 
@@ -153,6 +172,8 @@ Kintex-7 XC7K325T 纯硬件 TCP/IP 数据面: 64bit 字流 @125MHz, 当前 1G RG
   与 `tools/board_p5b_check.py --port` 用 COM9, `tools/board_diag18_test.py` 里的 COM8 已过时)
   全精度快照: TCB/窗口/FSM/三站词计数/tlast 三计数/
   截断计数 (TRU)/慢路径存活字段 (SC/SD/SF/SP/SV/HR)/线缆帧长 (WL) + 64 拍 TR/RXT 轨迹环
+  (⚠️ 2026-09-29: 该 UART 诊断行**在 KU5P 上不可观测** —— 本板无 UART; 且它在 DP 域有
+   **48 位未同步穿越**（`u_dbg_line`）。历史与理由见 `PORT_NOTES.md` P6b 收口 §⑧)
   + FIFO tlast 位图 (TL), boot 自检后每 5s 一行 (见 `board/uart_dbg.v` 头注释)
 - LED: boot 自检 3 闪 + 门控/锁存/满标志实时探针
 
@@ -231,7 +252,24 @@ Kintex-7 XC7K325T 纯硬件 TCP/IP 数据面: 64bit 字流 @125MHz, 当前 1G RG
 
 ## 验证
 
-**TB 门矩阵** (P6 类改动的固定回归门, ~25 min, 见 `sim/p4sim/`):
+> ⚠️ **2026-09-29 警示（先读这段，再照下面的命令抄）**：下面小段里的
+> `D:\repo\ECO\udp_hls_10g\...` 是**硬编码的另一个 checkout**。本仓是 2026-09-28 从那里
+> 整体拷贝来的 ⇒ **照抄这些命令 = "空门"**：编译的是 ECO 的源码、日志写进 ECO 的仓，**然后 exit 0**。
+> **现役跑法**（自定位，路径全部由脚本自身位置推导 + 三层守卫）：
+> ```bash
+> cmd //c 'D:\repo\XCKU5PMini\udp_hls_10g\sim\p4gates\run_matrix_p4dfix.bat'        # 16 门全跑
+> cmd //c 'D:\repo\XCKU5PMini\udp_hls_10g\sim\p4gates\run_matrix_p4dfix.bat' -only stallgate
+> bash /d/repo/XCKU5PMini/udp_hls_10g/sim/p4sim/run_matrix_p4dfix.sh               # 入口 sh 版
+> ```
+> ⚠️ **补一行（2026-09-29 实测）**：从 git bash 调用时开关要用**短横线** `-only`（不是 `/only`）——
+> MSYS 会把 `/only` 改写成 `"C:/Program Files/Git/only"` ⇒ 开关**静默丢弃** ⇒ **不报错地跑满 16 门**
+> （上面那行已按实测改正；纯 cmd 窗口里 `/only` 仍可用）。门 bat 均已自定位，故**相对仓根**的
+> `cmd //c 'sim\p4gates\run_matrix_p4dfix.bat'` 亦可（等价且更短）。
+> 守卫与负对照、以及"跑门 ≠ 判门"（16 门里 `unit_retx`/`unit_fifo` **无条件 exit 0**）
+> 详见 `PORT_NOTES.md` 的 P6b 收口 §⑤/§⑦。
+
+**TB 门矩阵** (P6 类改动的固定回归门, ~25 min, 见 `sim/p4sim/`)：
+**⚠️ 下面这些命令里的 `D:\repo\ECO\udp_hls_10g\...` 是历史形态（= 空门），不要照抄** —— 等价的自定位写法见本节的警示块。
 ```bash
 cd sim/p4sim
 cmd //c 'D:\repo\ECO\udp_hls_10g\sim\p4sim\run_tb_p4_burst.bat 200'                    # 门1 无注入基线
@@ -272,6 +310,8 @@ BYTES/DELAY 经 pcstall.memh 同源传入 TB 与 checker)。
   ⇒ 修前修后不可分
 
 **构建/烧录** (`board/`) — 两套独立工程, 位流互不覆盖:
+> ⚠️ 下面这几条是**空门形态**（同本节顶部警示；这一段此前没有就近警示）：`board\` 的 bat **都已自定位**，
+> 在**本仓根**用相对路径即可 ⇒ `cmd //c 'board\run_build_p4.bat'` 等（判据/产物不变）。
 ```bash
 cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_build_p4.bat'      # 默认构建 (echo 数据面) → p4_prj
 cmd //c 'D:\repo\ECO\udp_hls_10g\board\run_program_p4.bat'    # JTAG 烧录 (1MHz)
