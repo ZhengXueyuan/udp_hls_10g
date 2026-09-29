@@ -624,7 +624,7 @@ J7 = SFP A = **X0Y4**、J8 = SFP B = **X0Y5**（iBERT 实测）。一条 AOC 的
 | F3 | ⭐ **新增吞吐门**：`1 字/拍 + 背靠背最小帧`（TCP / 非 TCP 两条） | 802.3 帧长 + `P6B` 数据面 1 字/拍 | 见 §4.3 |
 | F4 | **字节序单元门** + 变异负对照 | §3.3 (i)（期望值手写死，不由 DUT 生成） | —— |
 | F5 | F4 / F-2 的判据逐条照搬 + 各自的变异负对照 | `mac_rx_64.v:128,133,135,199-206` / `mac_tx_64.v:232-244` | 判据不许放宽 |
-| F6 | `implicitly declared` 命中 **0**（当硬失败）· `10-3091` 计数 **0** | 工程坑 24 + 扩窗门 | 隐式 1 位线会静默截断 64 位连接 |
+| F6 | 隐式网签名命中 **0**（当硬失败：`Synth 8-11241` / `VRFC 10-3091] actual bit length 1 differs from formal bit length` / `VRFC 10-2989` (⚠️ 裸 `VRFC 10-3091` 会误伤 `board/util_gmii_to_rgmii.v` 的 14 处良性 unsized 字面量 —— 必须带 `actual bit length 1` 那一段)）· `10-3091` 计数 **0** | 工程坑 24 + 扩窗门 | 隐式 1 位线会静默截断 64 位连接 |
 | F7 | 全链守恒律：`W30 == W0 + W32`、`W31 == W1 − 4·W0 + W33`（**按新 MAC 重推**） | `mac_rx_64.v:48-53` 的原始形式 | 新 MAC 的计数器口径若变，守恒律必须重新推导并写进 TB |
 | F8 | ⚠️ **force 必须打在"生产者节点"（子模块端口）**，不是 wrapper 线 | P6e 实测：打线版会把"生产者↔线断开"掩盖成 PASS | 见负对照 N4 |
 
@@ -668,7 +668,7 @@ J7 = SFP A = **X0Y4**、J8 = SFP B = **X0Y5**（iBERT 实测）。一条 AOC 的
 | A11 | `rx_reset_0`/`tx_reset_0`/`user_rx_reset_0`/`user_tx_reset_0` **全被驱动/消费** | 【工具】坑 1 原文（`Opt 31-155`/`31-67`） | 日志**零命中** |
 | A12 | `rxrecclkout_0`/`gt_refclk_out` **未被消费** | 【工具】坑 2 原文（`Route 35-54`/`35-7`） | 日志**零命中** |
 | A13 | `write_bitstream completed successfully` + `0 Errors`；**`[Vivado 12-1790]` 出现是预期的** | 【工具】§0.1 原文 | 不得把 12-1790 当失败判据；**出现 `[Common 17-69] ... not permitted` 才是失败** |
-| A14 | lint：`implicitly declared` = 0 · `10-3091` = 0 | 【先例】工程坑 24 | 硬失败门槛 |
+| A14 | lint：隐式网签名 = 0 (`Synth 8-11241` / `VRFC 10-3091] actual bit length 1 differs from formal bit length` / `VRFC 10-2989` (⚠️ 裸 `VRFC 10-3091` 会误伤 `board/util_gmii_to_rgmii.v` 的 14 处良性 unsized 字面量 —— 必须带 `actual bit length 1` 那一段)) · `10-3091` = 0 | 【先例】工程坑 24 | 硬失败门槛 |
 | A15 | 无 `NSTD-1`/`UCIO-1`（所有端口有 LOC/IOSTANDARD） | 【工具】坑 4 的教训（`catch {add_files}` 静默失败 ⇒ 零约束设计） | 0 命中；且**必须回读 `get_files` 确认文件真的加进去了** |
 | A16 | 位流 sha256 + 大小 + `BUILD_ID` 记录入库 | 【先例】P7a/P6b 的指纹纪律 | 三元组齐全 |
 

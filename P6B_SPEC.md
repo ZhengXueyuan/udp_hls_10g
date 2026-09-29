@@ -1321,7 +1321,7 @@ set_clock_groups -asynchronous \
 1. `python board/check_p6b_timing.py board/p6b_ku5p_timing.rpt --expect dual` **退出码 0**。
 2. 该报告里：setup 失败端点 **0** / hold 失败端点 **0** / `IDDRE1/C|CB` Min-Period 违例 **0**（§8.6）。
 3. 构建日志里 **无** `Vivado 12-4739`（`set_clock_groups` 真生效）。
-4. 构建日志里 **无** `implicit` 隐式网、`10-3091` 位宽不符（照抄既有门的硬失败规则）。
+4. 构建日志里 **无** 隐式网签名 (`Synth 8-11241` / `VRFC 10-3091] actual bit length 1 differs from formal bit length`)、**无** `VRFC 10-2989`、`10-3091` 位宽不符（照抄既有门的硬失败规则）。⚠️ 旧句子里的 `implicit` 是**死关键字** (恒 0 命中)、且 **端口连接形式在 xvlog 里全静默** ⇒ 只跑 xvlog 的构建日志读数**不能**证明无隐式网 (见 CLAUDE.md 坑 24)。
 
 **B. 单元门（每个新模块至少一门 + 负对照）**
 

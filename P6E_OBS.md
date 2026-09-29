@@ -208,7 +208,7 @@ W20 vs W7         ⇒ **MAC 级发帧 vs HLS 慢路径发帧** —— 分开"没
 | `_proj_pcie/run_tb_axi_regs.bat` | 寄存器块单元门 17 项 (含快照窗口/触发脉冲/冻结/中途换代的 gen 守卫负对照) | **PASS_ALL** |
 | `sim/p6e_pcie/run_tb_p6e_pcie.bat` | ⭐ **真 wrapper 全链门**（P6b 起 **36 字全覆盖**）：其中 **34 个字**（W0..W23 + W26..W35）的计数源 force 成互不相同的常数、从 AXI 侧逐字读回比对；**W24/W25 不能用 force**（自由计数 / MMCM locked）⇒ 改用动态判据 `ΔW24/ΔW5 = 1.2501 ∈ [1.24,1.26]` 与 `locked==1`。门内另查 `0xB0 → SLVERR` 与 `gen 恰好 +1`<br>⚠️ force 必须打**生产者节点**(子模块端口): 打 wrapper 线会**掩盖"生产者↔线断开"** —— 实测把 `mac_tx_frames` 改回悬空, 打线版照样 PASS_ALL, 打生产者节点版当场 FAIL | **PASS_ALL**（读数 `board/p6b_verify/p6e_pcie_wrapper.pass.log`） |
 | `sim/p6e_pcie/run_tb_p6e_pcie_counters.bat` | ⭐ **新计数器增量门** (2026-09-29 加): 200 拍握手 ⇒ `W16` **恰好 +200**; 150 拍 `hls_rst_n` 低 ⇒ `W17` **恰好 +150**; 含 tvalid-only / tready-only 负向 —— 全链门把这两路 force 成常数, 掩盖了增量条件, 这道补动态那一段 | **PASS_ALL** |
-| `int_scratch/tb_int_axr36.v` (审查方独立写) | ⭐ **36 字读回 + 两条回绕负对照**: `snap_idx` 改回 5 位 / `snap_base` 改回 10 位 ⇒ 都必须 FAIL（实测 W32..W35 读回 W0..W3，**5 条 FAIL**）；两条变异的 xvlog `10-3091` 与 `implicitly` 计数**都是 0** ⇒ 这类错只有"例化真 DUT + 逐字读回"抓得到 | **PASS_ALL (reads=44)** / 负对照 **FAIL** |
+| `int_scratch/tb_int_axr36.v` (审查方独立写) | ⭐ **36 字读回 + 两条回绕负对照**: `snap_idx` 改回 5 位 / `snap_base` 改回 10 位 ⇒ 都必须 FAIL（实测 W32..W35 读回 W0..W3，**5 条 FAIL**）；两条变异的 xvlog `10-3091` 与 `implicitly` 计数**都是 0** (⚠️ `implicitly` 2026-09-29 实测已是死关键字 ⇒ 这半句无证据力) ⇒ 这类错只有"例化真 DUT + 逐字读回"抓得到 | **PASS_ALL (reads=44)** / 负对照 **FAIL** |
 | `int_scratch/tb_int_snapseq.v` (审查方独立写) | ⭐ **链式触发顺序门**（映射表由审查方按 wrapper 拼接**手工写死**，不复用 DUT 的 `fe_idx_of`）：41 代快照顺序成立 41/41、偏斜 **+36..+41 ns**；负对照把 FSM 改成 **DP 先** ⇒ 成立 **0/41**、偏斜 −46..−39 ns | **PASS_ALL (样本=41)** / 负对照 **FAIL** |
 | `sim/fifoasync/run_all.bat` (+ `run_mut_*.bat` 7 个变异) | `rtl/fifo_async.v` 单元门（12 个基础门 + 7 变异）。**F-1 修复的判据归属**：`run_mut_noovf.bat`（把 `ovf_pulse` 钉 0 = 撤回 F-1 修复）必须 FAIL —— 实测 `FAIL (3 条判据不成立)`，含"写域占用探针峰值 >= 金标准"与"探针非空"两条 | 正例 **PASS** / `mut_noovf` **FAIL**（有牙） |
 | `sim/snapcdc/negctrl/run_negctrl_2rst.bat` | 负对照: "两域各自复位会不会死锁" —— **实测不会** (见下) | 结论已改文档 |
@@ -228,7 +228,7 @@ W20 vs W7         ⇒ **MAC 级发帧 vs HLS 慢路径发帧** —— 分开"没
   "五处/六处"说法漏了索引表与 `snap_base`/`snap_idx` 的位宽, 正是 24 字与 36 字两次扩窗时踩到的坑)。
   读侧选字的**位宽上限见 `axi_regs` 的注释**（36 字版已把 `snap_idx` 加宽到 6 位、`snap_base` 到 11 位；
   再扩必须先加宽它们，否则 **`0xA0..` 会静默回绕成 `W0..` = 假 PASS**）。
-- **`fe_src`/`dp_src` 拼接必须恰好 `NW*32` 位**: 多一项会被静默截断 (门里 `findstr 10-3091` 当硬失败)。
+- **`fe_src`/`dp_src` 拼接必须恰好 `NW*32` 位**: 多一项会被静默截断。⚠️ **2026-09-29 订正**: 现在要用 `findstr /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length"` (裸 `10-3091` 会误伤 util_gmii_to_rgmii.v 的 14 处良性 unsized 字面量), 且必须跑在 **xelab** 日志上 (裸 `10-3091` 在 869 份 xvlog 日志里 0 命中)。
 - ⚠️ **`u_rxcdc`/`u_txcdc` 的 `ovf_cnt` 没接进快照**（见上 W27/W28 那条注）—— 这是 F-1 修复留下的
   **板级可观测缺口**：模块里已有拒写探针与单元门（`sim/fifoasync/run_mut_noovf.bat`），
   但 wrapper 例化处 `.ovf_cnt()` 悬空、快照无对应字。若要闭环，只需在 wrapper 里接出来并占用

@@ -366,7 +366,7 @@ abort fence 单元门 F1-F5,判据文本未改、激励按真链路补 `rst_req`
 - `run_tb_udp_split.bat` (`sim/p5udp/`, **T1 分流器单元门**: 分流/结构性不反压 (`tready` 恒 1)/
   透传逐字保真/坏帧与半帧整帧丢弃/缓冲溢出整帧丢; 决定性实验副本在 `sim/p5e_pre/`)。
 - `run_tb_udp_tx_guard.bat` (`sim/p5e_t2/`, **T2 守卫单元门**: peer 门 + `PLEN_MAX` 守卫 +
-  内置负对照) / `run_tb_p5e_t2_wrapper.bat` (**T2 真 wrapper 全链**, 含 `implicit` 检查)。
+  内置负对照) / `run_tb_p5e_t2_wrapper.bat` (**T2 真 wrapper 全链**, 含隐式网检查: `Synth 8-11241` / `VRFC 10-3091] actual bit length 1 differs from formal bit length` / `VRFC 10-2989` (⚠️ 裸 `10-3091` 不行 —— 见 CLAUDE.md 坑 24))。
 - `run_tb_app_udp.bat <case>` (`sim/p5e_udp/`, **T4 UDP 演示 app**: `pos` 正例 EXIT=0;
   负对照 `splitoff`/`portout`/`badcrc`/`nopeer` 各 EXIT=0 且正向判据不成立;
   `neglearn` **期望 exit 1** = 判别力实证) / `run_tb_p5e_udp_wrapper.bat`

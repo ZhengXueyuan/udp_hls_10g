@@ -59,7 +59,7 @@ PASS_ALL tb_int_axr36 (reads=44)
 | **`snap_idx` 改回 5 位**（`wire [4:0] snap_idx = r_word[4:0] - 5'd8;`） | `int_scratch/neg5/axi_regs.v` | **FAIL**：`W32@0xa0 got=c0de0000 (=W0)`、`W33→W1`、`W34→W2`、`W35→W3`（+`C3b 0xAC` 连带 FAIL）= **5 条** |
 | **`snap_base` 改回 10 位**（`wire [9:0] snap_base`） | `int_scratch/negbase/axi_regs.v` | **FAIL**：同样的 W32..W35 → W0..W3，5 条 |
 
-两条变异的 `xvlog` **位宽告警 `10-3091` 计数都是 0、`implicitly` 计数也是 0**
+两条变异的 `xvlog` **位宽告警 `10-3091` 计数都是 0、`implicitly` 计数也是 0** (⚠️ 后者 2026-09-29 实测已是**死关键字**, 0 命中 = 无话可说, 不能当证据; 见 `_proj_10g/notes/P7B_IMPLICIT_GATE_FIX.md`)
 ⇒ 这正是那条"lint 全程沉默、只有例化真 DUT 逐字读回才抓得到"的静默回绕。**判据有区分能力。**
 
 ### 1.3 每个字的**生产者节点**与**域归属**（逐字核，不是 wrapper 导线）
@@ -271,6 +271,7 @@ WNS **+0.373**、WHS **+0.010**、WPWS **+0.000**、失败端点 **0/220748**、
 ```
 
 ⇒ 四种组合**全部编过且能 elaborate**（四组合都没报 undeclared / implicit / 位宽）。
+  ⚠️ **2026-09-29 订正**: 这里的 "implicit" 是**死关键字** ⇒ 该项实际只能证 "没有**表达式形式**的未声明"，**不能证 "没有隐式网"**（端口连接形式在 xvlog 里全静默）。见 `_proj_10g/notes/P7B_IMPLICIT_GATE_FIX.md`。
 `int_scratch/mac/files.f` 是 211 个文件的清单；每个组合在 `int_scratch/mac_<tag>/` 独立目录跑（避文件锁）。
 
 ### 4.2 "P4 默认构建与 P6b 之前逐位相同" —— **我能证到什么程度（不含糊）**
@@ -364,7 +365,7 @@ WNS **+0.373**、WHS **+0.010**、WPWS **+0.000**、失败端点 **0/220748**、
 1. **runner 自定位**：把 `B=$(cd "$(dirname "$0")/../.." && pwd)` 与 `OUT=$B/sim/p4sim/...`
    写进 `run_matrix_p4dfix.sh`（bat 里同理用 `%~dp0..\..\`），**并把解析出的 root 打到日志第一行**；
 2. **加"路径越界"守卫**：每门 `xvlog` 之后 grep 日志里的源文件路径，出现 `D:\repo\ECO` 即硬失败
-   （本工程已有 `findstr implicit` / `10-3091` 的先例，照抄即可）；
+   （本工程已有隐式网制定例；⚠️ **2026-09-29 订正**: 不要照抄旧的 `findstr implicit` —— 它在 2025.2 下恒 0 命中, 而且只 grep xvlog 日志时**结构性拓不到端口连接形式**。用 `sim/p4gates/implicit_gate.bat` 的 5 键表, 并保证判据跑在 `xelab`/`synth_design` 日志上）；
 3. **回归要冻结修订**：跑之前把要测的源码树 `cp` 到临时目录（或至少把关键文件的 md5 打一行进日志），
    跑完核对；**施工纪律同款**："构建期间不得改动被构建的源码"；
 4. 本仓的 `sim/p4sim/matrix_p4dfix.log` 应标为**废弃/陈旧**（或在 adopt 新 runner 后重跑覆盖它）。
