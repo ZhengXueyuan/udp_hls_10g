@@ -1,0 +1,53 @@
+# ===========================================================================
+# sim/p4gates/paths.txt -- SINGLE SOURCE OF TRUTH for every repo-relative path
+# used by the P4 default-build regression matrix (16 gates).
+#
+#   Read by BOTH sim/p4gates/p4env.bat (cmd side) and sim/p4gates/p4gate.py
+#   (python side).  Nothing in the gate chain may hardcode a repository path:
+#   a repository path literal in a .bat/.sh is what made the 2026-09-era matrix
+#   silently compile ANOTHER checkout (D:\repo\ECO\udp_hls_10g) -- the "empty
+#   gate" defect.  Every path below is resolved against REPO_ROOT, and
+#   REPO_ROOT itself is derived from the script's own location.
+#
+#   Values are repo-relative (backslash or forward slash, both accepted).
+#   ';' separates list entries.
+# ===========================================================================
+
+# --- source subtrees (repo-relative) ---
+RTL=rtl
+TB=tb
+BOARD=board
+TOOLS=tools
+
+# --- HLS slow-path netlist handed to xsim (must match hls_files.f content) ---
+HLS=hls\slowstack_prj\solution1\syn\verilog
+
+# --- this tool dir + the matrix output dir ---
+GATES=sim\p4gates
+OUTDIR=sim\p4sim
+MATRIX_LOG=matrix_p4dfix.log
+
+# --- variables sim\p4gates\p4env.bat exports, and what they point at ---
+#     p4gate.py uses this to resolve %VAR%\... tokens inside a gate .bat into
+#     concrete paths (a variable the .bat assigns itself overrides this, which
+#     is how a re-hardcoded foreign path gets caught).
+P4ENV_VARS=REPO_ROOT:.;P4_SELF_ROOT:.;RTL:rtl;TB:tb;BOARD:board;TOOLS:tools;HLS:hls\slowstack_prj\solution1\syn\verilog;GATES:sim\p4gates;OUTDIR:sim\p4sim
+
+# --- the gate list + compile manifests live in the runner and here ---
+RUNNER=sim\p4gates\run_matrix_p4dfix.bat
+GATE_ENTRY=sim\p4sim\run_matrix_p4dfix.sh
+MANIFEST_GLOB=sim\p4gates\*_src.f
+
+# --- guard: the root must contain all of these or it is not this checkout ---
+REQUIRED_MARKERS=rtl\mac_rx_64.v;tb\tb_p4_chain.v;tools\gen_stim_p4_chain.py;tools\gen_stim_tcp_chain.py;sim\p4gates\p4env.bat;sim\p4gates\p4gate.py;sim\p4gates\paths.txt;sim\p4gates\run_matrix_p4dfix.bat;sim\p4sim\run_tb_p4_chain.bat
+REQUIRED_DIRS=hls\slowstack_prj\solution1\syn\verilog;rtl;tb
+
+# --- fingerprint: files that are NOT compiled but ARE part of the test ---
+#     (generators carry the pass/fail criteria; the bats carry the stimulus
+#      switches -- a run is only bound to a revision if these are hashed too)
+FINGERPRINT_GLOBS=tools\gen_stim_p4_chain.py;tools\gen_stim_tcp_chain.py;sim\p4gates\*.py;sim\p4gates\*.bat;sim\p4gates\*.txt;sim\p4gates\*.f;sim\p4sim\run_tb_*.bat;sim\p4sim\run_matrix_p4dfix.sh;sim\retxsim\run_*.bat;sim\retxsim2\run_*.bat;sim\vlansim\run_*.bat;sim\tbgate\run_*.bat
+
+# --- toolchain locations (NOT repository paths; one place for all of them) ---
+PY=C:\Users\zhxue\anaconda3\python.exe
+XV=C:\AMDDesignTools\2025.2\Vivado\bin
+TOOLCHAIN_ALLOW=C:\AMDDesignTools;C:\Users\zhxue\anaconda3
