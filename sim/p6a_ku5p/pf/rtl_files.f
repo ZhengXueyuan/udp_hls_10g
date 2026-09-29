@@ -4,7 +4,9 @@ D:\repo\XCKU5PMini\udp_hls_10g\rtl\app_status_uart.v
 D:\repo\XCKU5PMini\udp_hls_10g\rtl\app_udp_pattern.v
 D:\repo\XCKU5PMini\udp_hls_10g\rtl\axis_pipe.v
 D:\repo\XCKU5PMini\udp_hls_10g\rtl\checksum16.v
+D:\repo\XCKU5PMini\udp_hls_10g\rtl\clk_gen_p6b.v
 D:\repo\XCKU5PMini\udp_hls_10g\rtl\crc32_8b.v
+D:\repo\XCKU5PMini\udp_hls_10g\rtl\fifo_async.v
 D:\repo\XCKU5PMini\udp_hls_10g\rtl\fifo_sync.v
 D:\repo\XCKU5PMini\udp_hls_10g\rtl\frame_fifo.v
 D:\repo\XCKU5PMini\udp_hls_10g\rtl\mac_rx_64.v
@@ -14,6 +16,8 @@ D:\repo\XCKU5PMini\udp_hls_10g\rtl\rx_classify.v
 D:\repo\XCKU5PMini\udp_hls_10g\rtl\slow_cfg_adp.v
 D:\repo\XCKU5PMini\udp_hls_10g\rtl\slow_rx_adp.v
 D:\repo\XCKU5PMini\udp_hls_10g\rtl\slow_tx_adp.v
+D:\repo\XCKU5PMini\udp_hls_10g\rtl\snap_cdc.v
+D:\repo\XCKU5PMini\udp_hls_10g\rtl\snap_seq.v
 D:\repo\XCKU5PMini\udp_hls_10g\rtl\tcb.v
 D:\repo\XCKU5PMini\udp_hls_10g\rtl\tcp_cam.v
 D:\repo\XCKU5PMini\udp_hls_10g\rtl\tcp_echo.v

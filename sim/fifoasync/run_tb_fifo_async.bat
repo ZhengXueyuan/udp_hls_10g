@@ -5,7 +5,7 @@ REM usage: run_tb_fifo_async.bat [bal|wrfast|rdfast|bound|reset|clkstop|lat|earl
 REM   default = bal. Each case runs in its OWN dir (%~dp0case_<case>).
 REM Project traps handled here:
 REM   7  : parallel gates must not share xsim.dir (a leftover lock => FALSE failure)
-REM   24 : "implicitly" (implicit 1-bit wire) and VRFC 10-3091 (bit-width mismatch)
+REM   24 : "8-11241/10-3091" (implicit 1-bit wire) and VRFC 10-3091 (bit-width mismatch)
 REM        are hard failures, not warnings.
 REM bat rules: ASCII only + CRLF (non-ASCII comments break the GBK console).
 REM exit 0 only when the TB prints "FIFO_ASYNC_GATE: PASS_ALL".
@@ -29,9 +29,10 @@ cd /d "%CASEDIR%"
 if exist xsim.dir rmdir /s /q xsim.dir
 call %XV%\xvlog.bat -work xil_defaultlib %ROOT%\rtl\fifo_async.v %ROOT%\tb\tb_fifo_async.v > xvlog_%CASE%.log 2>&1 || (type xvlog_%CASE%.log & exit /b 1)
 call %XV%\xvlog.bat -work xil_defaultlib "%XV%\..\data\verilog\src\glbl.v" >> xvlog_%CASE%.log 2>&1 || (type xvlog_%CASE%.log & exit /b 1)
-findstr /I /C:"implicitly" xvlog_%CASE%.log >NUL && (echo IMPLICIT-DECL-FAIL & type xvlog_%CASE%.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_%CASE%.log >NUL && (echo IMPLICIT-DECL-FAIL & type xvlog_%CASE%.log & exit /b 1)
 findstr /C:"10-3091" xvlog_%CASE%.log >NUL && (echo BITWIDTH-MISMATCH-FAIL & type xvlog_%CASE%.log & exit /b 1)
 call %XV%\xelab.bat -debug typical -L unisims_ver xil_defaultlib.tb_fifo_async xil_defaultlib.glbl -s tb_fifo_async -log xelab_%CASE%.log > NUL 2>&1 || (type xelab_%CASE%.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_%CASE%.log >NUL && (echo IMPLICIT-DECL-FAIL-XELAB & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_%CASE%.log & exit /b 1)
 call %XV%\xsim.bat tb_fifo_async -runall -testplusarg %PA% -log xsim_%CASE%.log > NUL 2>&1
 findstr /C:"FIFO_ASYNC_GATE: PASS_ALL" xsim_%CASE%.log >NUL
 if errorlevel 1 (echo ---- FAIL detail [%CASE%]: & findstr /C:"FAIL-DETAIL" xsim_%CASE%.log & exit /b 1)

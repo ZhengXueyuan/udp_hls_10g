@@ -54,11 +54,12 @@ call %XV%\xvlog.bat -work xil_defaultlib %DM% ^
   %RTL%\fifo_sync.v %RTL%\crc32_8b.v %RTL%\frame_fifo.v %RTL%\udp_rx.v ^
   %RTL%\mac_rx_64.v %RTL%\rx_classify.v %RTL%\udp_split.v %RTL%\app_udp_pattern.v ^
   %TB%\tb_udprx_chain.v > xvlog_run.log 2>&1 || (type xvlog_run.log & exit /b 1)
-findstr /I /C:"implicit" xvlog_run.log > NUL
-if not errorlevel 1 (echo ERROR: implicit wire: & findstr /I /C:"implicit" xvlog_run.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_run.log > NUL
+if not errorlevel 1 (echo ERROR: implicit wire: & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_run.log & exit /b 1)
 call %XV%\xvlog.bat -work xil_defaultlib "%XV%\..\data\verilog\src\glbl.v" >> xvlog_run.log 2>&1 || (type xvlog_run.log & exit /b 1)
 
 call %XV%\xelab.bat -debug typical -L unisims_ver %DM% xil_defaultlib.tb_udprx_chain xil_defaultlib.glbl -s tb_udprx_chain_run -log xelab_run.log > NUL 2>&1 || (type xelab_run.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_run.log >NUL && (echo IMPLICIT-DECL-FAIL-XELAB & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_run.log & exit /b 1)
 
 call %XV%\xsim.bat tb_udprx_chain_run -runall -log xsim_run.log > NUL 2>&1
 findstr /C:"UDPRX CHAIN GATE" xsim_run.log > NUL

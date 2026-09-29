@@ -12,6 +12,7 @@ call %XV%\xvlog.bat -work xil_defaultlib ^
   %REPO_ROOT%\rtl\vlan_strip.v ^
   %REPO_ROOT%\tb\tb_vlan_strip.v > xvlog_tb.log 2>&1 || (type xvlog_tb.log & exit /b 1)
 call %XV%\xelab.bat -debug typical xil_defaultlib.tb_vlan_strip -s tb_vlan_strip -log xelab_run.log > NUL 2>&1 || (type xelab_run.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_run.log >NUL && (echo IMPLICIT-DECL-FAIL-XELAB & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_run.log & exit /b 1)
 call %XV%\xsim.bat tb_vlan_strip -runall -log xsim_run.log > NUL 2>&1 || (type xsim_run.log & exit /b 1)
 findstr /C:"ERR" /C:"VLAN_STRIP TB" xsim_run.log
 findstr /C:"VLAN_STRIP TB PASS" xsim_run.log >nul || exit /b 1

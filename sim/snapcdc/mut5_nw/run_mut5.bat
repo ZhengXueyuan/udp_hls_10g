@@ -79,9 +79,10 @@ echo ---- cfg=%CFG% NW=%W% expect=%EXPT%
 if exist xsim.dir rmdir /s /q xsim.dir
 call %XV%\xvlog.bat -work xil_defaultlib -d TB_NW_%W% "%DUT%" "%TB%" > xvlog_%CFG%_nw%W%.log 2>&1 || (type xvlog_%CFG%_nw%W%.log & exit /b 1)
 call %XV%\xvlog.bat -work xil_defaultlib "%XV%\..\data\verilog\src\glbl.v" >> xvlog_%CFG%_nw%W%.log 2>&1 || (type xvlog_%CFG%_nw%W%.log & exit /b 1)
-findstr /I /C:"implicitly" xvlog_%CFG%_nw%W%.log >NUL && (echo IMPLICIT-DECL-FAIL & type xvlog_%CFG%_nw%W%.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_%CFG%_nw%W%.log >NUL && (echo IMPLICIT-DECL-FAIL & type xvlog_%CFG%_nw%W%.log & exit /b 1)
 findstr /C:"10-3091" xvlog_%CFG%_nw%W%.log >NUL && (echo BITWIDTH-MISMATCH-FAIL & type xvlog_%CFG%_nw%W%.log & exit /b 1)
 call %XV%\xelab.bat -debug typical -L unisims_ver xil_defaultlib.tb_snap_cdc xil_defaultlib.glbl -s tb_snap_cdc -log xelab_%CFG%_nw%W%.log > NUL 2>&1 || (type xelab_%CFG%_nw%W%.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_%CFG%_nw%W%.log >NUL && (echo IMPLICIT-DECL-FAIL-XELAB & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_%CFG%_nw%W%.log & exit /b 1)
 call %XV%\xsim.bat tb_snap_cdc -runall -log xsim_%CFG%_nw%W%.log > NUL 2>&1
 findstr /C:"PASS" /C:"FAIL" /C:"TIMEOUT" xsim_%CFG%_nw%W%.log
 REM keep a committable copy of the RAW log (sim/**/*.log is gitignored; .txt is not)

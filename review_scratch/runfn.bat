@@ -7,8 +7,9 @@ cd /d "%RD%"
 if exist xsim.dir rmdir /s /q xsim.dir
 call %XV%\xvlog.bat -work xil_defaultlib ..\..\rtl\fifo_sync.v ..\rw\tb_rvw_fullnext.v > xv_fn.log 2>&1 || (type xv_fn.log & exit /b 1)
 call %XV%\xvlog.bat -work xil_defaultlib "%XV%\..\data\verilog\src\glbl.v" >> xv_fn.log 2>&1 || (type xv_fn.log & exit /b 1)
-findstr /I /C:"implicitly" xv_fn.log >NUL && (echo IMPLICIT-DECL-FAIL & type xv_fn.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xv_fn.log >NUL && (echo IMPLICIT-DECL-FAIL & type xv_fn.log & exit /b 1)
 findstr /C:"10-3091" xv_fn.log >NUL && (echo BITWIDTH-FAIL & type xv_fn.log & exit /b 1)
 call %XV%\xelab.bat -debug typical -L unisims_ver xil_defaultlib.tb_rvw_fullnext xil_defaultlib.glbl -s tb_fn -log xe_fn.log > NUL 2>&1 || (type xe_fn.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xe_fn.log >NUL && (echo IMPLICIT-DECL-FAIL-XELAB & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xe_fn.log & exit /b 1)
 call %XV%\xsim.bat tb_fn -runall -log xs_fn.log > NUL 2>&1
 type xs_fn.log

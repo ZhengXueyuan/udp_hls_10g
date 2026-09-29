@@ -28,9 +28,10 @@ if not exist "%CDIR%" mkdir "%CDIR%"
 cd /d "%CDIR%"
 if exist xsim.dir rmdir /s /q xsim.dir
 call %XV%\xvlog.bat -work xil_defaultlib %DEFS% %ROOT%\rtl\crc32_8b.v %ROOT%\rtl\fifo_sync.v %ROOT%\rtl\fifo_async.v %RTL% %ROOT%\audit_scratch\t3_txcdc\tb_tx_cdc_chain.v > xvlog_run.log 2>&1 || (type xvlog_run.log & exit /b 1)
-findstr /I /C:"implicitly" xvlog_run.log >NUL && echo NOTE-IMPLICIT-DECL
-findstr /C:"10-3091" xvlog_run.log >NUL && echo NOTE-BITWIDTH-MISMATCH
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_run.log >NUL && (echo IMPLICIT-DECL-FAIL-VXLOG & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_run.log & exit /b 1)
+findstr /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" xvlog_run.log >NUL && (echo BITWIDTH-MISMATCH-FAIL & findstr /C:"VRFC 10-3091" xvlog_run.log & exit /b 1)
 call %XV%\xelab.bat -debug typical -timescale 1ns/1ps -L xil_defaultlib xil_defaultlib.tb_tx_cdc_chain -s tb_tx_cdc_chain -log xelab_run.log > NUL 2>&1 || (type xelab_run.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_run.log >NUL && (echo IMPLICIT-DECL-FAIL-XELAB & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_run.log & exit /b 1)
 call %XV%\xsim.bat tb_tx_cdc_chain -runall %PA% -log xsim_%CASE%.log > NUL 2>&1
 findstr /C:"TXCHAIN" /C:"WIRE" /C:"NOTE-" xsim_%CASE%.log
 findstr /C:"TXCHAIN: PASS_ALL" xsim_%CASE%.log >NUL

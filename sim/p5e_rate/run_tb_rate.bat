@@ -45,12 +45,12 @@ call %XV%\xvlog.bat -work xil_defaultlib %DM% %DPL% ^
   %RTL%\udp_tx_cfg.v %RTL%\udp_tx_frame.v %RTL%\mac_tx_64.v ^
   %RTL%\app_udp_pattern.v ^
   %TB%\tb_app_udp_rate.v > xvlog_%CFG%.log 2>&1 || (type xvlog_%CFG%.log & exit /b 1)
-findstr /I /C:"implicit" xvlog_%CFG%.log > NUL
-if not errorlevel 1 (echo ERROR: implicit wire declaration: & findstr /I /C:"implicit" xvlog_%CFG%.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_%CFG%.log > NUL
+if not errorlevel 1 (echo ERROR: implicit wire declaration: & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_%CFG%.log & exit /b 1)
 
 call %XV%\xelab.bat -debug typical -L unisims_ver %DM% %DPL% xil_defaultlib.tb_app_udp_rate -s tb_rate_%CFG% -log xelab_%CFG%.log > NUL 2>&1 || (type xelab_%CFG%.log & exit /b 1)
-findstr /I /C:"implicit" xelab_%CFG%.log > NUL
-if not errorlevel 1 (echo ERROR: implicit wire declaration in xelab: & findstr /I /C:"implicit" xelab_%CFG%.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_%CFG%.log > NUL
+if not errorlevel 1 (echo ERROR: implicit wire declaration in xelab: & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_%CFG%.log & exit /b 1)
 
 call %XV%\xsim.bat tb_rate_%CFG% -runall -log xsim_%CFG%.log > NUL 2>&1
 findstr /C:"RATE TB DONE" xsim_%CFG%.log > NUL

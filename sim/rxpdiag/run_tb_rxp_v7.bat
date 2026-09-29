@@ -54,15 +54,15 @@ call %XV%\xvlog.bat -work xil_defaultlib -d RXP_DIAG ^
   %RTL%\fifo_sync.v %RTL%\frame_fifo.v %RTL%\udp_rx.v %RTL%\udp_split.v ^
   %RTL%\app_udp_pattern.v ^
   tb_rxp_v7.v > xvlog_v7.log 2>&1 || (type xvlog_v7.log & exit /b 1)
-findstr /I /C:"implicit" xvlog_v7.log > NUL
-if not errorlevel 1 (echo ERROR: implicit wire declaration found: & findstr /I /C:"implicit" xvlog_v7.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_v7.log > NUL
+if not errorlevel 1 (echo ERROR: implicit wire declaration found: & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_v7.log & exit /b 1)
 findstr /C:"multi" /C:"driv" /C:"unconnected" /C:"not connected" xvlog_v7.log > warn_v7.txt
 call %XV%\xvlog.bat -work xil_defaultlib "%XV%\..\data\verilog\src\glbl.v" >> xvlog_v7.log 2>&1 || (type xvlog_v7.log & exit /b 1)
 
 REM frame_fifo instantiates RAMB36E1 -> -L unisims_ver + glbl
 call %XV%\xelab.bat -debug typical -L unisims_ver xil_defaultlib.tb_rxp_v7 xil_defaultlib.glbl -s tb_rxp_v7 -log xelab_v7.log > NUL 2>&1 || (type xelab_v7.log & exit /b 1)
-findstr /I /C:"implicit" xelab_v7.log > NUL
-if not errorlevel 1 (echo ERROR: implicit wire declaration found in xelab: & findstr /I /C:"implicit" xelab_v7.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_v7.log > NUL
+if not errorlevel 1 (echo ERROR: implicit wire declaration found in xelab: & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_v7.log & exit /b 1)
 findstr /C:"multi" /C:"driv" /C:"unconnected" /C:"not connected" xelab_v7.log >> warn_v7.txt
 
 call %XV%\xsim.bat tb_rxp_v7 -runall -log xsim_v7.log > NUL 2>&1

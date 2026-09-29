@@ -85,6 +85,10 @@ call %XV%\xvlog.bat -work xil_defaultlib "%XV%\..\data\verilog\src\glbl.v" >> xv
 
 REM frame_fifo instantiates RAMB36E1/RAMB18E1 primitives -> -L unisims_ver + glbl
 call %XV%\xelab.bat -debug typical -L unisims_ver xil_defaultlib.tb_p5_app xil_defaultlib.glbl -s tb_p5_app -log xelab_run.log > NUL 2>&1 || (type xelab_run.log & exit /b 1)
+REM ---- P7B trap-24 check (xelab face).  The PORT-CONNECTION form of trap 24
+REM   prints NOTHING in xvlog (exit 0, empty log) -- this gate used to return 0
+REM   on such a log and read as PASS.  Keys = sim\p4gates\implicit_gate.bat.
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_run.log >NUL && (echo IMPLICIT-DECL-FAIL-XELAB & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_run.log & exit /b 1)
 call %XV%\xsim.bat tb_p5_app -runall -log xsim_run.log > NUL 2>&1 || (type xsim_run.log & exit /b 1)
 
 %PY% %TOOL%\gen_stim_p5_app.py %SIM% check
@@ -122,6 +126,10 @@ call %XV%\xvlog.bat -work xil_defaultlib -d P5_CLOSE -d APP_MODE ^
 call %XV%\xvlog.bat -work xil_defaultlib "%XV%\..\data\verilog\src\glbl.v" >> xvlog_close.log 2>&1 || (type xvlog_close.log & exit /b 1)
 
 call %XV%\xelab.bat -debug typical -L unisims_ver xil_defaultlib.tb_p5_app xil_defaultlib.glbl -s tb_p5_close -log xelab_close.log > NUL 2>&1 || (type xelab_close.log & exit /b 1)
+REM ---- P7B trap-24 check (xelab face).  The PORT-CONNECTION form of trap 24
+REM   prints NOTHING in xvlog (exit 0, empty log) -- this gate used to return 0
+REM   on such a log and read as PASS.  Keys = sim\p4gates\implicit_gate.bat.
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_close.log >NUL && (echo IMPLICIT-DECL-FAIL-XELAB & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_close.log & exit /b 1)
 call %XV%\xsim.bat tb_p5_close -runall -log xsim_close.log > NUL 2>&1 || (type xsim_close.log & exit /b 1)
 
 %PY% %TOOL%\gen_stim_p5_app.py %SIM% close check

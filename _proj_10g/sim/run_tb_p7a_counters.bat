@@ -26,7 +26,7 @@ call %XV%\xvlog.bat -i %RTL% ^
     %RTL%\gt_10gbr_example_stimulus_64b66b_async.v %RTL%\gt_10gbr_example_checking_64b66b_async.v ^
     %RTL%\gt_10gbr_example_reset_sync.v tb_p7a_counters.v > xvlog.txt 2>&1
 echo ---- xvlog exit=%ERRORLEVEL% ----
-findstr /I /C:"implicitly" xvlog.txt >NUL && (echo IMPLICIT-DECL-FAIL & findstr /I /C:"implicitly" xvlog.txt & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog.txt >NUL && (echo IMPLICIT-DECL-FAIL & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog.txt & exit /b 1)
 findstr /C:"10-3091" xvlog.txt >NUL && (echo BITWIDTH-MISMATCH-FAIL & findstr /C:"10-3091" xvlog.txt & exit /b 1)
 findstr /I /C:"ERROR" xvlog.txt >NUL && (echo XVLOG-ERROR-FAIL & findstr /I /C:"ERROR" xvlog.txt & exit /b 1)
 

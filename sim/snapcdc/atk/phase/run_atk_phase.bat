@@ -19,8 +19,9 @@ echo [B] HA=%HA% HB=%HB% STEP=%STEP% NLOOP=%NLOOP%
 if exist xsim.dir rmdir /s /q xsim.dir
 call %XV%\xvlog.bat -work xil_defaultlib %ROOT%\snap_cdc.v %ROOT%\tb_atk_phase.v > xvlog_atk.log 2>&1 || (type xvlog_atk.log & exit /b 1)
 call %XV%\xvlog.bat -work xil_defaultlib "%XV%\..\data\verilog\src\glbl.v" >> xvlog_atk.log 2>&1 || (type xvlog_atk.log & exit /b 1)
-findstr /I /C:"implicitly" xvlog_atk.log >NUL && (echo IMPLICIT-DECL-FAIL & type xvlog_atk.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_atk.log >NUL && (echo IMPLICIT-DECL-FAIL & type xvlog_atk.log & exit /b 1)
 findstr /C:"10-3091" xvlog_atk.log >NUL && (echo BITWIDTH-MISMATCH-FAIL & type xvlog_atk.log & exit /b 1)
 call %XV%\xelab.bat -debug typical -L unisims_ver xil_defaultlib.tb_atk_phase xil_defaultlib.glbl -s tb_atk_phase -log xelab_atk.log > NUL 2>&1 || (type xelab_atk.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_atk.log >NUL && (echo IMPLICIT-DECL-FAIL-XELAB & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_atk.log & exit /b 1)
 call %XV%\xsim.bat tb_atk_phase -runall -log xsim_atk.log -testplusarg "HA=%HA%" -testplusarg "HB=%HB%" -testplusarg "STEP=%STEP%" -testplusarg "NLOOP=%NLOOP%" -testplusarg "VLOG=%VLOG%" -testplusarg "WT=%WT%" > NUL 2>&1
 findstr /C:"PHASE-RESULT" /C:"FAIL" /C:"PASS" /C:"WARN" /C:"INFO" /C:"TIMEOUT" xsim_atk.log

@@ -18,9 +18,10 @@ if not exist "%CDIR%" mkdir "%CDIR%"
 cd /d "%CDIR%"
 if exist xsim.dir rmdir /s /q xsim.dir
 call %XV%\xvlog.bat -work xil_defaultlib %DEFS% %ROOT%\rtl\fifo_async.v %ROOT%\audit_scratch\t1_bits\tb_cdc_bits.v > xvlog_%CASE%.log 2>&1 || (type xvlog_%CASE%.log & exit /b 1)
-findstr /I /C:"implicitly" xvlog_%CASE%.log >NUL && echo NOTE-IMPLICIT-DECL
-findstr /C:"10-3091" xvlog_%CASE%.log >NUL && echo NOTE-BITWIDTH-MISMATCH
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_%CASE%.log >NUL && (echo IMPLICIT-DECL-FAIL-VXLOG & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_%CASE%.log & exit /b 1)
+findstr /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" xvlog_%CASE%.log >NUL && (echo BITWIDTH-MISMATCH-FAIL & findstr /C:"VRFC 10-3091" xvlog_%CASE%.log & exit /b 1)
 call %XV%\xelab.bat -debug typical -timescale 1ns/1ps -L xil_defaultlib xil_defaultlib.tb_cdc_bits -s tb_cdc_bits -log xelab_%CASE%.log > NUL 2>&1 || (type xelab_%CASE%.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_%CASE%.log >NUL && (echo IMPLICIT-DECL-FAIL-XELAB & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_%CASE%.log & exit /b 1)
 call %XV%\xsim.bat tb_cdc_bits -runall -log xsim_%CASE%.log > NUL 2>&1
 findstr /C:"RESULT" /C:"CDC_SPAN_TOTAL" /C:"CDC_BITS" /C:"BAD-" /C:"CONS-FAIL" /C:"INCOMPLETE" /C:"TIMEOUT" /C:"NOTE-" xsim_%CASE%.log
 findstr /C:"CDC_BITS: PASS_ALL" xsim_%CASE%.log >NUL

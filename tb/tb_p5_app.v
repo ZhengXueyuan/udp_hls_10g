@@ -280,6 +280,9 @@ module tb_p5_app;
     wire [15:0] ac_winq0, ac_wu_mark0, ac_stat_wu16, ac_stat_px16;
     wire [16:0] ac_pool;
     wire [31:0] ac_stat_wu, ac_stat_px;
+    // P7B: 3-bit FSM state of tcp_tx_frame (dbg_state[2:0]) -> app_status_uart.fsm_state[2:0].
+    // Was missing => implicit 1-bit net => xelab VRFC 10-3091 (silent truncation, trap 24).
+    wire [2:0]  tx_fsm_state_w;
     wire [31:0] tx_stat_ack_d;   // P5b: stat_ack_drop (P5a 未接)
 
     // ---- cam/tcb 仲裁 (tx > rx > cfg 级; cfg 级 = slow_cfg_adp 带 gnt) ----

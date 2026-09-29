@@ -59,13 +59,13 @@ REM    truncating 64/8-bit connections (upper bits = Z into the downstream => ma
 REM    stores a Z word => cw_len=X => permanent stall). The multi/driver/unconnected
 REM    checks do NOT catch it => checked separately here.
 REM 2) multi-driver / undriven / unconnected: recorded in warn_wh.txt for review.
-findstr /I /C:"implicit" xvlog_wh.log > NUL
-if not errorlevel 1 (echo ERROR: implicit wire declaration found: & findstr /I /C:"implicit" xvlog_wh.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_wh.log > NUL
+if not errorlevel 1 (echo ERROR: implicit wire declaration found: & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_wh.log & exit /b 1)
 findstr /C:"multi" /C:"driv" /C:"unconnected" /C:"not connected" xvlog_wh.log > warn_wh.txt
 
 call %XV%\xelab.bat -debug typical -L unisims_ver xil_defaultlib.tb_p5e_t2_wrapper xil_defaultlib.glbl -s tb_p5e_t2_wrapper -log xelab_wh.log > NUL 2>&1 || (type xelab_wh.log & exit /b 1)
-findstr /I /C:"implicit" xelab_wh.log > NUL
-if not errorlevel 1 (echo ERROR: implicit wire declaration found in xelab: & findstr /I /C:"implicit" xelab_wh.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_wh.log > NUL
+if not errorlevel 1 (echo ERROR: implicit wire declaration found in xelab: & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_wh.log & exit /b 1)
 findstr /C:"multi" /C:"driv" /C:"unconnected" /C:"not connected" xelab_wh.log >> warn_wh.txt
 call %XV%\xsim.bat tb_p5e_t2_wrapper -runall -log xsim_wh.log > NUL 2>&1 || (type xsim_wh.log & exit /b 1)
 
@@ -83,13 +83,13 @@ call %XV%\xvlog.bat -work xil_defaultlib_def ^
   %RTL%\app_ctrl.v %RTL%\app_pattern.v %RTL%\app_udp_pattern.v %RTL%\app_status_uart.v ^
   %BD%\wrapper_p4.v %BD%\util_gmii_to_rgmii.v %BD%\uart_dbg.v ^
   > xvlog_wd.log 2>&1 || (type xvlog_wd.log & exit /b 1)
-findstr /I /C:"implicit" xvlog_wd.log > NUL
-if not errorlevel 1 (echo ERROR: implicit wire declaration found in default build: & findstr /I /C:"implicit" xvlog_wd.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_wd.log > NUL
+if not errorlevel 1 (echo ERROR: implicit wire declaration found in default build: & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_wd.log & exit /b 1)
 findstr /C:"multi" /C:"driv" xvlog_wd.log > warn_wd.txt
 call %XV%\xvlog.bat -work xil_defaultlib_def "%XV%\..\data\verilog\src\glbl.v" >> xvlog_wd.log 2>&1 || (type xvlog_wd.log & exit /b 1)
 call %XV%\xelab.bat -L unisims_ver xil_defaultlib_def.wrapper_p4 xil_defaultlib_def.glbl -s wrapper_def -log xelab_wd.log > NUL 2>&1 || (type xelab_wd.log & exit /b 1)
-findstr /I /C:"implicit" xelab_wd.log > NUL
-if not errorlevel 1 (echo ERROR: implicit wire declaration found in default xelab: & findstr /I /C:"implicit" xelab_wd.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_wd.log > NUL
+if not errorlevel 1 (echo ERROR: implicit wire declaration found in default xelab: & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_wd.log & exit /b 1)
 findstr /C:"multi" /C:"driv" xelab_wd.log >> warn_wd.txt
 echo default-build elab OK
 

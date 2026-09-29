@@ -152,6 +152,8 @@ call :log "gate filter : %GATE_FILTER%"
 call :log "guard       : checkpaths + manifestcheck before, scanlog after each gate"
 call :log "note        : gates unit_retx / unit_fifo exit 0 unconditionally (their"
 call :log "              .bat ends in 'type xsim*.log') -- read their console tail."
+call :log "note        : unit_uart is NOT one of them any more (P7B 2026-09-29): it prints"
+call :log "              its verdict line and exits non-zero on FAIL:."
 
 call :log "--- revision fingerprint (before) ---"
 "%PY%" "%P4GATE_PY%" fingerprint --root "%REPO_ROOT%" --out "%FP_BEFORE%" --label before >>"%MATRIX_LOG%" 2>&1

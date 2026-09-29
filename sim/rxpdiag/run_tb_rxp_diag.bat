@@ -40,13 +40,13 @@ if exist xsim.dir rmdir /s /q xsim.dir
 call %XV%\xvlog.bat -work xil_defaultlib -d RXP_DIAG -d APP_MODE ^
   %RTL%\fifo_sync.v %RTL%\app_udp_pattern.v %RTL%\app_status_uart.v ^
   %BD%\uart_dbg.v %TB%\tb_rxp_diag.v > xvlog_diag.log 2>&1 || (type xvlog_diag.log & exit /b 1)
-findstr /I /C:"implicit" xvlog_diag.log > NUL
-if not errorlevel 1 (echo ERROR: implicit wire declaration found: & findstr /I /C:"implicit" xvlog_diag.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_diag.log > NUL
+if not errorlevel 1 (echo ERROR: implicit wire declaration found: & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_diag.log & exit /b 1)
 findstr /C:"multi" /C:"driv" /C:"unconnected" /C:"not connected" xvlog_diag.log > warn_diag.txt
 
 call %XV%\xelab.bat -L unisims_ver xil_defaultlib.tb_rxp_diag -s tb_rxp_diag -log xelab_diag.log > NUL 2>&1 || (type xelab_diag.log & exit /b 1)
-findstr /I /C:"implicit" xelab_diag.log > NUL
-if not errorlevel 1 (echo ERROR: implicit wire declaration found in xelab: & findstr /I /C:"implicit" xelab_diag.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_diag.log > NUL
+if not errorlevel 1 (echo ERROR: implicit wire declaration found in xelab: & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_diag.log & exit /b 1)
 
 call %XV%\xsim.bat tb_rxp_diag -runall -log xsim_diag.log > NUL 2>&1
 type xsim_diag.log | findstr /C:"RXPDIAG" /C:"RXP-DIAG GATE" /C:"FAIL"

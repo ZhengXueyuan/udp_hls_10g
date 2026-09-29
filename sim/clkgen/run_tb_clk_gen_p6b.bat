@@ -9,9 +9,10 @@ set ROOT=D:\repo\XCKU5PMini\udp_hls_10g
 if exist xsim.dir rmdir /s /q xsim.dir
 call %XV%\xvlog.bat -work xil_defaultlib %ROOT%\rtl\clk_gen_p6b.v %ROOT%\tb\tb_clk_gen_p6b.v > xvlog_clkgen.log 2>&1 || (type xvlog_clkgen.log & exit /b 1)
 call %XV%\xvlog.bat -work xil_defaultlib "%XV%\..\data\verilog\src\glbl.v" >> xvlog_clkgen.log 2>&1 || (type xvlog_clkgen.log & exit /b 1)
-findstr /I /C:"implicitly" xvlog_clkgen.log >NUL && (echo IMPLICIT-DECL-FAIL & type xvlog_clkgen.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_clkgen.log >NUL && (echo IMPLICIT-DECL-FAIL & type xvlog_clkgen.log & exit /b 1)
 findstr /C:"10-3091" xvlog_clkgen.log >NUL && (echo BITWIDTH-MISMATCH-FAIL & type xvlog_clkgen.log & exit /b 1)
 call %XV%\xelab.bat -debug typical -L unisims_ver xil_defaultlib.tb_clk_gen_p6b xil_defaultlib.glbl -s tb_clk_gen_p6b -log xelab_clkgen.log > NUL 2>&1 || (type xelab_clkgen.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_clkgen.log >NUL && (echo IMPLICIT-DECL-FAIL-XELAB & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_clkgen.log & exit /b 1)
 call %XV%\xsim.bat tb_clk_gen_p6b -runall -log xsim_clkgen.log > NUL 2>&1
 findstr /C:"CLKGEN" /C:"PASS_ALL" /C:"TIMEOUT" xsim_clkgen.log
 REM exit code: PASS_ALL => 0, anything else => 1

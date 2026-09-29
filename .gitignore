@@ -39,6 +39,88 @@ Pkt2.txt
 PktIdle.txt
 sim/p4sim/*
 !sim/p4sim/run_tb_*.bat
+# ⭐ 2026-09-29: 16 门矩阵的**现役 sh 入口** —— 它一直在盘上却**从未入库**
+#   (被上面的 `sim/p4sim/*` 挡住)，而 `udp_hls_10g/CLAUDE.md` 里逐字写着
+#   `bash sim/p4sim/run_matrix_p4dfix.sh -only ...` ⇒ **新克隆跑不了文档里那条命令**。
+!sim/p4sim/run_matrix_p4dfix.sh
+!sim/p4sim/p6logs/
+sim/p4sim/p6logs/*
+!sim/p4sim/p6logs/*/
+sim/p4sim/p6logs/*/*
+!sim/p4sim/p6logs/*/*.sh
+
+# ============================================================================
+# P7b (2026-09-29): 新 MAC / rx_classify v2 / 闸1 两通道 PCS 工程 / 隐式网检测器
+#
+# 实测: 本轮未跟踪 970 个 / 227.74 MB 里, **209 MB 是 6 棵生成工程或工作目录**
+#   (p7b_mac_synth/xxv_mac 139M · xxv_loop/pcs64_2ch 149M · p7b_mac_synth/mac_only 15M ·
+#    p7b_mac_synth/baseline 生成树 19M · notes/p7b_rollout/probe_*_work ×4 = 101M ·
+#    xxv_gate2 88M) —— 全部可重建 (各自的 tcl/py 驱动脚本都在白名单里)。
+# 入库 ≈ 18.2 MB (327 新增 + 107 修改), 沿用本工程一贯口径:
+#   "设计 + 门 + 全部**被文档逐字引用**的文本读数"入库; 位流/抓包/工程/网表不入库。
+#
+# ⚠️ 顺序纪律 (实测踩过): gitignore = 最后匹配者胜 ⇒ `!` 行必须排在它要覆盖的排除行**之后**;
+#    要放行子目录内的文件, 必须先放行**子目录本身**, 再重新排除其内容, 再逐类放行。
+# ============================================================================
+
+# ---- 新 MAC 的仿真工作目录 (只留 TB/驱动/逐变异留档日志) --------------------
+#      sim/_mut_logs/*.log = 逐变异 xsim 读数, P7B_MAC_GATEFIX.md 逐字引用 ⇒ git add -f。
+#      sim/_mut_rtl/ = 变异脚本改的**副本**, 与 rtl/ 逐字节相同 (md5 实测同值) ⇒ 排除无损。
+_proj_10g/p7b_mac/sim/_mut_rtl/
+_proj_10g/p7b_mac/sim/xsim.dir/
+_proj_10g/p7b_mac/sim/xsim_m10g*.log
+_proj_10g/p7b_mac/sim/xvlog*.log
+_proj_10g/p7b_mac/sim/xelab*.log
+
+# ---- rx_classify v2 的仿真工作目录 ------------------------------------------
+_proj_10g/p7b_rxcls/sim/_mut_rtl/
+_proj_10g/p7b_rxcls/sim/xsim.dir/
+_proj_10g/p7b_rxcls/sim/*/xsim.dir/
+_proj_10g/p7b_rxcls/sim/xsim_rxcls*.log
+_proj_10g/p7b_rxcls/sim/xvlog*.log
+_proj_10g/p7b_rxcls/sim/xelab*.log
+_proj_10g/p7b_rxcls/sim/legacy/xsim_legacy*.log
+_proj_10g/p7b_rxcls/sim/legacy_mut/xsim_legacy*.log
+_proj_10g/p7b_rxcls/sim/*/*.memh
+
+# ---- MAC 综合/实现 (183 MB → 14.3 MB): 排除 3 棵生成树, 保留全部报告与读数 ----
+_proj_10g/p7b_mac_synth/xxv_mac/
+_proj_10g/p7b_mac_synth/mac_only/
+_proj_10g/p7b_mac_synth/dfx_runtime.txt
+#    baseline/ 是闸1 工程的一份 routed 快照 (19 MB, 可重建); 只有 4 份 .rpt 被
+#    P7B_MAC_TIMING.md / P7B_RXCLASSIFY_DESIGN.md 引用 ⇒ 按 p5diag_verify 的先例
+#    "先放行子目录、再排内容、再逐类放行"。
+!_proj_10g/p7b_mac_synth/baseline/
+_proj_10g/p7b_mac_synth/baseline/*
+!_proj_10g/p7b_mac_synth/baseline/*.rpt
+
+# ---- 闸1 的两通道 PCS 工程 (157 MB → 1.2 MB): 只排 pcs64_2ch 生成树 ----------
+_proj_10g/xxv_loop/pcs64_2ch/
+_proj_10g/xxv_loop/tcl/dfx_runtime.txt
+#    logs/ 下被引用的是 *_stdout.txt / *_FINAL.txt (明文读数); *.log 是 Vivado journal
+_proj_10g/xxv_loop/logs/*.log
+_proj_10g/xxv_loop/sim/xsim.dir/
+_proj_10g/xxv_loop/sim/*.log
+_proj_10g/xxv_loop/sim/*.jou
+_proj_10g/xxv_loop/sim/*.pb
+_proj_10g/xxv_loop/sim/*.wdb
+
+# ---- 铺开/复现两份笔记目录: 只排工作区, 文本全留 -----------------------------
+_proj_10g/notes/p7b_rollout/probe_work/
+_proj_10g/notes/p7b_rollout/probe2_work/
+_proj_10g/notes/p7b_rollout/probe_p7a_work/
+_proj_10g/notes/p7b_rollout/probe_cfg_work/
+#    隐式网最小复现: 子目录是每次 xvlog/xelab 的产物, 顶层脚本/源码/读数留
+_proj_10g/notes/p7b_implicit_repro/*/
+
+# ---- ⚠️ 闸2: **在役** (2026-09-29 23:03 实测 88 MB / 244 文件, 且正在增长)。
+#      整目录排除, **不留任何 ! 行**; 等它收工后另行归档。 ----
+_proj_10g/xxv_gate2/
+
+# ---- audit_scratch 的 xsim 轮转备份 (产物) ----------------------------------
+#      既有 `!audit_scratch/**/*.log` (为本工程"归档级原始日志"而写) 把 *.backup.log
+#      一并放行了 —— 实测 7 个 / 485 KB。与既有 sim/**/*.backup.log 同性质, 补挡。
+audit_scratch/**/*.backup.log
 sim/vlansim/*
 !sim/vlansim/run_tb_*.bat
 tools/cpp_peer/peer.exe
@@ -51,7 +133,14 @@ sim/p5adv/
 sim/p5ind*/
 sim/p4indm/
 sim/p4sim_hlsprobe/
-sim/retxsim*/
+# P7B: was sim/retxsim*/ -- a DIRECTORY-excluding rule, so no !line could
+#   ever re-include a file inside it (git does not descend into an excluded dir).
+#   sim/retxsim2/run_tb_frame_fifo.bat is the ACTIVE unit_fifo gate of the 16-gate
+#   matrix (run_matrix_p4dfix.bat:174) and was therefore permanently unreachable by
+#   git. Rule reshaped to the contents form used by sim/p4sim/* , plus the same
+#   !.../run_tb_*.bat negation every sibling product dir already has.
+sim/retxsim*/*
+!sim/retxsim*/run_tb_*.bat
 sim/tbgate/
 xelab.pb
 # P5b/P5c 里程碑 (2026-09-20) 复核/跑数目录 (产物): 只保留驱动 .bat 与门 TB 源码

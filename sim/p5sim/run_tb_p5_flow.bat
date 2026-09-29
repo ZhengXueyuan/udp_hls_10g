@@ -71,6 +71,10 @@ call %XV%\xvlog.bat -work xil_defaultlib -d P5_FLOW ^
 call %XV%\xvlog.bat -work xil_defaultlib "%XV%\..\data\verilog\src\glbl.v" >> xvlog_flow.log 2>&1 || (type xvlog_flow.log & exit /b 1)
 
 call %XV%\xelab.bat -debug typical -L unisims_ver xil_defaultlib.tb_p5_app xil_defaultlib.glbl -s tb_p5_flow -log xelab_flow.log > NUL 2>&1 || (type xelab_flow.log & exit /b 1)
+REM ---- P7B trap-24 check (xelab face).  The PORT-CONNECTION form of trap 24
+REM   prints NOTHING in xvlog (exit 0, empty log) -- this gate used to return 0
+REM   on such a log and read as PASS.  Keys = sim/p4gates/implicit_gate.bat.
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_flow.log >NUL && (echo IMPLICIT-DECL-FAIL-XELAB & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_flow.log & exit /b 1)
 call %XV%\xsim.bat tb_p5_flow -runall -log xsim_flow.log > NUL 2>&1 || (type xsim_flow.log & exit /b 1)
 
 %PY% %TOOL%\gen_stim_p5_app.py %SIM% flow

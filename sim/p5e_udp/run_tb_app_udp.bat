@@ -51,14 +51,14 @@ call %XV%\xvlog.bat -work xil_defaultlib ^
   %RTL%\udp_tx_cfg.v %RTL%\udp_tx_frame.v %RTL%\tx_arb.v ^
   %RTL%\app_udp_pattern.v ^
   %TB%\tb_app_udp.v > xvlog_ua.log 2>&1 || (type xvlog_ua.log & exit /b 1)
-findstr /I /C:"implicit" xvlog_ua.log > NUL
-if not errorlevel 1 (echo ERROR: implicit wire declaration: & findstr /I /C:"implicit" xvlog_ua.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_ua.log > NUL
+if not errorlevel 1 (echo ERROR: implicit wire declaration: & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_ua.log & exit /b 1)
 call %XV%\xvlog.bat -work xil_defaultlib "%XV%\..\data\verilog\src\glbl.v" >> xvlog_ua.log 2>&1 || (type xvlog_ua.log & exit /b 1)
 
 REM frame_fifo instantiates RAMB36E1 -> -L unisims_ver + glbl
 call %XV%\xelab.bat -debug typical -L unisims_ver xil_defaultlib.tb_app_udp xil_defaultlib.glbl -s tb_app_udp -log xelab_ua.log > NUL 2>&1 || (type xelab_ua.log & exit /b 1)
-findstr /I /C:"implicit" xelab_ua.log > NUL
-if not errorlevel 1 (echo ERROR: implicit wire declaration in xelab: & findstr /I /C:"implicit" xelab_ua.log & exit /b 1)
+findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_ua.log > NUL
+if not errorlevel 1 (echo ERROR: implicit wire declaration in xelab: & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_ua.log & exit /b 1)
 call %XV%\xsim.bat tb_app_udp -runall %TPA% -log xsim_ua_%MODE%.log > NUL 2>&1 || (type xsim_ua_%MODE%.log & exit /b 1)
 
 findstr /C:"P5E UDP APP GATE: OK" xsim_ua_%MODE%.log > NUL
