@@ -1,0 +1,42 @@
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Tue Sep 29 10:15:18 2026
+# Process ID         : 26000
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rd_term
+# Command line       : xsim.exe -log xs_tm.log -mode tcl -source {xsim.dir/tb_tm/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rd_term/xs_tm.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rd_term\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 44733 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_tm/xsim_script.tcl
+# xsim {tb_tm} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+=== Phase A: tready=0 (consumer stalled) ===
+  A1: C=64 frame (delivers exactly 8 words => FIFO exactly full)
+   after A1: NEW frames=1 drops=0 dropFull=0 partial=0 orphanB=0 ovf=0 | OLD frames=1 drops=0
+  A2: C=14 frame (G=1 => 0 pushes, first_done=0)
+   after A2: NEW state=5 term_pend=0 | NEW frames=1 drops=1 dropFull=1 partial=0 orphanB=0 ovf=0 | OLD frames=1 drops=1
+=== Phase B: tready=1 (space available), send a good C=200 frame ===
+--- FINAL ---
+NEW: frames=1 crc=1 drop=2 bytes=68 dropFull=2 partial=0 orphanB=0 ovf=0 | words=8/9 popc=64 tlast=1 term=0 sop=1 baresop=0 open=0
+OLD: frames=2 crc=2 drop=1 bytes=272 | words=33/34 popc=264 tlast=2 sop=2 open=0
+DELTA frames (NEW-OLD) = 4294967295   DELTA drops = 1
+REVIEW_TERM_RESULT: FAIL -- NEW sacrificed a good frame the OLD delivered
+REVIEW_TERM_DONE
+$finish called at time : 4516 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rw/tb_rvw_term.v" Line 153
+exit
+INFO: [Common 17-206] Exiting xsim at Tue Sep 29 10:15:20 2026...

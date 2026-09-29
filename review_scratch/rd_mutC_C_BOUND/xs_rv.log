@@ -1,0 +1,61 @@
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Tue Sep 29 09:33:53 2026
+# Process ID         : 26344
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rd_mutC_C_BOUND
+# Command line       : xsim.exe -log xs_rv.log -mode tcl -source {xsim.dir/tb_fifo_async/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rd_mutC_C_BOUND/xs_rv.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rd_mutC_C_BOUND\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 46681 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_fifo_async/xsim_script.tcl
+# xsim {tb_fifo_async} -testplusarg C_BOUND -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+FIFO_ASYNC TB: case=BOUND WH=4 RH=4 T_wr=6400ps T_rd=6400ps
+== case BOUND: 灌满 / 排空 / 空态常读 / 1:1 高速两端捶打 ==
+  ok: BOUND1: 灌到 full=1
+  ok: BOUND1: full 期间写被严格挡住 (计数不再增)
+  ok: BOUND1: 占用极值 == DEPTH (真的到过满)
+  ok: BOUND1: 存在被 full 挡掉的写 (正证据)
+  ok: BOUND2: 排空完成
+  ok: BOUND2: 占用到过 0
+  ok: BOUND2: 空态下常读弹不出任何字
+  ok: BOUND2: 存在空态被忽略的读 (正证据)
+  info: BOUND3 期间 A: full 上升 46 次, empty 上升 127 次 (C: 610 / 571)
+  ok: BOUND3: 1:1 捶打期间 full 上升 >= 5 次
+  ok: BOUND3: 1:1 捶打期间 empty 上升 >= 5 次
+  ok: BOUND3: 小深度实例 (D=4) 两端都撞过 >= 5 次
+  ok: BOUND3: 收尾排空完成
+
+== 判据表 (每实例) ==
+  inst WIDTH/DEPTH/FWFT   写    读   比较  内容错  灰码违规/验证  占用max/min  full挡/empty挡  fullUp/emptyUp  队列余
+  A    72/16/FWFT=1     2406 2406 4058 0 0/4812 16/0 281/773 47/129 0
+  B    72/16/FWFT=0     2397 2397 2397 0 0/4794 16/0 390/700 157/64 0
+  C    40/4/FWFT=1      1822 1822 3246 0 0/3644 4/0 902/1299 611/573 0
+  D    40/4/FWFT=0      1847 1847 1847 0 0/3694 4/0 894/1271 618/590 0
+  ok: 通用1: 四实例内容错 0 (无丢失/重复/重排)
+  ok: 通用2: 四实例都真做过 dout 对拍 (比较数 > 0)
+  ok: 通用3: 四实例都真有被接受的写
+  ok: 通用4: 四实例都真有弹出
+  ok: 通用5: 灰码监视零违规
+  ok: 通用6: 灰码监视真有被验证的指针变化 (判据非空)
+  ok: 通用7: 收尾时 写-读 == 0 (排空后队列空)
+
+FIFO_ASYNC_GATE: PASS_ALL (case=BOUND)
+$finish called at time : 84022950 ps : File "D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rw/tb_fifo_async.v" Line 829
+exit
+INFO: [Common 17-206] Exiting xsim at Tue Sep 29 09:33:55 2026...

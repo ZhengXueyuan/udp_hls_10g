@@ -1,0 +1,64 @@
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Tue Sep 29 10:13:51 2026
+# Process ID         : 16368
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rd_fullnext
+# Command line       : xsim.exe -log xs_fn.log -mode tcl -source {xsim.dir/tb_fn/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rd_fullnext/xs_fn.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rd_fullnext\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 45079 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_fn/xsim_script.tcl
+# xsim {tb_fn} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+== TEST-1 exhaustive force sweep: (wptr,rptr) x {wr,rd} ==
+  cfg0 (D=4 , AW=2) exhaustive: 8x8x4 = 256 combos done
+  cfg1 (D=8 , AW=3) exhaustive: 16x16x4 = 1024 combos done
+  cfg2 (D=16, AW=4) exhaustive: 32x32x4 = 4096 combos done
+== TEST-2 free-running: full_next@t === full@(t+1), 60000 cycles ==
+  ERR lag cfg0 t=43140000 fn@prev=1 full=0
+  ERR lag cfg0 t=43244000 fn@prev=1 full=0
+  ERR lag cfg0 t=43252000 fn@prev=0 full=1
+  ERR lag cfg0 t=43260000 fn@prev=1 full=0
+  ERR lag cfg0 t=43268000 fn@prev=0 full=1
+  ERR lag cfg0 t=43276000 fn@prev=1 full=0
+  ERR lag cfg0 t=43284000 fn@prev=0 full=1
+  ERR lag cfg1 t=43300000 fn@prev=1 full=0
+  ERR lag cfg0 t=43316000 fn@prev=1 full=0
+  ERR lag cfg1 t=43316000 fn@prev=0 full=1
+  ERR lag cfg1 t=43332000 fn@prev=1 full=0
+  ERR lag cfg0 t=43340000 fn@prev=0 full=1
+  ERR lag cfg1 t=43380000 fn@prev=1 full=0
+  ERR lag cfg1 t=43388000 fn@prev=0 full=1
+  ERR lag cfg0 t=43436000 fn@prev=1 full=0
+  ERR lag cfg0 t=43444000 fn@prev=0 full=1
+  ERR lag cfg1 t=43444000 fn@prev=1 full=0
+  ERR lag cfg0 t=43460000 fn@prev=1 full=0
+  ERR lag cfg1 t=43460000 fn@prev=0 full=1
+  ERR lag cfg1 t=43468000 fn@prev=1 full=0
+  ERR lag cfg1 t=43476000 fn@prev=0 full=1
+  ERR lag cfg1 t=43484000 fn@prev=1 full=0
+  ERR lag cfg0 t=43492000 fn@prev=0 full=1
+  ERR lag cfg0 t=43508000 fn@prev=1 full=0
+  ERR lag cfg1 t=43508000 fn@prev=0 full=1
+REVIEW_FN: combos=5376 checks=70752 errors=36056
+  reachable-occupancy coverage: cfg0(D=4)=9/5  cfg1(D=8)=17/9  cfg2(D=16)=16/17
+REVIEW_FN_RESULT: FAIL (36056)
+REVIEW_FN_DONE
+$finish called at time : 523100100 ps : File "D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rw/tb_rvw_fullnext.v" Line 170
+exit
+INFO: [Common 17-206] Exiting xsim at Tue Sep 29 10:13:53 2026...

@@ -1,0 +1,44 @@
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Tue Sep 29 11:04:23 2026
+# Process ID         : 17108
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/audit_scratch/t2_rxcdc/case_neg_late
+# Command line       : xsim.exe -log xsim_neg_late.log -mode tcl -source {xsim.dir/tb_rx_cdc_chain/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/audit_scratch/t2_rxcdc/case_neg_late/xsim_neg_late.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/audit_scratch/t2_rxcdc/case_neg_late\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 49827 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_rx_cdc_chain/xsim_script.tcl
+# xsim {tb_rx_cdc_chain} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+TB-STIM frames=48 stim_bytes=24747
+RXCHAIN ATOMIC-FAIL t=21956000 rptr 0->0 wbin 256->257 tvalid=1 tready=1 full=0
+RXCHAIN ATOMIC-FAIL t=74692000 rptr 0->0 wbin 353->354 tvalid=1 tready=1 full=1
+RXCHAIN ATOMIC-FAIL t=74700000 rptr 0->1 wbin 354->354 tvalid=0 tready=0 full=1
+RXCHAIN ATOMIC-FAIL t=74820000 rptr 1->1 wbin 354->355 tvalid=1 tready=1 full=1
+RXCHAIN ATOMIC-FAIL t=74828000 rptr 1->2 wbin 355->355 tvalid=1 tready=0 full=1
+RXCHAIN ATOMIC-FAIL t=74948000 rptr 2->2 wbin 355->356 tvalid=1 tready=1 full=1
+RXCHAIN BAD-SOP: 帧内字 tuser=1
+RXCHAIN FINAL frames_in=48 mac_frames=35 crc_err=0 drop=13 dfull=13 dpart=13 orph=5656 ovf=0 mac_words=1805
+RXCHAIN FINAL dp_words=1805 dp_frames=34 term=13 bad=0 cdc_wbin=269 cdc_rbin=269 mrx_rptr=13
+RXCHAIN FINAL atomic_ok=1617 atomic_bad=376 wr_cycles=4832 acc=1805 refw=3027 fullcyc=3325 stall_bad=0
+RXCHAIN FAIL: R1 原子性 atomic_bad=376
+RXCHAIN FAIL: R3 帧守恒 34+13!=48
+RXCHAIN: FAIL
+$finish called at time : 287734400 ps : File "D:/repo/XCKU5PMini/udp_hls_10g/audit_scratch/t2_rxcdc/tb_rx_cdc_chain.v" Line 349
+exit
+INFO: [Common 17-206] Exiting xsim at Tue Sep 29 11:04:25 2026...

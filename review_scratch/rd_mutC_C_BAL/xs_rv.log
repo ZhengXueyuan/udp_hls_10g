@@ -1,0 +1,49 @@
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Tue Sep 29 09:33:41 2026
+# Process ID         : 2468
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rd_mutC_C_BAL
+# Command line       : xsim.exe -log xs_rv.log -mode tcl -source {xsim.dir/tb_fifo_async/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rd_mutC_C_BAL/xs_rv.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rd_mutC_C_BAL\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 46736 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_fifo_async/xsim_script.tcl
+# xsim {tb_fifo_async} -testplusarg C_BAL -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+FIFO_ASYNC TB: case=BAL WH=5 RH=4 T_wr=8000ps T_rd=6400ps
+== case BAL: 金标准对拍 (随机占空比, 不同周期) ==
+  ok: BAL: 排空完成 (四实例)
+
+== 判据表 (每实例) ==
+  inst WIDTH/DEPTH/FWFT   写    读   比较  内容错  灰码违规/验证  占用max/min  full挡/empty挡  fullUp/emptyUp  队列余
+  A    72/16/FWFT=1     14577 14577 28912 0 0/29154 16/0 316/6529 294/588 0
+  B    72/16/FWFT=0     14543 14543 14543 0 0/29086 16/0 457/6571 430/576 0
+  C    40/4/FWFT=1      11282 11282 22568 0 0/22564 4/0 3702/9804 3362/3696 0
+  D    40/4/FWFT=0      11343 11343 11343 0 0/22686 4/0 3673/9752 3327/3810 0
+  ok: 通用1: 四实例内容错 0 (无丢失/重复/重排)
+  ok: 通用2: 四实例都真做过 dout 对拍 (比较数 > 0)
+  ok: 通用3: 四实例都真有被接受的写
+  ok: 通用4: 四实例都真有弹出
+  ok: 通用5: 灰码监视零违规
+  ok: 通用6: 灰码监视真有被验证的指针变化 (判据非空)
+  ok: 通用7: 收尾时 写-读 == 0 (排空后队列空)
+
+FIFO_ASYNC_GATE: PASS_ALL (case=BAL)
+$finish called at time : 283056550 ps : File "D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rw/tb_fifo_async.v" Line 829
+exit
+INFO: [Common 17-206] Exiting xsim at Tue Sep 29 09:33:43 2026...

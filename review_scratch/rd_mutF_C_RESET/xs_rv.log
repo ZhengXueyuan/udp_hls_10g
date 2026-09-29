@@ -1,0 +1,173 @@
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Tue Sep 29 09:34:03 2026
+# Process ID         : 23604
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rd_mutF_C_RESET
+# Command line       : xsim.exe -log xs_rv.log -mode tcl -source {xsim.dir/tb_fifo_async/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rd_mutF_C_RESET/xs_rv.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rd_mutF_C_RESET\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 46624 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_fifo_async/xsim_script.tcl
+# xsim {tb_fifo_async} -testplusarg C_RESET -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+FIFO_ASYNC TB: case=RESET WH=5 RH=4 T_wr=8000ps T_rd=6400ps
+== case RESET: 空复位 / 满复位 / 在途两侧复位 / 单侧复位(脏) / 重新对齐 ==
+  ok: RESET1 前置: 排空完成
+  ok: RESET1: 空 FIFO 复位后 empty=1 / full=0
+  ok: RESET1: 复位不产生任何幽灵读写
+  [0] FWFT1-DOUT-MISMATCH t=57744000 got=b888d9e9bb000000ef exp=a3abd8e8d2000000df (seq got=239 exp=223)
+  [2] FWFT1-DOUT-MISMATCH t=57744000 got=44000000ea exp=c6000000ea (seq got=234 exp=234)
+  [0] FWFT1-DOUT-MISMATCH t=57751000 got=b888d9e9bb000000ef exp=a3abd8e8d2000000df (seq got=239 exp=223)
+  [2] FWFT1-DOUT-MISMATCH t=57751000 got=44000000ea exp=c6000000ea (seq got=234 exp=234)
+  [0] FWFT1-DOUT-MISMATCH t=57757000 got=b888d9e9bb000000ef exp=a3abd8e8d2000000df (seq got=239 exp=223)
+  [2] FWFT1-DOUT-MISMATCH t=57757000 got=44000000ea exp=c6000000ea (seq got=234 exp=234)
+  [0] FWFT1-DOUT-MISMATCH t=57764000 got=b888d9e9bb000000ef exp=a3abd8e8d2000000df (seq got=239 exp=223)
+  [2] FWFT1-DOUT-MISMATCH t=57764000 got=44000000ea exp=c6000000ea (seq got=234 exp=234)
+  [0] FWFT1-DOUT-MISMATCH t=57770000 got=b888d9e9bb000000ef exp=a3abd8e8d2000000df (seq got=239 exp=223)
+  [2] FWFT1-DOUT-MISMATCH t=57770000 got=44000000ea exp=c6000000ea (seq got=234 exp=234)
+  [0] FWFT1-DOUT-MISMATCH t=57776000 got=b888d9e9bb000000ef exp=a3abd8e8d2000000df (seq got=239 exp=223)
+  [2] FWFT1-DOUT-MISMATCH t=57776000 got=44000000ea exp=c6000000ea (seq got=234 exp=234)
+  [0] FWFT1-DOUT-MISMATCH t=57783000 got=b888d9e9bb000000ef exp=a3abd8e8d2000000df (seq got=239 exp=223)
+  [2] FWFT1-DOUT-MISMATCH t=57783000 got=44000000ea exp=c6000000ea (seq got=234 exp=234)
+  [0] FWFT1-DOUT-MISMATCH t=57789000 got=b888d9e9bb000000ef exp=a3abd8e8d2000000df (seq got=239 exp=223)
+  [2] FWFT1-DOUT-MISMATCH t=57789000 got=44000000ea exp=c6000000ea (seq got=234 exp=234)
+  ok: RESET2: 四实例都灌到 full=1
+  ok: RESET2: 灌满后复位 ⇒ empty=1/full=0
+  ok: RESET2: 复位丢弃全部在途数据 (复位后读不出任何字)
+  [0] FWFT1-DOUT-MISMATCH t=63031000 got=9a2b0f7eb30000027f exp=83503b673f0000027f (seq got=639 exp=639)
+  [2] FWFT1-DOUT-MISMATCH t=63031000 got=850000027a exp=c6000000ea (seq got=634 exp=234)
+  [0] FWFT1-DOUT-MISMATCH t=63037000 got=83503b673f0000027f exp=ce637085d3000000e0 (seq got=639 exp=224)
+  [0] FWFT1-DOUT-MISMATCH t=63044000 got=83503b673f0000027f exp=ea6d202f9c00000281 (seq got=639 exp=641)
+  [1] FWFT0-DOUT-MISMATCH t=63044000 got=095902c62600000274 exp=5ca7e11dc6000000df
+  [0] FWFT1-DOUT-MISMATCH t=63050000 got=83503b673f0000027f exp=ea6d202f9c00000281 (seq got=639 exp=641)
+  [0] FWFT1-DOUT-MISMATCH t=63056000 got=83503b673f0000027f exp=ea6d202f9c00000281 (seq got=639 exp=641)
+  [0] FWFT1-DOUT-MISMATCH t=63063000 got=ea6d202f9c00000281 exp=837667e55500000281 (seq got=641 exp=641)
+  [2] FWFT1-DOUT-MISMATCH t=63063000 got=af0000027b exp=7a000000eb (seq got=635 exp=235)
+  [3] FWFT0-DOUT-MISMATCH t=63063000 got=4700000279 exp=b70000027a
+  [0] FWFT1-DOUT-MISMATCH t=63069000 got=ea6d202f9c00000281 exp=837667e55500000281 (seq got=641 exp=641)
+  [2] FWFT1-DOUT-MISMATCH t=63069000 got=3c0000027b exp=99000000ec (seq got=635 exp=236)
+  [0] FWFT1-DOUT-MISMATCH t=63076000 got=837667e55500000281 exp=bed7ba865300000282 (seq got=641 exp=642)
+  [1] FWFT0-DOUT-MISMATCH t=63076000 got=093b825e6500000274 exp=b0053a62aa000000e0
+  [1] FWFT0-DOUT-MISMATCH t=63082000 got=577e3a8e0200000275 exp=fe65f445bd000000e1
+  [2] FWFT1-DOUT-MISMATCH t=63088000 got=c20000027d exp=850000027a (seq got=637 exp=634)
+  [2] FWFT1-DOUT-MISMATCH t=63095000 got=4a0000027d exp=af0000027b (seq got=637 exp=635)
+  [3] FWFT0-DOUT-MISMATCH t=63095000 got=0d00000279 exp=620000027b
+  [1] FWFT0-DOUT-MISMATCH t=63101000 got=95d9e9e61f00000276 exp=5d4111f09c000000e2
+  [2] FWFT1-DOUT-MISMATCH t=63101000 got=4a0000027d exp=af0000027b (seq got=637 exp=635)
+  [3] FWFT0-DOUT-MISMATCH t=63101000 got=b70000027a exp=d20000027e
+  [3] FWFT0-DOUT-MISMATCH t=63108000 got=620000027b exp=4f000000e9
+  [1] FWFT0-DOUT-MISMATCH t=63114000 got=b44ab0e5ca00000277 exp=9e6a7f2aad000000e4
+  [3] FWFT0-DOUT-MISMATCH t=63114000 got=d20000027e exp=16000000ea
+  [1] FWFT0-DOUT-MISMATCH t=63120000 got=a89969570e00000278 exp=e0670bea38000000e4
+  [2] FWFT1-DOUT-MISMATCH t=63127000 got=1200000280 exp=3c0000027b (seq got=640 exp=635)
+  [1] FWFT0-DOUT-MISMATCH t=63133000 got=33ca83978a00000279 exp=2253c084de000000e5
+  [1] FWFT0-DOUT-MISMATCH t=63140000 got=14b0227dd30000027a exp=122dbacb13000000e6
+  [2] FWFT1-DOUT-MISMATCH t=63146000 got=9d00000281 exp=c20000027d (seq got=641 exp=637)
+  [3] FWFT0-DOUT-MISMATCH t=63152000 got=7f00000283 exp=bf00000284
+  [3] FWFT0-DOUT-MISMATCH t=63178000 got=e200000284 exp=bc00000285
+  [3] FWFT0-DOUT-MISMATCH t=63184000 got=bf00000284 exp=0d00000279
+  [0] FWFT1-DOUT-MISMATCH t=66749000 got=f89b78416f000003b4 exp=5fbcc0e37f000003a0 (seq got=948 exp=928)
+  [3] FWFT0-DOUT-MISMATCH t=66749000 got=14000003ae exp=cf000003a3
+  [3] FWFT0-DOUT-MISMATCH t=66756000 got=ca000003ae exp=64000003a5
+  [0] FWFT1-DOUT-MISMATCH t=66762000 got=65f0d37065000003b4 exp=d408cea462000003a2 (seq got=948 exp=930)
+  [0] FWFT1-DOUT-MISMATCH t=66768000 got=65f0d37065000003b4 exp=d408cea462000003a2 (seq got=948 exp=930)
+  [0] FWFT1-DOUT-MISMATCH t=66775000 got=65f0d37065000003b4 exp=d408cea462000003a2 (seq got=948 exp=930)
+  [3] FWFT0-DOUT-MISMATCH t=66775000 got=9b000003b0 exp=22000003a9
+  [0] FWFT1-DOUT-MISMATCH t=66781000 got=8c42e3fe4a000003b5 exp=7658a54223000003a2 (seq got=949 exp=930)
+  [0] FWFT1-DOUT-MISMATCH t=66788000 got=8c42e3fe4a000003b5 exp=7658a54223000003a2 (seq got=949 exp=930)
+  [0] FWFT1-DOUT-MISMATCH t=66794000 got=d79516bb3f000003b6 exp=3ceadb1033000003a3 (seq got=950 exp=931)
+  [0] FWFT1-DOUT-MISMATCH t=66800000 got=d79516bb3f000003b6 exp=3ceadb1033000003a3 (seq got=950 exp=931)
+  [3] FWFT0-DOUT-MISMATCH t=66800000 got=24000003b1 exp=f7000003b2
+  [3] FWFT0-DOUT-MISMATCH t=66807000 got=2f000003b1 exp=c3000003b3
+  [3] FWFT0-DOUT-MISMATCH t=66813000 got=f7000003b2 exp=f7000003ad
+  [3] FWFT0-DOUT-MISMATCH t=66826000 got=c3000003b3 exp=14000003ae
+  [3] FWFT0-DOUT-MISMATCH t=66852000 got=46000003b6 exp=2a000003b8
+  ok: RESET3: 在途复位后仍能排空 (无挂死)
+  FAIL-DETAIL: RESET3: 在途两侧复位后逐字干净 (在途数据全丢, 无旧字重现)
+  ok: RESET3: 复位后流量正常恢复 (正证据)
+  ok: RESET4 前置: 脏窗口快照已取
+  ok: RESET4 前置(A): 读指针非零且未读数非零 (否则本项无判别力)
+  FAIL-DETAIL: RESET4 前置(C): 读指针非零且未读数非零
+  info: RESET4 快照 A: W=10 qcnt=11 R=31 | C: W=1 qcnt=0 R=1
+  info: RESET4 脏排空 A 弹数 P=10 (期望 == W=10; 真实未读只有 11) | C 弹数 1 (期望 1)
+  ok: RESET4: 只复位读侧 ⇒ 弹出数 == 写指针 W (指针错位实锤)
+  ok: RESET4: 弹出数 != 真实未读数 (多弹 = 静默脏数据)
+  ok: RESET4: C 实例(深度4)同样多弹 == W != qcnt
+  ok: RESET4: 脏窗口确实弹出了字 (正证据)
+  ok: RESET5 前置: 脏窗口快照已取
+  ok: RESET5 前置(A): 读指针非零且未读数非零 (否则本项无判别力)
+  ok: RESET5 前置(C): 读指针非零且未读数非零
+  info: RESET5 快照 A: W=25 qcnt=10 R=15 head_seq=1555 | C: W=4 qcnt=1
+  info: RESET5 脏灌 A PW=31 (期望 R+DEPTH=31; 真实空位 6; 超标 25) | C PW=7 (期望 7, 真实空位 3)
+  ok: RESET5: 只复位写侧 ⇒ 灌满字数 == R+DEPTH (指针错位实锤)
+  ok: RESET5: 写入数 > 真实空位 (覆盖了未读字)
+  ok: RESET5: C 实例(深度4)同样多写 == R+DEPTH
+  ok: RESET5: 被覆盖的未读字读出时 seq 已变 (内容实锤损坏)
+  [0] FWFT1-DOUT-MISMATCH t=87024000 got=b888d9e9bb000006e6 exp=5b01af80c300000604 (seq got=1766 exp=1540)
+  [2] FWFT1-DOUT-MISMATCH t=87024000 got=44000006e2 exp=8700000613 (seq got=1762 exp=1555)
+  [0] FWFT1-DOUT-MISMATCH t=87031000 got=b888d9e9bb000006e6 exp=5b01af80c300000604 (seq got=1766 exp=1540)
+  [1] FWFT0-DOUT-MISMATCH t=87031000 got=9e6a7f2aad000006cf exp=c803c192ed000005f4
+  [2] FWFT1-DOUT-MISMATCH t=87031000 got=c6000006e2 exp=c600000614 (seq got=1762 exp=1556)
+  [3] FWFT0-DOUT-MISMATCH t=87031000 got=e3000006ee exp=4f000006ee
+  [0] FWFT1-DOUT-MISMATCH t=87037000 got=b888d9e9bb000006e6 exp=5b01af80c300000604 (seq got=1766 exp=1540)
+  [2] FWFT1-DOUT-MISMATCH t=87037000 got=7a000006e3 exp=9e00000615 (seq got=1763 exp=1557)
+  [3] FWFT0-DOUT-MISMATCH t=87037000 got=4f000006ee exp=16000006ef
+  [0] FWFT1-DOUT-MISMATCH t=87044000 got=d502553acc000006e6 exp=ff798bfc8200000606 (seq got=1766 exp=1542)
+  [0] FWFT1-DOUT-MISMATCH t=87050000 got=d502553acc000006e6 exp=ff798bfc8200000606 (seq got=1766 exp=1542)
+  [0] FWFT1-DOUT-MISMATCH t=87056000 got=6b0d2e610a000006e7 exp=0ec9eb4e6f00000606 (seq got=1767 exp=1542)
+  [1] FWFT0-DOUT-MISMATCH t=87056000 got=2253c084de000006d0 exp=b609416e43000005f4
+  [2] FWFT1-DOUT-MISMATCH t=87056000 got=eb000006e5 exp=ec00000618 (seq got=1765 exp=1560)
+  [0] FWFT1-DOUT-MISMATCH t=87063000 got=16ec60702d000006e8 exp=47a7d0b1fc00000607 (seq got=1768 exp=1543)
+  [1] FWFT0-DOUT-MISMATCH t=87063000 got=122dbacb13000006d0 exp=5abc059ce7000005f5
+  [3] FWFT0-DOUT-MISMATCH t=87063000 got=16000006ef exp=9c000006f0
+  [0] FWFT1-DOUT-MISMATCH t=87069000 got=16ec60702d000006e8 exp=47a7d0b1fc00000607 (seq got=1768 exp=1543)
+  [2] FWFT1-DOUT-MISMATCH t=87069000 got=e4000006e6 exp=44000006e2 (seq got=1766 exp=1762)
+  [3] FWFT0-DOUT-MISMATCH t=87069000 got=9c000006f0 exp=76000006f2
+  [3] FWFT0-DOUT-MISMATCH t=87076000 got=76000006f2 exp=3c000006f2
+  [1] FWFT0-DOUT-MISMATCH t=87082000 got=0be5c83e9f000006d1 exp=9bf17b1e4b000005f6
+  [2] FWFT1-DOUT-MISMATCH t=87082000 got=7a000006e6 exp=c6000006e2 (seq got=1766 exp=1762)
+  [1] FWFT0-DOUT-MISMATCH t=87088000 got=eeaa175dd2000006d2 exp=26cfeed552000005f7
+  [2] FWFT1-DOUT-MISMATCH t=87088000 got=7a000006e6 exp=c6000006e2 (seq got=1766 exp=1762)
+  [1] FWFT0-DOUT-MISMATCH t=87095000 got=247e9c9d84000006d3 exp=a5617a6aaa000005f9
+  [2] FWFT1-DOUT-MISMATCH t=87095000 got=67000006e7 exp=7a000006e3 (seq got=1767 exp=1763)
+  [3] FWFT0-DOUT-MISMATCH t=87095000 got=3c000006f2 exp=a500000621
+  [1] FWFT0-DOUT-MISMATCH t=87114000 got=0a47aa8952000006d4 exp=cfa12dab1d000005f9
+  [1] FWFT0-DOUT-MISMATCH t=87120000 got=1dc9170052000006d5 exp=a8935b267a000005fa
+  [3] FWFT0-DOUT-MISMATCH t=87127000 got=c4000006f5 exp=75000006f5
+  [3] FWFT0-DOUT-MISMATCH t=87133000 got=75000006f5 exp=5f000006f6
+  FAIL-DETAIL: RESET6: 重新对齐复位后逐字干净 (恢复可用)
+  ok: RESET6: 恢复后流量正常 (正证据)
+
+== 判据表 (每实例) ==
+  inst WIDTH/DEPTH/FWFT   写    读   比较  内容错  灰码违规/验证  占用max/min  full挡/empty挡  fullUp/emptyUp  队列余
+  A    72/16/FWFT=1     465 465 700 700 0/3294 16/0 1/625 1/37 0
+  B    72/16/FWFT=0     450 450 450 450 0/3242 16/0 0/614 0/17 0
+  C    40/4/FWFT=1      311 311 488 488 0/2189 4/0 152/772 123/141 0
+  D    40/4/FWFT=0      306 306 306 305 0/2157 4/0 155/745 122/138 0
+  FAIL-DETAIL: 通用1: 四实例内容错 0 (无丢失/重复/重排)
+  ok: 通用2: 四实例都真做过 dout 对拍 (比较数 > 0)
+  ok: 通用3: 四实例都真有被接受的写
+  ok: 通用4: 四实例都真有弹出
+  ok: 通用5: 灰码监视零违规
+  ok: 通用6: 灰码监视真有被验证的指针变化 (判据非空)
+  ok: 通用7: 收尾时 写-读 == 0 (排空后队列空)
+
+FIFO_ASYNC_GATE: FAIL (4 条判据不成立)
+$finish called at time : 95619750 ps : File "D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rw/tb_fifo_async.v" Line 829
+exit
+INFO: [Common 17-206] Exiting xsim at Tue Sep 29 09:34:05 2026...

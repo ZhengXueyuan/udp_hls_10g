@@ -1,0 +1,48 @@
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Tue Sep 29 09:35:35 2026
+# Process ID         : 2884
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rd_macrx
+# Command line       : xsim.exe -log xs_rv.log -mode tcl -source {xsim.dir/tb_rvw/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rd_macrx/xs_rv.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rd_macrx\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 48080 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_rvw/xsim_script.tcl
+# xsim {tb_rvw} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+=== F1 control: content=200, no stall ===
+F1 : FE W0=1 W1=204 W4=0 | DP W30=1 W31=204 | gap(W1-W31)=0 gap(W0-W30)=0  [orphan_run=0]
+=== F2: content=200, tready stalled cyc[30,300) ===
+   [drop #1] t=3348000  dut.state=3  stat_drop=1  stat_frames=1  out_words=25 out_popc=200 out_tlast=1
+   mid-stall snapshot:
+F2s: FE W0=1 W1=204 W4=1 | DP W30=1 W31=204 | gap(W1-W31)=0 gap(W0-W30)=0  [orphan_run=0]
+F2 : FE W0=1 W1=204 W4=1 | DP W30=1 W31=268 | gap(W1-W31)=4294967232 gap(W0-W30)=0  [orphan_run=8]
+=== F3: content=72 (exactly 9 words), tready stalled cyc[12,300) ===
+   mid-stall snapshot:
+F3s: FE W0=2 W1=280 W4=1 | DP W30=1 W31=268 | gap(W1-W31)=12 gap(W0-W30)=1  [orphan_run=8]
+F3 : FE W0=2 W1=280 W4=1 | DP W30=1 W31=332 | gap(W1-W31)=4294967244 gap(W0-W30)=1  [orphan_run=16]
+=== F4 control: content=20, no stall ===
+F4 : FE W0=3 W1=304 W4=1 | DP W30=2 W31=356 | gap(W1-W31)=4294967244 gap(W0-W30)=1  [orphan_run=0]
+------------------------------------------------------------
+VERDICT: after F2 (mid-frame drop) and F3 (frame-end drop) the FE/DP
+         byte identity W1==W31 is broken by the orphan words that were
+         already pushed before the drop. Frame identity W0==W30 survives.
+REVIEW_DONE
+$finish called at time : 7500 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/review_scratch/rw/tb_rvw_macrx.v" Line 140
+exit
+INFO: [Common 17-206] Exiting xsim at Tue Sep 29 09:35:37 2026...

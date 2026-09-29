@@ -1,0 +1,68 @@
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Tue Sep 29 11:17:19 2026
+# Process ID         : 22224
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/audit_scratch/t3_txcdc/case_orig
+# Command line       : xsim.exe -log xsim_orig.log -mode tcl -source {xsim.dir/tb_tx_cdc_chain/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/audit_scratch/t3_txcdc/case_orig/xsim_orig.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/audit_scratch/t3_txcdc/case_orig\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 49539 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_tx_cdc_chain/xsim_script.tcl
+# xsim {tb_tx_cdc_chain} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+DUMP frame#0 len=72:
+   55 55 55 55 55 55 55 d5 3c 3d 3e 3f 38 39 3a 3b 
+   34 35 36 37 30 31 32 33 2c 2d 2e 2f 28 29 2a 2b 
+   00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+   00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+   00 00 00 00 4a 00 8e 7f 
+WIRE  frame#0 len=72 FCS-OK  完整匹配帧B (含 pad 到 60) ✓
+DUMP frame#1 len=328:
+   55 55 55 55 55 55 55 d5 00 25 4a 6f 94 b9 de 03 
+   28 4d 72 97 bc e1 06 2b 50 75 9a bf e4 09 2e 53 
+   78 9d c2 e7 0c 31 56 7b a1 c4 eb 0e 35 58 7f a2 
+   c9 ec 13 36 5d 80 a7 ca f1 14 3b 5e 85 a8 cf f2 
+   19 3c 63 86 ad d0 f7 1a 42 67 88 ad d6 fb 1c 41 
+   6a 8f b0 d5 fe 23 44 69 92 b7 d8 fd 26 4b 6c 91 
+   ba df 00 25 4e 73 94 b9 e3 06 29 4c 77 9a bd e0 
+   0b 2e 51 74 9f c2 e5 08 33 56 79 9c c7 ea 0d 30 
+   5b 7e a1 c4 ef 12 35 58 84 a1 ce eb 10 3d 5a 87 
+   ac c9 f6 13 38 65 82 af d4 f1 1e 3b 60 8d aa d7 
+   fc 19 46 63 88 b5 d2 ff 25 40 6f 8a b1 dc fb 26 
+   4d 68 97 b2 d9 04 23 4e 75 90 bf da 01 2c 4b 76 
+   9d b8 e7 02 29 54 73 9e c6 e3 0c 29 52 7f 98 c5 
+   ee 0b 34 51 7a a7 c0 ed 16 33 5c 79 a2 cf e8 15 
+   3e 5b 84 a1 ca f7 10 3d 67 82 ad c8 f3 1e 39 64 
+   8f aa d5 f0 1b 46 61 8c b7 d2 fd 18 43 6e 89 b4 
+   df fa 25 40 6b 96 b1 dc 08 2d 42 67 9c b1 d6 0b 
+   20 45 7a 9f b4 e9 0e 23 58 7d 92 b7 ec 01 26 5b 
+   70 95 ca ef 04 39 5e 73 a9 cc e3 06 3d 50 77 aa 
+   c1 e4 1b 3e 55 88 af c2 f9 1c 33 56 8d a0 c7 fa 
+   11 34 6b 8e a5 d8 ff 12 
+WIRE  frame#1 len=328 FCS-BAD (残留=d6560bc8) 首8=00 25 4a 6f 94 b9 de 03
+WIRE  frame#2 len=652 FCS-OK  **幽灵帧**: content = 帧A 的字节[320..960) (中终止后的残字被当新帧发出!)
+WIRE  frame#3 len=212 FCS-OK  完整匹配帧C ✓
+TXCHAIN FINAL mac_frames=3 mac_abort=1 wire_frames=4 match=2 short=0 badfcs=1 ghost=1
+TXCHAIN FINAL dp_acc=148 refw=0 cdc_wbin=148 cdc_rbin=148 mac_pop=148 fullcyc=3 model_bad=0 pop_bad=0
+TXCHAIN **F11-CONFIRMED**: 1 个 FCS 正确的幽灵帧上线 (坏帧当好帧)
+TXCHAIN FAIL: F-2 幽灵帧 = 1 (残字被当新帧发出)
+TXCHAIN FPRINT wf=0b4540e9 frames=3 abort=1 flush_words=3735928559 flush_done=3735928559 wire_frames=4
+TXCHAIN: FAIL
+$finish called at time : 126012 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/audit_scratch/t3_txcdc/tb_tx_cdc_chain.v" Line 362
+exit
+INFO: [Common 17-206] Exiting xsim at Tue Sep 29 11:17:21 2026...

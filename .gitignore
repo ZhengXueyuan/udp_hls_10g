@@ -362,3 +362,14 @@ sim/*_p6b/
 !p6b_accept_final/*.err
 !board/p6b_verify/*.log
 !_proj_pcie/smoke_scratch/*.log
+
+# ---- ⭐ 2026-09-29 补放行：三个 scratch 目录下的原始日志 --------------------------------
+#     原先的窄口径把 `*_scratch/**/*.log` 一律当产物排除（"读数已提练进 *.txt"）。
+#     **复核后改口**：`P6B_CDC_AUDIT.md:124` 的证据栏**逐字引用** `t1_bits/case_*/xsim_*.log`
+#     作为判据 C9（位级/字段跨域 walking-1/0，正是抓到 MUT_W75 / MUT_SWAP 两个变异的那条）
+#     的原始读数 ⇒ 不入库就**证据索引悬空**。
+#     取舍：合计 ~2.8 MB（audit 1.8 + int 0.3 + review 0.17 + 余），换"报告引用的东西真的在库里"。
+#     ⚠️ 仍排除它们里面的 `*.memh` / `xsim.dir/` / `*.wdb`（见上面 `*_scratch/**/*.memh`）。
+!audit_scratch/**/*.log
+!review_scratch/**/*.log
+!int_scratch/**/*.log

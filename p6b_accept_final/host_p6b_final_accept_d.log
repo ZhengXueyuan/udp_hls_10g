@@ -1,0 +1,79 @@
+########## P6b 正式验收 [stage=d] 2026-09-29 13:15:55 ##########
+位流期望: MAGIC=0x50360001 BUILD_ID=0x00000006 (冻结位流 sha256 c17700868b08170865f4a4ae0292ebb636aed03070e2875f6dbb005123a948ca)
+[setup] 补加 192.168.100.1/24 到 enp3s0
+enp3s0           UP             192.168.100.1/24 fe80::e0cd:c944:57b1:dac1/64 
+-- 等 PCIe 端点 / 驱动 / user BAR --
+[setup] insmod xdma.ko
+/dev/xdma0_c2h_0 /dev/xdma0_control /dev/xdma0_events_0 /dev/xdma0_events_1 /dev/xdma0_events_10 /dev/xdma0_events_11 /dev/xdma0_events_12 /dev/xdma0_events_13 /dev/xdma0_events_14 /dev/xdma0_events_15 /dev/xdma0_events_2 /dev/xdma0_events_3 /dev/xdma0_events_4 /dev/xdma0_events_5 /dev/xdma0_events_6 /dev/xdma0_events_7 /dev/xdma0_events_8 /dev/xdma0_events_9 /dev/xdma0_h2c_0 /dev/xdma0_user /dev/xdma0_xvc 
+
+===== A. 位流身份与前置 =====
+  [PASS] 判据A1   判据=MAGIC == 0x50360001 | 期望=0x50360001 | 实测=0x50360001
+  [PASS] 判据A2   判据=BUILD_ID == 6 (P6b+F4 双域 36 字版) | 期望=0x00000006 | 实测=0x00000006
+  [PASS] 判据A3   判据=MARKER == 0xdeadbeef (地址译码) | 期望=0xdeadbeef | 实测=0xdeadbeef
+  [PASS] 判据A4   判据=FREECNT 两次读不同 (AXI 域活性) | 期望=变化 | 实测=0xa63bd894 -> 0xa7c3d5c6 (Δ=25689394)
+  [PASS] 判据A5   判据=未实现地址 0xB0 ⇒ 0xffffffff (SLVERR) | 期望=0xffffffff | 实测=0xffffffff (负对照: 同趟 0x14 回 0xdeadbeef ≠ 0xffffffff ⇒ 不是通道死)
+  [INFO] 地址纪律自检: 判据地址 0xB0 < 0x100 ✓ (ar_word=araddr[7:2] 只有 6 位 ⇒ 每 256B 回绕)
+  [PASS] 判据A6   判据=快照 gen 恰好 +1 (自证本轮由本进程触发) | 期望=gen:g0->g0+1 | 实测=gen 0 -> 1
+  [INFO] SNAP_STATUS(0x1C) 快照后 = 0x00010056  ([31:16]gen [2]seen [1]done [0]busy)
+  [INFO] W25(MMCM 状态字) = 1 ; HW_STATUS(0x10) = 0x00000018
+  [PASS] 判据A7   判据=读失败必须可区分于读到 0 (负对照: 伪设备) | 期望=读失败⇒非零 | 实测=伪设备读取被 rd() 判为失败 ✓
+  [INFO] 未实现地址的 SKIP 语义: 本次 0xB0 回 0xffffffff ⇒ 按"未实现"处理 (绝不当 PASS)
+
+===== D. 图案/吞吐 (独立三口径) =====
+  [INFO] teach 前基线: W8(图案发帧)=0 W9(图案发字节)=0 W10(图案收帧)=0 W13(失配)=0
+  [PASS] 判据D0   判据=板子从未被教过 peer (D 段前提: 刚重烧) | 期望=W8=W10=0 | 实测=W8=0 W10=0 W9=0
+[setup] 补加 192.168.100.1/24 到 enp3s0
+  [PASS] 判据D0b  判据=ARP 预检: teach 之前 peer 已解析 (否则 teach 发不出去) | 期望=有 ARP 表项 | 实测=192.168.100.2 lladdr 00:0a:35:01:fe:c0 REACHABLE 
+[teach] 已 bind 0.0.0.0:8081 (抑制 ICMP unreachable 洪水; 本 socket 只睡不收)
+[teach] 已发 100 B 图案前缀 -> 192.168.100.2:8081 ; 载荷前 8 字节 = 7f0b02e536a14ed6
+[teach] 板子随即全速发 (后续保持 hold=120s 不退, 让 8081 一直有 socket)
+  [INFO] tcpdump: 抓包文件 /tmp/p6b_final_pat.pcap = 3058652 B (4 行 stderr)
+tcpdump: listening on enp3s0, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+2000 packets captured
+2145 packets received by filter
+  [INFO] 窗口起点 (T=1790659082.134699): W8=243258 W9=358075840 | 网卡硬件 rx_packets=250455 unicast=250568 (sysfs=250681) rx_errors=0 rx_missed=0
+  [INFO] 窗口终点 (T=1790659092.239446, Δt=10.104747s): W8=1063589 W9=1565604304 | 网卡硬件 rx_packets=1071070 unicast=1071182 (sysfs=1071292) rx_errors=0 rx_missed=0
+  [INFO] 增量: ΔW8=820331 ΔW9=1207528464 | 网卡 Δrx_packets=820615 Δunicast=820614 Δsysfs=820611 Δrx_errors=0 Δrx_missed=0
+  [INFO] 理论线速上限 = 1472/1538×1000 = 957.1 Mbps (1538 = 1472 载荷 + 8 UDP + 20 IP + 14 ETH + 4 FCS + 20 前导/IFG)
+  [PASS] 判据D1   判据=板子自报图案 TX 速率 >= 900 Mbps | 期望=>=900 (线速 957.1) | 实测=956.0 Mbps (ΔW9=1207528464 B / 10.104747s)
+  [PASS] 判据D2   判据=网卡**硬件**计数与板子自报吻合 (同口径 ±3%) | 期望=|Δ|<=3% | 实测=网卡 956.3 Mbps (unicast 956.3) vs 板子 956.0 Mbps; 偏差 0.03%
+  [INFO] teach 到达 app 层 ✓ (W10=1 >= 1 ⇒ 图案 app 收到了 my teach 帧)
+  [PASS] 判据E9   判据=增量自洽: ΔW9/ΔW8 ≈ 1472.0 B/帧 | 期望=[1471,1473] | 实测=1472.0015 B/帧 (ΔW9=1207528464 / ΔW8=820331)
+  [PASS] 判据D4a  判据=板子自报图案失配 W13 == 0 | 期望=0 | 实测=0
+  [PASS] 判据D4b  判据=FCS 错帧 W3 == 0 (物理层/前端配方) | 期望=0 | 实测=0
+  [INFO] 板子侧: W10(图案 app 收帧)=1 (>=1 ⇒ peer 学到了) W4(MAC 丢)=0 W21(帧内中止)=0 W20(MAC 发帧)=1063602 W7(HLS 发帧)=16
+
+  --- D3: 独立路径逐字节验证 (tcpdump pcap + 离线反解 xorshift64 状态) ---
+pcap: /tmp/p6b_final_pat.pcap — 文件 2000 包, 其中 1472B/UDP:8081 载荷 1999 帧
+① 求解器: 320 个方程解 64 个状态位 ⇒ rank = 64 (满秩)
+①b 求解器自检 (已知状态合成帧 ⇒ 反解 ⇒ 逐字节复原): **PASS**
+② 逐帧反解 + 逐字节复算: 1999/1999 帧**逐字节**等于由本帧反解状态生成的图案流
+③ 连续性: 相邻帧**严格相邻** (0 丢帧) 1998 处; 抓包侧丢帧事件 0 次 ; 间隔>64帧的大空洞 0 处
+[PASS] 抓到的每一帧都逐字节等于**同一约定 xorshift64 图案流**, 相邻帧在流上连续;
+       抓包侧丢帧已单独记账 (tcpdump 自身丢帧, 与板子无关) ⇒ **板子 TX 图案流无恙**
+  [PASS] 判据D3   判据=抓到的帧逐字节等于图案流 + 相邻帧严格相邻 + 0 处无法归因 | 期望=verifier exit 0 | 实测=exit 0
+pcap=/tmp/p6b_final_pat.pcap: 2000 包, 其中 1472B/UDP:8081 载荷 1999 帧
+① 逐帧反解: 1999 帧可解, 0 帧不可解 
+② ⭐ 状态 == SEED(0x9E3779B97F4A7C15) 的帧: 第 0 帧 (共 1 处) ⇒ 图案流**从 offset 0 开始**且该帧被逐字节复算通过
+   且它**就是抓到的第 0 帧** ⇒ 抓包在流起点之前武装 (D3 的抓包口径成立)
+  [PASS] 判据D3b  判据=图案流从 offset 0 开始 (某一帧状态 == SEED 且载荷逐字节复算通过) | 期望=找到 SEED 帧 | 实测=见上行 (exit 0)
+
+########## 汇总 [stage=d] ##########
+  PASS 判据A1    MAGIC == 0x50360001 | 实测: 0x50360001
+  PASS 判据A2    BUILD_ID == 6 (P6b+F4 双域 36 字版) | 实测: 0x00000006
+  PASS 判据A3    MARKER == 0xdeadbeef (地址译码) | 实测: 0xdeadbeef
+  PASS 判据A4    FREECNT 两次读不同 (AXI 域活性) | 实测: 0xa63bd894 -> 0xa7c3d5c6 (Δ=25689394)
+  PASS 判据A5    未实现地址 0xB0 ⇒ 0xffffffff (SLVERR) | 实测: 0xffffffff (负对照: 同趟 0x14 回 0xdeadbeef ≠ 0xffffffff ⇒ 不是通道死)
+  PASS 判据A6    快照 gen 恰好 +1 (自证本轮由本进程触发) | 实测: gen 0 -> 1
+  PASS 判据A7    读失败必须可区分于读到 0 (负对照: 伪设备) | 实测: 伪设备读取被 rd() 判为失败 ✓
+  PASS 判据D0    板子从未被教过 peer (D 段前提: 刚重烧) | 实测: W8=0 W10=0 W9=0
+  PASS 判据D0b   ARP 预检: teach 之前 peer 已解析 (否则 teach 发不出去) | 实测: 192.168.100.2 lladdr 00:0a:35:01:fe:c0 REACHABLE 
+  PASS 判据D1    板子自报图案 TX 速率 >= 900 Mbps | 实测: 956.0 Mbps (ΔW9=1207528464 B / 10.104747s)
+  PASS 判据D2    网卡**硬件**计数与板子自报吻合 (同口径 ±3%) | 实测: 网卡 956.3 Mbps (unicast 956.3) vs 板子 956.0 Mbps; 偏差 0.03%
+  PASS 判据D3    抓到的帧逐字节等于图案流 + 相邻帧严格相邻 + 0 处无法归因 | 实测: exit 0
+  PASS 判据D3b   图案流从 offset 0 开始 (某一帧状态 == SEED 且载荷逐字节复算通过) | 实测: 见上行 (exit 0)
+  PASS 判据D4a   板子自报图案失配 W13 == 0 | 实测: 0
+  PASS 判据D4b   FCS 错帧 W3 == 0 (物理层/前端配方) | 实测: 0
+  PASS 判据E9    增量自洽: ΔW9/ΔW8 ≈ 1472.0 B/帧 | 实测: 1472.0015 B/帧 (ΔW9=1207528464 / ΔW8=820331)
+  PASS=16 FAIL=0 SKIP=0 NOTE=0  日志: /tmp/p6b_final_accept_d.log
+########## stage=d: 无 FAIL ##########
