@@ -1,0 +1,232 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 21:53:20 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source {D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\p7b_mac_synth\tcl\run_mac_only.tcl}
+# set B    "D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth"
+# set part "xcku5p-ffvb676-1-e"
+# catch {set_param general.maxThreads 8}
+# proc sec {s} { puts "\n>>>>>>>>>> $s" }
+# proc dump_paths {tag dtype n} {
+#     set ps [get_timing_paths -delay_type $dtype -max_paths $n -nworst 1 -sort_by slack]
+#     set i 0
+#     foreach p $ps {
+#         incr i
+#         set sp  "<none>" ; set ep "<none>"
+#         catch {set sp [get_property STARTPOINT_PIN $p]}
+#         catch {set ep [get_property ENDPOINT_PIN   $p]}
+#         puts [format "%s_%s_P%d slack=%.3f levels=%s logic=%.3f net=%.3f sp=%s ep=%s" \
+#               $tag $dtype $i \
+#               [get_property SLACK $p] \
+#               [get_property LOGIC_LEVELS $p] \
+#               [get_property DATAPATH_LOGIC_DELAY $p] \
+#               [get_property DATAPATH_NET_DELAY $p] \
+#               $sp $ep]
+#     }
+# }
+# proc ts_block {tag f} {
+#     if {![file exists $f]} { puts "${tag}_MISSING $f" ; return }
+#     set fh [open $f r] ; set grab 0 ; set left 0
+#     while {[gets $fh line] >= 0} {
+#         if {[string first "Design Timing Summary" $line] >= 0} { set grab 1 ; set left 12 }
+#         if {$grab && $left > 0} {
+#             if {[string trim $line] ne ""} { puts "${tag}_TS $line" }
+#             incr left ; if {$left > 11} { set grab 0 }
+#         }
+#     }
+#     close $fh
+# }
+# proc ic_block {tag f} {
+#     if {![file exists $f]} { return }
+#     set fh [open $f r] ; set grab 0
+#     while {[gets $fh line] >= 0} {
+#         if {[string first "Intra Clock Table" $line] >= 0} { set grab 1 }
+#         if {[string first "Inter Clock Table" $line] >= 0} { set grab 0 }
+#         if {$grab && [string trim $line] ne ""} { puts "${tag}_IC $line" }
+#     }
+#     close $fh
+# }
+# proc build_one {name top rtl xdc pdir} {
+#     sec "BUILD $name  top=$top"
+#     if {[file exists $pdir]} { file delete -force $pdir }
+#     create_project -force $name $pdir -part $::part
+#     set_property target_language Verilog [current_project]
+#     add_files -norecurse $rtl
+#     add_files -fileset constrs_1 -norecurse $xdc
+#     # MEASURED (first attempt, this very build): calling `set_property top`
+#     # BEFORE the hierarchy has been parsed is answered with
+#     #   CRITICAL WARNING: [filemgmt 20-742] The top module "..." can not be
+#     #   validated ... a new suitable replacement top will be automatically
+#     #   selected
+#     # and the request is SILENTLY OVERRIDDEN -- the build then synthesises
+#     # mac_rx_10g instead of mac_tx_min_top, and every constraint in the XDC is
+#     # dropped with [Vivado 12-4739] "No valid object(s) found" while the build
+#     # still reports success.  So: update the compile order FIRST (that is what
+#     # parses the hierarchy), only then set the top.
+#     update_compile_order -fileset sources_1
+#     set_property top $top [current_fileset]
+#     update_compile_order -fileset sources_1
+# 
+#     # ---- out-of-context synthesis ------------------------------------------
+#     set_property -name {STEPS.SYNTH_DESIGN.ARGS.MORE OPTIONS} -value {-mode out_of_context} \
+#                  -objects [get_runs synth_1]
+#     # belt and braces: pin the top in the RUN as well, so a stale project top
+#     # can never send this build at the wrong module again
+#     catch {set_property -name {STEPS.SYNTH_DESIGN.ARGS.TOP} -value $top -objects [get_runs synth_1]}
+#     set_property strategy Performance_ExtraTimingOpt [get_runs impl_1]
+# 
+#     puts "${name}_SYNTH_OPTS = [get_property {STEPS.SYNTH_DESIGN.ARGS.MORE OPTIONS} [get_runs synth_1]]"
+#     puts "${name}_STRATEGY   = [get_property strategy [get_runs impl_1]]"
+#     puts "${name}_TOP        = [get_property top [current_fileset]]"
+#     puts "${name}_FILES      = [llength [get_files -quiet]]"
+#     foreach f [get_files -quiet] { puts "${name}_FILE $f" }
+#     if {[get_property top [current_fileset]] ne $top} {
+#         puts "${name}_TOP_MISMATCH asked=<$top> got=<[get_property top [current_fileset]]>"
+#         puts "${name}_VERDICT = TOP_NOT_SET"
+#         return 0
+#     }
+#     puts "${name}_TOP_OK"
+# 
+#     reset_run synth_1
+#     catch {launch_runs synth_1 -jobs 8} e
+#     puts "${name}_SYNTH_LAUNCH = $e"
+#     wait_on_run synth_1
+#     puts "${name}_SYNTH_STATUS   = [get_property STATUS   [get_runs synth_1]]"
+#     puts "${name}_SYNTH_PROGRESS = [get_property PROGRESS [get_runs synth_1]]"
+#     if {![string match "100%*" [get_property PROGRESS [get_runs synth_1]]]} {
+#         puts "${name}_VERDICT = SYNTH_FAIL"
+#         return 0
+#     }
+# 
+#     # post-synthesis (pre-implementation) timing + area -- the RAW structure
+#     set sdir "$pdir/${name}.runs/synth_1"
+#     # HARD GATE: a constraint that found no object is DROPPED while the build
+#     # still succeeds ([Vivado 12-4739]).  Count it, it must be zero.
+#     set srl "$sdir/runme.log"
+#     if {[file exists $srl]} {
+#         set fh [open $srl r] ; set n4739 0 ; set nerr 0
+#         while {[gets $fh line] >= 0} {
+#             if {[string first "12-4739" $line] >= 0} { incr n4739 }
+#             if {[string first "ERROR:"   $line] >= 0} { incr nerr }
+#         }
+#         close $fh
+#         puts "${name}_SYNTH_GATE_12_4739_N = $n4739"
+#         puts "${name}_SYNTH_GATE_ERROR_N   = $nerr"
+#     }
+#     foreach f [glob -nocomplain "$sdir/*_timing_summary_synth.rpt"] { ts_block "${name}_SYN" $f }
+#     foreach f [glob -nocomplain "$sdir/*_utilization_synth.rpt"] {
+#         puts "${name}_SYNTH_UTIL_FILE $f"
+#         set fh [open $f r]
+#         while {[gets $fh line] >= 0} {
+#             set t [string trim $line]
+#             foreach k {"CLB LUTs" "CLB Registers" "CARRY8" "Block RAM Tile" "RAMB36" \
+#                        "RAMB18" "URAM" "DSPs" "Bonded IOB" "Slice LUTs" "Slice Registers"} {
+#                 if {[string first $k $t] == 0} { puts "${name}_SUTIL $t" ; break }
+#             }
+#         }
+#         close $fh
+#     }
+# 
+#     # ---- place + route ------------------------------------------------------
+#     catch {launch_runs impl_1 -to_step route_design -jobs 8} e2
+#     puts "${name}_IMPL_LAUNCH = $e2"
+#     wait_on_run impl_1
+#     puts "${name}_IMPL_STATUS   = [get_property STATUS   [get_runs impl_1]]"
+#     puts "${name}_IMPL_PROGRESS = [get_property PROGRESS [get_runs impl_1]]"
+# 
+#     open_run impl_1
+#     puts "${name}_CLOCKS = [get_clocks]"
+#     puts "${name}_WNS  = [get_property SLACK [get_timing_paths -delay_type max -max_paths 1]]"
+#     puts "${name}_WHS  = [get_property SLACK [get_timing_paths -delay_type min -max_paths 1]]"
+#     puts "${name}_WPWS = [get_property SLACK [get_timing_paths -delay_type min_max -max_paths 1]]"
+# 
+#     set idir "$pdir/${name}.runs/impl_1"
+#     foreach f [glob -nocomplain "$idir/*_timing_summary_routed.rpt"] {
+#         puts "${name}_TSR = $f"
+#         ts_block "${name}_ROU" $f
+#         ic_block "${name}_ROU" $f
+#     }
+# 
+#     dump_paths $name max 8
+#     dump_paths $name min 5
+# 
+#     # ---- the CRC chain, named explicitly ------------------------------------
+#     set crc_cells [get_cells -hier -quiet -filter {NAME =~ *u_crc*}]
+#     puts "${name}_CRC_CELL_N = [llength $crc_cells]"
+#     set crc_ffs [get_cells -hier -quiet -filter {NAME =~ *u_crc* && IS_SEQUENTIAL}]
+#     puts "${name}_CRC_FF_N   = [llength $crc_ffs]"
+#     set tot_ffs [get_cells -hier -quiet -filter {IS_SEQUENTIAL}]
+#     puts "${name}_TOTAL_FF_N = [llength $tot_ffs]"
+# 
+#     catch {
+#         report_timing -from [get_cells -hier -quiet -filter {NAME =~ *u_crc/crc_reg*}] \
+#                       -to   [get_cells -hier -quiet -filter {NAME =~ *u_crc/crc_reg*}] \
+#                       -max_paths 4 -delay_type max -file "$::B/reports/${name}_crc_reg2reg.rpt"
+#         puts "${name}_CRC_R2R_REPORT = written"
+#     }
+#     catch {
+#         report_timing -max_paths 40 -delay_type max -nworst 4 \
+#                       -file "$::B/reports/${name}_setup_paths.rpt"
+#         report_timing -max_paths 20 -delay_type min -nworst 4 \
+#                       -file "$::B/reports/${name}_hold_paths.rpt"
+#         report_timing_summary -file "$::B/reports/${name}_timing_summary.rpt"
+#         report_utilization -file "$::B/reports/${name}_util_routed.rpt"
+#         report_utilization -hierarchical -file "$::B/reports/${name}_util_hier_routed.rpt"
+#         report_drc -file "$::B/reports/${name}_drc.rpt"
+#         puts "${name}_REPORTS = written"
+#     }
+# 
+#     close_project
+#     puts "${name}_VERDICT = BUILT"
+#     return 1
+# }
+# set rtl_files [list "$B/rtl/crc32_64.v" "$B/rtl/fifo_sync.v" \
+#                     "$B/rtl/mac_tx_10g.v" "$B/rtl/mac_rx_10g.v"]
+# sec "ENV"
+
+>>>>>>>>>> ENV
+# puts "VIVADO = [version -short]"
+VIVADO = 2025.2
+# puts "PART_N = [llength [get_parts $part -quiet]]"
+PART_N = 1
+# build_one mac_tx_ooc mac_tx_min_top $rtl_files "$B/xdc/mac_tx_min.xdc" "$B/mac_only/mac_tx_ooc"
+
+>>>>>>>>>> BUILD mac_tx_ooc  top=mac_tx_min_top
+CRITICAL WARNING: [filemgmt 20-742] The top module "mac_tx_min_top" specified for this project can not be validated. The current project is using automatic hierarchy update mode, and hence a new suitable replacement top will be automatically selected. If this is not desired, please change the hierarchy update mode to one of the manual compile order modes first, and then set top to any desired value.
+Resolution: To switch to manual update order go to the Sources view, right-click on any node in the hierarchy and in the context menu select: 'Hierarchy Update' option 'No Update' or run the following Tcl Command: set_property source_mgmt_mode None [current_project] (which is the Manual Compile Order mode).
+mac_tx_ooc_SYNTH_OPTS = -mode out_of_context
+mac_tx_ooc_STRATEGY   = Performance_ExtraTimingOpt
+mac_tx_ooc_TOP        = mac_rx_10g
+mac_tx_ooc_FILES      = 5
+mac_tx_ooc_FILE D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/rtl/mac_tx_10g.v
+mac_tx_ooc_FILE D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/rtl/crc32_64.v
+mac_tx_ooc_FILE D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/rtl/fifo_sync.v
+mac_tx_ooc_FILE D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/rtl/mac_rx_10g.v
+mac_tx_ooc_FILE D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xdc/mac_tx_min.xdc
+mac_tx_ooc_TOP_MISMATCH asked=<mac_tx_min_top> got=<mac_rx_10g>
+mac_tx_ooc_VERDICT = TOP_NOT_SET
+# build_one mac_rx_ooc mac_rx_min_top $rtl_files "$B/xdc/mac_rx_min.xdc" "$B/mac_only/mac_rx_ooc"
+
+>>>>>>>>>> BUILD mac_rx_ooc  top=mac_rx_min_top
+CRITICAL WARNING: [filemgmt 20-742] The top module "mac_rx_min_top" specified for this project can not be validated. The current project is using automatic hierarchy update mode, and hence a new suitable replacement top will be automatically selected. If this is not desired, please change the hierarchy update mode to one of the manual compile order modes first, and then set top to any desired value.
+Resolution: To switch to manual update order go to the Sources view, right-click on any node in the hierarchy and in the context menu select: 'Hierarchy Update' option 'No Update' or run the following Tcl Command: set_property source_mgmt_mode None [current_project] (which is the Manual Compile Order mode).
+mac_rx_ooc_SYNTH_OPTS = -mode out_of_context
+mac_rx_ooc_STRATEGY   = Performance_ExtraTimingOpt
+mac_rx_ooc_TOP        = mac_rx_10g
+mac_rx_ooc_FILES      = 5
+mac_rx_ooc_FILE D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/rtl/mac_tx_10g.v
+mac_rx_ooc_FILE D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/rtl/crc32_64.v
+mac_rx_ooc_FILE D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/rtl/fifo_sync.v
+mac_rx_ooc_FILE D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/rtl/mac_rx_10g.v
+mac_rx_ooc_FILE D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xdc/mac_rx_min.xdc
+mac_rx_ooc_TOP_MISMATCH asked=<mac_rx_min_top> got=<mac_rx_10g>
+mac_rx_ooc_VERDICT = TOP_NOT_SET
+# sec "DONE"
+
+>>>>>>>>>> DONE
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 29 21:53:31 2026...

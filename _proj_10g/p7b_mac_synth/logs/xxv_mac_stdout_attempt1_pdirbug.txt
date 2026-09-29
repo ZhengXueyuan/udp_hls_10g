@@ -1,0 +1,866 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 22:06:14 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source {D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\p7b_mac_synth\tcl\run_xxv_mac.tcl}
+# set B    "D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth"
+# set root "$B/xxv_mac"
+# set pdir "$root/pcs64_2ch"
+# set part "xcku5p-ffvb676-1-e"
+# catch {set_param general.maxThreads 8}
+# proc sec {s} { puts "\n>>>>>>>>>> $s" }
+# proc dump_paths {tag dtype n} {
+#     set ps [get_timing_paths -delay_type $dtype -max_paths $n -nworst 1 -sort_by slack]
+#     set i 0
+#     foreach p $ps {
+#         incr i
+#         set sp "<none>" ; set ep "<none>"
+#         catch {set sp [get_property STARTPOINT_PIN $p]}
+#         catch {set ep [get_property ENDPOINT_PIN   $p]}
+#         puts [format "%s_%s_P%d slack=%.3f levels=%s logic=%.3f net=%.3f sp=%s ep=%s" \
+#               $tag $dtype $i [get_property SLACK $p] [get_property LOGIC_LEVELS $p] \
+#               [get_property DATAPATH_LOGIC_DELAY $p] [get_property DATAPATH_NET_DELAY $p] \
+#               $sp $ep]
+#     }
+# }
+# proc ts_block {tag f} {
+#     if {![file exists $f]} { puts "${tag}_TSR_MISSING $f" ; return }
+#     set fh [open $f r] ; set grab 0 ; set left 0
+#     while {[gets $fh line] >= 0} {
+#         if {[string first "Design Timing Summary" $line] >= 0} { set grab 1 ; set left 12 }
+#         if {$grab && $left > 0} {
+#             if {[string trim $line] ne ""} { puts "${tag}_TS $line" }
+#             incr left ; if {$left > 11} { set grab 0 }
+#         }
+#     }
+#     close $fh
+# }
+# proc ic_block {tag f} {
+#     if {![file exists $f]} { return }
+#     set fh [open $f r] ; set grab 0
+#     while {[gets $fh line] >= 0} {
+#         if {[string first "Intra Clock Table" $line] >= 0} { set grab 1 }
+#         if {[string first "Inter Clock Table" $line] >= 0} { set grab 0 }
+#         if {$grab && [string trim $line] ne ""} { puts "${tag}_IC $line" }
+#     }
+#     close $fh
+# }
+# proc util_block {tag f} {
+#     if {![file exists $f]} { puts "${tag}_UTIL_MISSING $f" ; return }
+#     set fh [open $f r]
+#     while {[gets $fh line] >= 0} {
+#         set t [string trim $line]
+#         foreach k {"CLB LUTs" "CLB Registers" "CARRY8" "Block RAM Tile" "RAMB36" \
+#                    "RAMB18" "URAM" "DSPs" "Bonded IOB" "GTYE4_CHANNEL" "BUFGCE" \
+#                    "Slice LUTs" "Slice Registers"} {
+#             if {[string first $k $t] == 0} { puts "${tag}_UTIL $t" ; break }
+#         }
+#     }
+#     close $fh
+# }
+# proc build_top {tag top} {
+#     sec "BUILD $tag  top=$top"
+#     # a design left open in memory blocks the next launch_runs
+#     catch {close_design}
+#     update_compile_order -fileset sources_1
+#     set_property top $top [current_fileset]
+#     update_compile_order -fileset sources_1
+#     puts "${tag}_TOP = [get_property top [current_fileset]]"
+#     # HARD GUARD: the MAC-only build was once silently sent at the wrong module
+#     # because `set_property top` can be overridden by automatic hierarchy
+#     # update; never trust it without reading it back.
+#     if {[get_property top [current_fileset]] ne $top} {
+#         puts "${tag}_TOP_MISMATCH asked=<$top> got=<[get_property top [current_fileset]]>"
+#         puts "${tag}_VERDICT = TOP_NOT_SET"
+#         return 0
+#     }
+# 
+#     reset_run synth_1
+#     catch {launch_runs synth_1 -jobs 8} e
+#     puts "${tag}_SYNTH_LAUNCH = $e"
+#     wait_on_run synth_1
+#     puts "${tag}_SYNTH_STATUS   = [get_property STATUS   [get_runs synth_1]]"
+#     puts "${tag}_SYNTH_PROGRESS = [get_property PROGRESS [get_runs synth_1]]"
+#     if {![string match "100%*" [get_property PROGRESS [get_runs synth_1]]]} {
+#         puts "${tag}_VERDICT = SYNTH_FAIL"
+#         return 0
+#     }
+#     foreach f [glob -nocomplain "$pdir/pcs64_2ch.runs/synth_1/*_utilization_synth.rpt"] {
+#         puts "${tag}_SYNTH_UTIL_FILE $f"
+#     }
+#     foreach f [glob -nocomplain "$pdir/pcs64_2ch.runs/synth_1/*_timing_summary_synth.rpt"] {
+#         ts_block "${tag}_SYN" $f
+#     }
+# 
+#     reset_run impl_1
+#     catch {launch_runs impl_1 -to_step route_design -jobs 8} e2
+#     puts "${tag}_IMPL_LAUNCH = $e2"
+#     wait_on_run impl_1
+#     puts "${tag}_IMPL_STATUS   = [get_property STATUS   [get_runs impl_1]]"
+#     puts "${tag}_IMPL_PROGRESS = [get_property PROGRESS [get_runs impl_1]]"
+# 
+#     open_run impl_1
+#     puts "${tag}_WNS  = [get_property SLACK [get_timing_paths -delay_type max -max_paths 1]]"
+#     puts "${tag}_WHS  = [get_property SLACK [get_timing_paths -delay_type min -max_paths 1]]"
+#     puts "${tag}_WPWS = [get_property SLACK [get_timing_paths -delay_type min_max -max_paths 1]]"
+# 
+#     set idir "$pdir/pcs64_2ch.runs/impl_1"
+#     foreach f [glob -nocomplain "$idir/*_timing_summary_routed.rpt"] {
+#         puts "${tag}_TSR = $f"
+#         ts_block "${tag}" $f
+#         ic_block "${tag}" $f
+#         catch {file copy -force $f "$::B/reports/${tag}_timing_summary_routed.rpt"}
+#     }
+#     foreach f [glob -nocomplain "$idir/*_utilization_placed.rpt"] {
+#         puts "${tag}_UTIL_FILE $f"
+#         util_block "${tag}" $f
+#         catch {file copy -force $f "$::B/reports/${tag}_utilization_placed.rpt"}
+#     }
+#     foreach f [glob -nocomplain "$idir/*_drc_routed.rpt"] {
+#         catch {file copy -force $f "$::B/reports/${tag}_drc_routed.rpt"}
+#     }
+#     foreach f [glob -nocomplain "$idir/*_methodology_drc_routed.rpt"] {
+#         catch {file copy -force $f "$::B/reports/${tag}_methodology_drc_routed.rpt"}
+#     }
+# 
+#     dump_paths $tag max 10
+#     dump_paths $tag min 6
+# 
+#     # ---- the CRC chains, named explicitly -----------------------------------
+#     foreach inst {u_mac_tx u_mac_rx} {
+#         set cn [llength [get_cells -hier -quiet -filter "NAME =~ *${inst}/u_crc*"]]
+#         set cf [llength [get_cells -hier -quiet -filter "NAME =~ *${inst}/u_crc* && IS_SEQUENTIAL"]]
+#         puts "${tag}_CRC_${inst}_CELL_N = $cn"
+#         puts "${tag}_CRC_${inst}_FF_N   = $cf"
+#         catch {
+#             report_timing -from [get_cells -hier -quiet -filter "NAME =~ *${inst}/u_crc/crc_reg*"] \
+#                           -to   [get_cells -hier -quiet -filter "NAME =~ *${inst}/u_crc/crc_reg*"] \
+#                           -max_paths 4 -delay_type max \
+#                           -file "$::B/reports/${tag}_${inst}_crc_reg2reg.rpt"
+#             puts "${tag}_CRC_${inst}_R2R = written"
+#         }
+#     }
+#     puts "${tag}_TOTAL_FF_N = [llength [get_cells -hier -quiet -filter {IS_SEQUENTIAL}]]"
+#     puts "${tag}_TOTAL_CELL_N = [llength [get_cells -hier -quiet]]"
+# 
+#     catch {
+#         report_timing -max_paths 60 -delay_type max -nworst 4 -file "$::B/reports/${tag}_setup_paths.rpt"
+#         report_timing -max_paths 30 -delay_type min -nworst 4 -file "$::B/reports/${tag}_hold_paths.rpt"
+#         puts "${tag}_PATHREPORTS = written"
+#     }
+#     puts "${tag}_VERDICT = BUILT"
+#     return 1
+# }
+# sec "OPEN"
+
+>>>>>>>>>> OPEN
+# open_project "$pdir/pcs64_2ch.xpr"
+INFO: [Project 1-313] Project file moved from 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_loop/pcs64_2ch' since last save.
+Scanning sources...
+Finished scanning sources
+WARNING: [Project 1-509] GeneratedRun file for 'synth_1' not found
+WARNING: [Project 1-509] GeneratedRun file for 'pcs64_synth_1' not found
+WARNING: [Project 1-509] GeneratedRun file for 'vio_0_synth_1' not found
+WARNING: [Project 1-509] GeneratedRun file for 'impl_1' not found
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:emb-plus-vpr-4616:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\emb-plus-vpr-4616\1.0\board.xml as part xcve2302-sfva784-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:emb-plus-vpr-4616:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\emb-plus-vpr-4616\1.1\board.xml as part xcve2302-sfva784-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:k24c:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\k24c\1.0\board.xml as part xck24-ubva530-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:k24c:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\k24c\1.1\board.xml as part xck24-ubva530-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:k24i:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\k24i\1.0\board.xml as part xck24-ubva530-2lvi-i specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:k26c:part0:1.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\k26c\1.2\board.xml as part xck26-sfvc784-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:k26c:part0:1.3 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\k26c\1.3\board.xml as part xck26-sfvc784-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:k26c:part0:1.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\k26c\1.4\board.xml as part xck26-sfvc784-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:k26i:part0:1.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\k26i\1.2\board.xml as part xck26-sfvc784-2lvi-i specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:k26i:part0:1.3 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\k26i\1.3\board.xml as part xck26-sfvc784-2lvi-i specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:k26i:part0:1.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\k26i\1.4\board.xml as part xck26-sfvc784-2lvi-i specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:kcu105:part0:1.6 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\kcu105\1.6\board.xml as part xcku040-ffva1156-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:kcu105:part0:1.7 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\kcu105\1.7\board.xml as part xcku040-ffva1156-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:kcu1500:part0:1.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\kcu1500\1.2\board.xml as part xcku115-flvb2104-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:kd240_som:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\kd240_som\1.0\board.xml as part xck24-ubva530-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:kd240_som:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\kd240_som\1.1\board.xml as part xck24-ubva530-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:kr260_som:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\kr260_som\1.0\board.xml as part xck26-sfvc784-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:kr260_som:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\kr260_som\1.1\board.xml as part xck26-sfvc784-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:kv260_som:part0:1.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\kv260_som\1.2\board.xml as part xck26-sfvc784-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:kv260_som:part0:1.3 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\kv260_som\1.3\board.xml as part xck26-sfvc784-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:kv260_som:part0:1.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\kv260_som\1.4\board.xml as part xck26-sfvc784-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:scu35:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\scu35\1.0\board.xml as part xcsu35p-sbvb625-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:sp701:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\sp701\1.0\board.xml as part xc7s100fgga676-2 specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:sp701:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\sp701\1.1\board.xml as part xc7s100fgga676-2 specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:v80:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\v80\1.0\board.xml as part xcv80-lsva4737-2mhp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vc707:part0:1.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vc707\1.4\board.xml as part xc7vx485tffg1761-2 specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vc707:part0:1.5 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vc707\1.5\board.xml as part xc7vx485tffg1761-2 specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vc709:part0:1.8 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vc709\1.8\board.xml as part xc7vx690tffg1761-2 specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vck190:part0:2.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vck190\production\2.2\board.xml as part xcvc1902-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vck190:part0:3.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vck190\production\3.0\board.xml as part xcvc1902-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vck190:part0:3.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vck190\production\3.1\board.xml as part xcvc1902-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vck190:part0:3.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vck190\production\3.2\board.xml as part xcvc1902-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vck190:part0:3.3 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vck190\production\3.3\board.xml as part xcvc1902-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vck190:part0:3.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vck190\production\3.4\board.xml as part xcvc1902-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vck190_newl:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vck190_newl\production\1.0\board.xml as part xcvc1902-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vck190_newl:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vck190_newl\production\1.1\board.xml as part xcvc1902-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vck190_newl:part0:1.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vck190_newl\production\1.2\board.xml as part xcvc1902-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vck190_newl:part0:1.3 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vck190_newl\production\1.3\board.xml as part xcvc1902-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vcu108:part0:1.6 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vcu108\1.6\board.xml as part xcvu095-ffva2104-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vcu108:part0:1.7 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vcu108\1.7\board.xml as part xcvu095-ffva2104-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vcu110:part0:1.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vcu110\1.4\board.xml as part xcvu190-flgc2104-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vcu118:part0:2.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vcu118\2.0\board.xml as part xcvu9p-flga2104-2l-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vcu118:part0:2.3 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vcu118\2.3\board.xml as part xcvu9p-flga2104-2l-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vcu118:part0:2.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vcu118\2.4\board.xml as part xcvu9p-flga2104-2l-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vcu128:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vcu128\production\1.0\board.xml as part xcvu37p-fsvh2892-2l-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vcu129:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vcu129\production\1.0\board.xml as part xcvu29p-fsga2577-2l-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vcu1525:part0:1.3 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vcu1525\1.3\board.xml as part xcvu9p-fsgd2104-2l-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vek280:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vek280\production\1.0\board.xml as part xcve2802-vsvh1760-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vek280:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vek280\production\1.1\board.xml as part xcve2802-vsvh1760-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vek280:part0:1.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vek280\production\1.2\board.xml as part xcve2802-vsvh1760-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vek385:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vek385\1.0\board.xml as part xc2ve3858-ssva2112-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vek385:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vek385\1.1\board.xml as part xc2ve3858-ssva2112-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vek385_1:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vek385_2\1.0\board.xml as part xc2ve3858-ssva2112-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vermeo_t1_mpsoc:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vermeo_t1_mpsoc\1.0\board.xml as part xczu19eg-ffvd1760-2l-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vermeo_t1_rfsoc:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vermeo_t1_rfsoc\1.0\board.xml as part xczu21dr-ffvd1156-2l-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vhk158:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vhk158\production\1.0\board.xml as part xcvh1582-vsva3697-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vhk158:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vhk158\production\1.1\board.xml as part xcvh1582-vsva3697-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vhk158:part0:1.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vhk158\production\1.2\board.xml as part xcvh1582-vsva3697-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vmk180:part0:2.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vmk180\production\2.2\board.xml as part xcvm1802-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vmk180:part0:3.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vmk180\production\3.0\board.xml as part xcvm1802-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vmk180:part0:3.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vmk180\production\3.1\board.xml as part xcvm1802-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vmk180:part0:3.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vmk180\production\3.2\board.xml as part xcvm1802-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vmk180:part0:3.3 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vmk180\production\3.3\board.xml as part xcvm1802-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vmk180_newl:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vmk180_newl\production\1.0\board.xml as part xcvm1802-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vmk180_newl:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vmk180_newl\production\1.1\board.xml as part xcvm1802-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vpk120:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vpk120\production\1.0\board.xml as part xcvp1202-vsva2785-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vpk120:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vpk120\production\1.1\board.xml as part xcvp1202-vsva2785-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vpk120:part0:1.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vpk120\production\1.2\board.xml as part xcvp1202-vsva2785-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vpk180:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vpk180\production\1.0\board.xml as part xcvp1802-lsvc4072-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vpk180:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vpk180\production\1.1\board.xml as part xcvp1802-lsvc4072-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vpk180:part0:1.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vpk180\production\1.2\board.xml as part xcvp1802-lsvc4072-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vrk160:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vrk160\1.0\board.xml as part xcvr1602-vsva2488-2mp-e-s-es1 specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vrk160:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vrk160\1.1\board.xml as part xcvr1602-vsva2488-2mp-e-s-es1 specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zc702:part0:1.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zc702\1.4\board.xml as part xc7z020clg484-1 specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zc706:part0:1.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zc706\1.4\board.xml as part xc7z045ffg900-2 specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zc706:part0:1.5 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zc706\1.5\board.xml as part xc7z045ffg900-2 specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu102:part0:3.3 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu102\3.3\board.xml as part xczu9eg-ffvb1156-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu102:part0:3.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu102\3.4\board.xml as part xczu9eg-ffvb1156-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu104:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu104\1.1\board.xml as part xczu7ev-ffvc1156-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu106:part0:2.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu106\2.4\board.xml as part xczu7ev-ffvc1156-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu106:part0:2.5 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu106\2.5\board.xml as part xczu7ev-ffvc1156-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu106:part0:2.6 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu106\2.6\board.xml as part xczu7ev-ffvc1156-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu111:part0:1.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu111\1.2\board.xml as part xczu28dr-ffvg1517-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu111:part0:1.3 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu111\1.3\board.xml as part xczu28dr-ffvg1517-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu111:part0:1.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu111\1.4\board.xml as part xczu28dr-ffvg1517-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu1275:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu1275\1.0\board.xml as part xczu29dr-ffvf1760-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu1285:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu1285\1.0\board.xml as part xczu39dr-ffvf1760-2-i specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu208:part0:2.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu208\production\2.0\board.xml as part xczu48dr-fsvg1517-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu208ld:part0:2.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu208ld\production\2.0\board.xml as part xczu58dr-fsvg1517-2-i specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu216:part0:2.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu216\production\2.0\board.xml as part xczu49dr-ffvf1760-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu216ld:part0:2.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu216ld\production\2.0\board.xml as part xczu59dr-ffvf1760-2-i specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu670:part0:2.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu670\2.0\board.xml as part xczu67dr-fsve1156-2-i specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu670ld:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu670ld\1.0\board.xml as part xczu57dr-fsve1156-2-i specified in board_part file is either invalid or not available
+WARNING: [Project 1-5713] Board part '' set for the project  is not found. BoardPart property will be unset. Please select board from latest repo build 
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository 'C:/AMDDesignTools/2025.2/Vivado/data/ip'.
+open_project: Time (s): cpu = 00:00:35 ; elapsed = 00:00:07 . Memory (MB): peak = 607.246 ; gain = 295.543
+# puts "PART = [get_property part [current_project]]"
+PART = xcku5p-ffvb676-1-e
+# puts "OPEN_OK"
+OPEN_OK
+# sec "ADD"
+
+>>>>>>>>>> ADD
+# add_files -norecurse [list \
+#     "$root/rtl/xxv_mac_top.v" \
+#     "$B/rtl/crc32_64.v" \
+#     "$B/rtl/fifo_sync.v" \
+#     "$B/rtl/mac_tx_10g.v" \
+#     "$B/rtl/mac_rx_10g.v" ]
+# update_compile_order -fileset sources_1
+# foreach f [get_files -quiet -of [get_filesets sources_1]] { puts "SRC $f" }
+SRC D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_mac_top.v
+SRC D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/rtl/crc32_64.v
+SRC D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/rtl/fifo_sync.v
+SRC D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/rtl/mac_tx_10g.v
+SRC D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/rtl/mac_rx_10g.v
+SRC D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/obs_util.v
+SRC D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v
+SRC D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xgmii_rx_chk.v
+SRC D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v
+# puts "IPLIST = [get_ips]"
+IPLIST = pcs64 vio_0
+# foreach f [get_files -quiet -of [get_filesets constrs_1]] { puts "CONSTR $f" }
+CONSTR D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/xdc/xxv_loop.xdc
+CONSTR D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/xdc/xxv_loop_impl.xdc
+# sec "VIO"
+
+>>>>>>>>>> VIO
+# puts "VIO_NUMIN  = [get_property CONFIG.C_NUM_PROBE_IN  [get_ips vio_0]]"
+VIO_NUMIN  = 48
+# puts "VIO_NUMOUT = [get_property CONFIG.C_NUM_PROBE_OUT [get_ips vio_0]]"
+VIO_NUMOUT = 8
+# puts "VIO_W0     = [get_property CONFIG.C_PROBE_IN0_WIDTH  [get_ips vio_0]]"
+VIO_W0     = 32
+# puts "VIO_W47    = [get_property CONFIG.C_PROBE_IN47_WIDTH [get_ips vio_0]]"
+VIO_W47    = 32
+# puts "VIO_O6W    = [get_property CONFIG.C_PROBE_OUT6_WIDTH [get_ips vio_0]]"
+VIO_O6W    = 3
+# set_property strategy Performance_ExtraTimingOpt [get_runs impl_1]
+# build_top A_Base    xxv_loop_top
+
+>>>>>>>>>> BUILD A_Base  top=xxv_loop_top
+A_Base_TOP = xxv_loop_top
+WARNING: [Vivado 12-7122] Auto Incremental Compile:: No reference checkpoint was found in run synth_1. Auto-incremental flow will not be run, the standard flow will be run instead.
+[Tue Sep 29 22:06:25 2026] Launched pcs64_synth_1, vio_0_synth_1...
+Run output will be captured here:
+pcs64_synth_1: D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/pcs64_2ch/pcs64_2ch.runs/pcs64_synth_1/runme.log
+vio_0_synth_1: D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/pcs64_2ch/pcs64_2ch.runs/vio_0_synth_1/runme.log
+[Tue Sep 29 22:06:25 2026] Launched synth_1...
+Run output will be captured here: D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/pcs64_2ch/pcs64_2ch.runs/synth_1/runme.log
+A_Base_SYNTH_LAUNCH = 
+[Tue Sep 29 22:06:25 2026] Waiting for synth_1 to finish...
+
+
+*** Running vivado
+    with args -log xxv_loop_top.vds -m64 -product Vivado -mode batch -messageDb vivado.pb -notrace -source xxv_loop_top.tcl
+
+
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 22:06:37 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source xxv_loop_top.tcl -notrace
+create_project: Time (s): cpu = 00:00:33 ; elapsed = 00:00:05 . Memory (MB): peak = 548.441 ; gain = 237.781
+Command: synth_design -top xxv_loop_top -part xcku5p-ffvb676-1-e
+Starting synth_design
+Attempting to get a license for feature 'Synthesis' and/or device 'xcku5p'
+INFO: [Common 17-349] Got license for feature 'Synthesis' and/or device 'xcku5p'
+INFO: [Device 21-403] Loading part xcku5p-ffvb676-1-e
+INFO: [Synth 8-7079] Multithreading enabled for synth_design using a maximum of 7 processes.
+INFO: [Synth 8-7078] Launching helper process for spawning children vivado processes
+INFO: [Synth 8-7075] Helper process launched with PID 26496
+---------------------------------------------------------------------------------
+Starting RTL Elaboration : Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 1966.441 ; gain = 246.125
+---------------------------------------------------------------------------------
+INFO: [Synth 8-11241] undeclared symbol 'stat_rx_status', assumed default net type 'wire' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:185]
+INFO: [Synth 8-11241] undeclared symbol 'clear_count', assumed default net type 'wire' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:189]
+INFO: [Synth 8-11241] undeclared symbol 'rx_protocol_error', assumed default net type 'wire' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:426]
+INFO: [Synth 8-11241] undeclared symbol 'rx_mii_clk', assumed default net type 'wire' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:581]
+WARNING: [Synth 8-11065] parameter 'STARTUP_TIME' becomes localparam in 'pcs64_example_fsm' with formal parameter declaration list [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:719]
+WARNING: [Synth 8-11065] parameter 'GENERATOR_COUNT' becomes localparam in 'pcs64_example_fsm' with formal parameter declaration list [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:721]
+INFO: [Synth 8-11241] undeclared symbol 'ctl_tx_enable', assumed default net type 'wire' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:992]
+INFO: [Synth 8-11241] undeclared symbol 'ctl_local_loopback', assumed default net type 'wire' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1000]
+INFO: [Synth 8-11241] undeclared symbol 'ctl_FEC_Enable_Error_to_PCS', assumed default net type 'wire' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1001]
+INFO: [Synth 8-11241] undeclared symbol 'ctl_FEC_TX_Enable', assumed default net type 'wire' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1002]
+INFO: [Synth 8-11241] undeclared symbol 'ctl_FEC_RX_Enable', assumed default net type 'wire' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1334]
+INFO: [Synth 8-11241] undeclared symbol 'ctl_rx_test_pattern_select', assumed default net type 'wire' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1339]
+INFO: [Synth 8-6157] synthesizing module 'xxv_loop_top' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:82]
+INFO: [Synth 8-6157] synthesizing module 'IBUFDS' [C:/AMDDesignTools/2025.2/Vivado/scripts/rt/data/unisim_comp.v:82819]
+INFO: [Synth 8-6155] done synthesizing module 'IBUFDS' (0#1) [C:/AMDDesignTools/2025.2/Vivado/scripts/rt/data/unisim_comp.v:82819]
+INFO: [Synth 8-6157] synthesizing module 'BUFG' [C:/AMDDesignTools/2025.2/Vivado/scripts/rt/data/unisim_comp.v:2678]
+INFO: [Synth 8-6155] done synthesizing module 'BUFG' (0#1) [C:/AMDDesignTools/2025.2/Vivado/scripts/rt/data/unisim_comp.v:2678]
+INFO: [Synth 8-6157] synthesizing module 'pcs64' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/pcs64_2ch/pcs64_2ch.runs/synth_1/.Xil/Vivado-27008-xyz-intel/realtime/pcs64_stub.v:6]
+INFO: [Synth 8-6155] done synthesizing module 'pcs64' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/pcs64_2ch/pcs64_2ch.runs/synth_1/.Xil/Vivado-27008-xyz-intel/realtime/pcs64_stub.v:6]
+INFO: [Synth 8-6157] synthesizing module 'pcs64_pkt_gen_mon_ds' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:61]
+	Parameter PKT_NUM bound to: 20 - type: integer 
+	Parameter FIXED_PACKET_LENGTH bound to: 256 - type: integer 
+	Parameter MIN_LENGTH bound to: 64 - type: integer 
+	Parameter MAX_LENGTH bound to: 9000 - type: integer 
+INFO: [Synth 8-6157] synthesizing module 'pcs64_user_cdc_sync' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:477]
+INFO: [Synth 8-6155] done synthesizing module 'pcs64_user_cdc_sync' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:477]
+INFO: [Synth 8-6157] synthesizing module 'pcs64_cdc_sync_2stage' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:451]
+	Parameter WIDTH bound to: 64 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'pcs64_cdc_sync_2stage' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:451]
+INFO: [Synth 8-6157] synthesizing module 'pcs64_cdc_sync_2stage__parameterized0' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:451]
+	Parameter WIDTH bound to: 48 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'pcs64_cdc_sync_2stage__parameterized0' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:451]
+INFO: [Synth 8-6157] synthesizing module 'pcs64_cdc_sync_2stage__parameterized1' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:451]
+	Parameter WIDTH bound to: 1 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'pcs64_cdc_sync_2stage__parameterized1' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:451]
+INFO: [Synth 8-6157] synthesizing module 'pcs64_example_fsm' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:687]
+INFO: [Synth 8-155] case statement is not full and has no default [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:799]
+INFO: [Synth 8-6155] done synthesizing module 'pcs64_example_fsm' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:687]
+INFO: [Synth 8-6157] synthesizing module 'pcs64_mii_traffic_gen_mon' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:500]
+	Parameter FIXED_PACKET_LENGTH bound to: 256 - type: integer 
+	Parameter TRAF_MIN_LENGTH bound to: 64 - type: integer 
+	Parameter TRAF_MAX_LENGTH bound to: 9000 - type: integer 
+INFO: [Synth 8-6157] synthesizing module 'pcs64_mii_pkt_gen' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:935]
+	Parameter pkt_len bound to: 256 - type: integer 
+INFO: [Synth 8-6157] synthesizing module 'pcs64_pcs_pktprbs_gen' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1617]
+	Parameter BIT_COUNT bound to: 64 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'pcs64_pcs_pktprbs_gen' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1617]
+INFO: [Synth 8-6155] done synthesizing module 'pcs64_mii_pkt_gen' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:935]
+INFO: [Synth 8-6157] synthesizing module 'pcs64_mii_traf_chk' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1254]
+INFO: [Synth 8-6155] done synthesizing module 'pcs64_mii_traf_chk' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1254]
+INFO: [Synth 8-6157] synthesizing module 'pcs64_mii_traf_gen_chk' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1480]
+INFO: [Synth 8-6155] done synthesizing module 'pcs64_mii_traf_gen_chk' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1480]
+INFO: [Synth 8-6155] done synthesizing module 'pcs64_mii_traffic_gen_mon' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:500]
+INFO: [Synth 8-6155] done synthesizing module 'pcs64_pkt_gen_mon_ds' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:61]
+INFO: [Synth 8-6157] synthesizing module 'xgmii_rx_chk' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xgmii_rx_chk.v:52]
+INFO: [Synth 8-6155] done synthesizing module 'xgmii_rx_chk' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xgmii_rx_chk.v:52]
+INFO: [Synth 8-6157] synthesizing module 'cdc_sync2' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/obs_util.v:24]
+INFO: [Synth 8-6155] done synthesizing module 'cdc_sync2' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/obs_util.v:24]
+INFO: [Synth 8-6157] synthesizing module 'snap_hold' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/obs_util.v:35]
+	Parameter W bound to: 704 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'snap_hold' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/obs_util.v:35]
+INFO: [Synth 8-6157] synthesizing module 'snap_hold__parameterized0' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/obs_util.v:35]
+	Parameter W bound to: 32 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'snap_hold__parameterized0' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/obs_util.v:35]
+INFO: [Synth 8-6157] synthesizing module 'snap_hold__parameterized1' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/obs_util.v:35]
+	Parameter W bound to: 320 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'snap_hold__parameterized1' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/obs_util.v:35]
+INFO: [Synth 8-6157] synthesizing module 'obs_reg' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/obs_util.v:74]
+	Parameter W bound to: 32 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'obs_reg' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/obs_util.v:74]
+INFO: [Synth 8-6157] synthesizing module 'vio_0' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/pcs64_2ch/pcs64_2ch.runs/synth_1/.Xil/Vivado-27008-xyz-intel/realtime/vio_0_stub.v:6]
+INFO: [Synth 8-6155] done synthesizing module 'vio_0' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/pcs64_2ch/pcs64_2ch.runs/synth_1/.Xil/Vivado-27008-xyz-intel/realtime/vio_0_stub.v:6]
+INFO: [Synth 8-6155] done synthesizing module 'xxv_loop_top' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:82]
+WARNING: [Synth 8-3936] Found unconnected internal register 'gen_rtl_loop.md_reg' and it is trimmed from '33' to '32' bits. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:2366]
+WARNING: [Synth 8-6014] Unused sequential element start_check.start_flag_reg was removed.  [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1374]
+WARNING: [Synth 8-6014] Unused sequential element start_check.byte_count_reg was removed.  [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1375]
+WARNING: [Synth 8-6014] Unused sequential element end_check.start_flag_reg was removed.  [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1384]
+WARNING: [Synth 8-6014] Unused sequential element end_check.end_flag_reg was removed.  [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1385]
+WARNING: [Synth 8-6014] Unused sequential element end_check.byte_count1_reg was removed.  [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1386]
+WARNING: [Synth 8-6014] Unused sequential element end_check.byte_count2_reg was removed.  [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1387]
+WARNING: [Synth 8-6014] Unused sequential element start_check.start_flag_reg was removed.  [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1557]
+WARNING: [Synth 8-6014] Unused sequential element start_check.byte_count_reg was removed.  [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1558]
+WARNING: [Synth 8-6014] Unused sequential element end_check.start_flag_reg was removed.  [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1567]
+WARNING: [Synth 8-6014] Unused sequential element end_check.end_flag_reg was removed.  [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1568]
+WARNING: [Synth 8-6014] Unused sequential element end_check.byte_count1_reg was removed.  [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1569]
+WARNING: [Synth 8-6014] Unused sequential element end_check.byte_count2_reg was removed.  [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/pcs64_pkt_gen_mon_ds.v:1570]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'u_vio'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:646]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'u_tgm'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:305]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'DUT'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:185]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'u_chk1'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:387]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'u_chk0'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:373]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r00'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:596]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r01'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:597]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r02'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:598]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r03'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:599]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r04'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:600]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r05'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:601]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r06'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:602]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r07'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:603]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r08'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:604]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r09'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:605]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r10'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:606]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r11'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:607]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r12'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:608]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r13'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:609]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r14'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:610]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r15'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:611]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r16'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:612]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r17'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:613]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r18'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:614]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r19'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:615]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r20'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:616]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r21'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:617]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r22'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:618]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r23'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:619]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r24'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:620]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r25'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:621]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r26'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:622]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r27'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:623]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r28'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:624]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r29'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:625]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r30'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:626]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r31'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:627]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r32'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:628]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r33'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:629]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r34'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:630]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r35'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:631]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r36'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:633]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r37'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:634]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r38'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:635]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r39'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:636]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r40'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:637]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r41'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:638]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r42'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:639]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r43'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:640]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r44'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:641]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r45'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:642]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r46'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:643]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'r47'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/rtl/xxv_loop_top.v:644]
+WARNING: [Synth 8-7129] Port stat_rx_framing_err_valid in module pcs64_mii_traf_chk is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_framing_err in module pcs64_mii_traf_chk is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_hi_ber in module pcs64_mii_traf_chk is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_valid_ctrl_code in module pcs64_mii_traf_chk is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_bad_code in module pcs64_mii_traf_chk is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_bad_code_valid in module pcs64_mii_traf_chk is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_error_valid in module pcs64_mii_traf_chk is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_error[7] in module pcs64_mii_traf_chk is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_error[6] in module pcs64_mii_traf_chk is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_error[5] in module pcs64_mii_traf_chk is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_error[4] in module pcs64_mii_traf_chk is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_error[3] in module pcs64_mii_traf_chk is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_error[2] in module pcs64_mii_traf_chk is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_error[1] in module pcs64_mii_traf_chk is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_error[0] in module pcs64_mii_traf_chk is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_fifo_error in module pcs64_mii_traf_chk is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_local_fault in module pcs64_mii_traf_chk is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_tx_local_fault in module pcs64_mii_pkt_gen is either unconnected or has no load
+WARNING: [Synth 8-7129] Port rx_lane_align in module pcs64_mii_traffic_gen_mon is either unconnected or has no load
+---------------------------------------------------------------------------------
+Finished RTL Elaboration : Time (s): cpu = 00:00:04 ; elapsed = 00:00:05 . Memory (MB): peak = 2121.430 ; gain = 401.113
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Handling Custom Attributes
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Handling Custom Attributes : Time (s): cpu = 00:00:04 ; elapsed = 00:00:05 . Memory (MB): peak = 2121.430 ; gain = 401.113
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished RTL Optimization Phase 1 : Time (s): cpu = 00:00:04 ; elapsed = 00:00:05 . Memory (MB): peak = 2121.430 ; gain = 401.113
+---------------------------------------------------------------------------------
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.054 . Memory (MB): peak = 2121.430 ; gain = 0.000
+INFO: [Netlist 29-17] Analyzing 2 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
+INFO: [Project 1-570] Preparing netlist for logic optimization
+
+Processing XDC Constraints
+Initializing timing engine
+Parsing XDC File [d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/pcs64_2ch/pcs64_2ch.gen/sources_1/ip/pcs64/pcs64/pcs64_in_context.xdc] for cell 'DUT'
+Finished Parsing XDC File [d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/pcs64_2ch/pcs64_2ch.gen/sources_1/ip/pcs64/pcs64/pcs64_in_context.xdc] for cell 'DUT'
+Parsing XDC File [d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/pcs64_2ch/pcs64_2ch.gen/sources_1/ip/vio_0/vio_0/vio_0_in_context.xdc] for cell 'u_vio'
+Finished Parsing XDC File [d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/pcs64_2ch/pcs64_2ch.gen/sources_1/ip/vio_0/vio_0/vio_0_in_context.xdc] for cell 'u_vio'
+Parsing XDC File [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/xdc/xxv_loop.xdc]
+CRITICAL WARNING: [Constraints 18-1056] Clock 'gtrefclk0' completely overrides clock 'gt_refclk_p'.
+New: create_clock -period 6.400 -name gtrefclk0 [get_ports gt_refclk_p], [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/xdc/xxv_loop.xdc:41]
+Previous: create_clock -period 6.400 [get_ports gt_refclk_p], [d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/pcs64_2ch/pcs64_2ch.gen/sources_1/ip/pcs64/pcs64/pcs64_in_context.xdc:2]
+Resolution: Review the constraint files and remove the redundant clock definition(s). If the clock constraints are not saved in a file, you can first save the constraints to an XDC file and reload the design once the constraints have been corrected.
+Finished Parsing XDC File [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/xdc/xxv_loop.xdc]
+INFO: [Project 1-236] Implementation specific constraints were found while reading constraint file [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/xdc/xxv_loop.xdc]. These constraints will be ignored for synthesis but will be used in implementation. Impacted constraints are listed in the file [.Xil/xxv_loop_top_propImpl.xdc].
+Resolution: To avoid this warning, move constraints listed in [.Xil/xxv_loop_top_propImpl.xdc] to another XDC file and exclude this new file from synthesis with the used_in_synthesis property (File Properties dialog in GUI) and re-run elaboration/synthesis.
+Completed Processing XDC Constraints
+
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.002 . Memory (MB): peak = 2212.016 ; gain = 0.000
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 2 instances were transformed.
+  BUFG => BUFGCE: 1 instance 
+  IBUFDS => IBUFDS (DIFFINBUF, IBUFCTRL): 1 instance 
+
+Constraint Validation Runtime : Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.049 . Memory (MB): peak = 2212.016 ; gain = 0.000
+WARNING: [Timing 38-316] Clock period '6.400' specified during out-of-context synthesis of instance 'DUT' at clock pin 'rx_core_clk_0' is different from the actual clock period '6.206', this can lead to different synthesis results.
+---------------------------------------------------------------------------------
+Finished Constraint Validation : Time (s): cpu = 00:00:12 ; elapsed = 00:00:13 . Memory (MB): peak = 2212.504 ; gain = 492.188
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Loading Part and Timing Information
+---------------------------------------------------------------------------------
+Loading part: xcku5p-ffvb676-1-e
+INFO: [Synth 8-6742] Reading net delay rules and data
+---------------------------------------------------------------------------------
+Finished Loading Part and Timing Information : Time (s): cpu = 00:00:12 ; elapsed = 00:00:13 . Memory (MB): peak = 2212.504 ; gain = 492.188
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Applying 'set_property' XDC Constraints
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished applying 'set_property' XDC Constraints : Time (s): cpu = 00:00:12 ; elapsed = 00:00:13 . Memory (MB): peak = 2212.504 ; gain = 492.188
+---------------------------------------------------------------------------------
+INFO: [Synth 8-802] inferred FSM for state register 'state_reg' in module 'pcs64_example_fsm'
+INFO: [Synth 8-802] inferred FSM for state register 'state_reg' in module 'pcs64_mii_pkt_gen'
+INFO: [Synth 8-802] inferred FSM for state register 'state_reg' in module 'pcs64_mii_traf_chk'
+INFO: [Synth 8-802] inferred FSM for state register 'state_reg' in module 'pcs64_mii_traf_gen_chk'
+---------------------------------------------------------------------------------------------------
+                   State |                     New Encoding |                Previous Encoding 
+---------------------------------------------------------------------------------------------------
+                      S0 |                            00000 |                            00000
+                      S1 |                            00001 |                            00001
+                      S2 |                            00010 |                            00011
+                      S3 |                            00011 |                            00010
+                      S4 |                            00100 |                            00110
+                      S5 |                            00101 |                            00111
+                     S16 |                            00110 |                            11000
+                     S17 |                            00111 |                            11001
+                      S6 |                            01000 |                            00101
+                      S7 |                            01001 |                            00100
+                      S8 |                            01010 |                            01100
+                      S9 |                            01011 |                            01101
+                     S10 |                            01100 |                            01111
+                     S11 |                            01101 |                            01110
+                     S12 |                            01110 |                            01010
+                     S13 |                            01111 |                            01011
+                     S14 |                            10000 |                            01001
+                     S15 |                            10001 |                            01000
+---------------------------------------------------------------------------------------------------
+INFO: [Synth 8-3354] encoded FSM with state register 'state_reg' using encoding 'sequential' in module 'pcs64_example_fsm'
+---------------------------------------------------------------------------------------------------
+                   State |                     New Encoding |                Previous Encoding 
+---------------------------------------------------------------------------------------------------
+                      S0 |                         00000001 |                              000
+                      S1 |                         00000010 |                              001
+                      S2 |                         00000100 |                              011
+                      S3 |                         00001000 |                              010
+                      S4 |                         00010000 |                              110
+                      S5 |                         00100000 |                              111
+                      S6 |                         01000000 |                              101
+                      S7 |                         10000000 |                              100
+---------------------------------------------------------------------------------------------------
+INFO: [Synth 8-3354] encoded FSM with state register 'state_reg' using encoding 'one-hot' in module 'pcs64_mii_pkt_gen'
+---------------------------------------------------------------------------------------------------
+                   State |                     New Encoding |                Previous Encoding 
+---------------------------------------------------------------------------------------------------
+                      S0 |                               00 |                               00
+                      S1 |                               01 |                               01
+                      S2 |                               10 |                               11
+---------------------------------------------------------------------------------------------------
+INFO: [Synth 8-3354] encoded FSM with state register 'state_reg' using encoding 'sequential' in module 'pcs64_mii_traf_chk'
+---------------------------------------------------------------------------------------------------
+                   State |                     New Encoding |                Previous Encoding 
+---------------------------------------------------------------------------------------------------
+                      S0 |                               00 |                               00
+                      S1 |                               01 |                               01
+                      S2 |                               10 |                               11
+---------------------------------------------------------------------------------------------------
+INFO: [Synth 8-3354] encoded FSM with state register 'state_reg' using encoding 'sequential' in module 'pcs64_mii_traf_gen_chk'
+---------------------------------------------------------------------------------
+Finished RTL Optimization Phase 2 : Time (s): cpu = 00:00:13 ; elapsed = 00:00:14 . Memory (MB): peak = 2212.504 ; gain = 492.188
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start RTL Component Statistics 
+---------------------------------------------------------------------------------
+Detailed RTL Component Info : 
++---Adders : 
+	   3 Input   65 Bit       Adders := 2     
+	   2 Input   32 Bit       Adders := 3     
+	   2 Input   30 Bit       Adders := 1     
+	   2 Input   16 Bit       Adders := 2     
+	   2 Input    9 Bit       Adders := 1     
+	   2 Input    8 Bit       Adders := 11    
+	   2 Input    6 Bit       Adders := 2     
+	   2 Input    3 Bit       Adders := 1     
+	   2 Input    2 Bit       Adders := 1     
++---XORs : 
+	   2 Input      1 Bit         XORs := 4     
++---XORs : 
+	               33 Bit    Wide XORs := 64    
++---Registers : 
+	              704 Bit    Registers := 1     
+	              320 Bit    Registers := 1     
+	               65 Bit    Registers := 2     
+	               64 Bit    Registers := 11    
+	               48 Bit    Registers := 6     
+	               32 Bit    Registers := 56    
+	               30 Bit    Registers := 1     
+	               16 Bit    Registers := 2     
+	                9 Bit    Registers := 1     
+	                8 Bit    Registers := 15    
+	                6 Bit    Registers := 2     
+	                5 Bit    Registers := 2     
+	                4 Bit    Registers := 6     
+	                3 Bit    Registers := 1     
+	                2 Bit    Registers := 39    
+	                1 Bit    Registers := 78    
++---Muxes : 
+	   2 Input   64 Bit        Muxes := 10    
+	   7 Input   64 Bit        Muxes := 1     
+	   2 Input   48 Bit        Muxes := 2     
+	   2 Input   32 Bit        Muxes := 11    
+	  18 Input   32 Bit        Muxes := 1     
+	   7 Input   32 Bit        Muxes := 3     
+	   4 Input   32 Bit        Muxes := 2     
+	   2 Input   31 Bit        Muxes := 2     
+	   3 Input   30 Bit        Muxes := 1     
+	   7 Input    9 Bit        Muxes := 1     
+	   2 Input    8 Bit        Muxes := 12    
+	   7 Input    8 Bit        Muxes := 2     
+	   4 Input    6 Bit        Muxes := 2     
+	  18 Input    5 Bit        Muxes := 1     
+	  39 Input    5 Bit        Muxes := 1     
+	   2 Input    4 Bit        Muxes := 17    
+	   3 Input    4 Bit        Muxes := 6     
+	   2 Input    3 Bit        Muxes := 4     
+	   8 Input    3 Bit        Muxes := 1     
+	   7 Input    2 Bit        Muxes := 1     
+	   3 Input    2 Bit        Muxes := 2     
+	   2 Input    2 Bit        Muxes := 6     
+	   2 Input    1 Bit        Muxes := 35    
+	  18 Input    1 Bit        Muxes := 6     
+	   7 Input    1 Bit        Muxes := 10    
+	   3 Input    1 Bit        Muxes := 11    
+---------------------------------------------------------------------------------
+Finished RTL Component Statistics 
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Part Resource Summary
+---------------------------------------------------------------------------------
+Part Resources:
+DSPs: 1824 (col length:96)
+BRAMs: 960 (col length: RAMB18 96 RAMB36 48)
+---------------------------------------------------------------------------------
+Finished Part Resource Summary
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Cross Boundary and Area Optimization
+---------------------------------------------------------------------------------
+WARNING: [Synth 8-7129] Port stat_tx_local_fault in module pcs64_mii_pkt_gen is either unconnected or has no load
+WARNING: [Synth 8-7129] Port rx_lane_align in module pcs64_mii_traffic_gen_mon is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_framing_err_valid in module pcs64_mii_traffic_gen_mon is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_framing_err in module pcs64_mii_traffic_gen_mon is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_hi_ber in module pcs64_mii_traffic_gen_mon is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_valid_ctrl_code in module pcs64_mii_traffic_gen_mon is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_bad_code in module pcs64_mii_traffic_gen_mon is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_bad_code_valid in module pcs64_mii_traffic_gen_mon is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_error_valid in module pcs64_mii_traffic_gen_mon is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_error[7] in module pcs64_mii_traffic_gen_mon is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_error[6] in module pcs64_mii_traffic_gen_mon is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_error[5] in module pcs64_mii_traffic_gen_mon is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_error[4] in module pcs64_mii_traffic_gen_mon is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_error[3] in module pcs64_mii_traffic_gen_mon is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_error[2] in module pcs64_mii_traffic_gen_mon is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_error[1] in module pcs64_mii_traffic_gen_mon is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_error[0] in module pcs64_mii_traffic_gen_mon is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_fifo_error in module pcs64_mii_traffic_gen_mon is either unconnected or has no load
+WARNING: [Synth 8-7129] Port stat_rx_local_fault in module pcs64_mii_traffic_gen_mon is either unconnected or has no load
+---------------------------------------------------------------------------------
+Finished Cross Boundary and Area Optimization : Time (s): cpu = 00:00:18 ; elapsed = 00:00:19 . Memory (MB): peak = 2247.023 ; gain = 526.707
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Applying XDC Timing Constraints
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Applying XDC Timing Constraints : Time (s): cpu = 00:00:24 ; elapsed = 00:00:25 . Memory (MB): peak = 2763.398 ; gain = 1043.082
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Timing Optimization
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Timing Optimization : Time (s): cpu = 00:00:25 ; elapsed = 00:00:26 . Memory (MB): peak = 2805.230 ; gain = 1084.914
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Technology Mapping
+---------------------------------------------------------------------------------
+INFO: [Synth 8-3332] Sequential element (i_pcs64_mii_gen_mon/i_pcs64_PKT_GEN1/FSM_onehot_state_reg[6]) is unused and will be removed from module pcs64_pkt_gen_mon_ds.
+---------------------------------------------------------------------------------
+Finished Technology Mapping : Time (s): cpu = 00:00:26 ; elapsed = 00:00:28 . Memory (MB): peak = 2841.309 ; gain = 1120.992
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start IO Insertion
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Flattening Before IO Insertion
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Flattening Before IO Insertion
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Final Netlist Cleanup
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Final Netlist Cleanup
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished IO Insertion : Time (s): cpu = 00:00:28 ; elapsed = 00:00:30 . Memory (MB): peak = 3042.168 ; gain = 1321.852
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Renaming Generated Instances
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Renaming Generated Instances : Time (s): cpu = 00:00:28 ; elapsed = 00:00:30 . Memory (MB): peak = 3042.168 ; gain = 1321.852
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Rebuilding User Hierarchy
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Rebuilding User Hierarchy : Time (s): cpu = 00:00:29 ; elapsed = 00:00:30 . Memory (MB): peak = 3042.168 ; gain = 1321.852
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Renaming Generated Ports
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Renaming Generated Ports : Time (s): cpu = 00:00:29 ; elapsed = 00:00:30 . Memory (MB): peak = 3042.168 ; gain = 1321.852
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Handling Custom Attributes
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Handling Custom Attributes : Time (s): cpu = 00:00:29 ; elapsed = 00:00:30 . Memory (MB): peak = 3042.168 ; gain = 1321.852
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Renaming Generated Nets
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Renaming Generated Nets : Time (s): cpu = 00:00:29 ; elapsed = 00:00:30 . Memory (MB): peak = 3042.168 ; gain = 1321.852
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Writing Synthesis Report
+---------------------------------------------------------------------------------
+
+Report BlackBoxes: 
++------+--------------+----------+
+|      |BlackBox name |Instances |
++------+--------------+----------+
+|1     |pcs64         |         1|
+|2     |vio_0         |         1|
++------+--------------+----------+
+
+Report Cell Usage: 
++------+-------+------+
+|      |Cell   |Count |
++------+-------+------+
+|1     |pcs64  |     1|
+|2     |vio    |     1|
+|3     |BUFG   |     1|
+|4     |CARRY8 |   215|
+|5     |LUT1   |   329|
+|6     |LUT2   |   100|
+|7     |LUT3   |   159|
+|8     |LUT4   |   207|
+|9     |LUT5   |   215|
+|10    |LUT6   |   369|
+|11    |FDCE   |     7|
+|12    |FDRE   |  4719|
+|13    |FDSE   |   301|
+|14    |IBUF   |     2|
+|15    |IBUFDS |     1|
+|16    |OBUF   |     6|
++------+-------+------+
+---------------------------------------------------------------------------------
+Finished Writing Synthesis Report : Time (s): cpu = 00:00:29 ; elapsed = 00:00:30 . Memory (MB): peak = 3042.168 ; gain = 1321.852
+---------------------------------------------------------------------------------
+Synthesis finished with 0 errors, 0 critical warnings and 19 warnings.
+Synthesis Optimization Runtime : Time (s): cpu = 00:00:21 ; elapsed = 00:00:27 . Memory (MB): peak = 3042.168 ; gain = 1230.777
+Synthesis Optimization Complete : Time (s): cpu = 00:00:29 ; elapsed = 00:00:31 . Memory (MB): peak = 3042.168 ; gain = 1321.852
+INFO: [Project 1-571] Translating synthesized netlist
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.042 . Memory (MB): peak = 3042.168 ; gain = 0.000
+INFO: [Netlist 29-17] Analyzing 219 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
+INFO: [Project 1-570] Preparing netlist for logic optimization
+INFO: [Opt 31-138] Pushed 0 inverter(s) to 0 load pin(s).
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.001 . Memory (MB): peak = 3042.168 ; gain = 0.000
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 4 instances were transformed.
+  BUFG => BUFGCE: 1 instance 
+  IBUF => IBUF (IBUFCTRL, INBUF): 2 instances
+  IBUFDS => IBUFDS (DIFFINBUF, IBUFCTRL): 1 instance 
+
+Synth Design complete | Checksum: 5fb2f0f2
+INFO: [Common 17-83] Releasing license: Synthesis
+135 Infos, 54 Warnings, 1 Critical Warnings and 0 Errors encountered.
+synth_design completed successfully
+synth_design: Time (s): cpu = 00:00:35 ; elapsed = 00:00:38 . Memory (MB): peak = 3042.168 ; gain = 2435.480
+INFO: [runtcl-6] Synthesis results are not added to the cache due to CRITICAL_WARNING
+Write ShapeDB Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.005 . Memory (MB): peak = 3042.168 ; gain = 0.000
+INFO: [Common 17-1381] The checkpoint 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/pcs64_2ch/pcs64_2ch.runs/synth_1/xxv_loop_top.dcp' has been generated.
+INFO: [Vivado 12-24828] Executing command : report_utilization -file xxv_loop_top_utilization_synth.rpt -pb xxv_loop_top_utilization_synth.pb
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 29 22:07:23 2026...
+[Tue Sep 29 22:07:25 2026] synth_1 finished
+wait_on_runs: Time (s): cpu = 00:00:00 ; elapsed = 00:01:00 . Memory (MB): peak = 617.309 ; gain = 10.062
+A_Base_SYNTH_STATUS   = synth_design Complete!
+A_Base_SYNTH_PROGRESS = 100%
+can't read "pdir": no such variable
+    while executing
+"glob -nocomplain "$pdir/pcs64_2ch.runs/synth_1/*_utilization_synth.rpt""
+    (procedure "build_top" line 28)
+    invoked from within
+"build_top A_Base    xxv_loop_top"
+    (file "D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\p7b_mac_synth\tcl\run_xxv_mac.tcl" line 213)
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 29 22:07:25 2026...

@@ -1,0 +1,317 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version      : Vivado v.2025.2 (win64) Build 6299465 Fri Nov 14 19:35:11 GMT 2025
+| Date              : Tue Sep 29 22:29:39 2026
+| Host              : xyz-intel running 64-bit major release  (build 9200)
+| Command           : report_timing -from [get_cells -hier -quiet -filter {NAME =~ *u_mac_tx/u_crc/crc_reg*}] -to [get_cells -hier -quiet -filter {NAME =~ *u_mac_tx/u_crc/crc_reg*}] -max_paths 4 -delay_type max -file D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/reports/B_WithMac_u_mac_tx_crc_reg2reg.rpt
+| Design            : xxv_mac_top
+| Device            : xcku5p-ffvb676
+| Speed File        : -1  PRODUCTION 1.29 05-01-2022
+| Design State      : Routed
+| Temperature Grade : E
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Timing Report
+
+Slack (MET) :             2.588ns  (required time - arrival time)
+  Source:                 u_mac_tx/u_crc/crc_reg[31]/C
+                            (rising edge-triggered cell FDPE clocked by txoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            u_mac_tx/u_crc/crc_reg[29]/D
+                            (rising edge-triggered cell FDPE clocked by txoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             txoutclk_out[0]_1
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            6.400ns  (txoutclk_out[0]_1 rise@6.400ns - txoutclk_out[0]_1 rise@0.000ns)
+  Data Path Delay:        3.687ns  (logic 0.727ns (19.720%)  route 2.960ns (80.280%))
+  Logic Levels:           6  (LUT5=1 LUT6=5)
+  Clock Path Skew:        -0.106ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.793ns = ( 8.193 - 6.400 ) 
+    Source Clock Delay      (SCD):    2.029ns
+    Clock Pessimism Removal (CPR):    0.130ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.800ns (routing 0.520ns, distribution 1.280ns)
+  Clock Net Delay (Destination): 1.589ns (routing 0.477ns, distribution 1.112ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock txoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=2, routed)           0.090     0.090    DUT/inst/i_core_gtwiz_userclk_tx_inst_1/txoutclk_out[0]
+    BUFG_GT_X0Y44        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  DUT/inst/i_core_gtwiz_userclk_tx_inst_1/gen_gtwiz_userclk_tx_main.bufg_gt_usrclk_inst/O
+    X2Y1 (CLOCK_ROOT)    net (fo=1199, routed)        1.800     2.029    u_mac_tx/u_crc/tx_mii_clk_1
+    SLICE_X105Y110       FDPE                                         r  u_mac_tx/u_crc/crc_reg[31]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X105Y110       FDPE (Prop_FFF2_SLICEL_C_Q)
+                                                      0.099     2.128 r  u_mac_tx/u_crc/crc_reg[31]/Q
+                         net (fo=14, routed)          0.635     2.763    u_mac_tx/u_crc/crc_reg_n_0_[31]
+    SLICE_X101Y110       LUT6 (Prop_B6LUT_SLICEM_I0_O)
+                                                      0.116     2.879 r  u_mac_tx/u_crc/crc[17]_i_8/O
+                         net (fo=5, routed)           0.654     3.532    u_mac_tx/u_crc/crc[17]_i_8_n_0
+    SLICE_X102Y117       LUT6 (Prop_H6LUT_SLICEL_I0_O)
+                                                      0.116     3.648 r  u_mac_tx/u_crc/crc[29]_i_39/O
+                         net (fo=1, routed)           0.108     3.756    u_mac_tx/u_crc/crc[29]_i_39_n_0
+    SLICE_X102Y118       LUT6 (Prop_G6LUT_SLICEL_I0_O)
+                                                      0.147     3.903 r  u_mac_tx/u_crc/crc[29]_i_15/O
+                         net (fo=1, routed)           0.111     4.014    u_mac_tx/u_crc/crc[29]_i_15_n_0
+    SLICE_X102Y118       LUT5 (Prop_E6LUT_SLICEL_I4_O)
+                                                      0.148     4.162 r  u_mac_tx/u_crc/crc[29]_i_4/O
+                         net (fo=1, routed)           0.470     4.632    u_mac_tx/u_crc/crc[29]_i_4_n_0
+    SLICE_X101Y116       LUT6 (Prop_B6LUT_SLICEM_I0_O)
+                                                      0.039     4.671 r  u_mac_tx/u_crc/crc[29]_i_2/O
+                         net (fo=1, routed)           0.180     4.851    u_mac_tx/u_crc/crc[29]_i_2_n_0
+    SLICE_X101Y111       LUT6 (Prop_C6LUT_SLICEM_I3_O)
+                                                      0.062     4.913 r  u_mac_tx/u_crc/crc[29]_i_1/O
+                         net (fo=4, routed)           0.802     5.716    u_mac_tx/u_crc/crc_nxt[29]
+    SLICE_X103Y111       FDPE                                         r  u_mac_tx/u_crc/crc_reg[29]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock txoutclk_out[0]_1 rise edge)
+                                                      6.400     6.400 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     6.400 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=2, routed)           0.082     6.482    DUT/inst/i_core_gtwiz_userclk_tx_inst_1/txoutclk_out[0]
+    BUFG_GT_X0Y44        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     6.604 r  DUT/inst/i_core_gtwiz_userclk_tx_inst_1/gen_gtwiz_userclk_tx_main.bufg_gt_usrclk_inst/O
+    X2Y1 (CLOCK_ROOT)    net (fo=1199, routed)        1.589     8.193    u_mac_tx/u_crc/tx_mii_clk_1
+    SLICE_X103Y111       FDPE                                         r  u_mac_tx/u_crc/crc_reg[29]/C
+                         clock pessimism              0.130     8.323    
+                         clock uncertainty           -0.046     8.277    
+    SLICE_X103Y111       FDPE (Setup_EFF_SLICEM_C_D)
+                                                      0.027     8.304    u_mac_tx/u_crc/crc_reg[29]
+  -------------------------------------------------------------------
+                         required time                          8.304    
+                         arrival time                          -5.716    
+  -------------------------------------------------------------------
+                         slack                                  2.588    
+
+Slack (MET) :             2.700ns  (required time - arrival time)
+  Source:                 u_mac_tx/u_crc/crc_reg[23]/C
+                            (rising edge-triggered cell FDPE clocked by txoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            u_mac_tx/u_crc/crc_reg[4]/D
+                            (rising edge-triggered cell FDPE clocked by txoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             txoutclk_out[0]_1
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            6.400ns  (txoutclk_out[0]_1 rise@6.400ns - txoutclk_out[0]_1 rise@0.000ns)
+  Data Path Delay:        3.653ns  (logic 0.869ns (23.790%)  route 2.784ns (76.210%))
+  Logic Levels:           6  (LUT3=1 LUT6=4 MUXF7=1)
+  Clock Path Skew:        -0.028ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.809ns = ( 8.209 - 6.400 ) 
+    Source Clock Delay      (SCD):    2.035ns
+    Clock Pessimism Removal (CPR):    0.198ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.806ns (routing 0.520ns, distribution 1.286ns)
+  Clock Net Delay (Destination): 1.605ns (routing 0.477ns, distribution 1.128ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock txoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=2, routed)           0.090     0.090    DUT/inst/i_core_gtwiz_userclk_tx_inst_1/txoutclk_out[0]
+    BUFG_GT_X0Y44        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  DUT/inst/i_core_gtwiz_userclk_tx_inst_1/gen_gtwiz_userclk_tx_main.bufg_gt_usrclk_inst/O
+    X2Y1 (CLOCK_ROOT)    net (fo=1199, routed)        1.806     2.035    u_mac_tx/u_crc/tx_mii_clk_1
+    SLICE_X107Y111       FDPE                                         r  u_mac_tx/u_crc/crc_reg[23]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X107Y111       FDPE (Prop_GFF_SLICEM_C_Q)
+                                                      0.095     2.130 r  u_mac_tx/u_crc/crc_reg[23]/Q
+                         net (fo=11, routed)          0.532     2.662    u_mac_tx/u_crc/crc_reg_n_0_[23]
+    SLICE_X100Y113       LUT3 (Prop_B6LUT_SLICEL_I2_O)
+                                                      0.149     2.811 r  u_mac_tx/u_crc/crc[28]_i_30/O
+                         net (fo=13, routed)          0.727     3.538    u_mac_tx/u_crc/crc[28]_i_30_n_0
+    SLICE_X102Y119       LUT6 (Prop_B6LUT_SLICEL_I5_O)
+                                                      0.100     3.638 r  u_mac_tx/u_crc/crc[4]_i_27/O
+                         net (fo=1, routed)           0.052     3.690    u_mac_tx/u_crc/crc[4]_i_27_n_0
+    SLICE_X102Y119       LUT6 (Prop_G6LUT_SLICEL_I3_O)
+                                                      0.114     3.804 r  u_mac_tx/u_crc/crc[4]_i_12/O
+                         net (fo=1, routed)           0.009     3.813    u_mac_tx/u_crc/crc[4]_i_12_n_0
+    SLICE_X102Y119       MUXF7 (Prop_F7MUX_GH_SLICEL_I1_O)
+                                                      0.082     3.895 r  u_mac_tx/u_crc/crc_reg[4]_i_4/O
+                         net (fo=1, routed)           0.601     4.496    u_mac_tx/u_crc/crc_reg[4]_i_4_n_0
+    SLICE_X101Y120       LUT6 (Prop_G6LUT_SLICEM_I0_O)
+                                                      0.179     4.675 r  u_mac_tx/u_crc/crc[4]_i_2/O
+                         net (fo=1, routed)           0.114     4.789    u_mac_tx/u_crc/crc[4]_i_2_n_0
+    SLICE_X101Y119       LUT6 (Prop_B6LUT_SLICEM_I3_O)
+                                                      0.150     4.939 r  u_mac_tx/u_crc/crc[4]_i_1/O
+                         net (fo=7, routed)           0.749     5.688    u_mac_tx/u_crc/crc_nxt[4]
+    SLICE_X108Y113       FDPE                                         r  u_mac_tx/u_crc/crc_reg[4]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock txoutclk_out[0]_1 rise edge)
+                                                      6.400     6.400 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     6.400 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=2, routed)           0.082     6.482    DUT/inst/i_core_gtwiz_userclk_tx_inst_1/txoutclk_out[0]
+    BUFG_GT_X0Y44        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     6.604 r  DUT/inst/i_core_gtwiz_userclk_tx_inst_1/gen_gtwiz_userclk_tx_main.bufg_gt_usrclk_inst/O
+    X2Y1 (CLOCK_ROOT)    net (fo=1199, routed)        1.605     8.209    u_mac_tx/u_crc/tx_mii_clk_1
+    SLICE_X108Y113       FDPE                                         r  u_mac_tx/u_crc/crc_reg[4]/C
+                         clock pessimism              0.198     8.407    
+                         clock uncertainty           -0.046     8.361    
+    SLICE_X108Y113       FDPE (Setup_EFF_SLICEL_C_D)
+                                                      0.027     8.388    u_mac_tx/u_crc/crc_reg[4]
+  -------------------------------------------------------------------
+                         required time                          8.388    
+                         arrival time                          -5.688    
+  -------------------------------------------------------------------
+                         slack                                  2.700    
+
+Slack (MET) :             2.736ns  (required time - arrival time)
+  Source:                 u_mac_tx/u_crc/crc_reg[1]/C
+                            (rising edge-triggered cell FDPE clocked by txoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            u_mac_tx/u_crc/crc_reg[24]/D
+                            (rising edge-triggered cell FDPE clocked by txoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             txoutclk_out[0]_1
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            6.400ns  (txoutclk_out[0]_1 rise@6.400ns - txoutclk_out[0]_1 rise@0.000ns)
+  Data Path Delay:        3.535ns  (logic 0.577ns (16.323%)  route 2.958ns (83.677%))
+  Logic Levels:           7  (LUT4=1 LUT5=1 LUT6=5)
+  Clock Path Skew:        -0.110ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.791ns = ( 8.191 - 6.400 ) 
+    Source Clock Delay      (SCD):    2.031ns
+    Clock Pessimism Removal (CPR):    0.130ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.802ns (routing 0.520ns, distribution 1.282ns)
+  Clock Net Delay (Destination): 1.587ns (routing 0.477ns, distribution 1.110ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock txoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=2, routed)           0.090     0.090    DUT/inst/i_core_gtwiz_userclk_tx_inst_1/txoutclk_out[0]
+    BUFG_GT_X0Y44        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  DUT/inst/i_core_gtwiz_userclk_tx_inst_1/gen_gtwiz_userclk_tx_main.bufg_gt_usrclk_inst/O
+    X2Y1 (CLOCK_ROOT)    net (fo=1199, routed)        1.802     2.031    u_mac_tx/u_crc/tx_mii_clk_1
+    SLICE_X105Y113       FDPE                                         r  u_mac_tx/u_crc/crc_reg[1]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X105Y113       FDPE (Prop_HFF2_SLICEL_C_Q)
+                                                      0.097     2.128 r  u_mac_tx/u_crc/crc_reg[1]/Q
+                         net (fo=9, routed)           0.195     2.323    u_mac_tx/u_crc/crc_reg_n_0_[1]
+    SLICE_X105Y110       LUT5 (Prop_F6LUT_SLICEL_I0_O)
+                                                      0.148     2.471 r  u_mac_tx/u_crc/crc[14]_i_18/O
+                         net (fo=26, routed)          0.386     2.857    u_mac_tx/u_crc/crc[14]_i_18_n_0
+    SLICE_X103Y112       LUT4 (Prop_E6LUT_SLICEM_I0_O)
+                                                      0.039     2.896 r  u_mac_tx/u_crc/crc[31]_i_56/O
+                         net (fo=9, routed)           0.690     3.586    u_mac_tx/u_crc/crc[31]_i_56_n_0
+    SLICE_X100Y115       LUT6 (Prop_G6LUT_SLICEL_I0_O)
+                                                      0.063     3.649 r  u_mac_tx/u_crc/crc[29]_i_22/O
+                         net (fo=4, routed)           0.625     4.274    u_mac_tx/u_crc/crc[29]_i_22_n_0
+    SLICE_X102Y114       LUT6 (Prop_B6LUT_SLICEL_I1_O)
+                                                      0.064     4.338 r  u_mac_tx/u_crc/crc[24]_i_15/O
+                         net (fo=1, routed)           0.101     4.439    u_mac_tx/u_crc/crc[24]_i_15_n_0
+    SLICE_X102Y114       LUT6 (Prop_A6LUT_SLICEL_I5_O)
+                                                      0.039     4.478 r  u_mac_tx/u_crc/crc[24]_i_4/O
+                         net (fo=1, routed)           0.317     4.795    u_mac_tx/u_crc/crc[24]_i_4_n_0
+    SLICE_X106Y114       LUT6 (Prop_G6LUT_SLICEM_I0_O)
+                                                      0.064     4.859 r  u_mac_tx/u_crc/crc[24]_i_2/O
+                         net (fo=1, routed)           0.188     5.047    u_mac_tx/u_crc/crc[24]_i_2_n_0
+    SLICE_X106Y112       LUT6 (Prop_B6LUT_SLICEM_I3_O)
+                                                      0.063     5.110 r  u_mac_tx/u_crc/crc[24]_i_1/O
+                         net (fo=5, routed)           0.456     5.566    u_mac_tx/u_crc/crc_nxt[24]
+    SLICE_X102Y112       FDPE                                         r  u_mac_tx/u_crc/crc_reg[24]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock txoutclk_out[0]_1 rise edge)
+                                                      6.400     6.400 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     6.400 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=2, routed)           0.082     6.482    DUT/inst/i_core_gtwiz_userclk_tx_inst_1/txoutclk_out[0]
+    BUFG_GT_X0Y44        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     6.604 r  DUT/inst/i_core_gtwiz_userclk_tx_inst_1/gen_gtwiz_userclk_tx_main.bufg_gt_usrclk_inst/O
+    X2Y1 (CLOCK_ROOT)    net (fo=1199, routed)        1.587     8.191    u_mac_tx/u_crc/tx_mii_clk_1
+    SLICE_X102Y112       FDPE                                         r  u_mac_tx/u_crc/crc_reg[24]/C
+                         clock pessimism              0.130     8.321    
+                         clock uncertainty           -0.046     8.275    
+    SLICE_X102Y112       FDPE (Setup_EFF_SLICEL_C_D)
+                                                      0.027     8.302    u_mac_tx/u_crc/crc_reg[24]
+  -------------------------------------------------------------------
+                         required time                          8.302    
+                         arrival time                          -5.566    
+  -------------------------------------------------------------------
+                         slack                                  2.736    
+
+Slack (MET) :             2.763ns  (required time - arrival time)
+  Source:                 u_mac_tx/u_crc/crc_reg[8]/C
+                            (rising edge-triggered cell FDPE clocked by txoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            u_mac_tx/u_crc/crc_reg[11]/D
+                            (rising edge-triggered cell FDPE clocked by txoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             txoutclk_out[0]_1
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            6.400ns  (txoutclk_out[0]_1 rise@6.400ns - txoutclk_out[0]_1 rise@0.000ns)
+  Data Path Delay:        3.530ns  (logic 0.638ns (18.076%)  route 2.892ns (81.924%))
+  Logic Levels:           6  (LUT4=1 LUT6=4 MUXF7=1)
+  Clock Path Skew:        -0.088ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.804ns = ( 8.204 - 6.400 ) 
+    Source Clock Delay      (SCD):    2.022ns
+    Clock Pessimism Removal (CPR):    0.130ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.793ns (routing 0.520ns, distribution 1.273ns)
+  Clock Net Delay (Destination): 1.600ns (routing 0.477ns, distribution 1.123ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock txoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=2, routed)           0.090     0.090    DUT/inst/i_core_gtwiz_userclk_tx_inst_1/txoutclk_out[0]
+    BUFG_GT_X0Y44        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  DUT/inst/i_core_gtwiz_userclk_tx_inst_1/gen_gtwiz_userclk_tx_main.bufg_gt_usrclk_inst/O
+    X2Y1 (CLOCK_ROOT)    net (fo=1199, routed)        1.793     2.022    u_mac_tx/u_crc/tx_mii_clk_1
+    SLICE_X102Y113       FDPE                                         r  u_mac_tx/u_crc/crc_reg[8]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X102Y113       FDPE (Prop_EFF_SLICEL_C_Q)
+                                                      0.096     2.118 r  u_mac_tx/u_crc/crc_reg[8]/Q
+                         net (fo=15, routed)          0.636     2.754    u_mac_tx/u_crc/crc_reg_n_0_[8]
+    SLICE_X101Y111       LUT6 (Prop_E6LUT_SLICEM_I0_O)
+                                                      0.101     2.855 r  u_mac_tx/u_crc/crc[29]_i_42/O
+                         net (fo=11, routed)          0.581     3.436    u_mac_tx/u_crc/crc[29]_i_42_n_0
+    SLICE_X103Y116       LUT4 (Prop_A6LUT_SLICEM_I0_O)
+                                                      0.040     3.476 r  u_mac_tx/u_crc/crc[29]_i_31/O
+                         net (fo=5, routed)           0.657     4.134    u_mac_tx/u_crc/crc[29]_i_31_n_0
+    SLICE_X99Y115        LUT6 (Prop_D6LUT_SLICEL_I0_O)
+                                                      0.099     4.233 r  u_mac_tx/u_crc/crc[11]_i_13/O
+                         net (fo=1, routed)           0.010     4.243    u_mac_tx/u_crc/crc[11]_i_13_n_0
+    SLICE_X99Y115        MUXF7 (Prop_F7MUX_CD_SLICEL_I0_O)
+                                                      0.082     4.325 r  u_mac_tx/u_crc/crc_reg[11]_i_5/O
+                         net (fo=1, routed)           0.174     4.499    u_mac_tx/u_crc/crc_reg[11]_i_5_n_0
+    SLICE_X99Y114        LUT6 (Prop_H6LUT_SLICEL_I1_O)
+                                                      0.179     4.678 r  u_mac_tx/u_crc/crc[11]_i_2/O
+                         net (fo=1, routed)           0.602     5.280    u_mac_tx/u_crc/crc[11]_i_2_n_0
+    SLICE_X109Y110       LUT6 (Prop_H6LUT_SLICEM_I3_O)
+                                                      0.041     5.321 r  u_mac_tx/u_crc/crc[11]_i_1/O
+                         net (fo=6, routed)           0.231     5.552    u_mac_tx/u_crc/crc_nxt[11]
+    SLICE_X107Y110       FDPE                                         r  u_mac_tx/u_crc/crc_reg[11]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock txoutclk_out[0]_1 rise edge)
+                                                      6.400     6.400 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     6.400 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=2, routed)           0.082     6.482    DUT/inst/i_core_gtwiz_userclk_tx_inst_1/txoutclk_out[0]
+    BUFG_GT_X0Y44        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     6.604 r  DUT/inst/i_core_gtwiz_userclk_tx_inst_1/gen_gtwiz_userclk_tx_main.bufg_gt_usrclk_inst/O
+    X2Y1 (CLOCK_ROOT)    net (fo=1199, routed)        1.600     8.204    u_mac_tx/u_crc/tx_mii_clk_1
+    SLICE_X107Y110       FDPE                                         r  u_mac_tx/u_crc/crc_reg[11]/C
+                         clock pessimism              0.130     8.334    
+                         clock uncertainty           -0.046     8.288    
+    SLICE_X107Y110       FDPE (Setup_HFF2_SLICEM_C_D)
+                                                      0.027     8.315    u_mac_tx/u_crc/crc_reg[11]
+  -------------------------------------------------------------------
+                         required time                          8.315    
+                         arrival time                          -5.552    
+  -------------------------------------------------------------------
+                         slack                                  2.763    
+
+
+
+

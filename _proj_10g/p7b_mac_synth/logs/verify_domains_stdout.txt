@@ -1,0 +1,141 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 22:18:56 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source {D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\p7b_mac_synth\tcl\verify_domains.tcl}
+# set B "D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth"
+# catch {set_param general.maxThreads 8}
+# open_checkpoint "$B/xxv_mac/pcs64_2ch/pcs64_2ch.runs/impl_1/xxv_mac_top_routed.dcp"
+Command: open_checkpoint D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/pcs64_2ch/pcs64_2ch.runs/impl_1/xxv_mac_top_routed.dcp
+
+Starting open_checkpoint Task
+
+Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.026 . Memory (MB): peak = 324.914 ; gain = 3.648
+INFO: [Device 21-403] Loading part xcku5p-ffvb676-1-e
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.138 . Memory (MB): peak = 1683.668 ; gain = 0.000
+INFO: [Netlist 29-17] Analyzing 1408 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
+INFO: [Project 1-479] Netlist was created with Vivado 2025.2
+INFO: [Project 1-570] Preparing netlist for logic optimization
+Read ShapeDB Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.045 . Memory (MB): peak = 1683.668 ; gain = 0.000
+INFO: [Timing 38-478] Restoring timing data from binary archive.
+INFO: [Timing 38-479] Binary timing data restore complete.
+INFO: [Project 1-856] Restoring constraints from binary archive.
+INFO: [Project 1-853] Binary constraint restore complete.
+INFO: [Designutils 20-5722] Start Reading Physical Databases.
+Reading placement.
+Read Netlist Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.022 . Memory (MB): peak = 1944.957 ; gain = 0.000
+Reading placer database...
+Read Device Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.023 . Memory (MB): peak = 1946.539 ; gain = 1.582
+Read PlaceDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.470 . Memory (MB): peak = 1979.242 ; gain = 30.203
+Read PulsedLatchDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 1979.242 ; gain = 0.000
+Reading routing.
+Read RouteStorage: Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 2399.809 ; gain = 420.566
+Read Physdb Files: Time (s): cpu = 00:00:03 ; elapsed = 00:00:04 . Memory (MB): peak = 2399.809 ; gain = 454.852
+Restored from archive | CPU: 3.000000 secs | Memory: 0.000000 MB |
+Finished XDEF File Restore: Time (s): cpu = 00:00:03 ; elapsed = 00:00:04 . Memory (MB): peak = 2399.809 ; gain = 454.852
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.006 . Memory (MB): peak = 2399.809 ; gain = 0.000
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 45 instances were transformed.
+  IBUF => IBUF (IBUFCTRL, INBUF): 2 instances
+  IBUFDS => IBUFDS (DIFFINBUF, IBUFCTRL): 1 instance 
+  RAM32M => RAM32M (RAMD32(x6), RAMS32(x2)): 26 instances
+  RAM32M16 => RAM32M16 (RAMD32(x14), RAMS32(x2)): 12 instances
+  RAM32X1D => RAM32X1D (RAMD32(x2)): 4 instances
+
+INFO: [Project 1-604] Checkpoint was created with Vivado v2025.2 (64-bit) build 6299465
+open_checkpoint: Time (s): cpu = 00:00:45 ; elapsed = 00:00:20 . Memory (MB): peak = 2399.809 ; gain = 2086.984
+# puts "TOP = [get_property top [current_design]]"
+TOP = xxv_mac_top
+# puts "PART = [get_property PART [current_design]]"
+PART = xcku5p-ffvb676-1-e
+# proc clkof {label cellpath} {
+#     set c [get_cells -quiet $cellpath]
+#     if {[llength $c] == 0} { puts "DOM_${label} = <cell not found: $cellpath>" ; return }
+#     set p [get_pins -quiet "$cellpath/C"]
+#     if {[llength $p] == 0} { set p [get_pins -quiet "$cellpath/CLK"] }
+#     if {[llength $p] == 0} { puts "DOM_${label} = <no clock pin on $cellpath>" ; return }
+#     set clk [get_clocks -quiet -of_objects $p]
+#     puts "DOM_${label} = $clk    (cell $cellpath pin [get_property REF_PIN_NAME [lindex $p 0]])"
+# }
+# proc anyreg {inst} {
+#     set cs [get_cells -quiet -hier -filter "NAME =~ ${inst}/* && IS_SEQUENTIAL"]
+#     if {[llength $cs] == 0} { return "<none>" }
+#     return [lindex $cs 0]
+# }
+# foreach inst {u_mac_tx u_mac_rx} {
+#     set c [anyreg $inst]
+#     puts "MACREG_$inst = $c"
+#     set p [get_pins -quiet "$c/CLK"]
+#     if {[llength $p] == 0} { set p [get_pins -quiet "$c/C"] }
+#     puts "MACCLK_$inst = [get_clocks -quiet -of_objects $p]"
+# }
+MACREG_u_mac_tx = u_mac_tx/FSM_sequential_state_reg[0]
+MACCLK_u_mac_tx = txoutclk_out[0]_1
+MACREG_u_mac_rx = u_mac_rx/b_data_reg[0]
+MACCLK_u_mac_rx = rxoutclk_out[0]_1
+# puts "MACREG_u_mac_tx_crc = [anyreg u_mac_tx/u_crc]"
+MACREG_u_mac_tx_crc = u_mac_tx/u_crc/crc_reg[0]
+# puts "MACREG_u_mac_rx_crc = [anyreg u_mac_rx/u_crc]"
+MACREG_u_mac_rx_crc = u_mac_rx/u_crc/crc_reg[0]
+# set txd_loads [get_pins -quiet -of_objects [get_nets -quiet tx_mii_d_1]]
+# puts "TXD_NET_LOADS_N = [llength $txd_loads]"
+TXD_NET_LOADS_N = 0
+# set seen {}
+# foreach p $txd_loads {
+#     set cc [get_clocks -quiet -of_objects $p]
+#     if {[llength $cc]} { lappend seen [list $cc $p] }
+# }
+# puts "TXD_CAPTURE_CLOCKS:"
+TXD_CAPTURE_CLOCKS:
+# foreach e $seen { puts "  TXD_LOAD clk=[lindex $e 0] pin=[lindex $e 1]" }
+# set txc_loads [get_pins -quiet -of_objects [get_nets -quiet tx_mii_c_1]]
+# foreach p $txc_loads {
+#     set cc [get_clocks -quiet -of_objects $p]
+#     if {[llength $cc]} { puts "  TXC_LOAD clk=$cc pin=$p" }
+# }
+# set rxd_drv [get_pins -quiet -of_objects [get_nets -quiet rx_mii_d_1]]
+# puts "RXD_NET_DRIVERS_N = [llength $rxd_drv]"
+RXD_NET_DRIVERS_N = 0
+# foreach p $rxd_drv {
+#     set cc [get_clocks -quiet -of_objects $p]
+#     if {[llength $cc]} { puts "  RXD_DRIVER clk=$cc pin=$p" }
+# }
+# set rxc_drv [get_pins -quiet -of_objects [get_nets -quiet rx_mii_c_1]]
+# foreach p $rxc_drv {
+#     set cc [get_clocks -quiet -of_objects $p]
+#     if {[llength $cc]} { puts "  RXC_DRIVER clk=$cc pin=$p" }
+# }
+# foreach n {user_tx_reset_1 user_rx_reset_1} {
+#     set d [get_pins -quiet -of_objects [get_nets -quiet $n]]
+#     puts "RSTNET_$n loads=[llength $d]"
+#     foreach p $d {
+#         set cc [get_clocks -quiet -of_objects $p]
+#         if {[llength $cc]} { puts "  RSTLOAD $n clk=$cc pin=$p" }
+#     }
+# }
+RSTNET_user_tx_reset_1 loads=2
+RSTNET_user_rx_reset_1 loads=133
+# puts "ALLCLOCKS = [get_clocks]"
+ALLCLOCKS = dclk gtrefclk0 qpll0clk_in[0] qpll0refclk_in[0] rxoutclk_out[0] txoutclk_out[0] txoutclkpcs_out[0] rxoutclk_out[0]_1 txoutclk_out[0]_1 txoutclkpcs_out[0]_1 dbg_hub/inst/BSCANID.u_xsdbm_id/SWITCH_N_EXT_BSCAN.bscan_inst/SERIES7_BSCAN.bscan_inst/INTERNAL_TCK USE_DIVIDER.dclk_mmcm
+# foreach c [get_clocks] { puts "CLK $c period=[get_property PERIOD $c]" }
+CLK dclk period=10.000
+CLK gtrefclk0 period=6.400
+CLK qpll0clk_in[0] period=0.194
+CLK qpll0refclk_in[0] period=6.400
+CLK rxoutclk_out[0] period=6.400
+CLK txoutclk_out[0] period=6.400
+CLK txoutclkpcs_out[0] period=6.206
+CLK rxoutclk_out[0]_1 period=6.400
+CLK txoutclk_out[0]_1 period=6.400
+CLK txoutclkpcs_out[0]_1 period=6.206
+CLK dbg_hub/inst/BSCANID.u_xsdbm_id/SWITCH_N_EXT_BSCAN.bscan_inst/SERIES7_BSCAN.bscan_inst/INTERNAL_TCK period=50.000
+CLK USE_DIVIDER.dclk_mmcm period=10.000
+# puts "DOMAIN_VERIFY_DONE"
+DOMAIN_VERIFY_DONE
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 29 22:19:19 2026...

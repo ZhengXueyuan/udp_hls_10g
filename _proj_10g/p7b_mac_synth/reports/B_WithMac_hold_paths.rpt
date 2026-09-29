@@ -1,0 +1,1858 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version      : Vivado v.2025.2 (win64) Build 6299465 Fri Nov 14 19:35:11 GMT 2025
+| Date              : Tue Sep 29 22:29:42 2026
+| Host              : xyz-intel running 64-bit major release  (build 9200)
+| Command           : report_timing -max_paths 30 -delay_type min -nworst 4 -file D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/reports/B_WithMac_hold_paths.rpt
+| Design            : xxv_mac_top
+| Device            : xcku5p-ffvb676
+| Speed File        : -1  PRODUCTION 1.29 05-01-2022
+| Design State      : Routed
+| Temperature Grade : E
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Timing Report
+
+Slack (MET) :             0.008ns  (arrival time - required time)
+  Source:                 fd_lfsr_reg[62]/C
+                            (rising edge-triggered cell FDCE clocked by txoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            u_mac_tx/u_fifo/mem_reg_0_15_70_72/RAMA_D1/I
+                            (rising edge-triggered cell RAMD32 clocked by txoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             txoutclk_out[0]_1
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (txoutclk_out[0]_1 rise@0.000ns - txoutclk_out[0]_1 rise@0.000ns)
+  Data Path Delay:        0.157ns  (logic 0.070ns (44.650%)  route 0.087ns (55.350%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.085ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.166ns
+    Source Clock Delay      (SCD):    1.867ns
+    Clock Pessimism Removal (CPR):    0.214ns
+  Clock Net Delay (Source):      1.663ns (routing 0.477ns, distribution 1.186ns)
+  Clock Net Delay (Destination): 1.937ns (routing 0.520ns, distribution 1.417ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock txoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=2, routed)           0.082     0.082    DUT/inst/i_core_gtwiz_userclk_tx_inst_1/txoutclk_out[0]
+    BUFG_GT_X0Y44        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     0.204 r  DUT/inst/i_core_gtwiz_userclk_tx_inst_1/gen_gtwiz_userclk_tx_main.bufg_gt_usrclk_inst/O
+    X2Y1 (CLOCK_ROOT)    net (fo=1199, routed)        1.663     1.867    tx_mii_clk_1
+    SLICE_X108Y123       FDCE                                         r  fd_lfsr_reg[62]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X108Y123       FDCE (Prop_GFF_SLICEL_C_Q)
+                                                      0.070     1.937 r  fd_lfsr_reg[62]/Q
+                         net (fo=4, routed)           0.087     2.024    u_mac_tx/u_fifo/mem_reg_0_15_70_72/DIA1
+    SLICE_X107Y123       RAMD32                                       r  u_mac_tx/u_fifo/mem_reg_0_15_70_72/RAMA_D1/I
+  -------------------------------------------------------------------    -------------------
+
+                         (clock txoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=2, routed)           0.090     0.090    DUT/inst/i_core_gtwiz_userclk_tx_inst_1/txoutclk_out[0]
+    BUFG_GT_X0Y44        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  DUT/inst/i_core_gtwiz_userclk_tx_inst_1/gen_gtwiz_userclk_tx_main.bufg_gt_usrclk_inst/O
+    X2Y1 (CLOCK_ROOT)    net (fo=1199, routed)        1.937     2.166    u_mac_tx/u_fifo/mem_reg_0_15_70_72/WCLK
+    SLICE_X107Y123       RAMD32                                       r  u_mac_tx/u_fifo/mem_reg_0_15_70_72/RAMA_D1/CLK
+                         clock pessimism             -0.214     1.952    
+    SLICE_X107Y123       RAMD32 (Hold_E6LUT_SLICEM_CLK_I)
+                                                      0.063     2.015    u_mac_tx/u_fifo/mem_reg_0_15_70_72/RAMA_D1
+  -------------------------------------------------------------------
+                         required time                         -2.015    
+                         arrival time                           2.024    
+  -------------------------------------------------------------------
+                         slack                                  0.008    
+
+Slack (MET) :             0.008ns  (arrival time - required time)
+  Source:                 fd_lfsr_reg[62]/C
+                            (rising edge-triggered cell FDCE clocked by txoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            u_mac_tx/u_fifo/mem_reg_0_15_70_72/RAMA_D1/I
+                            (rising edge-triggered cell RAMD32 clocked by txoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             txoutclk_out[0]_1
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (txoutclk_out[0]_1 rise@0.000ns - txoutclk_out[0]_1 rise@0.000ns)
+  Data Path Delay:        0.157ns  (logic 0.070ns (44.650%)  route 0.087ns (55.350%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.085ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.166ns
+    Source Clock Delay      (SCD):    1.867ns
+    Clock Pessimism Removal (CPR):    0.214ns
+  Clock Net Delay (Source):      1.663ns (routing 0.477ns, distribution 1.186ns)
+  Clock Net Delay (Destination): 1.937ns (routing 0.520ns, distribution 1.417ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock txoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=2, routed)           0.082     0.082    DUT/inst/i_core_gtwiz_userclk_tx_inst_1/txoutclk_out[0]
+    BUFG_GT_X0Y44        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     0.204 r  DUT/inst/i_core_gtwiz_userclk_tx_inst_1/gen_gtwiz_userclk_tx_main.bufg_gt_usrclk_inst/O
+    X2Y1 (CLOCK_ROOT)    net (fo=1199, routed)        1.663     1.867    tx_mii_clk_1
+    SLICE_X108Y123       FDCE                                         r  fd_lfsr_reg[62]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X108Y123       FDCE (Prop_GFF_SLICEL_C_Q)
+                                                      0.070     1.937 f  fd_lfsr_reg[62]/Q
+                         net (fo=4, routed)           0.087     2.024    u_mac_tx/u_fifo/mem_reg_0_15_70_72/DIA1
+    SLICE_X107Y123       RAMD32                                       f  u_mac_tx/u_fifo/mem_reg_0_15_70_72/RAMA_D1/I
+  -------------------------------------------------------------------    -------------------
+
+                         (clock txoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=2, routed)           0.090     0.090    DUT/inst/i_core_gtwiz_userclk_tx_inst_1/txoutclk_out[0]
+    BUFG_GT_X0Y44        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  DUT/inst/i_core_gtwiz_userclk_tx_inst_1/gen_gtwiz_userclk_tx_main.bufg_gt_usrclk_inst/O
+    X2Y1 (CLOCK_ROOT)    net (fo=1199, routed)        1.937     2.166    u_mac_tx/u_fifo/mem_reg_0_15_70_72/WCLK
+    SLICE_X107Y123       RAMD32                                       r  u_mac_tx/u_fifo/mem_reg_0_15_70_72/RAMA_D1/CLK
+                         clock pessimism             -0.214     1.952    
+    SLICE_X107Y123       RAMD32 (Hold_E6LUT_SLICEM_CLK_I)
+                                                      0.063     2.015    u_mac_tx/u_fifo/mem_reg_0_15_70_72/RAMA_D1
+  -------------------------------------------------------------------
+                         required time                         -2.015    
+                         arrival time                           2.024    
+  -------------------------------------------------------------------
+                         slack                                  0.008    
+
+Slack (MET) :             0.013ns  (arrival time - required time)
+  Source:                 xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by txoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by txoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             txoutclk_out[0]_1
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (txoutclk_out[0]_1 rise@0.000ns - txoutclk_out[0]_1 rise@0.000ns)
+  Data Path Delay:        0.187ns  (logic 0.110ns (58.673%)  route 0.077ns (41.327%))
+  Logic Levels:           1  (LUT3=1)
+  Clock Path Skew:        0.120ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.041ns
+    Source Clock Delay      (SCD):    1.791ns
+    Clock Pessimism Removal (CPR):    0.130ns
+  Clock Net Delay (Source):      1.587ns (routing 0.477ns, distribution 1.110ns)
+  Clock Net Delay (Destination): 1.812ns (routing 0.520ns, distribution 1.292ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock txoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=2, routed)           0.082     0.082    DUT/inst/i_core_gtwiz_userclk_tx_inst_1/txoutclk_out[0]
+    BUFG_GT_X0Y44        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     0.204 r  DUT/inst/i_core_gtwiz_userclk_tx_inst_1/gen_gtwiz_userclk_tx_main.bufg_gt_usrclk_inst/O
+    X2Y1 (CLOCK_ROOT)    net (fo=1199, routed)        1.587     1.791    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X112Y90        FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+    SLICE_X112Y90        FDRE (Prop_BFF2_SLICEM_C_Q)
+                                                      0.071     1.862 r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=3, routed)           0.066     1.929    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X111Y90        LUT3 (Prop_D5LUT_SLICEL_I0_O)
+                                                      0.039     1.968 r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=1, routed)           0.011     1.979    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X111Y90        FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock txoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=2, routed)           0.090     0.090    DUT/inst/i_core_gtwiz_userclk_tx_inst_1/txoutclk_out[0]
+    BUFG_GT_X0Y44        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  DUT/inst/i_core_gtwiz_userclk_tx_inst_1/gen_gtwiz_userclk_tx_main.bufg_gt_usrclk_inst/O
+    X2Y1 (CLOCK_ROOT)    net (fo=1199, routed)        1.812     2.041    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X111Y90        FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         clock pessimism             -0.130     1.911    
+    SLICE_X111Y90        FDRE (Hold_DFF2_SLICEL_C_D)
+                                                      0.055     1.966    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------
+                         required time                         -1.966    
+                         arrival time                           1.979    
+  -------------------------------------------------------------------
+                         slack                                  0.013    
+
+Slack (MET) :             0.013ns  (arrival time - required time)
+  Source:                 xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by txoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by txoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             txoutclk_out[0]_1
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (txoutclk_out[0]_1 rise@0.000ns - txoutclk_out[0]_1 rise@0.000ns)
+  Data Path Delay:        0.187ns  (logic 0.110ns (58.673%)  route 0.077ns (41.327%))
+  Logic Levels:           1  (LUT3=1)
+  Clock Path Skew:        0.120ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.041ns
+    Source Clock Delay      (SCD):    1.791ns
+    Clock Pessimism Removal (CPR):    0.130ns
+  Clock Net Delay (Source):      1.587ns (routing 0.477ns, distribution 1.110ns)
+  Clock Net Delay (Destination): 1.812ns (routing 0.520ns, distribution 1.292ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock txoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=2, routed)           0.082     0.082    DUT/inst/i_core_gtwiz_userclk_tx_inst_1/txoutclk_out[0]
+    BUFG_GT_X0Y44        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     0.204 r  DUT/inst/i_core_gtwiz_userclk_tx_inst_1/gen_gtwiz_userclk_tx_main.bufg_gt_usrclk_inst/O
+    X2Y1 (CLOCK_ROOT)    net (fo=1199, routed)        1.587     1.791    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X112Y90        FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+    SLICE_X112Y90        FDRE (Prop_BFF2_SLICEM_C_Q)
+                                                      0.071     1.862 f  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=3, routed)           0.066     1.929    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X111Y90        LUT3 (Prop_D5LUT_SLICEL_I0_O)
+                                                      0.039     1.968 r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=1, routed)           0.011     1.979    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X111Y90        FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock txoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=2, routed)           0.090     0.090    DUT/inst/i_core_gtwiz_userclk_tx_inst_1/txoutclk_out[0]
+    BUFG_GT_X0Y44        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  DUT/inst/i_core_gtwiz_userclk_tx_inst_1/gen_gtwiz_userclk_tx_main.bufg_gt_usrclk_inst/O
+    X2Y1 (CLOCK_ROOT)    net (fo=1199, routed)        1.812     2.041    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X111Y90        FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         clock pessimism             -0.130     1.911    
+    SLICE_X111Y90        FDRE (Hold_DFF2_SLICEL_C_D)
+                                                      0.055     1.966    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------
+                         required time                         -1.966    
+                         arrival time                           1.979    
+  -------------------------------------------------------------------
+                         slack                                  0.013    
+
+Slack (MET) :             0.013ns  (arrival time - required time)
+  Source:                 xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by txoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by txoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             txoutclk_out[0]_1
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (txoutclk_out[0]_1 rise@0.000ns - txoutclk_out[0]_1 rise@0.000ns)
+  Data Path Delay:        0.187ns  (logic 0.110ns (58.673%)  route 0.077ns (41.327%))
+  Logic Levels:           1  (LUT3=1)
+  Clock Path Skew:        0.120ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.041ns
+    Source Clock Delay      (SCD):    1.791ns
+    Clock Pessimism Removal (CPR):    0.130ns
+  Clock Net Delay (Source):      1.587ns (routing 0.477ns, distribution 1.110ns)
+  Clock Net Delay (Destination): 1.812ns (routing 0.520ns, distribution 1.292ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock txoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=2, routed)           0.082     0.082    DUT/inst/i_core_gtwiz_userclk_tx_inst_1/txoutclk_out[0]
+    BUFG_GT_X0Y44        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     0.204 r  DUT/inst/i_core_gtwiz_userclk_tx_inst_1/gen_gtwiz_userclk_tx_main.bufg_gt_usrclk_inst/O
+    X2Y1 (CLOCK_ROOT)    net (fo=1199, routed)        1.587     1.791    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X112Y90        FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+    SLICE_X112Y90        FDRE (Prop_BFF2_SLICEM_C_Q)
+                                                      0.071     1.862 r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=3, routed)           0.066     1.929    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X111Y90        LUT3 (Prop_D5LUT_SLICEL_I0_O)
+                                                      0.039     1.968 f  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=1, routed)           0.011     1.979    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X111Y90        FDRE                                         f  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock txoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=2, routed)           0.090     0.090    DUT/inst/i_core_gtwiz_userclk_tx_inst_1/txoutclk_out[0]
+    BUFG_GT_X0Y44        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  DUT/inst/i_core_gtwiz_userclk_tx_inst_1/gen_gtwiz_userclk_tx_main.bufg_gt_usrclk_inst/O
+    X2Y1 (CLOCK_ROOT)    net (fo=1199, routed)        1.812     2.041    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X111Y90        FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         clock pessimism             -0.130     1.911    
+    SLICE_X111Y90        FDRE (Hold_DFF2_SLICEL_C_D)
+                                                      0.055     1.966    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------
+                         required time                         -1.966    
+                         arrival time                           1.979    
+  -------------------------------------------------------------------
+                         slack                                  0.013    
+
+Slack (MET) :             0.013ns  (arrival time - required time)
+  Source:                 xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by txoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by txoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             txoutclk_out[0]_1
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (txoutclk_out[0]_1 rise@0.000ns - txoutclk_out[0]_1 rise@0.000ns)
+  Data Path Delay:        0.187ns  (logic 0.110ns (58.673%)  route 0.077ns (41.327%))
+  Logic Levels:           1  (LUT3=1)
+  Clock Path Skew:        0.120ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.041ns
+    Source Clock Delay      (SCD):    1.791ns
+    Clock Pessimism Removal (CPR):    0.130ns
+  Clock Net Delay (Source):      1.587ns (routing 0.477ns, distribution 1.110ns)
+  Clock Net Delay (Destination): 1.812ns (routing 0.520ns, distribution 1.292ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock txoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=2, routed)           0.082     0.082    DUT/inst/i_core_gtwiz_userclk_tx_inst_1/txoutclk_out[0]
+    BUFG_GT_X0Y44        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     0.204 r  DUT/inst/i_core_gtwiz_userclk_tx_inst_1/gen_gtwiz_userclk_tx_main.bufg_gt_usrclk_inst/O
+    X2Y1 (CLOCK_ROOT)    net (fo=1199, routed)        1.587     1.791    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X112Y90        FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+    SLICE_X112Y90        FDRE (Prop_BFF2_SLICEM_C_Q)
+                                                      0.071     1.862 f  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=3, routed)           0.066     1.929    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X111Y90        LUT3 (Prop_D5LUT_SLICEL_I0_O)
+                                                      0.039     1.968 f  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=1, routed)           0.011     1.979    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X111Y90        FDRE                                         f  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock txoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=2, routed)           0.090     0.090    DUT/inst/i_core_gtwiz_userclk_tx_inst_1/txoutclk_out[0]
+    BUFG_GT_X0Y44        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  DUT/inst/i_core_gtwiz_userclk_tx_inst_1/gen_gtwiz_userclk_tx_main.bufg_gt_usrclk_inst/O
+    X2Y1 (CLOCK_ROOT)    net (fo=1199, routed)        1.812     2.041    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X111Y90        FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         clock pessimism             -0.130     1.911    
+    SLICE_X111Y90        FDRE (Hold_DFF2_SLICEL_C_D)
+                                                      0.055     1.966    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------
+                         required time                         -1.966    
+                         arrival time                           1.979    
+  -------------------------------------------------------------------
+                         slack                                  0.013    
+
+Slack (MET) :             0.015ns  (arrival time - required time)
+  Source:                 p_bcd1_reg[3]/C
+                            (rising edge-triggered cell FDRE clocked by dclk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            r03/r_reg[11]/D
+                            (rising edge-triggered cell FDRE clocked by dclk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             dclk
+  Path Type:              Hold (Min at Fast Process Corner)
+  Requirement:            0.000ns  (dclk rise@0.000ns - dclk rise@0.000ns)
+  Data Path Delay:        0.080ns  (logic 0.038ns (47.689%)  route 0.042ns (52.311%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.018ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.059ns
+    Source Clock Delay      (SCD):    1.739ns
+    Clock Pessimism Removal (CPR):    0.302ns
+  Clock Net Delay (Source):      1.224ns (routing 0.596ns, distribution 0.628ns)
+  Clock Net Delay (Destination): 1.379ns (routing 0.665ns, distribution 0.714ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock dclk rise edge)       0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.079     0.079    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.230     0.309 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.040     0.349    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.349 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.150     0.499    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.017     0.516 r  u_sysclk_bufg/O
+    X1Y0 (CLOCK_ROOT)    net (fo=4282, routed)        1.224     1.739    dclk
+    SLICE_X103Y22        FDRE                                         r  p_bcd1_reg[3]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X103Y22        FDRE (Prop_CFF_SLICEM_C_Q)
+                                                      0.038     1.777 r  p_bcd1_reg[3]/Q
+                         net (fo=5, routed)           0.042     1.819    r03/d[11]
+    SLICE_X103Y21        FDRE                                         r  r03/r_reg[11]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock dclk rise edge)       0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.100     0.100    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.328     0.428 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.050     0.478    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.478 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.183     0.661    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.019     0.680 r  u_sysclk_bufg/O
+    X1Y0 (CLOCK_ROOT)    net (fo=4282, routed)        1.379     2.059    r03/clk
+    SLICE_X103Y21        FDRE                                         r  r03/r_reg[11]/C
+                         clock pessimism             -0.302     1.757    
+    SLICE_X103Y21        FDRE (Hold_HFF2_SLICEM_C_D)
+                                                      0.047     1.804    r03/r_reg[11]
+  -------------------------------------------------------------------
+                         required time                         -1.804    
+                         arrival time                           1.819    
+  -------------------------------------------------------------------
+                         slack                                  0.015    
+
+Slack (MET) :             0.015ns  (arrival time - required time)
+  Source:                 p_bcd1_reg[3]/C
+                            (rising edge-triggered cell FDRE clocked by dclk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            r03/r_reg[11]/D
+                            (rising edge-triggered cell FDRE clocked by dclk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             dclk
+  Path Type:              Hold (Min at Fast Process Corner)
+  Requirement:            0.000ns  (dclk rise@0.000ns - dclk rise@0.000ns)
+  Data Path Delay:        0.080ns  (logic 0.038ns (47.689%)  route 0.042ns (52.311%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.018ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.059ns
+    Source Clock Delay      (SCD):    1.739ns
+    Clock Pessimism Removal (CPR):    0.302ns
+  Clock Net Delay (Source):      1.224ns (routing 0.596ns, distribution 0.628ns)
+  Clock Net Delay (Destination): 1.379ns (routing 0.665ns, distribution 0.714ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock dclk rise edge)       0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.079     0.079    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.230     0.309 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.040     0.349    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.349 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.150     0.499    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.017     0.516 r  u_sysclk_bufg/O
+    X1Y0 (CLOCK_ROOT)    net (fo=4282, routed)        1.224     1.739    dclk
+    SLICE_X103Y22        FDRE                                         r  p_bcd1_reg[3]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X103Y22        FDRE (Prop_CFF_SLICEM_C_Q)
+                                                      0.038     1.777 f  p_bcd1_reg[3]/Q
+                         net (fo=5, routed)           0.042     1.819    r03/d[11]
+    SLICE_X103Y21        FDRE                                         f  r03/r_reg[11]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock dclk rise edge)       0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.100     0.100    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.328     0.428 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.050     0.478    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.478 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.183     0.661    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.019     0.680 r  u_sysclk_bufg/O
+    X1Y0 (CLOCK_ROOT)    net (fo=4282, routed)        1.379     2.059    r03/clk
+    SLICE_X103Y21        FDRE                                         r  r03/r_reg[11]/C
+                         clock pessimism             -0.302     1.757    
+    SLICE_X103Y21        FDRE (Hold_HFF2_SLICEM_C_D)
+                                                      0.047     1.804    r03/r_reg[11]
+  -------------------------------------------------------------------
+                         required time                         -1.804    
+                         arrival time                           1.819    
+  -------------------------------------------------------------------
+                         slack                                  0.015    
+
+Slack (MET) :             0.020ns  (arrival time - required time)
+  Source:                 dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/C
+                            (rising edge-triggered cell FDCE clocked by USE_DIVIDER.dclk_mmcm  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/DP/WADR3
+                            (rising edge-triggered cell RAMD32 clocked by USE_DIVIDER.dclk_mmcm  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             USE_DIVIDER.dclk_mmcm
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (USE_DIVIDER.dclk_mmcm rise@0.000ns - USE_DIVIDER.dclk_mmcm rise@0.000ns)
+  Data Path Delay:        0.248ns  (logic 0.071ns (28.614%)  route 0.177ns (71.386%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.132ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    5.707ns
+    Source Clock Delay      (SCD):    5.754ns
+    Clock Pessimism Removal (CPR):    -0.179ns
+  Clock Net Delay (Source):      2.095ns (routing 1.319ns, distribution 0.776ns)
+  Clock Net Delay (Destination): 2.392ns (routing 1.444ns, distribution 0.948ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock USE_DIVIDER.dclk_mmcm rise edge)
+                                                      0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.079     0.079    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.398     0.477 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.040     0.517    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.517 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.304     0.821    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.024     0.845 r  u_sysclk_bufg/O
+                         net (fo=4282, routed)        1.918     2.763    dbg_hub/inst/BSCANID.u_xsdbm_id/clk
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                      0.644     3.407 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.ULTRASCALEPLUS.U_GT_MMCM/CLKOUT0
+                         net (fo=1, routed)           0.228     3.635    dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.dclk_mmcm
+    BUFGCE_X0Y42         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.024     3.659 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.BUFG_inst_div/O
+    X2Y0 (CLOCK_ROOT)    net (fo=6803, routed)        2.095     5.754    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/wr_clk
+    SLICE_X77Y39         FDCE                                         r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X77Y39         FDCE (Prop_HFF2_SLICEL_C_Q)
+                                                      0.071     5.825 r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/Q
+                         net (fo=24, routed)          0.177     6.002    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/A3
+    SLICE_X79Y40         RAMD32                                       r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/DP/WADR3
+  -------------------------------------------------------------------    -------------------
+
+                         (clock USE_DIVIDER.dclk_mmcm rise edge)
+                                                      0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.100     0.100    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.479     0.579 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.050     0.629    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.629 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.345     0.974    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.028     1.002 r  u_sysclk_bufg/O
+                         net (fo=4282, routed)        2.135     3.137    dbg_hub/inst/BSCANID.u_xsdbm_id/clk
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                     -0.106     3.031 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.ULTRASCALEPLUS.U_GT_MMCM/CLKOUT0
+                         net (fo=1, routed)           0.256     3.287    dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.dclk_mmcm
+    BUFGCE_X0Y42         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.028     3.315 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.BUFG_inst_div/O
+    X2Y0 (CLOCK_ROOT)    net (fo=6803, routed)        2.392     5.707    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/WCLK
+    SLICE_X79Y40         RAMD32                                       r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/DP/CLK
+                         clock pessimism              0.179     5.886    
+    SLICE_X79Y40         RAMD32 (Hold_G6LUT_SLICEM_CLK_WADR3)
+                                                      0.096     5.982    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/DP
+  -------------------------------------------------------------------
+                         required time                         -5.982    
+                         arrival time                           6.002    
+  -------------------------------------------------------------------
+                         slack                                  0.020    
+
+Slack (MET) :             0.020ns  (arrival time - required time)
+  Source:                 dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/C
+                            (rising edge-triggered cell FDCE clocked by USE_DIVIDER.dclk_mmcm  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/DP/WADR3
+                            (rising edge-triggered cell RAMD32 clocked by USE_DIVIDER.dclk_mmcm  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             USE_DIVIDER.dclk_mmcm
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (USE_DIVIDER.dclk_mmcm rise@0.000ns - USE_DIVIDER.dclk_mmcm rise@0.000ns)
+  Data Path Delay:        0.248ns  (logic 0.071ns (28.614%)  route 0.177ns (71.386%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.132ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    5.707ns
+    Source Clock Delay      (SCD):    5.754ns
+    Clock Pessimism Removal (CPR):    -0.179ns
+  Clock Net Delay (Source):      2.095ns (routing 1.319ns, distribution 0.776ns)
+  Clock Net Delay (Destination): 2.392ns (routing 1.444ns, distribution 0.948ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock USE_DIVIDER.dclk_mmcm rise edge)
+                                                      0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.079     0.079    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.398     0.477 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.040     0.517    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.517 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.304     0.821    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.024     0.845 r  u_sysclk_bufg/O
+                         net (fo=4282, routed)        1.918     2.763    dbg_hub/inst/BSCANID.u_xsdbm_id/clk
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                      0.644     3.407 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.ULTRASCALEPLUS.U_GT_MMCM/CLKOUT0
+                         net (fo=1, routed)           0.228     3.635    dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.dclk_mmcm
+    BUFGCE_X0Y42         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.024     3.659 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.BUFG_inst_div/O
+    X2Y0 (CLOCK_ROOT)    net (fo=6803, routed)        2.095     5.754    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/wr_clk
+    SLICE_X77Y39         FDCE                                         r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X77Y39         FDCE (Prop_HFF2_SLICEL_C_Q)
+                                                      0.071     5.825 f  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/Q
+                         net (fo=24, routed)          0.177     6.002    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/A3
+    SLICE_X79Y40         RAMD32                                       f  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/DP/WADR3
+  -------------------------------------------------------------------    -------------------
+
+                         (clock USE_DIVIDER.dclk_mmcm rise edge)
+                                                      0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.100     0.100    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.479     0.579 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.050     0.629    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.629 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.345     0.974    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.028     1.002 r  u_sysclk_bufg/O
+                         net (fo=4282, routed)        2.135     3.137    dbg_hub/inst/BSCANID.u_xsdbm_id/clk
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                     -0.106     3.031 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.ULTRASCALEPLUS.U_GT_MMCM/CLKOUT0
+                         net (fo=1, routed)           0.256     3.287    dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.dclk_mmcm
+    BUFGCE_X0Y42         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.028     3.315 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.BUFG_inst_div/O
+    X2Y0 (CLOCK_ROOT)    net (fo=6803, routed)        2.392     5.707    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/WCLK
+    SLICE_X79Y40         RAMD32                                       r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/DP/CLK
+                         clock pessimism              0.179     5.886    
+    SLICE_X79Y40         RAMD32 (Hold_G6LUT_SLICEM_CLK_WADR3)
+                                                      0.096     5.982    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/DP
+  -------------------------------------------------------------------
+                         required time                         -5.982    
+                         arrival time                           6.002    
+  -------------------------------------------------------------------
+                         slack                                  0.020    
+
+Slack (MET) :             0.020ns  (arrival time - required time)
+  Source:                 dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/C
+                            (rising edge-triggered cell FDCE clocked by USE_DIVIDER.dclk_mmcm  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/SP/WADR3
+                            (rising edge-triggered cell RAMD32 clocked by USE_DIVIDER.dclk_mmcm  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             USE_DIVIDER.dclk_mmcm
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (USE_DIVIDER.dclk_mmcm rise@0.000ns - USE_DIVIDER.dclk_mmcm rise@0.000ns)
+  Data Path Delay:        0.248ns  (logic 0.071ns (28.614%)  route 0.177ns (71.386%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.132ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    5.707ns
+    Source Clock Delay      (SCD):    5.754ns
+    Clock Pessimism Removal (CPR):    -0.179ns
+  Clock Net Delay (Source):      2.095ns (routing 1.319ns, distribution 0.776ns)
+  Clock Net Delay (Destination): 2.392ns (routing 1.444ns, distribution 0.948ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock USE_DIVIDER.dclk_mmcm rise edge)
+                                                      0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.079     0.079    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.398     0.477 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.040     0.517    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.517 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.304     0.821    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.024     0.845 r  u_sysclk_bufg/O
+                         net (fo=4282, routed)        1.918     2.763    dbg_hub/inst/BSCANID.u_xsdbm_id/clk
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                      0.644     3.407 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.ULTRASCALEPLUS.U_GT_MMCM/CLKOUT0
+                         net (fo=1, routed)           0.228     3.635    dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.dclk_mmcm
+    BUFGCE_X0Y42         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.024     3.659 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.BUFG_inst_div/O
+    X2Y0 (CLOCK_ROOT)    net (fo=6803, routed)        2.095     5.754    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/wr_clk
+    SLICE_X77Y39         FDCE                                         r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X77Y39         FDCE (Prop_HFF2_SLICEL_C_Q)
+                                                      0.071     5.825 r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/Q
+                         net (fo=24, routed)          0.177     6.002    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/A3
+    SLICE_X79Y40         RAMD32                                       r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/SP/WADR3
+  -------------------------------------------------------------------    -------------------
+
+                         (clock USE_DIVIDER.dclk_mmcm rise edge)
+                                                      0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.100     0.100    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.479     0.579 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.050     0.629    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.629 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.345     0.974    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.028     1.002 r  u_sysclk_bufg/O
+                         net (fo=4282, routed)        2.135     3.137    dbg_hub/inst/BSCANID.u_xsdbm_id/clk
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                     -0.106     3.031 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.ULTRASCALEPLUS.U_GT_MMCM/CLKOUT0
+                         net (fo=1, routed)           0.256     3.287    dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.dclk_mmcm
+    BUFGCE_X0Y42         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.028     3.315 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.BUFG_inst_div/O
+    X2Y0 (CLOCK_ROOT)    net (fo=6803, routed)        2.392     5.707    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/WCLK
+    SLICE_X79Y40         RAMD32                                       r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/SP/CLK
+                         clock pessimism              0.179     5.886    
+    SLICE_X79Y40         RAMD32 (Hold_H6LUT_SLICEM_CLK_WADR3)
+                                                      0.096     5.982    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/SP
+  -------------------------------------------------------------------
+                         required time                         -5.982    
+                         arrival time                           6.002    
+  -------------------------------------------------------------------
+                         slack                                  0.020    
+
+Slack (MET) :             0.020ns  (arrival time - required time)
+  Source:                 dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/C
+                            (rising edge-triggered cell FDCE clocked by USE_DIVIDER.dclk_mmcm  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/SP/WADR3
+                            (rising edge-triggered cell RAMD32 clocked by USE_DIVIDER.dclk_mmcm  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             USE_DIVIDER.dclk_mmcm
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (USE_DIVIDER.dclk_mmcm rise@0.000ns - USE_DIVIDER.dclk_mmcm rise@0.000ns)
+  Data Path Delay:        0.248ns  (logic 0.071ns (28.614%)  route 0.177ns (71.386%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.132ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    5.707ns
+    Source Clock Delay      (SCD):    5.754ns
+    Clock Pessimism Removal (CPR):    -0.179ns
+  Clock Net Delay (Source):      2.095ns (routing 1.319ns, distribution 0.776ns)
+  Clock Net Delay (Destination): 2.392ns (routing 1.444ns, distribution 0.948ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock USE_DIVIDER.dclk_mmcm rise edge)
+                                                      0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.079     0.079    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.398     0.477 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.040     0.517    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.517 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.304     0.821    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.024     0.845 r  u_sysclk_bufg/O
+                         net (fo=4282, routed)        1.918     2.763    dbg_hub/inst/BSCANID.u_xsdbm_id/clk
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                      0.644     3.407 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.ULTRASCALEPLUS.U_GT_MMCM/CLKOUT0
+                         net (fo=1, routed)           0.228     3.635    dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.dclk_mmcm
+    BUFGCE_X0Y42         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.024     3.659 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.BUFG_inst_div/O
+    X2Y0 (CLOCK_ROOT)    net (fo=6803, routed)        2.095     5.754    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/wr_clk
+    SLICE_X77Y39         FDCE                                         r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X77Y39         FDCE (Prop_HFF2_SLICEL_C_Q)
+                                                      0.071     5.825 f  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/Q
+                         net (fo=24, routed)          0.177     6.002    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/A3
+    SLICE_X79Y40         RAMD32                                       f  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/SP/WADR3
+  -------------------------------------------------------------------    -------------------
+
+                         (clock USE_DIVIDER.dclk_mmcm rise edge)
+                                                      0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.100     0.100    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.479     0.579 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.050     0.629    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.629 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.345     0.974    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.028     1.002 r  u_sysclk_bufg/O
+                         net (fo=4282, routed)        2.135     3.137    dbg_hub/inst/BSCANID.u_xsdbm_id/clk
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                     -0.106     3.031 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.ULTRASCALEPLUS.U_GT_MMCM/CLKOUT0
+                         net (fo=1, routed)           0.256     3.287    dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.dclk_mmcm
+    BUFGCE_X0Y42         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.028     3.315 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.BUFG_inst_div/O
+    X2Y0 (CLOCK_ROOT)    net (fo=6803, routed)        2.392     5.707    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/WCLK
+    SLICE_X79Y40         RAMD32                                       r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/SP/CLK
+                         clock pessimism              0.179     5.886    
+    SLICE_X79Y40         RAMD32 (Hold_H6LUT_SLICEM_CLK_WADR3)
+                                                      0.096     5.982    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15/SP
+  -------------------------------------------------------------------
+                         required time                         -5.982    
+                         arrival time                           6.002    
+  -------------------------------------------------------------------
+                         slack                                  0.020    
+
+Slack (MET) :             0.020ns  (arrival time - required time)
+  Source:                 dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/C
+                            (rising edge-triggered cell FDCE clocked by USE_DIVIDER.dclk_mmcm  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/DP/WADR3
+                            (rising edge-triggered cell RAMD32 clocked by USE_DIVIDER.dclk_mmcm  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             USE_DIVIDER.dclk_mmcm
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (USE_DIVIDER.dclk_mmcm rise@0.000ns - USE_DIVIDER.dclk_mmcm rise@0.000ns)
+  Data Path Delay:        0.248ns  (logic 0.071ns (28.614%)  route 0.177ns (71.386%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.132ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    5.707ns
+    Source Clock Delay      (SCD):    5.754ns
+    Clock Pessimism Removal (CPR):    -0.179ns
+  Clock Net Delay (Source):      2.095ns (routing 1.319ns, distribution 0.776ns)
+  Clock Net Delay (Destination): 2.392ns (routing 1.444ns, distribution 0.948ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock USE_DIVIDER.dclk_mmcm rise edge)
+                                                      0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.079     0.079    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.398     0.477 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.040     0.517    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.517 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.304     0.821    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.024     0.845 r  u_sysclk_bufg/O
+                         net (fo=4282, routed)        1.918     2.763    dbg_hub/inst/BSCANID.u_xsdbm_id/clk
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                      0.644     3.407 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.ULTRASCALEPLUS.U_GT_MMCM/CLKOUT0
+                         net (fo=1, routed)           0.228     3.635    dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.dclk_mmcm
+    BUFGCE_X0Y42         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.024     3.659 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.BUFG_inst_div/O
+    X2Y0 (CLOCK_ROOT)    net (fo=6803, routed)        2.095     5.754    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/wr_clk
+    SLICE_X77Y39         FDCE                                         r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X77Y39         FDCE (Prop_HFF2_SLICEL_C_Q)
+                                                      0.071     5.825 r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/Q
+                         net (fo=24, routed)          0.177     6.002    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/A3
+    SLICE_X79Y40         RAMD32                                       r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/DP/WADR3
+  -------------------------------------------------------------------    -------------------
+
+                         (clock USE_DIVIDER.dclk_mmcm rise edge)
+                                                      0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.100     0.100    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.479     0.579 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.050     0.629    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.629 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.345     0.974    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.028     1.002 r  u_sysclk_bufg/O
+                         net (fo=4282, routed)        2.135     3.137    dbg_hub/inst/BSCANID.u_xsdbm_id/clk
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                     -0.106     3.031 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.ULTRASCALEPLUS.U_GT_MMCM/CLKOUT0
+                         net (fo=1, routed)           0.256     3.287    dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.dclk_mmcm
+    BUFGCE_X0Y42         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.028     3.315 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.BUFG_inst_div/O
+    X2Y0 (CLOCK_ROOT)    net (fo=6803, routed)        2.392     5.707    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/WCLK
+    SLICE_X79Y40         RAMD32                                       r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/DP/CLK
+                         clock pessimism              0.179     5.886    
+    SLICE_X79Y40         RAMD32 (Hold_G5LUT_SLICEM_CLK_WADR3)
+                                                      0.096     5.982    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/DP
+  -------------------------------------------------------------------
+                         required time                         -5.982    
+                         arrival time                           6.002    
+  -------------------------------------------------------------------
+                         slack                                  0.020    
+
+Slack (MET) :             0.020ns  (arrival time - required time)
+  Source:                 dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/C
+                            (rising edge-triggered cell FDCE clocked by USE_DIVIDER.dclk_mmcm  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/DP/WADR3
+                            (rising edge-triggered cell RAMD32 clocked by USE_DIVIDER.dclk_mmcm  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             USE_DIVIDER.dclk_mmcm
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (USE_DIVIDER.dclk_mmcm rise@0.000ns - USE_DIVIDER.dclk_mmcm rise@0.000ns)
+  Data Path Delay:        0.248ns  (logic 0.071ns (28.614%)  route 0.177ns (71.386%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.132ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    5.707ns
+    Source Clock Delay      (SCD):    5.754ns
+    Clock Pessimism Removal (CPR):    -0.179ns
+  Clock Net Delay (Source):      2.095ns (routing 1.319ns, distribution 0.776ns)
+  Clock Net Delay (Destination): 2.392ns (routing 1.444ns, distribution 0.948ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock USE_DIVIDER.dclk_mmcm rise edge)
+                                                      0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.079     0.079    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.398     0.477 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.040     0.517    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.517 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.304     0.821    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.024     0.845 r  u_sysclk_bufg/O
+                         net (fo=4282, routed)        1.918     2.763    dbg_hub/inst/BSCANID.u_xsdbm_id/clk
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                      0.644     3.407 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.ULTRASCALEPLUS.U_GT_MMCM/CLKOUT0
+                         net (fo=1, routed)           0.228     3.635    dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.dclk_mmcm
+    BUFGCE_X0Y42         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.024     3.659 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.BUFG_inst_div/O
+    X2Y0 (CLOCK_ROOT)    net (fo=6803, routed)        2.095     5.754    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/wr_clk
+    SLICE_X77Y39         FDCE                                         r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X77Y39         FDCE (Prop_HFF2_SLICEL_C_Q)
+                                                      0.071     5.825 f  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/Q
+                         net (fo=24, routed)          0.177     6.002    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/A3
+    SLICE_X79Y40         RAMD32                                       f  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/DP/WADR3
+  -------------------------------------------------------------------    -------------------
+
+                         (clock USE_DIVIDER.dclk_mmcm rise edge)
+                                                      0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.100     0.100    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.479     0.579 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.050     0.629    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.629 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.345     0.974    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.028     1.002 r  u_sysclk_bufg/O
+                         net (fo=4282, routed)        2.135     3.137    dbg_hub/inst/BSCANID.u_xsdbm_id/clk
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                     -0.106     3.031 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.ULTRASCALEPLUS.U_GT_MMCM/CLKOUT0
+                         net (fo=1, routed)           0.256     3.287    dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.dclk_mmcm
+    BUFGCE_X0Y42         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.028     3.315 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.BUFG_inst_div/O
+    X2Y0 (CLOCK_ROOT)    net (fo=6803, routed)        2.392     5.707    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/WCLK
+    SLICE_X79Y40         RAMD32                                       r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/DP/CLK
+                         clock pessimism              0.179     5.886    
+    SLICE_X79Y40         RAMD32 (Hold_G5LUT_SLICEM_CLK_WADR3)
+                                                      0.096     5.982    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/DP
+  -------------------------------------------------------------------
+                         required time                         -5.982    
+                         arrival time                           6.002    
+  -------------------------------------------------------------------
+                         slack                                  0.020    
+
+Slack (MET) :             0.020ns  (arrival time - required time)
+  Source:                 dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/C
+                            (rising edge-triggered cell FDCE clocked by USE_DIVIDER.dclk_mmcm  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/SP/WADR3
+                            (rising edge-triggered cell RAMD32 clocked by USE_DIVIDER.dclk_mmcm  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             USE_DIVIDER.dclk_mmcm
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (USE_DIVIDER.dclk_mmcm rise@0.000ns - USE_DIVIDER.dclk_mmcm rise@0.000ns)
+  Data Path Delay:        0.248ns  (logic 0.071ns (28.614%)  route 0.177ns (71.386%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.132ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    5.707ns
+    Source Clock Delay      (SCD):    5.754ns
+    Clock Pessimism Removal (CPR):    -0.179ns
+  Clock Net Delay (Source):      2.095ns (routing 1.319ns, distribution 0.776ns)
+  Clock Net Delay (Destination): 2.392ns (routing 1.444ns, distribution 0.948ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock USE_DIVIDER.dclk_mmcm rise edge)
+                                                      0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.079     0.079    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.398     0.477 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.040     0.517    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.517 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.304     0.821    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.024     0.845 r  u_sysclk_bufg/O
+                         net (fo=4282, routed)        1.918     2.763    dbg_hub/inst/BSCANID.u_xsdbm_id/clk
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                      0.644     3.407 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.ULTRASCALEPLUS.U_GT_MMCM/CLKOUT0
+                         net (fo=1, routed)           0.228     3.635    dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.dclk_mmcm
+    BUFGCE_X0Y42         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.024     3.659 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.BUFG_inst_div/O
+    X2Y0 (CLOCK_ROOT)    net (fo=6803, routed)        2.095     5.754    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/wr_clk
+    SLICE_X77Y39         FDCE                                         r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X77Y39         FDCE (Prop_HFF2_SLICEL_C_Q)
+                                                      0.071     5.825 r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/Q
+                         net (fo=24, routed)          0.177     6.002    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/A3
+    SLICE_X79Y40         RAMD32                                       r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/SP/WADR3
+  -------------------------------------------------------------------    -------------------
+
+                         (clock USE_DIVIDER.dclk_mmcm rise edge)
+                                                      0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.100     0.100    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.479     0.579 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.050     0.629    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.629 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.345     0.974    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.028     1.002 r  u_sysclk_bufg/O
+                         net (fo=4282, routed)        2.135     3.137    dbg_hub/inst/BSCANID.u_xsdbm_id/clk
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                     -0.106     3.031 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.ULTRASCALEPLUS.U_GT_MMCM/CLKOUT0
+                         net (fo=1, routed)           0.256     3.287    dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.dclk_mmcm
+    BUFGCE_X0Y42         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.028     3.315 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.BUFG_inst_div/O
+    X2Y0 (CLOCK_ROOT)    net (fo=6803, routed)        2.392     5.707    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/WCLK
+    SLICE_X79Y40         RAMD32                                       r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/SP/CLK
+                         clock pessimism              0.179     5.886    
+    SLICE_X79Y40         RAMD32 (Hold_H5LUT_SLICEM_CLK_WADR3)
+                                                      0.096     5.982    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/SP
+  -------------------------------------------------------------------
+                         required time                         -5.982    
+                         arrival time                           6.002    
+  -------------------------------------------------------------------
+                         slack                                  0.020    
+
+Slack (MET) :             0.020ns  (arrival time - required time)
+  Source:                 dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/C
+                            (rising edge-triggered cell FDCE clocked by USE_DIVIDER.dclk_mmcm  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/SP/WADR3
+                            (rising edge-triggered cell RAMD32 clocked by USE_DIVIDER.dclk_mmcm  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             USE_DIVIDER.dclk_mmcm
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (USE_DIVIDER.dclk_mmcm rise@0.000ns - USE_DIVIDER.dclk_mmcm rise@0.000ns)
+  Data Path Delay:        0.248ns  (logic 0.071ns (28.614%)  route 0.177ns (71.386%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.132ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    5.707ns
+    Source Clock Delay      (SCD):    5.754ns
+    Clock Pessimism Removal (CPR):    -0.179ns
+  Clock Net Delay (Source):      2.095ns (routing 1.319ns, distribution 0.776ns)
+  Clock Net Delay (Destination): 2.392ns (routing 1.444ns, distribution 0.948ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock USE_DIVIDER.dclk_mmcm rise edge)
+                                                      0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.079     0.079    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.398     0.477 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.040     0.517    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.517 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.304     0.821    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.024     0.845 r  u_sysclk_bufg/O
+                         net (fo=4282, routed)        1.918     2.763    dbg_hub/inst/BSCANID.u_xsdbm_id/clk
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                      0.644     3.407 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.ULTRASCALEPLUS.U_GT_MMCM/CLKOUT0
+                         net (fo=1, routed)           0.228     3.635    dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.dclk_mmcm
+    BUFGCE_X0Y42         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.024     3.659 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.BUFG_inst_div/O
+    X2Y0 (CLOCK_ROOT)    net (fo=6803, routed)        2.095     5.754    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/wr_clk
+    SLICE_X77Y39         FDCE                                         r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X77Y39         FDCE (Prop_HFF2_SLICEL_C_Q)
+                                                      0.071     5.825 f  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.gl0.wr/wpntr/gic0.gc0.count_d2_reg[3]/Q
+                         net (fo=24, routed)          0.177     6.002    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/A3
+    SLICE_X79Y40         RAMD32                                       f  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/SP/WADR3
+  -------------------------------------------------------------------    -------------------
+
+                         (clock USE_DIVIDER.dclk_mmcm rise edge)
+                                                      0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.100     0.100    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.479     0.579 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.050     0.629    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.629 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.345     0.974    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.028     1.002 r  u_sysclk_bufg/O
+                         net (fo=4282, routed)        2.135     3.137    dbg_hub/inst/BSCANID.u_xsdbm_id/clk
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                     -0.106     3.031 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.ULTRASCALEPLUS.U_GT_MMCM/CLKOUT0
+                         net (fo=1, routed)           0.256     3.287    dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.dclk_mmcm
+    BUFGCE_X0Y42         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.028     3.315 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.BUFG_inst_div/O
+    X2Y0 (CLOCK_ROOT)    net (fo=6803, routed)        2.392     5.707    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/WCLK
+    SLICE_X79Y40         RAMD32                                       r  dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/SP/CLK
+                         clock pessimism              0.179     5.886    
+    SLICE_X79Y40         RAMD32 (Hold_H5LUT_SLICEM_CLK_WADR3)
+                                                      0.096     5.982    dbg_hub/inst/BSCANID.u_xsdbm_id/CORE_XSDB.UUT_MASTER/U_ICON_INTERFACE/U_CMD6_RD/U_RD_FIFO/SUBCORE_FIFO.xsdbm_v3_0_5_rdfifo_inst/inst_fifo_gen/gconvfifo.rf/grf.rf/gntv_or_sync_fifo.mem/gdm.dm_gen.dm/RAM_reg_0_15_14_15__0/SP
+  -------------------------------------------------------------------
+                         required time                         -5.982    
+                         arrival time                           6.002    
+  -------------------------------------------------------------------
+                         slack                                  0.020    
+
+Slack (MET) :             0.023ns  (arrival time - required time)
+  Source:                 dclk_free_reg[24]/C
+                            (rising edge-triggered cell FDRE clocked by dclk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            u_snap_dclk/hold_reg[24]/D
+                            (rising edge-triggered cell FDRE clocked by dclk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             dclk
+  Path Type:              Hold (Min at Fast Process Corner)
+  Requirement:            0.000ns  (dclk rise@0.000ns - dclk rise@0.000ns)
+  Data Path Delay:        0.076ns  (logic 0.039ns (51.531%)  route 0.037ns (48.469%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.006ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.009ns
+    Source Clock Delay      (SCD):    1.695ns
+    Clock Pessimism Removal (CPR):    0.308ns
+  Clock Net Delay (Source):      1.179ns (routing 0.596ns, distribution 0.583ns)
+  Clock Net Delay (Destination): 1.329ns (routing 0.665ns, distribution 0.664ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock dclk rise edge)       0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.079     0.079    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.230     0.309 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.040     0.349    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.349 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.150     0.499    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.017     0.516 r  u_sysclk_bufg/O
+    X1Y0 (CLOCK_ROOT)    net (fo=4282, routed)        1.179     1.695    dclk
+    SLICE_X91Y25         FDRE                                         r  dclk_free_reg[24]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X91Y25         FDRE (Prop_AFF_SLICEL_C_Q)
+                                                      0.039     1.734 r  dclk_free_reg[24]/Q
+                         net (fo=3, routed)           0.037     1.771    u_snap_dclk/hold_reg[31]_0[24]
+    SLICE_X91Y25         FDRE                                         r  u_snap_dclk/hold_reg[24]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock dclk rise edge)       0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.100     0.100    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.328     0.428 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.050     0.478    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.478 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.183     0.661    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.019     0.680 r  u_sysclk_bufg/O
+    X1Y0 (CLOCK_ROOT)    net (fo=4282, routed)        1.329     2.009    u_snap_dclk/dclk
+    SLICE_X91Y25         FDRE                                         r  u_snap_dclk/hold_reg[24]/C
+                         clock pessimism             -0.308     1.701    
+    SLICE_X91Y25         FDRE (Hold_CFF2_SLICEL_C_D)
+                                                      0.047     1.748    u_snap_dclk/hold_reg[24]
+  -------------------------------------------------------------------
+                         required time                         -1.748    
+                         arrival time                           1.771    
+  -------------------------------------------------------------------
+                         slack                                  0.023    
+
+Slack (MET) :             0.023ns  (arrival time - required time)
+  Source:                 dclk_free_reg[24]/C
+                            (rising edge-triggered cell FDRE clocked by dclk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            u_snap_dclk/hold_reg[24]/D
+                            (rising edge-triggered cell FDRE clocked by dclk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             dclk
+  Path Type:              Hold (Min at Fast Process Corner)
+  Requirement:            0.000ns  (dclk rise@0.000ns - dclk rise@0.000ns)
+  Data Path Delay:        0.076ns  (logic 0.039ns (51.531%)  route 0.037ns (48.469%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.006ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.009ns
+    Source Clock Delay      (SCD):    1.695ns
+    Clock Pessimism Removal (CPR):    0.308ns
+  Clock Net Delay (Source):      1.179ns (routing 0.596ns, distribution 0.583ns)
+  Clock Net Delay (Destination): 1.329ns (routing 0.665ns, distribution 0.664ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock dclk rise edge)       0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.079     0.079    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.230     0.309 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.040     0.349    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.349 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.150     0.499    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.017     0.516 r  u_sysclk_bufg/O
+    X1Y0 (CLOCK_ROOT)    net (fo=4282, routed)        1.179     1.695    dclk
+    SLICE_X91Y25         FDRE                                         r  dclk_free_reg[24]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X91Y25         FDRE (Prop_AFF_SLICEL_C_Q)
+                                                      0.039     1.734 f  dclk_free_reg[24]/Q
+                         net (fo=3, routed)           0.037     1.771    u_snap_dclk/hold_reg[31]_0[24]
+    SLICE_X91Y25         FDRE                                         f  u_snap_dclk/hold_reg[24]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock dclk rise edge)       0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.100     0.100    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.328     0.428 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.050     0.478    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.478 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.183     0.661    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.019     0.680 r  u_sysclk_bufg/O
+    X1Y0 (CLOCK_ROOT)    net (fo=4282, routed)        1.329     2.009    u_snap_dclk/dclk
+    SLICE_X91Y25         FDRE                                         r  u_snap_dclk/hold_reg[24]/C
+                         clock pessimism             -0.308     1.701    
+    SLICE_X91Y25         FDRE (Hold_CFF2_SLICEL_C_D)
+                                                      0.047     1.748    u_snap_dclk/hold_reg[24]
+  -------------------------------------------------------------------
+                         required time                         -1.748    
+                         arrival time                           1.771    
+  -------------------------------------------------------------------
+                         slack                                  0.023    
+
+Slack (MET) :             0.023ns  (arrival time - required time)
+  Source:                 xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by rxoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell RAMD32 clocked by rxoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             rxoutclk_out[0]_1
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (rxoutclk_out[0]_1 rise@0.000ns - rxoutclk_out[0]_1 rise@0.000ns)
+  Data Path Delay:        0.237ns  (logic 0.069ns (29.114%)  route 0.168ns (70.886%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.132ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.098ns
+    Source Clock Delay      (SCD):    1.819ns
+    Clock Pessimism Removal (CPR):    0.147ns
+  Clock Net Delay (Source):      1.614ns (routing 0.805ns, distribution 0.809ns)
+  Clock Net Delay (Destination): 1.869ns (routing 0.884ns, distribution 0.985ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock rxoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/RXOUTCLK
+                         net (fo=2, routed)           0.083     0.083    DUT/inst/i_core_gtwiz_userclk_rx_inst_1/rxoutclk_out[0]
+    BUFG_GT_X0Y46        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     0.205 r  DUT/inst/i_core_gtwiz_userclk_rx_inst_1/gen_gtwiz_userclk_rx_main.bufg_gt_usrclk_inst/O
+    X2Y0 (CLOCK_ROOT)    net (fo=4355, routed)        1.614     1.819    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X89Y89         FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+    SLICE_X89Y89         FDRE (Prop_BFF_SLICEM_C_Q)
+                                                      0.069     1.888 r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=1, routed)           0.168     2.056    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X86Y87         RAMD32                                       r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock rxoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/RXOUTCLK
+                         net (fo=2, routed)           0.090     0.090    DUT/inst/i_core_gtwiz_userclk_rx_inst_1/rxoutclk_out[0]
+    BUFG_GT_X0Y46        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  DUT/inst/i_core_gtwiz_userclk_rx_inst_1/gen_gtwiz_userclk_rx_main.bufg_gt_usrclk_inst/O
+    X2Y0 (CLOCK_ROOT)    net (fo=4355, routed)        1.869     2.098    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X86Y87         RAMD32                                       r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+                         clock pessimism             -0.147     1.951    
+    SLICE_X86Y87         RAMD32 (Hold_B5LUT_SLICEM_CLK_I)
+                                                      0.082     2.033    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------
+                         required time                         -2.033    
+                         arrival time                           2.056    
+  -------------------------------------------------------------------
+                         slack                                  0.023    
+
+Slack (MET) :             0.023ns  (arrival time - required time)
+  Source:                 xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by rxoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell RAMD32 clocked by rxoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             rxoutclk_out[0]_1
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (rxoutclk_out[0]_1 rise@0.000ns - rxoutclk_out[0]_1 rise@0.000ns)
+  Data Path Delay:        0.237ns  (logic 0.069ns (29.114%)  route 0.168ns (70.886%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.132ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.098ns
+    Source Clock Delay      (SCD):    1.819ns
+    Clock Pessimism Removal (CPR):    0.147ns
+  Clock Net Delay (Source):      1.614ns (routing 0.805ns, distribution 0.809ns)
+  Clock Net Delay (Destination): 1.869ns (routing 0.884ns, distribution 0.985ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock rxoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/RXOUTCLK
+                         net (fo=2, routed)           0.083     0.083    DUT/inst/i_core_gtwiz_userclk_rx_inst_1/rxoutclk_out[0]
+    BUFG_GT_X0Y46        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     0.205 r  DUT/inst/i_core_gtwiz_userclk_rx_inst_1/gen_gtwiz_userclk_rx_main.bufg_gt_usrclk_inst/O
+    X2Y0 (CLOCK_ROOT)    net (fo=4355, routed)        1.614     1.819    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X89Y89         FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+    SLICE_X89Y89         FDRE (Prop_BFF_SLICEM_C_Q)
+                                                      0.069     1.888 f  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=1, routed)           0.168     2.056    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X86Y87         RAMD32                                       f  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock rxoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/RXOUTCLK
+                         net (fo=2, routed)           0.090     0.090    DUT/inst/i_core_gtwiz_userclk_rx_inst_1/rxoutclk_out[0]
+    BUFG_GT_X0Y46        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  DUT/inst/i_core_gtwiz_userclk_rx_inst_1/gen_gtwiz_userclk_rx_main.bufg_gt_usrclk_inst/O
+    X2Y0 (CLOCK_ROOT)    net (fo=4355, routed)        1.869     2.098    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X86Y87         RAMD32                                       r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+                         clock pessimism             -0.147     1.951    
+    SLICE_X86Y87         RAMD32 (Hold_B5LUT_SLICEM_CLK_I)
+                                                      0.082     2.033    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------
+                         required time                         -2.033    
+                         arrival time                           2.056    
+  -------------------------------------------------------------------
+                         slack                                  0.023    
+
+Slack (MET) :             0.023ns  (arrival time - required time)
+  Source:                 xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by rxoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by rxoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             rxoutclk_out[0]_1
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (rxoutclk_out[0]_1 rise@0.000ns - rxoutclk_out[0]_1 rise@0.000ns)
+  Data Path Delay:        0.196ns  (logic 0.116ns (59.250%)  route 0.080ns (40.750%))
+  Logic Levels:           1  (LUT4=1)
+  Clock Path Skew:        0.118ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.101ns
+    Source Clock Delay      (SCD):    1.836ns
+    Clock Pessimism Removal (CPR):    0.147ns
+  Clock Net Delay (Source):      1.631ns (routing 0.805ns, distribution 0.826ns)
+  Clock Net Delay (Destination): 1.872ns (routing 0.884ns, distribution 0.988ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock rxoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/RXOUTCLK
+                         net (fo=2, routed)           0.083     0.083    DUT/inst/i_core_gtwiz_userclk_rx_inst_1/rxoutclk_out[0]
+    BUFG_GT_X0Y46        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     0.205 r  DUT/inst/i_core_gtwiz_userclk_rx_inst_1/gen_gtwiz_userclk_rx_main.bufg_gt_usrclk_inst/O
+    X2Y0 (CLOCK_ROOT)    net (fo=4355, routed)        1.631     1.836    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X84Y77         FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+    SLICE_X84Y77         FDRE (Prop_AFF_SLICEL_C_Q)
+                                                      0.070     1.906 r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=2, routed)           0.064     1.970    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X86Y77         LUT4 (Prop_D5LUT_SLICEM_I0_O)
+                                                      0.046     2.016 r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=1, routed)           0.016     2.032    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X86Y77         FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock rxoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/RXOUTCLK
+                         net (fo=2, routed)           0.090     0.090    DUT/inst/i_core_gtwiz_userclk_rx_inst_1/rxoutclk_out[0]
+    BUFG_GT_X0Y46        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  DUT/inst/i_core_gtwiz_userclk_rx_inst_1/gen_gtwiz_userclk_rx_main.bufg_gt_usrclk_inst/O
+    X2Y0 (CLOCK_ROOT)    net (fo=4355, routed)        1.872     2.101    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X86Y77         FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         clock pessimism             -0.147     1.954    
+    SLICE_X86Y77         FDRE (Hold_DFF2_SLICEM_C_D)
+                                                      0.054     2.008    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------
+                         required time                         -2.008    
+                         arrival time                           2.032    
+  -------------------------------------------------------------------
+                         slack                                  0.023    
+
+Slack (MET) :             0.023ns  (arrival time - required time)
+  Source:                 xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by rxoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by rxoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             rxoutclk_out[0]_1
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (rxoutclk_out[0]_1 rise@0.000ns - rxoutclk_out[0]_1 rise@0.000ns)
+  Data Path Delay:        0.196ns  (logic 0.116ns (59.250%)  route 0.080ns (40.750%))
+  Logic Levels:           1  (LUT4=1)
+  Clock Path Skew:        0.118ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.101ns
+    Source Clock Delay      (SCD):    1.836ns
+    Clock Pessimism Removal (CPR):    0.147ns
+  Clock Net Delay (Source):      1.631ns (routing 0.805ns, distribution 0.826ns)
+  Clock Net Delay (Destination): 1.872ns (routing 0.884ns, distribution 0.988ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock rxoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/RXOUTCLK
+                         net (fo=2, routed)           0.083     0.083    DUT/inst/i_core_gtwiz_userclk_rx_inst_1/rxoutclk_out[0]
+    BUFG_GT_X0Y46        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     0.205 r  DUT/inst/i_core_gtwiz_userclk_rx_inst_1/gen_gtwiz_userclk_rx_main.bufg_gt_usrclk_inst/O
+    X2Y0 (CLOCK_ROOT)    net (fo=4355, routed)        1.631     1.836    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X84Y77         FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+    SLICE_X84Y77         FDRE (Prop_AFF_SLICEL_C_Q)
+                                                      0.070     1.906 f  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=2, routed)           0.064     1.970    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X86Y77         LUT4 (Prop_D5LUT_SLICEM_I0_O)
+                                                      0.046     2.016 f  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=1, routed)           0.016     2.032    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X86Y77         FDRE                                         f  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock rxoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/RXOUTCLK
+                         net (fo=2, routed)           0.090     0.090    DUT/inst/i_core_gtwiz_userclk_rx_inst_1/rxoutclk_out[0]
+    BUFG_GT_X0Y46        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  DUT/inst/i_core_gtwiz_userclk_rx_inst_1/gen_gtwiz_userclk_rx_main.bufg_gt_usrclk_inst/O
+    X2Y0 (CLOCK_ROOT)    net (fo=4355, routed)        1.872     2.101    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X86Y77         FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         clock pessimism             -0.147     1.954    
+    SLICE_X86Y77         FDRE (Hold_DFF2_SLICEM_C_D)
+                                                      0.054     2.008    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------
+                         required time                         -2.008    
+                         arrival time                           2.032    
+  -------------------------------------------------------------------
+                         slack                                  0.023    
+
+Slack (MET) :             0.024ns  (arrival time - required time)
+  Source:                 xxv_mac_top/vio_0/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by USE_DIVIDER.dclk_mmcm  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            xxv_mac_top/vio_0/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by USE_DIVIDER.dclk_mmcm  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             USE_DIVIDER.dclk_mmcm
+  Path Type:              Hold (Min at Fast Process Corner)
+  Requirement:            0.000ns  (USE_DIVIDER.dclk_mmcm rise@0.000ns - USE_DIVIDER.dclk_mmcm rise@0.000ns)
+  Data Path Delay:        0.124ns  (logic 0.053ns (42.661%)  route 0.071ns (57.339%))
+  Logic Levels:           1  (LUT3=1)
+  Clock Path Skew:        0.055ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    3.175ns
+    Source Clock Delay      (SCD):    3.225ns
+    Clock Pessimism Removal (CPR):    -0.104ns
+  Clock Net Delay (Source):      1.232ns (routing 0.733ns, distribution 0.499ns)
+  Clock Net Delay (Destination): 1.395ns (routing 0.813ns, distribution 0.582ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock USE_DIVIDER.dclk_mmcm rise edge)
+                                                      0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.079     0.079    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.230     0.309 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.040     0.349    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.349 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.150     0.499    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.017     0.516 r  u_sysclk_bufg/O
+                         net (fo=4282, routed)        1.084     1.600    dbg_hub/inst/BSCANID.u_xsdbm_id/clk
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                      0.230     1.830 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.ULTRASCALEPLUS.U_GT_MMCM/CLKOUT0
+                         net (fo=1, routed)           0.146     1.976    dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.dclk_mmcm
+    BUFGCE_X0Y42         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.017     1.993 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.BUFG_inst_div/O
+    X2Y0 (CLOCK_ROOT)    net (fo=6803, routed)        1.232     3.225    xxv_mac_top/vio_0/<hidden>/<hidden>
+    SLICE_X95Y36         FDRE                                         r  xxv_mac_top/vio_0/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+    SLICE_X95Y36         FDRE (Prop_EFF2_SLICEM_C_Q)
+                                                      0.039     3.264 r  xxv_mac_top/vio_0/<hidden>/<hidden>
+                         net (fo=3, routed)           0.055     3.319    xxv_mac_top/vio_0/<hidden>/<hidden>
+    SLICE_X94Y36         LUT3 (Prop_D6LUT_SLICEL_I2_O)
+                                                      0.014     3.333 r  xxv_mac_top/vio_0/<hidden>/<hidden>
+                         net (fo=1, routed)           0.016     3.349    xxv_mac_top/vio_0/<hidden>/<hidden>
+    SLICE_X94Y36         FDRE                                         r  xxv_mac_top/vio_0/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock USE_DIVIDER.dclk_mmcm rise edge)
+                                                      0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.100     0.100    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.328     0.428 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.050     0.478    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.478 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.183     0.661    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.019     0.680 r  u_sysclk_bufg/O
+                         net (fo=4282, routed)        1.211     1.891    dbg_hub/inst/BSCANID.u_xsdbm_id/clk
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                     -0.295     1.596 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.ULTRASCALEPLUS.U_GT_MMCM/CLKOUT0
+                         net (fo=1, routed)           0.166     1.762    dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.dclk_mmcm
+    BUFGCE_X0Y42         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.019     1.781 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.BUFG_inst_div/O
+    X2Y0 (CLOCK_ROOT)    net (fo=6803, routed)        1.395     3.175    xxv_mac_top/vio_0/<hidden>/<hidden>
+    SLICE_X94Y36         FDRE                                         r  xxv_mac_top/vio_0/<hidden>/<hidden>
+                         clock pessimism              0.104     3.279    
+    SLICE_X94Y36         FDRE (Hold_DFF_SLICEL_C_D)
+                                                      0.046     3.325    xxv_mac_top/vio_0/<hidden>/<hidden>
+  -------------------------------------------------------------------
+                         required time                         -3.325    
+                         arrival time                           3.349    
+  -------------------------------------------------------------------
+                         slack                                  0.024    
+
+Slack (MET) :             0.024ns  (arrival time - required time)
+  Source:                 xxv_mac_top/vio_0/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by USE_DIVIDER.dclk_mmcm  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            xxv_mac_top/vio_0/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by USE_DIVIDER.dclk_mmcm  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             USE_DIVIDER.dclk_mmcm
+  Path Type:              Hold (Min at Fast Process Corner)
+  Requirement:            0.000ns  (USE_DIVIDER.dclk_mmcm rise@0.000ns - USE_DIVIDER.dclk_mmcm rise@0.000ns)
+  Data Path Delay:        0.124ns  (logic 0.053ns (42.661%)  route 0.071ns (57.339%))
+  Logic Levels:           1  (LUT3=1)
+  Clock Path Skew:        0.055ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    3.175ns
+    Source Clock Delay      (SCD):    3.225ns
+    Clock Pessimism Removal (CPR):    -0.104ns
+  Clock Net Delay (Source):      1.232ns (routing 0.733ns, distribution 0.499ns)
+  Clock Net Delay (Destination): 1.395ns (routing 0.813ns, distribution 0.582ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock USE_DIVIDER.dclk_mmcm rise edge)
+                                                      0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.079     0.079    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.230     0.309 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.040     0.349    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.349 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.150     0.499    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.017     0.516 r  u_sysclk_bufg/O
+                         net (fo=4282, routed)        1.084     1.600    dbg_hub/inst/BSCANID.u_xsdbm_id/clk
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                      0.230     1.830 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.ULTRASCALEPLUS.U_GT_MMCM/CLKOUT0
+                         net (fo=1, routed)           0.146     1.976    dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.dclk_mmcm
+    BUFGCE_X0Y42         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.017     1.993 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.BUFG_inst_div/O
+    X2Y0 (CLOCK_ROOT)    net (fo=6803, routed)        1.232     3.225    xxv_mac_top/vio_0/<hidden>/<hidden>
+    SLICE_X95Y36         FDRE                                         r  xxv_mac_top/vio_0/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+    SLICE_X95Y36         FDRE (Prop_EFF2_SLICEM_C_Q)
+                                                      0.039     3.264 f  xxv_mac_top/vio_0/<hidden>/<hidden>
+                         net (fo=3, routed)           0.055     3.319    xxv_mac_top/vio_0/<hidden>/<hidden>
+    SLICE_X94Y36         LUT3 (Prop_D6LUT_SLICEL_I2_O)
+                                                      0.014     3.333 f  xxv_mac_top/vio_0/<hidden>/<hidden>
+                         net (fo=1, routed)           0.016     3.349    xxv_mac_top/vio_0/<hidden>/<hidden>
+    SLICE_X94Y36         FDRE                                         f  xxv_mac_top/vio_0/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock USE_DIVIDER.dclk_mmcm rise edge)
+                                                      0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.100     0.100    u_sysclk_ibuf/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.328     0.428 r  u_sysclk_ibuf/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.050     0.478    u_sysclk_ibuf/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.478 r  u_sysclk_ibuf/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.183     0.661    dclk_ibuf
+    BUFGCE_X0Y41         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.019     0.680 r  u_sysclk_bufg/O
+                         net (fo=4282, routed)        1.211     1.891    dbg_hub/inst/BSCANID.u_xsdbm_id/clk
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                     -0.295     1.596 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.ULTRASCALEPLUS.U_GT_MMCM/CLKOUT0
+                         net (fo=1, routed)           0.166     1.762    dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.dclk_mmcm
+    BUFGCE_X0Y42         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.019     1.781 r  dbg_hub/inst/BSCANID.u_xsdbm_id/USE_DIVIDER.BUFG_inst_div/O
+    X2Y0 (CLOCK_ROOT)    net (fo=6803, routed)        1.395     3.175    xxv_mac_top/vio_0/<hidden>/<hidden>
+    SLICE_X94Y36         FDRE                                         r  xxv_mac_top/vio_0/<hidden>/<hidden>
+                         clock pessimism              0.104     3.279    
+    SLICE_X94Y36         FDRE (Hold_DFF_SLICEL_C_D)
+                                                      0.046     3.325    xxv_mac_top/vio_0/<hidden>/<hidden>
+  -------------------------------------------------------------------
+                         required time                         -3.325    
+                         arrival time                           3.349    
+  -------------------------------------------------------------------
+                         slack                                  0.024    
+
+Slack (MET) :             0.024ns  (arrival time - required time)
+  Source:                 xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by rxoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by rxoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             rxoutclk_out[0]_1
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (rxoutclk_out[0]_1 rise@0.000ns - rxoutclk_out[0]_1 rise@0.000ns)
+  Data Path Delay:        0.183ns  (logic 0.070ns (38.251%)  route 0.113ns (61.749%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.104ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.174ns
+    Source Clock Delay      (SCD):    1.915ns
+    Clock Pessimism Removal (CPR):    0.155ns
+  Clock Net Delay (Source):      1.710ns (routing 0.805ns, distribution 0.905ns)
+  Clock Net Delay (Destination): 1.945ns (routing 0.884ns, distribution 1.061ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock rxoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/RXOUTCLK
+                         net (fo=2, routed)           0.083     0.083    DUT/inst/i_core_gtwiz_userclk_rx_inst_1/rxoutclk_out[0]
+    BUFG_GT_X0Y46        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     0.205 r  DUT/inst/i_core_gtwiz_userclk_rx_inst_1/gen_gtwiz_userclk_rx_main.bufg_gt_usrclk_inst/O
+    X2Y0 (CLOCK_ROOT)    net (fo=4355, routed)        1.710     1.915    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X98Y94         FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+    SLICE_X98Y94         FDRE (Prop_DFF_SLICEM_C_Q)
+                                                      0.070     1.985 r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=1, routed)           0.113     2.098    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X97Y93         FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock rxoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/RXOUTCLK
+                         net (fo=2, routed)           0.090     0.090    DUT/inst/i_core_gtwiz_userclk_rx_inst_1/rxoutclk_out[0]
+    BUFG_GT_X0Y46        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  DUT/inst/i_core_gtwiz_userclk_rx_inst_1/gen_gtwiz_userclk_rx_main.bufg_gt_usrclk_inst/O
+    X2Y0 (CLOCK_ROOT)    net (fo=4355, routed)        1.945     2.174    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X97Y93         FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         clock pessimism             -0.155     2.019    
+    SLICE_X97Y93         FDRE (Hold_EFF2_SLICEL_C_D)
+                                                      0.055     2.074    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------
+                         required time                         -2.074    
+                         arrival time                           2.098    
+  -------------------------------------------------------------------
+                         slack                                  0.024    
+
+Slack (MET) :             0.024ns  (arrival time - required time)
+  Source:                 xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by rxoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by rxoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             rxoutclk_out[0]_1
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (rxoutclk_out[0]_1 rise@0.000ns - rxoutclk_out[0]_1 rise@0.000ns)
+  Data Path Delay:        0.183ns  (logic 0.070ns (38.251%)  route 0.113ns (61.749%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.104ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.174ns
+    Source Clock Delay      (SCD):    1.915ns
+    Clock Pessimism Removal (CPR):    0.155ns
+  Clock Net Delay (Source):      1.710ns (routing 0.805ns, distribution 0.905ns)
+  Clock Net Delay (Destination): 1.945ns (routing 0.884ns, distribution 1.061ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock rxoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/RXOUTCLK
+                         net (fo=2, routed)           0.083     0.083    DUT/inst/i_core_gtwiz_userclk_rx_inst_1/rxoutclk_out[0]
+    BUFG_GT_X0Y46        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     0.205 r  DUT/inst/i_core_gtwiz_userclk_rx_inst_1/gen_gtwiz_userclk_rx_main.bufg_gt_usrclk_inst/O
+    X2Y0 (CLOCK_ROOT)    net (fo=4355, routed)        1.710     1.915    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X98Y94         FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+    SLICE_X98Y94         FDRE (Prop_DFF_SLICEM_C_Q)
+                                                      0.070     1.985 f  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=1, routed)           0.113     2.098    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X97Y93         FDRE                                         f  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock rxoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/RXOUTCLK
+                         net (fo=2, routed)           0.090     0.090    DUT/inst/i_core_gtwiz_userclk_rx_inst_1/rxoutclk_out[0]
+    BUFG_GT_X0Y46        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  DUT/inst/i_core_gtwiz_userclk_rx_inst_1/gen_gtwiz_userclk_rx_main.bufg_gt_usrclk_inst/O
+    X2Y0 (CLOCK_ROOT)    net (fo=4355, routed)        1.945     2.174    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X97Y93         FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         clock pessimism             -0.155     2.019    
+    SLICE_X97Y93         FDRE (Hold_EFF2_SLICEL_C_D)
+                                                      0.055     2.074    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------
+                         required time                         -2.074    
+                         arrival time                           2.098    
+  -------------------------------------------------------------------
+                         slack                                  0.024    
+
+Slack (MET) :             0.024ns  (arrival time - required time)
+  Source:                 xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by rxoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by rxoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             rxoutclk_out[0]_1
+  Path Type:              Hold (Min at Fast Process Corner)
+  Requirement:            0.000ns  (rxoutclk_out[0]_1 rise@0.000ns - rxoutclk_out[0]_1 rise@0.000ns)
+  Data Path Delay:        0.126ns  (logic 0.063ns (49.994%)  route 0.063ns (50.006%))
+  Logic Levels:           1  (LUT4=1)
+  Clock Path Skew:        0.055ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    1.213ns
+    Source Clock Delay      (SCD):    1.069ns
+    Clock Pessimism Removal (CPR):    0.089ns
+  Clock Net Delay (Source):      0.943ns (routing 0.454ns, distribution 0.489ns)
+  Clock Net Delay (Destination): 1.074ns (routing 0.506ns, distribution 0.568ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock rxoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/RXOUTCLK
+                         net (fo=2, routed)           0.053     0.053    DUT/inst/i_core_gtwiz_userclk_rx_inst_1/rxoutclk_out[0]
+    BUFG_GT_X0Y46        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.073     0.126 r  DUT/inst/i_core_gtwiz_userclk_rx_inst_1/gen_gtwiz_userclk_rx_main.bufg_gt_usrclk_inst/O
+    X2Y0 (CLOCK_ROOT)    net (fo=4355, routed)        0.943     1.069    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X84Y77         FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+    SLICE_X84Y77         FDRE (Prop_AFF_SLICEL_C_Q)
+                                                      0.039     1.108 r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=2, routed)           0.054     1.162    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X86Y77         LUT4 (Prop_D5LUT_SLICEM_I0_O)
+                                                      0.024     1.186 r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=1, routed)           0.009     1.195    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X86Y77         FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock rxoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/RXOUTCLK
+                         net (fo=2, routed)           0.057     0.057    DUT/inst/i_core_gtwiz_userclk_rx_inst_1/rxoutclk_out[0]
+    BUFG_GT_X0Y46        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.082     0.139 r  DUT/inst/i_core_gtwiz_userclk_rx_inst_1/gen_gtwiz_userclk_rx_main.bufg_gt_usrclk_inst/O
+    X2Y0 (CLOCK_ROOT)    net (fo=4355, routed)        1.074     1.213    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X86Y77         FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         clock pessimism             -0.089     1.124    
+    SLICE_X86Y77         FDRE (Hold_DFF2_SLICEM_C_D)
+                                                      0.047     1.171    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------
+                         required time                         -1.171    
+                         arrival time                           1.195    
+  -------------------------------------------------------------------
+                         slack                                  0.024    
+
+Slack (MET) :             0.024ns  (arrival time - required time)
+  Source:                 xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by rxoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by rxoutclk_out[0]_1  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             rxoutclk_out[0]_1
+  Path Type:              Hold (Min at Fast Process Corner)
+  Requirement:            0.000ns  (rxoutclk_out[0]_1 rise@0.000ns - rxoutclk_out[0]_1 rise@0.000ns)
+  Data Path Delay:        0.126ns  (logic 0.063ns (49.994%)  route 0.063ns (50.006%))
+  Logic Levels:           1  (LUT4=1)
+  Clock Path Skew:        0.055ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    1.213ns
+    Source Clock Delay      (SCD):    1.069ns
+    Clock Pessimism Removal (CPR):    0.089ns
+  Clock Net Delay (Source):      0.943ns (routing 0.454ns, distribution 0.489ns)
+  Clock Net Delay (Destination): 1.074ns (routing 0.506ns, distribution 0.568ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock rxoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/RXOUTCLK
+                         net (fo=2, routed)           0.053     0.053    DUT/inst/i_core_gtwiz_userclk_rx_inst_1/rxoutclk_out[0]
+    BUFG_GT_X0Y46        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.073     0.126 r  DUT/inst/i_core_gtwiz_userclk_rx_inst_1/gen_gtwiz_userclk_rx_main.bufg_gt_usrclk_inst/O
+    X2Y0 (CLOCK_ROOT)    net (fo=4355, routed)        0.943     1.069    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X84Y77         FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+    SLICE_X84Y77         FDRE (Prop_AFF_SLICEL_C_Q)
+                                                      0.039     1.108 f  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=2, routed)           0.054     1.162    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X86Y77         LUT4 (Prop_D5LUT_SLICEM_I0_O)
+                                                      0.024     1.186 f  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=1, routed)           0.009     1.195    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X86Y77         FDRE                                         f  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock rxoutclk_out[0]_1 rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y5   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt_1/inst/gen_gtwizard_gtye4_top.pcs64_gt_1_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/RXOUTCLK
+                         net (fo=2, routed)           0.057     0.057    DUT/inst/i_core_gtwiz_userclk_rx_inst_1/rxoutclk_out[0]
+    BUFG_GT_X0Y46        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.082     0.139 r  DUT/inst/i_core_gtwiz_userclk_rx_inst_1/gen_gtwiz_userclk_rx_main.bufg_gt_usrclk_inst/O
+    X2Y0 (CLOCK_ROOT)    net (fo=4355, routed)        1.074     1.213    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X86Y77         FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+                         clock pessimism             -0.089     1.124    
+    SLICE_X86Y77         FDRE (Hold_DFF2_SLICEM_C_D)
+                                                      0.047     1.171    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top_24/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------
+                         required time                         -1.171    
+                         arrival time                           1.195    
+  -------------------------------------------------------------------
+                         slack                                  0.024    
+
+Slack (MET) :             0.024ns  (arrival time - required time)
+  Source:                 xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by rxoutclk_out[0]  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell RAMD32 clocked by rxoutclk_out[0]  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             rxoutclk_out[0]
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (rxoutclk_out[0] rise@0.000ns - rxoutclk_out[0] rise@0.000ns)
+  Data Path Delay:        0.271ns  (logic 0.071ns (26.199%)  route 0.200ns (73.801%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.165ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.248ns
+    Source Clock Delay      (SCD):    1.932ns
+    Clock Pessimism Removal (CPR):    0.151ns
+  Clock Net Delay (Source):      1.727ns (routing 0.804ns, distribution 0.923ns)
+  Clock Net Delay (Destination): 2.019ns (routing 0.884ns, distribution 1.135ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock rxoutclk_out[0] rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y4   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt/inst/gen_gtwizard_gtye4_top.pcs64_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/RXOUTCLK
+                         net (fo=2, routed)           0.083     0.083    DUT/inst/i_core_gtwiz_userclk_rx_inst_0/rxoutclk_out[0]
+    BUFG_GT_X0Y47        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     0.205 r  DUT/inst/i_core_gtwiz_userclk_rx_inst_0/gen_gtwiz_userclk_rx_main.bufg_gt_usrclk_inst/O
+    X2Y0 (CLOCK_ROOT)    net (fo=2160, routed)        1.727     1.932    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X105Y42        FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+    SLICE_X105Y42        FDRE (Prop_BFF2_SLICEL_C_Q)
+                                                      0.071     2.003 r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=1, routed)           0.200     2.203    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X103Y37        RAMD32                                       r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock rxoutclk_out[0] rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y4   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt/inst/gen_gtwizard_gtye4_top.pcs64_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/RXOUTCLK
+                         net (fo=2, routed)           0.090     0.090    DUT/inst/i_core_gtwiz_userclk_rx_inst_0/rxoutclk_out[0]
+    BUFG_GT_X0Y47        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  DUT/inst/i_core_gtwiz_userclk_rx_inst_0/gen_gtwiz_userclk_rx_main.bufg_gt_usrclk_inst/O
+    X2Y0 (CLOCK_ROOT)    net (fo=2160, routed)        2.019     2.248    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X103Y37        RAMD32                                       r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+                         clock pessimism             -0.151     2.097    
+    SLICE_X103Y37        RAMD32 (Hold_B5LUT_SLICEM_CLK_I)
+                                                      0.082     2.179    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------
+                         required time                         -2.179    
+                         arrival time                           2.203    
+  -------------------------------------------------------------------
+                         slack                                  0.024    
+
+Slack (MET) :             0.024ns  (arrival time - required time)
+  Source:                 xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell FDRE clocked by rxoutclk_out[0]  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+                            (rising edge-triggered cell RAMD32 clocked by rxoutclk_out[0]  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             rxoutclk_out[0]
+  Path Type:              Hold (Min at Slow Process Corner)
+  Requirement:            0.000ns  (rxoutclk_out[0] rise@0.000ns - rxoutclk_out[0] rise@0.000ns)
+  Data Path Delay:        0.271ns  (logic 0.071ns (26.199%)  route 0.200ns (73.801%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.165ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.248ns
+    Source Clock Delay      (SCD):    1.932ns
+    Clock Pessimism Removal (CPR):    0.151ns
+  Clock Net Delay (Source):      1.727ns (routing 0.804ns, distribution 0.923ns)
+  Clock Net Delay (Destination): 2.019ns (routing 0.884ns, distribution 1.135ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock rxoutclk_out[0] rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y4   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt/inst/gen_gtwizard_gtye4_top.pcs64_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/RXOUTCLK
+                         net (fo=2, routed)           0.083     0.083    DUT/inst/i_core_gtwiz_userclk_rx_inst_0/rxoutclk_out[0]
+    BUFG_GT_X0Y47        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     0.205 r  DUT/inst/i_core_gtwiz_userclk_rx_inst_0/gen_gtwiz_userclk_rx_main.bufg_gt_usrclk_inst/O
+    X2Y0 (CLOCK_ROOT)    net (fo=2160, routed)        1.727     1.932    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X105Y42        FDRE                                         r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+    SLICE_X105Y42        FDRE (Prop_BFF2_SLICEL_C_Q)
+                                                      0.071     2.003 f  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top/<hidden>/<hidden>/<hidden>/<hidden>
+                         net (fo=1, routed)           0.200     2.203    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X103Y37        RAMD32                                       f  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock rxoutclk_out[0] rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y4   GTYE4_CHANNEL                0.000     0.000 r  DUT/inst/i_pcs64_gt/inst/gen_gtwizard_gtye4_top.pcs64_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/RXOUTCLK
+                         net (fo=2, routed)           0.090     0.090    DUT/inst/i_core_gtwiz_userclk_rx_inst_0/rxoutclk_out[0]
+    BUFG_GT_X0Y47        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  DUT/inst/i_core_gtwiz_userclk_rx_inst_0/gen_gtwiz_userclk_rx_main.bufg_gt_usrclk_inst/O
+    X2Y0 (CLOCK_ROOT)    net (fo=2160, routed)        2.019     2.248    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+    SLICE_X103Y37        RAMD32                                       r  xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+                         clock pessimism             -0.151     2.097    
+    SLICE_X103Y37        RAMD32 (Hold_B5LUT_SLICEM_CLK_I)
+                                                      0.082     2.179    xxv_mac_top/pcs64/pcs64_wrapper/pcs64_top/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>/<hidden>
+  -------------------------------------------------------------------
+                         required time                         -2.179    
+                         arrival time                           2.203    
+  -------------------------------------------------------------------
+                         slack                                  0.024    
+
+
+
+

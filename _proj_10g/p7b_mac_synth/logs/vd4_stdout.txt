@@ -1,0 +1,99 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 22:20:45 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source {D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\p7b_mac_synth\tcl\vd4.tcl}
+# set B "D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth"
+# open_checkpoint "$B/xxv_mac/pcs64_2ch/pcs64_2ch.runs/impl_1/xxv_mac_top_routed.dcp"
+Command: open_checkpoint D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth/xxv_mac/pcs64_2ch/pcs64_2ch.runs/impl_1/xxv_mac_top_routed.dcp
+
+Starting open_checkpoint Task
+
+Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.025 . Memory (MB): peak = 330.449 ; gain = 7.145
+INFO: [Device 21-403] Loading part xcku5p-ffvb676-1-e
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.163 . Memory (MB): peak = 1677.012 ; gain = 0.000
+INFO: [Netlist 29-17] Analyzing 1408 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 1 CPU seconds
+INFO: [Project 1-479] Netlist was created with Vivado 2025.2
+INFO: [Project 1-570] Preparing netlist for logic optimization
+Read ShapeDB Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.046 . Memory (MB): peak = 1677.012 ; gain = 0.000
+INFO: [Timing 38-478] Restoring timing data from binary archive.
+INFO: [Timing 38-479] Binary timing data restore complete.
+INFO: [Project 1-856] Restoring constraints from binary archive.
+INFO: [Constraints 18-5170] The checkpoint was created with non-default parameter values which do not match the current Vivado settings.  Mismatching parameters are:
+  general.maxThreads
+INFO: [Project 1-853] Binary constraint restore complete.
+INFO: [Designutils 20-5722] Start Reading Physical Databases.
+Reading placement.
+Read Netlist Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.021 . Memory (MB): peak = 1938.891 ; gain = 0.000
+Reading placer database...
+Read Device Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.023 . Memory (MB): peak = 1941.129 ; gain = 2.238
+Read PlaceDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.459 . Memory (MB): peak = 1973.398 ; gain = 29.785
+Read PulsedLatchDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 1973.398 ; gain = 0.000
+Reading routing.
+Read RouteStorage: Time (s): cpu = 00:00:04 ; elapsed = 00:00:03 . Memory (MB): peak = 2395.348 ; gain = 421.949
+Read Physdb Files: Time (s): cpu = 00:00:04 ; elapsed = 00:00:04 . Memory (MB): peak = 2395.348 ; gain = 456.457
+Restored from archive | CPU: 4.000000 secs | Memory: 0.000000 MB |
+Finished XDEF File Restore: Time (s): cpu = 00:00:04 ; elapsed = 00:00:04 . Memory (MB): peak = 2395.348 ; gain = 456.457
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.007 . Memory (MB): peak = 2395.348 ; gain = 0.000
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 45 instances were transformed.
+  IBUF => IBUF (IBUFCTRL, INBUF): 2 instances
+  IBUFDS => IBUFDS (DIFFINBUF, IBUFCTRL): 1 instance 
+  RAM32M => RAM32M (RAMD32(x6), RAMS32(x2)): 26 instances
+  RAM32M16 => RAM32M16 (RAMD32(x14), RAMS32(x2)): 12 instances
+  RAM32X1D => RAM32X1D (RAMD32(x2)): 4 instances
+
+INFO: [Project 1-604] Checkpoint was created with Vivado v2025.2 (64-bit) build 6299465
+open_checkpoint: Time (s): cpu = 00:00:20 ; elapsed = 00:00:19 . Memory (MB): peak = 2395.348 ; gain = 2080.844
+# proc cellclk {cp} {
+#     set c [get_cells -quiet $cp]
+#     if {[llength $c]==0} { return "<missing>" }
+#     foreach pn {C CLK} {
+#         set p [get_pins -quiet "$cp/$pn"]
+#         if {[llength $p]} { return [get_clocks -quiet -of_objects $p] }
+#     }
+#     return "<no clk pin>"
+# }
+# puts "ENDPOINT_TXENC  = [cellclk DUT/inst/i_pcs64_top_1/i_pcs64_CORE/i_TX_TOP/i_TX_STRIPER/i_TX_ENCODER/is_valid_ctrl_reg[0]]"
+ENDPOINT_TXENC  = txoutclk_out[0]_1
+# puts "SRC_MACTX       = [cellclk u_mac_tx/cw_keep_reg[1]]"
+SRC_MACTX       = txoutclk_out[0]_1
+# puts "SRC_PCSRX       = [cellclk DUT/inst/i_pcs64_top_1/i_pcs64_CORE/i_RX_TOP/i_RX_DESTRIPER/i_CLK_COMP/dataout_reg[10]]"
+SRC_PCSRX       = rxoutclk_out[0]_1
+# puts "DST_MACRX       = [cellclk u_mac_rx/stat_crc_err_reg[28]]"
+DST_MACRX       = rxoutclk_out[0]_1
+# set n [get_nets -hier -quiet -filter {NAME =~ *rx_mii_d_1*}]
+# puts "RX_MII_D_1_NETS = [llength $n]"
+RX_MII_D_1_NETS = 394
+# set drv {}
+# foreach nn $n {
+#     foreach p [get_pins -quiet -of_objects $nn -filter {DIRECTION == OUT}] {
+#         set cc [get_clocks -quiet -of_objects [get_pins -quiet "[get_property PARENT_CELL $p]/C"]]
+#         puts "   RXD1 driver cell=[get_property PARENT_CELL $p] clk=[cellclk [get_property PARENT_CELL $p]]"
+#         break
+#     }
+#     break
+# }
+   RXD1 driver cell=DUT clk=<no clk pin>
+# set n2 [get_nets -hier -quiet -filter {NAME =~ *tx_mii_d_1*}]
+# puts "TX_MII_D_1_NETS = [llength $n2]"
+TX_MII_D_1_NETS = 376
+# foreach nn $n2 {
+#     foreach p [get_pins -quiet -of_objects $nn -filter {DIRECTION == IN}] {
+#         set pc [get_property PARENT_CELL $p]
+#         if {[string match "*MULT_DRIVEN*" $pc]} { continue }
+#         puts "   TXD1 load cell=$pc clk=[cellclk $pc]"
+#         break
+#     }
+#     break
+# }
+   TXD1 load cell=DUT clk=<no clk pin>
+# puts "VD4_DONE"
+VD4_DONE
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 29 22:21:08 2026...
