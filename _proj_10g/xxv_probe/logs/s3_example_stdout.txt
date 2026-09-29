@@ -1,0 +1,829 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 19:00:48 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source s3_example.tcl
+# set root "D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe"
+# proc sec {s} { puts "\nS3 >>>>>>>>>> $s" }
+# catch {set_param general.maxThreads 4}
+# proc doex {tag} {
+#     global root
+#     sec "S3_BEGIN $tag"
+#     set pdir "$root/$tag"
+#     if {[catch {open_project "$pdir/$tag.xpr"} e]} { puts "S3_OPEN_FAIL = $e"; return }
+#     set ip [get_ips $tag]
+# 
+#     set gd "$pdir/$tag.gen/sources_1/ip/$tag"
+#     foreach pat {example_design} {
+#         set rc [catch {generate_target $pat $ip} e]
+#         puts "S3_GEN_$pat rc = $rc"
+#         if {$rc} { puts "S3_GEN_${pat}_ERR = $e" }
+#     }
+# 
+#     set exdir "$root/${tag}_ex"
+#     if {[file exists $exdir]} { file delete -force $exdir }
+#     set rc [catch {open_example_project -force -in_process -dir $exdir $ip} e]
+#     puts "S3_OPEN_EXAMPLE rc = $rc"
+#     if {$rc} { puts "S3_OPEN_EXAMPLE_ERR = $e"; close_project -quiet; return }
+# 
+#     catch {puts "S3_EX_PROJECT = [current_project]"}
+#     catch {puts "S3_EX_TOP     = [get_property top [current_fileset]]"}
+#     catch {puts "S3_EX_PART    = [get_property part [current_project]]"}
+#     foreach f [get_files -quiet] { puts "S3_EX_FILE $f" }
+#     foreach f [get_files -quiet -of [get_filesets constrs_1]] { puts "S3_EX_CONSTR $f" }
+# 
+#     puts "S3_EX_GT_XCI = [glob -nocomplain "$exdir/**/*_gt.xci"]"
+# 
+#     close_project -quiet
+#     puts "S3_END $tag"
+# }
+# doex pcs64
+
+S3 >>>>>>>>>> S3_BEGIN pcs64
+Scanning sources...
+Finished scanning sources
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:emb-plus-vpr-4616:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\emb-plus-vpr-4616\1.0\board.xml as part xcve2302-sfva784-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:emb-plus-vpr-4616:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\emb-plus-vpr-4616\1.1\board.xml as part xcve2302-sfva784-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:k24c:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\k24c\1.0\board.xml as part xck24-ubva530-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:k24c:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\k24c\1.1\board.xml as part xck24-ubva530-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:k24i:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\k24i\1.0\board.xml as part xck24-ubva530-2lvi-i specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:k26c:part0:1.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\k26c\1.2\board.xml as part xck26-sfvc784-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:k26c:part0:1.3 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\k26c\1.3\board.xml as part xck26-sfvc784-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:k26c:part0:1.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\k26c\1.4\board.xml as part xck26-sfvc784-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:k26i:part0:1.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\k26i\1.2\board.xml as part xck26-sfvc784-2lvi-i specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:k26i:part0:1.3 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\k26i\1.3\board.xml as part xck26-sfvc784-2lvi-i specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:k26i:part0:1.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\k26i\1.4\board.xml as part xck26-sfvc784-2lvi-i specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:kcu105:part0:1.6 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\kcu105\1.6\board.xml as part xcku040-ffva1156-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:kcu105:part0:1.7 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\kcu105\1.7\board.xml as part xcku040-ffva1156-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:kcu1500:part0:1.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\kcu1500\1.2\board.xml as part xcku115-flvb2104-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:kd240_som:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\kd240_som\1.0\board.xml as part xck24-ubva530-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:kd240_som:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\kd240_som\1.1\board.xml as part xck24-ubva530-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:kr260_som:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\kr260_som\1.0\board.xml as part xck26-sfvc784-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:kr260_som:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\kr260_som\1.1\board.xml as part xck26-sfvc784-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:kv260_som:part0:1.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\kv260_som\1.2\board.xml as part xck26-sfvc784-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:kv260_som:part0:1.3 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\kv260_som\1.3\board.xml as part xck26-sfvc784-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:kv260_som:part0:1.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\kv260_som\1.4\board.xml as part xck26-sfvc784-2lv-c specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:scu35:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\scu35\1.0\board.xml as part xcsu35p-sbvb625-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:sp701:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\sp701\1.0\board.xml as part xc7s100fgga676-2 specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:sp701:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\sp701\1.1\board.xml as part xc7s100fgga676-2 specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:v80:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\v80\1.0\board.xml as part xcv80-lsva4737-2mhp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vc707:part0:1.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vc707\1.4\board.xml as part xc7vx485tffg1761-2 specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vc707:part0:1.5 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vc707\1.5\board.xml as part xc7vx485tffg1761-2 specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vc709:part0:1.8 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vc709\1.8\board.xml as part xc7vx690tffg1761-2 specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vck190:part0:2.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vck190\production\2.2\board.xml as part xcvc1902-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vck190:part0:3.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vck190\production\3.0\board.xml as part xcvc1902-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vck190:part0:3.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vck190\production\3.1\board.xml as part xcvc1902-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vck190:part0:3.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vck190\production\3.2\board.xml as part xcvc1902-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vck190:part0:3.3 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vck190\production\3.3\board.xml as part xcvc1902-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vck190:part0:3.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vck190\production\3.4\board.xml as part xcvc1902-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vck190_newl:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vck190_newl\production\1.0\board.xml as part xcvc1902-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vck190_newl:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vck190_newl\production\1.1\board.xml as part xcvc1902-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vck190_newl:part0:1.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vck190_newl\production\1.2\board.xml as part xcvc1902-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vck190_newl:part0:1.3 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vck190_newl\production\1.3\board.xml as part xcvc1902-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vcu108:part0:1.6 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vcu108\1.6\board.xml as part xcvu095-ffva2104-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vcu108:part0:1.7 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vcu108\1.7\board.xml as part xcvu095-ffva2104-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vcu110:part0:1.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vcu110\1.4\board.xml as part xcvu190-flgc2104-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vcu118:part0:2.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vcu118\2.0\board.xml as part xcvu9p-flga2104-2l-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vcu118:part0:2.3 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vcu118\2.3\board.xml as part xcvu9p-flga2104-2l-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vcu118:part0:2.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vcu118\2.4\board.xml as part xcvu9p-flga2104-2l-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vcu128:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vcu128\production\1.0\board.xml as part xcvu37p-fsvh2892-2l-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vcu129:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vcu129\production\1.0\board.xml as part xcvu29p-fsga2577-2l-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vcu1525:part0:1.3 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vcu1525\1.3\board.xml as part xcvu9p-fsgd2104-2l-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vek280:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vek280\production\1.0\board.xml as part xcve2802-vsvh1760-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vek280:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vek280\production\1.1\board.xml as part xcve2802-vsvh1760-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vek280:part0:1.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vek280\production\1.2\board.xml as part xcve2802-vsvh1760-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vek385:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vek385\1.0\board.xml as part xc2ve3858-ssva2112-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vek385:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vek385\1.1\board.xml as part xc2ve3858-ssva2112-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vek385_1:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vek385_2\1.0\board.xml as part xc2ve3858-ssva2112-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vermeo_t1_mpsoc:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vermeo_t1_mpsoc\1.0\board.xml as part xczu19eg-ffvd1760-2l-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vermeo_t1_rfsoc:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vermeo_t1_rfsoc\1.0\board.xml as part xczu21dr-ffvd1156-2l-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vhk158:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vhk158\production\1.0\board.xml as part xcvh1582-vsva3697-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vhk158:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vhk158\production\1.1\board.xml as part xcvh1582-vsva3697-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vhk158:part0:1.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vhk158\production\1.2\board.xml as part xcvh1582-vsva3697-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vmk180:part0:2.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vmk180\production\2.2\board.xml as part xcvm1802-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vmk180:part0:3.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vmk180\production\3.0\board.xml as part xcvm1802-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vmk180:part0:3.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vmk180\production\3.1\board.xml as part xcvm1802-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vmk180:part0:3.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vmk180\production\3.2\board.xml as part xcvm1802-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vmk180:part0:3.3 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vmk180\production\3.3\board.xml as part xcvm1802-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vmk180_newl:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vmk180_newl\production\1.0\board.xml as part xcvm1802-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vmk180_newl:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vmk180_newl\production\1.1\board.xml as part xcvm1802-vsva2197-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vpk120:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vpk120\production\1.0\board.xml as part xcvp1202-vsva2785-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vpk120:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vpk120\production\1.1\board.xml as part xcvp1202-vsva2785-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vpk120:part0:1.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vpk120\production\1.2\board.xml as part xcvp1202-vsva2785-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vpk180:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vpk180\production\1.0\board.xml as part xcvp1802-lsvc4072-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vpk180:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vpk180\production\1.1\board.xml as part xcvp1802-lsvc4072-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vpk180:part0:1.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vpk180\production\1.2\board.xml as part xcvp1802-lsvc4072-2mp-e-s specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vrk160:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vrk160\1.0\board.xml as part xcvr1602-vsva2488-2mp-e-s-es1 specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:vrk160:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\vrk160\1.1\board.xml as part xcvr1602-vsva2488-2mp-e-s-es1 specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zc702:part0:1.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zc702\1.4\board.xml as part xc7z020clg484-1 specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zc706:part0:1.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zc706\1.4\board.xml as part xc7z045ffg900-2 specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zc706:part0:1.5 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zc706\1.5\board.xml as part xc7z045ffg900-2 specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu102:part0:3.3 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu102\3.3\board.xml as part xczu9eg-ffvb1156-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu102:part0:3.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu102\3.4\board.xml as part xczu9eg-ffvb1156-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu104:part0:1.1 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu104\1.1\board.xml as part xczu7ev-ffvc1156-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu106:part0:2.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu106\2.4\board.xml as part xczu7ev-ffvc1156-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu106:part0:2.5 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu106\2.5\board.xml as part xczu7ev-ffvc1156-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu106:part0:2.6 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu106\2.6\board.xml as part xczu7ev-ffvc1156-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu111:part0:1.2 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu111\1.2\board.xml as part xczu28dr-ffvg1517-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu111:part0:1.3 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu111\1.3\board.xml as part xczu28dr-ffvg1517-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu111:part0:1.4 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu111\1.4\board.xml as part xczu28dr-ffvg1517-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu1275:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu1275\1.0\board.xml as part xczu29dr-ffvf1760-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu1285:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu1285\1.0\board.xml as part xczu39dr-ffvf1760-2-i specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu208:part0:2.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu208\production\2.0\board.xml as part xczu48dr-fsvg1517-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu208ld:part0:2.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu208ld\production\2.0\board.xml as part xczu58dr-fsvg1517-2-i specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu216:part0:2.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu216\production\2.0\board.xml as part xczu49dr-ffvf1760-2-e specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu216ld:part0:2.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu216ld\production\2.0\board.xml as part xczu59dr-ffvf1760-2-i specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu670:part0:2.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu670\2.0\board.xml as part xczu67dr-fsve1156-2-i specified in board_part file is either invalid or not available
+WARNING: [Board 49-26] cannot add Board Part xilinx.com:zcu670ld:part0:1.0 available at C:/AMDDesignTools/2025.2/data/xhub/boards\XilinxBoardStore\boards\Xilinx\zcu670ld\1.0\board.xml as part xczu57dr-fsve1156-2-i specified in board_part file is either invalid or not available
+WARNING: [Project 1-5713] Board part '' set for the project  is not found. BoardPart property will be unset. Please select board from latest repo build 
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository 'C:/AMDDesignTools/2025.2/Vivado/data/ip'.
+WARNING: [Vivado 12-4105] The example_design target will be deprecated in a future release. Instead, use open_example_project command to get the example design.
+WARNING: [Vivado 12-1783] Unsupported target specified: 'example_design'. Supported targets for this IP are: 'all' 'elaborate_contents' 'block_model' 'instantiation_template' 'synthesis' 'simulation' 'implementation' 'example' 'changelog'. File: 'pcs64.xci'. 
+ERROR: [Vivado 12-1773] No legal targets specified.  Supported targets for this IP are: all elaborate_contents block_model instantiation_template synthesis simulation implementation example changelog. File: 'pcs64.xci'.
+S3_GEN_example_design rc = 1
+S3_GEN_example_design_ERR = ERROR: [Common 17-39] 'generate_target' failed due to earlier errors.
+
+INFO: [IP_Flow 19-1686] Generating 'Examples' target for IP 'pcs64'...
+cd d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex
+::source d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64/pcs64.gen/sources_1/ip/pcs64/pcs64_ex.tcl
+## set_param general.maxThreads 4
+## set_param general.usePosixSpawnForFork 1
+## set srcIpDir "d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64/pcs64.gen/sources_1/ip/pcs64"
+## set srcXciDir "d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64/pcs64.srcs/sources_1/ip/pcs64"
+## puts "INFO: \[open_example_project\] Creating new example project..."
+INFO: [open_example_project] Creating new example project...
+## create_project -name pcs64_ex -part xcku5p-ffvb676-1-e -force
+## set_property target_language verilog [current_project]
+## set_property simulator_language MIXED [current_project]
+## set_property coreContainer.enable false [current_project]
+## set projDir [get_property DIRECTORY [current_project]]
+## set importDir [file join $projDir imports]
+## file mkdir $importDir
+## set returnCode 0
+## set_property target_simulator XSim [current_project]
+## puts "INFO: \[open_example_project\] Importing original IP ..."
+INFO: [open_example_project] Importing original IP ...
+## import_ip -files [list [file join $srcIpDir ../../../../pcs64.srcs/sources_1/ip/pcs64/pcs64.xci]] -name pcs64
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository 'C:/AMDDesignTools/2025.2/Vivado/data/ip'.
+## if { $returnCode == 0 } { 
+##   reset_target {open_example} [get_ips pcs64]
+## 
+##   # Generate the IP
+##   proc _filter_supported_targets {targets ip} {
+##     set res {}
+##     set all [get_property SUPPORTED_TARGETS $ip]
+##     foreach target $targets {
+##       lappend res {*}[lsearch -all -inline -nocase $all $target]
+##     }
+##     return $res
+##   }
+##   puts "INFO: \[open_example_project\] Generating the example project IP ..."
+##   generate_target [_filter_supported_targets {instantiation_template synthesis simulation implementation shared_logic} [get_ips pcs64]] [get_ips pcs64]
+## } 
+INFO: [open_example_project] Generating the example project IP ...
+INFO: [IP_Flow 19-1706] Not generating 'Instantiation Template' target for IP 'pcs64'. Target already exists and is up to date.
+INFO: [IP_Flow 19-1706] Not generating 'Synthesis' target for IP 'pcs64'. Target already exists and is up to date.
+INFO: [IP_Flow 19-1706] Not generating 'Simulation' target for IP 'pcs64'. Target already exists and is up to date.
+INFO: [IP_Flow 19-1706] Not generating 'Implementation' target for IP 'pcs64'. Target already exists and is up to date.
+## if { $returnCode == 0 } { 
+##   # Add example synthesis HDL files
+##   puts "INFO: \[open_example_project\] Adding example synthesis HDL files ..."
+##   add_files -quiet -copy_to $importDir -fileset [current_fileset] \
+##   [list [file join $srcIpDir pcs64/example_design/pcs64_pkt_gen_mon.v]] \
+##   [list [file join $srcIpDir pcs64/example_design/pcs64_exdes.v]]
+## } 
+INFO: [open_example_project] Adding example synthesis HDL files ...
+## if { $returnCode == 0 } { 
+##   # Add example XDC files
+##   puts "INFO: \[open_example_project\] Adding example XDC files ..."
+##   add_files -quiet -copy_to $importDir -fileset [current_fileset -constrset] \
+##   [list [file join $srcIpDir pcs64/example_design/pcs64_example_top.xdc]]
+## 
+## } 
+INFO: [open_example_project] Adding example XDC files ...
+## if { $returnCode == 0 } { 
+##   # Add example simulation HDL files
+##   puts "INFO: \[open_example_project\] Adding simulation HDL files ..."
+##   if { [catch {current_fileset -simset} exc] } { create_fileset -simset sim_1 }
+##   add_files -quiet -copy_to $importDir -fileset [current_fileset -simset] \
+##   [list [file join $srcIpDir pcs64/example_design/pcs64_exdes_tb.v]]
+## set_property USED_IN_SYNTHESIS false [get_files [list [file join $importDir pcs64_exdes_tb.v]]]
+## } 
+INFO: [open_example_project] Adding simulation HDL files ...
+## set_property TOP [lindex [find_top] 0] [current_fileset]
+## if { $returnCode == 0 } { 
+##   puts "INFO: \[open_example_project\] Sourcing example extension scripts ..."
+##   # Source script extension file(s)
+##   puts "INFO: \[open_example_project\] Sourcing extension script: top_set.tcl"
+##   if {[catch {source [file join $srcIpDir top_set.tcl]} errMsg]} {
+##     puts "ERROR: \[open_example_project\] Open Example Project failed: Error encountered while sourcing custom IP example design script: top_set.tcl"
+##     puts "$errMsg"
+##     error "ERROR: see log file for details."
+##     incr returnCode
+##   }
+## }
+INFO: [open_example_project] Sourcing example extension scripts ...
+INFO: [open_example_project] Sourcing extension script: top_set.tcl
+## if { $returnCode == 0 } { 
+##   # Update compile order
+##   update_compile_order -fileset [current_fileset]
+##   update_compile_order -fileset [current_fileset -simset]
+##   puts "INFO: \[open_example_project\] Rebuilding top IP..."
+##   set tfiles [get_files -filter {name=~"*.xci" || name=~"*.bd"}]
+##   foreach tfile $tfiles {
+##     if { [lsearch [list_property $tfile] PARENT_COMPOSITE_FILE ] == -1} {
+##       generate_target all $tfile
+##     }
+##   }
+##   export_ip_user_files -force
+## } 
+INFO: [open_example_project] Rebuilding top IP...
+INFO: [Vivado 12-25919] Exporting simulation script for '' simulator
+INFO: [exportsim-Tcl-40] Using compiled simulation libraries for IPs
+INFO: [SIM-utils-72] Using boost library from 'C:/AMDDesignTools/2025.2/Vivado/tps/boost_1_72_0'
+INFO: [exportsim-Tcl-35] Exporting simulation files for "XSIM" (AMD Vivado Simulator)...
+INFO: [exportsim-Tcl-29] Pre-compiled simulation library path: 'C:/AMDDesignTools/2025.2/Vivado/data/xsim'
+INFO: [exportsim-Tcl-29] Script generated: 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.ip_user_files/sim_scripts/pcs64/xsim/pcs64.sh'
+INFO: [SIM-utils-43] Exported 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.ip_user_files/sim_scripts/pcs64/xsim/pcs64_sv.sveo'
+INFO: [exportsim-Tcl-35] Exporting simulation files for "MODELSIM" (Siemens ModelSim Simulator)...
+INFO: [exportsim-Tcl-29] Pre-compiled simulation library path: 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.cache/compile_simlib/modelsim'
+INFO: [SIM-utils-40] Using sources from the project IP version (pre-compiled version failed or does not exist) - gtwizard_ultrascale_v1_7_22
+INFO: [SIM-utils-40] Using sources from the project IP version (pre-compiled version failed or does not exist) - xxv_ethernet_v5_0_2
+INFO: [exportsim-Tcl-29] Script generated: 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.ip_user_files/sim_scripts/pcs64/modelsim/pcs64.sh'
+INFO: [SIM-utils-43] Exported 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.ip_user_files/sim_scripts/pcs64/modelsim/pcs64_sv.sveo'
+INFO: [exportsim-Tcl-35] Exporting simulation files for "QUESTA" (Siemens Questa Advanced Simulator)...
+INFO: [exportsim-Tcl-29] Pre-compiled simulation library path: 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.cache/compile_simlib/questa'
+INFO: [exportsim-Tcl-29] Script generated: 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.ip_user_files/sim_scripts/pcs64/questa/pcs64.sh'
+INFO: [SIM-utils-43] Exported 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.ip_user_files/sim_scripts/pcs64/questa/pcs64_sv.sveo'
+INFO: [exportsim-Tcl-35] Exporting simulation files for "RIVIERA" (Aldec Riviera-PRO Simulator)...
+INFO: [exportsim-Tcl-29] Pre-compiled simulation library path: 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.cache/compile_simlib/riviera'
+INFO: [exportsim-Tcl-29] Script generated: 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.ip_user_files/sim_scripts/pcs64/riviera/pcs64.sh'
+INFO: [SIM-utils-43] Exported 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.ip_user_files/sim_scripts/pcs64/riviera/pcs64_sv.sveo'
+INFO: [exportsim-Tcl-35] Exporting simulation files for "ACTIVEHDL" (Aldec Active-HDL Simulator)...
+INFO: [exportsim-Tcl-29] Pre-compiled simulation library path: 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.cache/compile_simlib/activehdl'
+INFO: [exportsim-Tcl-29] Script generated: 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.ip_user_files/sim_scripts/pcs64/activehdl/pcs64.sh'
+INFO: [SIM-utils-43] Exported 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.ip_user_files/sim_scripts/pcs64/activehdl/pcs64_sv.sveo'
+## if { $returnCode == 0 } { 
+##   # Versal design: make sure there is a PS BD cell
+##   set mpart [get_property part [current_project]]
+##   set fam [get_property C_FAMILY $mpart]
+##   if { [string compare $fam "versal"] == 0 } {
+##     set cips_vlnv "xilinx.com:ip:versal_cips:*"
+##     set psx_vlnv "xilinx.com:ip:psx_wizard:*"
+##     set ps_vlnv "xilinx.com:ip:ps_wizard:*"
+##     proc is_supported_by_part {part vlnv} {
+##       set ipdef [get_ipdefs $vlnv]
+##       if {$ipdef != ""} {
+##         set supported_parts [get_property supported_parts $ipdef]
+##         set supported [expr [string first $part $supported_parts] != -1]
+##         return $supported
+##       }
+##       return 0
+##     }
+##     set supports_cips [is_supported_by_part $mpart $cips_vlnv]
+##     set supports_psx [is_supported_by_part $mpart $psx_vlnv]
+##     set supports_ps [is_supported_by_part $mpart $ps_vlnv]
+##     if { $supports_ps || $supports_cips || $supports_psx } {
+##       set scopedBDs {}
+##       foreach ip [get_ips] {
+##         set ipBDList [get_files -quiet -of $ip *.bd]
+##         if { $ipBDList != {} } { 
+##            foreach ipBd $ipBDList { 
+##              lappend scopedBDs $ipBd
+##           }
+##         }
+##       }
+##       set allBDs [get_files *.bd]
+##       set bFoundPS 0
+##       set topBD1 ""
+##       set topBDNames {}
+##       foreach bd1 $allBDs {
+##         set bAlsoInIpBDs 0
+##         foreach bd2 $scopedBDs {
+##           if { $bd1 == $bd2 } {
+##             set bAlsoInIpBDs 1
+##             break 
+##           } 
+##         } 
+##         if { $bAlsoInIpBDs == 0 } { 
+##           set fname [file tail $bd1]
+##           set bUsedInSynth [get_property used_in_synthesis [get_files $fname]]
+##           if { $bUsedInSynth == 1 } { 
+##             set rname [file rootname $fname]
+##             set topBD1 $fname
+##             lappend topBDNames $rname 
+##           } 
+##         } 
+##       } 
+##       set PSIPs [get_ips -filter IPDEF=~"*versal_cips*"] 
+##       set PSIPs [concat $PSIPs [get_ips -filter IPDEF=~"*psx_wizard*"]] 
+##       set PSIPs [concat $PSIPs [get_ips -filter IPDEF=~"*ps_wizard*"]] 
+##       foreach PSIP $PSIPs {
+##         set bBDcontext [ get_property is_bd_context $PSIP ]
+##         if { $bBDcontext == 1 } { 
+##           foreach topBD $topBDNames {
+##             set namelen [string length $topBD]
+##             if { [string compare -length $namelen $PSIP $topBD] == 0 } {
+##               set bFoundPS 1 
+##               break 
+##             } 
+##           } 
+##         } else {
+##           set bFoundPS 1 
+##           break 
+##         } 
+##       } 
+##       if { $bFoundPS == 0 } {
+##         if { $topBD1 == "" } {
+##           set newname ""
+##           set bDone 0
+##           set bdctr 0
+##           while { $bDone == 0 } {
+##             set uname "design_${bdctr}"
+##             set bNotUnique 0
+##             foreach bdname $topBDNames {
+##               if { $bdname == $uname } {
+##                 incr bdctr
+##                 set bNotUnique 1
+##                 break
+##               } 
+##             } 
+##             if { $bNotUnique == 0 } {
+##               set newname $uname
+##               set bDone 1
+##             } 
+##           } 
+##           puts "INFO: \[open_example_project\] Creating new BD $newname"
+##           create_bd_design $newname
+##           puts "INFO: \[open_example_project\] Creating new processing subsystem cell in BD $newname"
+##           if {$supports_ps} {
+##             create_bd_cell -type ip -vlnv $ps_vlnv "ps_wizard_0"
+##           } elseif {$supports_cips} {
+##             create_bd_cell -type ip -vlnv $cips_vlnv "cips_0"
+##           } elseif {$supports_psx} {
+##             create_bd_cell -type ip -vlnv $psx_vlnv "psx_wizard_0"
+##           }
+##           set wrapper [make_wrapper -files [get_files ${newname}.bd] -top]
+##           if { [ catch { add_module_instance -module_name ${newname}_wrapper -inst_name ${newname}_i } msg ] } { 
+##             puts "DEBUG: \[open_example_project\] add_module_instance error: $msg "
+##             puts "ERROR: \[open_example_project\] Unable to add ${newname}_wrapper module to top module."
+##           } 
+##           puts "INFO: \[open_example_project\] Adding BD wrapper file: $wrapper"
+##           add_files -norecurse $wrapper 
+##           update_compile_order -fileset sources_1
+##           save_bd_design
+##         } else {
+##           open_bd_design $topBD1
+##           puts "INFO: \[open_example_project\] Creating new processing subsystem cell in existing BD $topBD1"
+##           if {$supports_ps} {
+##             create_bd_cell -type ip -vlnv $ps_vlnv "ps_wizard_0"
+##           } elseif {$supports_cips} {
+##             create_bd_cell -type ip -vlnv $cips_vlnv "cips_0"
+##           } elseif {$supports_psx} {
+##             create_bd_cell -type ip -vlnv $psx_vlnv "psx_wizard_0"
+##           }
+##           update_compile_order -fileset sources_1
+##           save_bd_design
+##         }
+##       }
+##     } else {
+##       puts "INFO: \[open_example_project\] Current part '$mpart' is not supported by versal_cips core, so CIPS will not be added to design if needed."
+##     }
+##   }
+## }
+## set dfile [file join $srcIpDir oepdone.txt]
+## if { [ catch { set doneFile [open $dfile w] } ] } {
+## } else { 
+##   puts $doneFile "Open Example Project DONE"
+##   close $doneFile
+## }
+## if { $returnCode != 0 } {
+##   puts "ERROR: \[open_example_project\] Problems were encountered while executing the example design script, please review the log file."
+##   error "ERROR: See log file for details."
+##   incr returnCode
+## } else {
+##   puts "INFO: \[open_example_project\] Open Example Project completed"
+## }
+INFO: [open_example_project] Open Example Project completed
+cd d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/tcl
+open_example_project: Time (s): cpu = 00:00:05 ; elapsed = 00:00:09 . Memory (MB): peak = 647.785 ; gain = 50.773
+S3_OPEN_EXAMPLE rc = 0
+S3_EX_PROJECT = pcs64_ex
+S3_EX_TOP     = pcs64_exdes
+S3_EX_PART    = xcku5p-ffvb676-1-e
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.srcs/sources_1/ip/pcs64/pcs64.xci
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/pcs64_gt.xci
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/synth/pcs64_gt_ooc.xdc
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/synth/pcs64_gt.xdc
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_bit_sync.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gte4_drp_arb.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gthe4_delay_powergood.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtye4_delay_powergood.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gthe3_cpll_cal.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gthe3_cal_freqcnt.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gthe4_cpll_cal.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gthe4_cpll_cal_rx.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gthe4_cpll_cal_tx.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gthe4_cal_freqcnt.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtye4_cpll_cal.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtye4_cpll_cal_rx.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtye4_cpll_cal_tx.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtye4_cal_freqcnt.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtwiz_buffbypass_rx.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtwiz_buffbypass_tx.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtwiz_reset.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtwiz_userclk_rx.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtwiz_userclk_tx.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtwiz_userdata_rx.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtwiz_userdata_tx.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_reset_sync.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_reset_inv_sync.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/sim/gtwizard_ultrascale_v1_7_gtye4_channel.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/sim/pcs64_gt_gtye4_channel_wrapper.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/sim/pcs64_gt_gtwizard_gtye4.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/sim/pcs64_gt_gtwizard_top.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/sim/pcs64_gt.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/synth/gtwizard_ultrascale_v1_7_gtye4_channel.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/synth/pcs64_gt_gtye4_channel_wrapper.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/synth/pcs64_gt_gtwizard_gtye4.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/synth/pcs64_gt_gtwizard_top.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/ip_0/synth/pcs64_gt.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/doc/xxv_ethernet_v5_0_changelog.txt
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/synth/pcs64_board.xdc
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/pcs64.vho
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/pcs64.veo
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/pcs64_sv.sveo
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/synth/pcs64.xdc
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/synth/pcs64_ooc.xdc
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/xxv_ethernet_v5_0_2/pcs64_wrapper.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/xxv_ethernet_v5_0_2/pcs64_top.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/pcs64/gtwizard_ultrascale_v1_7_gtye4_common.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/pcs64/pcs64_gt_gtye4_common_wrapper.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/xxv_ethernet_v5_0_2/pcs64_common_wrapper.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/xxv_ethernet_v5_0_2/pcs64_ultrascale_rx_userclk.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/xxv_ethernet_v5_0_2/pcs64_ultrascale_tx_userclk.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/pcs64_ex.gen/sources_1/ip/pcs64/pcs64.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/imports/pcs64_pkt_gen_mon.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/imports/pcs64_exdes.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/imports/pcs64_example_top.xdc
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/imports/pcs64_exdes_tb.v
+S3_EX_CONSTR d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/imports/pcs64_example_top.xdc
+S3_EX_GT_XCI = 
+S3_END pcs64
+# doex macpcs64
+
+S3 >>>>>>>>>> S3_BEGIN macpcs64
+Scanning sources...
+Finished scanning sources
+WARNING: [Project 1-5713] Board part '' set for the project  is not found. BoardPart property will be unset. Please select board from latest repo build 
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository 'C:/AMDDesignTools/2025.2/Vivado/data/ip'.
+WARNING: [Vivado 12-4105] The example_design target will be deprecated in a future release. Instead, use open_example_project command to get the example design.
+WARNING: [Vivado 12-1783] Unsupported target specified: 'example_design'. Supported targets for this IP are: 'all' 'elaborate_contents' 'block_model' 'instantiation_template' 'synthesis' 'simulation' 'implementation' 'example' 'changelog'. File: 'macpcs64.xci'. 
+ERROR: [Vivado 12-1773] No legal targets specified.  Supported targets for this IP are: all elaborate_contents block_model instantiation_template synthesis simulation implementation example changelog. File: 'macpcs64.xci'.
+S3_GEN_example_design rc = 1
+S3_GEN_example_design_ERR = ERROR: [Common 17-39] 'generate_target' failed due to earlier errors.
+
+INFO: [IP_Flow 19-1686] Generating 'Examples' target for IP 'macpcs64'...
+cd d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex
+::source d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64/macpcs64.gen/sources_1/ip/macpcs64/macpcs64_ex.tcl
+## set_param general.maxThreads 4
+## set_param general.usePosixSpawnForFork 1
+## set srcIpDir "d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64/macpcs64.gen/sources_1/ip/macpcs64"
+## set srcXciDir "d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64/macpcs64.srcs/sources_1/ip/macpcs64"
+## puts "INFO: \[open_example_project\] Creating new example project..."
+INFO: [open_example_project] Creating new example project...
+## create_project -name macpcs64_ex -part xcku5p-ffvb676-1-e -force
+## set_property target_language verilog [current_project]
+## set_property simulator_language MIXED [current_project]
+## set_property coreContainer.enable false [current_project]
+## set projDir [get_property DIRECTORY [current_project]]
+## set importDir [file join $projDir imports]
+## file mkdir $importDir
+## set returnCode 0
+## set_property target_simulator XSim [current_project]
+## puts "INFO: \[open_example_project\] Importing original IP ..."
+INFO: [open_example_project] Importing original IP ...
+## import_ip -files [list [file join $srcIpDir ../../../../macpcs64.srcs/sources_1/ip/macpcs64/macpcs64.xci]] -name macpcs64
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository 'C:/AMDDesignTools/2025.2/Vivado/data/ip'.
+## if { $returnCode == 0 } { 
+##   reset_target {open_example} [get_ips macpcs64]
+## 
+##   # Generate the IP
+##   proc _filter_supported_targets {targets ip} {
+##     set res {}
+##     set all [get_property SUPPORTED_TARGETS $ip]
+##     foreach target $targets {
+##       lappend res {*}[lsearch -all -inline -nocase $all $target]
+##     }
+##     return $res
+##   }
+##   puts "INFO: \[open_example_project\] Generating the example project IP ..."
+##   generate_target [_filter_supported_targets {instantiation_template synthesis simulation implementation shared_logic} [get_ips macpcs64]] [get_ips macpcs64]
+## } 
+INFO: [open_example_project] Generating the example project IP ...
+INFO: [IP_Flow 19-1706] Not generating 'Instantiation Template' target for IP 'macpcs64'. Target already exists and is up to date.
+INFO: [IP_Flow 19-1706] Not generating 'Synthesis' target for IP 'macpcs64'. Target already exists and is up to date.
+INFO: [IP_Flow 19-1706] Not generating 'Simulation' target for IP 'macpcs64'. Target already exists and is up to date.
+INFO: [IP_Flow 19-1706] Not generating 'Implementation' target for IP 'macpcs64'. Target already exists and is up to date.
+## if { $returnCode == 0 } { 
+##   # Add example synthesis HDL files
+##   puts "INFO: \[open_example_project\] Adding example synthesis HDL files ..."
+##   add_files -quiet -copy_to $importDir -fileset [current_fileset] \
+##   [list [file join $srcIpDir macpcs64/example_design/macpcs64_pkt_gen_mon.v]] \
+##   [list [file join $srcIpDir macpcs64/example_design/macpcs64_exdes.v]]
+## } 
+INFO: [open_example_project] Adding example synthesis HDL files ...
+## if { $returnCode == 0 } { 
+##   # Add example XDC files
+##   puts "INFO: \[open_example_project\] Adding example XDC files ..."
+##   add_files -quiet -copy_to $importDir -fileset [current_fileset -constrset] \
+##   [list [file join $srcIpDir macpcs64/example_design/macpcs64_example_top.xdc]]
+## 
+## } 
+INFO: [open_example_project] Adding example XDC files ...
+## if { $returnCode == 0 } { 
+##   # Add example simulation HDL files
+##   puts "INFO: \[open_example_project\] Adding simulation HDL files ..."
+##   if { [catch {current_fileset -simset} exc] } { create_fileset -simset sim_1 }
+##   add_files -quiet -copy_to $importDir -fileset [current_fileset -simset] \
+##   [list [file join $srcIpDir macpcs64/example_design/macpcs64_exdes_tb.v]]
+## set_property USED_IN_SYNTHESIS false [get_files [list [file join $importDir macpcs64_exdes_tb.v]]]
+## } 
+INFO: [open_example_project] Adding simulation HDL files ...
+## set_property TOP [lindex [find_top] 0] [current_fileset]
+## if { $returnCode == 0 } { 
+##   puts "INFO: \[open_example_project\] Sourcing example extension scripts ..."
+##   # Source script extension file(s)
+##   puts "INFO: \[open_example_project\] Sourcing extension script: top_set.tcl"
+##   if {[catch {source [file join $srcIpDir top_set.tcl]} errMsg]} {
+##     puts "ERROR: \[open_example_project\] Open Example Project failed: Error encountered while sourcing custom IP example design script: top_set.tcl"
+##     puts "$errMsg"
+##     error "ERROR: see log file for details."
+##     incr returnCode
+##   }
+## }
+INFO: [open_example_project] Sourcing example extension scripts ...
+INFO: [open_example_project] Sourcing extension script: top_set.tcl
+## if { $returnCode == 0 } { 
+##   # Update compile order
+##   update_compile_order -fileset [current_fileset]
+##   update_compile_order -fileset [current_fileset -simset]
+##   puts "INFO: \[open_example_project\] Rebuilding top IP..."
+##   set tfiles [get_files -filter {name=~"*.xci" || name=~"*.bd"}]
+##   foreach tfile $tfiles {
+##     if { [lsearch [list_property $tfile] PARENT_COMPOSITE_FILE ] == -1} {
+##       generate_target all $tfile
+##     }
+##   }
+##   export_ip_user_files -force
+## } 
+INFO: [open_example_project] Rebuilding top IP...
+INFO: [Vivado 12-25919] Exporting simulation script for '' simulator
+INFO: [exportsim-Tcl-40] Using compiled simulation libraries for IPs
+INFO: [SIM-utils-72] Using boost library from 'C:/AMDDesignTools/2025.2/Vivado/tps/boost_1_72_0'
+INFO: [exportsim-Tcl-35] Exporting simulation files for "XSIM" (AMD Vivado Simulator)...
+INFO: [exportsim-Tcl-29] Pre-compiled simulation library path: 'C:/AMDDesignTools/2025.2/Vivado/data/xsim'
+INFO: [exportsim-Tcl-29] Script generated: 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.ip_user_files/sim_scripts/macpcs64/xsim/macpcs64.sh'
+INFO: [SIM-utils-43] Exported 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.ip_user_files/sim_scripts/macpcs64/xsim/macpcs64_sv.sveo'
+INFO: [exportsim-Tcl-35] Exporting simulation files for "MODELSIM" (Siemens ModelSim Simulator)...
+INFO: [exportsim-Tcl-29] Pre-compiled simulation library path: 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.cache/compile_simlib/modelsim'
+INFO: [SIM-utils-40] Using sources from the project IP version (pre-compiled version failed or does not exist) - gtwizard_ultrascale_v1_7_22
+INFO: [SIM-utils-40] Using sources from the project IP version (pre-compiled version failed or does not exist) - xxv_ethernet_v5_0_2
+INFO: [exportsim-Tcl-29] Script generated: 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.ip_user_files/sim_scripts/macpcs64/modelsim/macpcs64.sh'
+INFO: [SIM-utils-43] Exported 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.ip_user_files/sim_scripts/macpcs64/modelsim/macpcs64_sv.sveo'
+INFO: [exportsim-Tcl-35] Exporting simulation files for "QUESTA" (Siemens Questa Advanced Simulator)...
+INFO: [exportsim-Tcl-29] Pre-compiled simulation library path: 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.cache/compile_simlib/questa'
+INFO: [exportsim-Tcl-29] Script generated: 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.ip_user_files/sim_scripts/macpcs64/questa/macpcs64.sh'
+INFO: [SIM-utils-43] Exported 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.ip_user_files/sim_scripts/macpcs64/questa/macpcs64_sv.sveo'
+INFO: [exportsim-Tcl-35] Exporting simulation files for "RIVIERA" (Aldec Riviera-PRO Simulator)...
+INFO: [exportsim-Tcl-29] Pre-compiled simulation library path: 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.cache/compile_simlib/riviera'
+INFO: [exportsim-Tcl-29] Script generated: 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.ip_user_files/sim_scripts/macpcs64/riviera/macpcs64.sh'
+INFO: [SIM-utils-43] Exported 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.ip_user_files/sim_scripts/macpcs64/riviera/macpcs64_sv.sveo'
+INFO: [exportsim-Tcl-35] Exporting simulation files for "ACTIVEHDL" (Aldec Active-HDL Simulator)...
+INFO: [exportsim-Tcl-29] Pre-compiled simulation library path: 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.cache/compile_simlib/activehdl'
+INFO: [exportsim-Tcl-29] Script generated: 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.ip_user_files/sim_scripts/macpcs64/activehdl/macpcs64.sh'
+INFO: [SIM-utils-43] Exported 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.ip_user_files/sim_scripts/macpcs64/activehdl/macpcs64_sv.sveo'
+## if { $returnCode == 0 } { 
+##   # Versal design: make sure there is a PS BD cell
+##   set mpart [get_property part [current_project]]
+##   set fam [get_property C_FAMILY $mpart]
+##   if { [string compare $fam "versal"] == 0 } {
+##     set cips_vlnv "xilinx.com:ip:versal_cips:*"
+##     set psx_vlnv "xilinx.com:ip:psx_wizard:*"
+##     set ps_vlnv "xilinx.com:ip:ps_wizard:*"
+##     proc is_supported_by_part {part vlnv} {
+##       set ipdef [get_ipdefs $vlnv]
+##       if {$ipdef != ""} {
+##         set supported_parts [get_property supported_parts $ipdef]
+##         set supported [expr [string first $part $supported_parts] != -1]
+##         return $supported
+##       }
+##       return 0
+##     }
+##     set supports_cips [is_supported_by_part $mpart $cips_vlnv]
+##     set supports_psx [is_supported_by_part $mpart $psx_vlnv]
+##     set supports_ps [is_supported_by_part $mpart $ps_vlnv]
+##     if { $supports_ps || $supports_cips || $supports_psx } {
+##       set scopedBDs {}
+##       foreach ip [get_ips] {
+##         set ipBDList [get_files -quiet -of $ip *.bd]
+##         if { $ipBDList != {} } { 
+##            foreach ipBd $ipBDList { 
+##              lappend scopedBDs $ipBd
+##           }
+##         }
+##       }
+##       set allBDs [get_files *.bd]
+##       set bFoundPS 0
+##       set topBD1 ""
+##       set topBDNames {}
+##       foreach bd1 $allBDs {
+##         set bAlsoInIpBDs 0
+##         foreach bd2 $scopedBDs {
+##           if { $bd1 == $bd2 } {
+##             set bAlsoInIpBDs 1
+##             break 
+##           } 
+##         } 
+##         if { $bAlsoInIpBDs == 0 } { 
+##           set fname [file tail $bd1]
+##           set bUsedInSynth [get_property used_in_synthesis [get_files $fname]]
+##           if { $bUsedInSynth == 1 } { 
+##             set rname [file rootname $fname]
+##             set topBD1 $fname
+##             lappend topBDNames $rname 
+##           } 
+##         } 
+##       } 
+##       set PSIPs [get_ips -filter IPDEF=~"*versal_cips*"] 
+##       set PSIPs [concat $PSIPs [get_ips -filter IPDEF=~"*psx_wizard*"]] 
+##       set PSIPs [concat $PSIPs [get_ips -filter IPDEF=~"*ps_wizard*"]] 
+##       foreach PSIP $PSIPs {
+##         set bBDcontext [ get_property is_bd_context $PSIP ]
+##         if { $bBDcontext == 1 } { 
+##           foreach topBD $topBDNames {
+##             set namelen [string length $topBD]
+##             if { [string compare -length $namelen $PSIP $topBD] == 0 } {
+##               set bFoundPS 1 
+##               break 
+##             } 
+##           } 
+##         } else {
+##           set bFoundPS 1 
+##           break 
+##         } 
+##       } 
+##       if { $bFoundPS == 0 } {
+##         if { $topBD1 == "" } {
+##           set newname ""
+##           set bDone 0
+##           set bdctr 0
+##           while { $bDone == 0 } {
+##             set uname "design_${bdctr}"
+##             set bNotUnique 0
+##             foreach bdname $topBDNames {
+##               if { $bdname == $uname } {
+##                 incr bdctr
+##                 set bNotUnique 1
+##                 break
+##               } 
+##             } 
+##             if { $bNotUnique == 0 } {
+##               set newname $uname
+##               set bDone 1
+##             } 
+##           } 
+##           puts "INFO: \[open_example_project\] Creating new BD $newname"
+##           create_bd_design $newname
+##           puts "INFO: \[open_example_project\] Creating new processing subsystem cell in BD $newname"
+##           if {$supports_ps} {
+##             create_bd_cell -type ip -vlnv $ps_vlnv "ps_wizard_0"
+##           } elseif {$supports_cips} {
+##             create_bd_cell -type ip -vlnv $cips_vlnv "cips_0"
+##           } elseif {$supports_psx} {
+##             create_bd_cell -type ip -vlnv $psx_vlnv "psx_wizard_0"
+##           }
+##           set wrapper [make_wrapper -files [get_files ${newname}.bd] -top]
+##           if { [ catch { add_module_instance -module_name ${newname}_wrapper -inst_name ${newname}_i } msg ] } { 
+##             puts "DEBUG: \[open_example_project\] add_module_instance error: $msg "
+##             puts "ERROR: \[open_example_project\] Unable to add ${newname}_wrapper module to top module."
+##           } 
+##           puts "INFO: \[open_example_project\] Adding BD wrapper file: $wrapper"
+##           add_files -norecurse $wrapper 
+##           update_compile_order -fileset sources_1
+##           save_bd_design
+##         } else {
+##           open_bd_design $topBD1
+##           puts "INFO: \[open_example_project\] Creating new processing subsystem cell in existing BD $topBD1"
+##           if {$supports_ps} {
+##             create_bd_cell -type ip -vlnv $ps_vlnv "ps_wizard_0"
+##           } elseif {$supports_cips} {
+##             create_bd_cell -type ip -vlnv $cips_vlnv "cips_0"
+##           } elseif {$supports_psx} {
+##             create_bd_cell -type ip -vlnv $psx_vlnv "psx_wizard_0"
+##           }
+##           update_compile_order -fileset sources_1
+##           save_bd_design
+##         }
+##       }
+##     } else {
+##       puts "INFO: \[open_example_project\] Current part '$mpart' is not supported by versal_cips core, so CIPS will not be added to design if needed."
+##     }
+##   }
+## }
+## set dfile [file join $srcIpDir oepdone.txt]
+## if { [ catch { set doneFile [open $dfile w] } ] } {
+## } else { 
+##   puts $doneFile "Open Example Project DONE"
+##   close $doneFile
+## }
+## if { $returnCode != 0 } {
+##   puts "ERROR: \[open_example_project\] Problems were encountered while executing the example design script, please review the log file."
+##   error "ERROR: See log file for details."
+##   incr returnCode
+## } else {
+##   puts "INFO: \[open_example_project\] Open Example Project completed"
+## }
+INFO: [open_example_project] Open Example Project completed
+cd d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/tcl
+open_example_project: Time (s): cpu = 00:00:04 ; elapsed = 00:00:08 . Memory (MB): peak = 696.586 ; gain = 38.867
+S3_OPEN_EXAMPLE rc = 0
+S3_EX_PROJECT = macpcs64_ex
+S3_EX_TOP     = macpcs64_exdes
+S3_EX_PART    = xcku5p-ffvb676-1-e
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.srcs/sources_1/ip/macpcs64/macpcs64.xci
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/macpcs64_gt.xci
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/synth/macpcs64_gt_ooc.xdc
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/synth/macpcs64_gt.xdc
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_bit_sync.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gte4_drp_arb.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gthe4_delay_powergood.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtye4_delay_powergood.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gthe3_cpll_cal.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gthe3_cal_freqcnt.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gthe4_cpll_cal.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gthe4_cpll_cal_rx.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gthe4_cpll_cal_tx.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gthe4_cal_freqcnt.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtye4_cpll_cal.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtye4_cpll_cal_rx.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtye4_cpll_cal_tx.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtye4_cal_freqcnt.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtwiz_buffbypass_rx.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtwiz_buffbypass_tx.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtwiz_reset.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtwiz_userclk_rx.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtwiz_userclk_tx.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtwiz_userdata_rx.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_gtwiz_userdata_tx.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_reset_sync.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/hdl/gtwizard_ultrascale_v1_7_reset_inv_sync.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/sim/gtwizard_ultrascale_v1_7_gtye4_channel.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/sim/macpcs64_gt_gtye4_channel_wrapper.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/sim/macpcs64_gt_gtwizard_gtye4.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/sim/macpcs64_gt_gtwizard_top.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/sim/macpcs64_gt.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/synth/gtwizard_ultrascale_v1_7_gtye4_channel.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/synth/macpcs64_gt_gtye4_channel_wrapper.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/synth/macpcs64_gt_gtwizard_gtye4.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/synth/macpcs64_gt_gtwizard_top.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/ip_0/synth/macpcs64_gt.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/doc/xxv_ethernet_v5_0_changelog.txt
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/synth/macpcs64_board.xdc
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/macpcs64.vho
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/macpcs64.veo
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/macpcs64_sv.sveo
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/synth/macpcs64.xdc
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/synth/macpcs64_ooc.xdc
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/xxv_ethernet_v5_0_2/macpcs64_wrapper.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/xxv_ethernet_v5_0_2/macpcs64_top.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/macpcs64/gtwizard_ultrascale_v1_7_gtye4_common.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/macpcs64/macpcs64_gt_gtye4_common_wrapper.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/xxv_ethernet_v5_0_2/macpcs64_common_wrapper.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/xxv_ethernet_v5_0_2/macpcs64_ultrascale_rx_userclk.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/xxv_ethernet_v5_0_2/macpcs64_ultrascale_tx_userclk.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/macpcs64_ex.gen/sources_1/ip/macpcs64/macpcs64.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/imports/macpcs64_pkt_gen_mon.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/imports/macpcs64_exdes.v
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/imports/macpcs64_example_top.xdc
+S3_EX_FILE d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/imports/macpcs64_exdes_tb.v
+S3_EX_CONSTR d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64_ex/macpcs64_ex/imports/macpcs64_example_top.xdc
+S3_EX_GT_XCI = 
+S3_END macpcs64
+# sec "S3 DONE"
+
+S3 >>>>>>>>>> S3 DONE
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 29 19:01:12 2026...

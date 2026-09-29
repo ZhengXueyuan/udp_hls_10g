@@ -1,0 +1,934 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 18:54:27 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source s1_prepare.tcl
+# set root "D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe"
+# set part "xcku5p-ffvb676-1-e"
+# proc sec {s} { puts "\nS1 >>>>>>>>>> $s" }
+# catch {set_param general.maxThreads 4}
+# sec "ENV"
+
+S1 >>>>>>>>>> ENV
+# puts "S1_VIVADO          = [version -short]"
+S1_VIVADO          = 2025.2
+# puts "S1_PART_N          = [llength [get_parts $part -quiet]]"
+S1_PART_N          = 1
+# puts "S1_LIC_MAIN_EXISTS = [file exists C:/AMDDesignTools/2025.2/data/ip/core_licenses/Xilinx.lic]"
+S1_LIC_MAIN_EXISTS = 1
+# puts "S1_LIC_FREE_EXISTS = [file exists C:/AMDDesignTools/2025.2/data/ip/core_licenses/XilinxFree.lic]"
+S1_LIC_FREE_EXISTS = 1
+# puts "S1_LIC_HIDDEN      = [file exists C:/AMDDesignTools/2025.2/data/ip/core_licenses/Xilinx.lic.HIDDEN]"
+S1_LIC_HIDDEN      = 0
+# proc envp {n} { if {[info exists ::env($n)]} { return $::env($n) } ; return "<unset>" }
+# puts "S1_ENV_XILINXD_LICENSE_FILE = [envp XILINXD_LICENSE_FILE]"
+S1_ENV_XILINXD_LICENSE_FILE = <unset>
+# puts "S1_ENV_XILINX_LICENSE_FILE  = [envp XILINX_LICENSE_FILE]"
+S1_ENV_XILINX_LICENSE_FILE  = <unset>
+# puts "S1_ENV_LM_LICENSE_FILE      = [envp LM_LICENSE_FILE]"
+S1_ENV_LM_LICENSE_FILE      = <unset>
+# sec "S1_LICPARAMS"
+
+S1 >>>>>>>>>> S1_LICPARAMS
+# if {[catch {set allp [list_param]} e]} { puts "S1_LISTPARAM_FAIL = $e"; set allp {} }
+# puts "S1_LISTPARAM_N = [llength $allp]"
+S1_LISTPARAM_N = 17
+# foreach p [lsort $allp] {
+#     if {[string match -nocase "*lic*" $p] || [string match -nocase "*xilinx*" $p]} {
+#         set v "<err>"; catch {set v [get_param $p]}
+#         puts "S1_LICPARAM $p = $v"
+#     }
+# }
+# proc dump_ip {mn} {
+#     set ip [get_ips $mn]
+#     puts "DUMP_${mn}_IS_LOCKED      = [get_property IS_LOCKED $ip]"
+#     catch {puts "DUMP_${mn}_LOCK_DETAILS  = [get_property LOCK_DETAILS $ip]"}
+#     catch {puts "DUMP_${mn}_USED_LIC_KEYS = [get_property USED_LICENSE_KEYS $ip]"}
+#     set pl {}
+#     catch {set pl [list_property $ip]}
+#     foreach p [lsort $pl] {
+#         if {[string match "CONFIG.*" $p]} {
+#             set v "<err>"
+#             catch {set v [get_property $p $ip]}
+#             puts "CFG_${mn} $p = $v"
+#         }
+#     }
+# }
+# proc mk {tag core basrkr} {
+#     global root part
+#     set pdir "$root/$tag"
+#     set mn   "$tag"
+# 
+#     sec "S1_BEGIN $tag core=<$core> base_r_kr=<$basrkr>"
+#     if {[file exists "$pdir/$mn.xpr"]} { file delete -force $pdir }
+#     if {[catch {create_project -force $mn $pdir -part $part} e]} {
+#         puts "S1_CREATE_PROJECT_FAIL = $e"; return
+#     }
+#     set_property target_language Verilog [current_project]
+# 
+#     # GT selection: try the known spellings, record which one is accepted.
+#     foreach p {CONFIG.GT_LOCATION CONFIG.LOCATE_GT CONFIG.CHANNEL_ENABLE} {
+#         catch {puts "S1_GT_PARAM_AVAIL $p = [get_property $p [get_ips -quiet $mn]]"}
+#     }
+# 
+#     if {[catch {create_ip -name xxv_ethernet -vendor xilinx.com -library ip \
+#                      -version 5.0 -module_name $mn} e]} {
+#         puts "S1_CREATE_IP_FAIL = $e"; close_project -quiet; return
+#     }
+#     puts "S1_CREATE_IP = OK"
+#     set ip [get_ips $mn]
+#     puts "S1_IS_LOCKED_AT_CREATE = [get_property IS_LOCKED $ip]"
+# 
+#     foreach {k v} [list \
+#         CONFIG.LINE_RATE            {10} \
+#         CONFIG.CLOCKING             {Asynchronous} \
+#         CONFIG.BASE_R_KR            $basrkr \
+#         CONFIG.GT_REF_CLK_FREQ      {156.25} \
+#         CONFIG.GT_TYPE              {GTY} \
+#         CONFIG.INCLUDE_SHARED_LOGIC {1} \
+#         CONFIG.CORE                 $core] {
+#         if {[catch {set_property $k $v $ip} e]} {
+#             puts "S1_SETPARAM_FAIL $k = $e"
+#         } else {
+#             set gv "<rb-err>"; catch {set gv [get_property $k $ip]}
+#             puts "S1_SETPARAM_OK $k = <$v> readback=<$gv>"
+#         }
+#     }
+# 
+#     # GT channel X0Y4 (SFP A).  Try each spelling, keep whichever works.
+#     foreach p {CONFIG.GT_LOCATION CONFIG.LOCATE_GT CONFIG.CHANNEL_ENABLE} {
+#         if {[catch {set_property $p {X0Y4} $ip} e]} {
+#             puts "S1_GT_SET_FAIL $p = $e"
+#         } else {
+#             catch {puts "S1_GT_SET_OK $p readback=<[get_property $p $ip]>"}
+#         }
+#     }
+# 
+#     puts "S1_IS_LOCKED_POSTCFG = [get_property IS_LOCKED $ip]"
+#     catch {puts "S1_LOCK_DETAILS_POSTCFG = [get_property LOCK_DETAILS $ip]"}
+# 
+#     set gr [catch {generate_target all $ip} e]
+#     puts "S1_GENERATE rc = $gr"
+#     if {$gr} { puts "S1_GENERATE_ERR = $e" }
+#     catch {puts "S1_IS_LOCKED_POSTGEN = [get_property IS_LOCKED $ip]"}
+#     catch {puts "S1_LOCK_DETAILS_POSTGEN = [get_property LOCK_DETAILS $ip]"}
+#     catch {puts "S1_USED_LICENSE_KEYS = [get_property USED_LICENSE_KEYS $ip]"}
+# 
+#     set gd "$pdir/$mn.gen/sources_1/ip/$mn"
+#     foreach pat {*.v *.veo *.vho *.xci hdl/*.sv hdl/*.v synth/*.xdc *.xdc doc/* sim/*.v} {
+#         set fl [glob -nocomplain -directory $gd $pat]
+#         puts "S1_ART $pat n=[llength $fl]"
+#         foreach f $fl { puts "S1_ARTF $pat [file tail $f] size=[file size $f]" }
+#     }
+#     set sdir "$pdir/$mn.srcs/sources_1/ip/$mn"
+#     puts "S1_XCI_DIR = $sdir"
+#     foreach f [glob -nocomplain -directory $sdir *] { puts "S1_SRCF [file tail $f] size=[file size $f]" }
+# 
+#     dump_ip $mn
+# 
+#     close_project -quiet
+#     puts "S1_END $tag"
+# }
+# mk pcs64    {Ethernet PCS/PMA 64-bit}     {BASE-R}
+
+S1 >>>>>>>>>> S1_BEGIN pcs64 core=<Ethernet PCS/PMA 64-bit> base_r_kr=<BASE-R>
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository 'C:/AMDDesignTools/2025.2/Vivado/data/ip'.
+S1_CREATE_IP = OK
+S1_IS_LOCKED_AT_CREATE = 0
+S1_SETPARAM_OK CONFIG.LINE_RATE = <10> readback=<10>
+S1_SETPARAM_OK CONFIG.CLOCKING = <Asynchronous> readback=<Asynchronous>
+S1_SETPARAM_OK CONFIG.BASE_R_KR = <BASE-R> readback=<BASE-R>
+S1_SETPARAM_OK CONFIG.GT_REF_CLK_FREQ = <156.25> readback=<156.25>
+S1_SETPARAM_OK CONFIG.GT_TYPE = <GTY> readback=<GTY>
+S1_SETPARAM_OK CONFIG.INCLUDE_SHARED_LOGIC = <1> readback=<1>
+S1_SETPARAM_OK CONFIG.CORE = <Ethernet PCS/PMA 64-bit> readback=<Ethernet PCS/PMA 64-bit>
+ERROR: [IP_Flow 19-3461] Value 'X0Y4' is out of the range for parameter 'GT LOCATION(GT_LOCATION)' for IP 'pcs64' . Valid values are - 1, 0
+INFO: [IP_Flow 19-3438] Customization errors found on 'pcs64'. Restoring to previous valid configuration.
+S1_GT_SET_FAIL CONFIG.GT_LOCATION = ERROR: [Common 17-39] 'set_property' failed due to earlier errors.
+
+ERROR: [Vivado 12-4371] Cannot find parameter 'LOCATE_GT' on IP 'pcs64'.
+ERROR: [Vivado 12-1342] Failed to set property 'CONFIG.LOCATE_GT' on IP 'pcs64'.
+S1_GT_SET_FAIL CONFIG.LOCATE_GT = ERROR: [Common 17-39] 'set_property' failed due to earlier errors.
+
+ERROR: [Vivado 12-4371] Cannot find parameter 'CHANNEL_ENABLE' on IP 'pcs64'.
+ERROR: [Vivado 12-1342] Failed to set property 'CONFIG.CHANNEL_ENABLE' on IP 'pcs64'.
+S1_GT_SET_FAIL CONFIG.CHANNEL_ENABLE = ERROR: [Common 17-39] 'set_property' failed due to earlier errors.
+
+S1_IS_LOCKED_POSTCFG = 0
+S1_LOCK_DETAILS_POSTCFG = IP is not locked
+INFO: [IP_Flow 19-1686] Generating 'Instantiation Template' target for IP 'pcs64'...
+INFO: [IP_Flow 19-1686] Generating 'Synthesis' target for IP 'pcs64'...
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_tsn_802d1cm@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_tsn_802d1cm@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_tsn_802d1cm@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_tsn_802d1cm@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+INFO: [IP_Flow 19-1686] Generating 'Simulation' target for IP 'pcs64'...
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_tsn_802d1cm@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+INFO: [Common 17-14] Message 'IP_Flow 19-650' appears 100 times and further instances of the messages will be disabled. Use the Tcl command set_msg_config to change the current settings.
+INFO: [IP_Flow 19-1686] Generating 'Implementation' target for IP 'pcs64'...
+INFO: [IP_Flow 19-1686] Generating 'Change Log' target for IP 'pcs64'...
+generate_target: Time (s): cpu = 00:00:05 ; elapsed = 00:00:07 . Memory (MB): peak = 716.246 ; gain = 20.984
+S1_GENERATE rc = 0
+S1_IS_LOCKED_POSTGEN = 0
+S1_LOCK_DETAILS_POSTGEN = IP is not locked
+S1_USED_LICENSE_KEYS = {{implementation {xxv_eth_mac_pcs@2025.05 design_linking} {xxv_eth_basekr@2025.05 design_linking} {xxv_tsn_802d1cm@2025.05 design_linking}} {simulation {xxv_eth_mac_pcs@2025.05 design_linking} {xxv_eth_basekr@2025.05 design_linking} {xxv_tsn_802d1cm@2025.05 design_linking}} {synthesis {xxv_eth_mac_pcs@2025.05 design_linking} {xxv_eth_basekr@2025.05 design_linking} {xxv_tsn_802d1cm@2025.05 design_linking}} {changelog {xxv_eth_mac_pcs@2025.05 design_linking} {xxv_eth_basekr@2025.05 design_linking} {xxv_tsn_802d1cm@2025.05 design_linking}} {instantiation_template {xxv_eth_mac_pcs@2025.05 design_linking} {xxv_eth_basekr@2025.05 design_linking} {xxv_tsn_802d1cm@2025.05 design_linking}}}
+S1_ART *.v n=1
+S1_ARTF *.v pcs64.v size=11512
+S1_ART *.veo n=1
+S1_ARTF *.veo pcs64.veo size=8984
+S1_ART *.vho n=1
+S1_ARTF *.vho pcs64.vho size=7891
+S1_ART *.xci n=0
+S1_ART hdl/*.sv n=1
+S1_ARTF hdl/*.sv xxv_ethernet_v5_0_vl_rfs.sv size=21560191
+S1_ART hdl/*.v n=0
+S1_ART synth/*.xdc n=3
+S1_ARTF synth/*.xdc pcs64.xdc size=12576
+S1_ARTF synth/*.xdc pcs64_board.xdc size=60
+S1_ARTF synth/*.xdc pcs64_ooc.xdc size=3666
+S1_ART *.xdc n=0
+S1_ART doc/* n=1
+S1_ARTF doc/* xxv_ethernet_v5_0_changelog.txt size=15075
+S1_ART sim/*.v n=0
+S1_XCI_DIR = D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/pcs64/pcs64.srcs/sources_1/ip/pcs64
+S1_SRCF pcs64.xci size=37578
+DUMP_pcs64_IS_LOCKED      = 0
+DUMP_pcs64_LOCK_DETAILS  = IP is not locked
+DUMP_pcs64_USED_LIC_KEYS = {{implementation {xxv_eth_mac_pcs@2025.05 design_linking} {xxv_eth_basekr@2025.05 design_linking} {xxv_tsn_802d1cm@2025.05 design_linking}} {simulation {xxv_eth_mac_pcs@2025.05 design_linking} {xxv_eth_basekr@2025.05 design_linking} {xxv_tsn_802d1cm@2025.05 design_linking}} {synthesis {xxv_eth_mac_pcs@2025.05 design_linking} {xxv_eth_basekr@2025.05 design_linking} {xxv_tsn_802d1cm@2025.05 design_linking}} {changelog {xxv_eth_mac_pcs@2025.05 design_linking} {xxv_eth_basekr@2025.05 design_linking} {xxv_tsn_802d1cm@2025.05 design_linking}} {instantiation_template {xxv_eth_mac_pcs@2025.05 design_linking} {xxv_eth_basekr@2025.05 design_linking} {xxv_tsn_802d1cm@2025.05 design_linking}}}
+CFG_pcs64 CONFIG.ADD_GT_CNTRL_STS_PORTS = 0
+CFG_pcs64 CONFIG.ANLT_CLK_IN_MHZ = 100
+CFG_pcs64 CONFIG.AN_CLK_PORT0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AN_CLK_PORT1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AN_CLK_PORT2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AN_CLK_PORT3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AN_RESET_PORT_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AN_RESET_PORT_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AN_RESET_PORT_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AN_RESET_PORT_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_RX_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_RX_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_RX_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_RX_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_RX_EXP_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_RX_EXP_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_RX_EXP_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_RX_EXP_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_RX_PREEMPT_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_RX_PREEMPT_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_RX_PREEMPT_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_RX_PREEMPT_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_TX_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_TX_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_TX_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_TX_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_TX_EXP_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_TX_EXP_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_TX_EXP_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_TX_EXP_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_TX_PREEMPT_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_TX_PREEMPT_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_TX_PREEMPT_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.AXIS_TX_PREEMPT_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.BASE_R_KR = BASE-KR
+CFG_pcs64 CONFIG.CLOCKING = Asynchronous
+CFG_pcs64 CONFIG.CMAC_CORE_SELECT = CMACE4_X0Y0
+CFG_pcs64 CONFIG.CORE = Ethernet PCS/PMA 64-bit
+CFG_pcs64 CONFIG.CTL_GT_RESET_ALL_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.CTL_GT_RESET_ALL_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.CTL_GT_RESET_ALL_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.CTL_GT_RESET_ALL_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.CTL_GT_RX_RESET_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.CTL_GT_RX_RESET_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.CTL_GT_RX_RESET_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.CTL_GT_RX_RESET_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.CTL_GT_TX_RESET_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.CTL_GT_TX_RESET_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.CTL_GT_TX_RESET_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.CTL_GT_TX_RESET_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.Component_Name = pcs64
+CFG_pcs64 CONFIG.DATA_PATH_INTERFACE = MII
+CFG_pcs64 CONFIG.DIFFCLK_BOARD_INTERFACE = Custom
+CFG_pcs64 CONFIG.DRP_CLK_PORT.INSERT_VIP = 0
+CFG_pcs64 CONFIG.ENABLE_DATAPATH_PARITY = 0
+CFG_pcs64 CONFIG.ENABLE_GT_BOARD_INTERFACE = 0
+CFG_pcs64 CONFIG.ENABLE_PIPELINE_REG = 0
+CFG_pcs64 CONFIG.ENABLE_PREEMPTION = 0
+CFG_pcs64 CONFIG.ENABLE_PREEMPTION_FIFO = 0
+CFG_pcs64 CONFIG.ENABLE_RX_FLOW_CONTROL_LOGIC = 0
+CFG_pcs64 CONFIG.ENABLE_TIME_STAMPING = 0
+CFG_pcs64 CONFIG.ENABLE_TX_FLOW_CONTROL_LOGIC = 0
+CFG_pcs64 CONFIG.ENABLE_VLANE_ADJUST_MODE = 0
+CFG_pcs64 CONFIG.ETHERNET_BOARD_INTERFACE = Custom
+CFG_pcs64 CONFIG.FAST_SIM_MODE = 0
+CFG_pcs64 CONFIG.GTM_GROUP_SELECT = NA
+CFG_pcs64 CONFIG.GTWIZ_RESET_FREERUN_CLK.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GTWIZ_RESET_RX_DATAPATH_0_PORT.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GTWIZ_RESET_RX_DATAPATH_1_PORT.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GTWIZ_RESET_RX_DATAPATH_2_PORT.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GTWIZ_RESET_RX_DATAPATH_3_PORT.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GTWIZ_RESET_TX_DATAPATH_0_PORT.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GTWIZ_RESET_TX_DATAPATH_1_PORT.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GTWIZ_RESET_TX_DATAPATH_2_PORT.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GTWIZ_RESET_TX_DATAPATH_3_PORT.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_DRPCLK_PORT0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_DRPCLK_PORT1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_DRPCLK_PORT2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_DRPCLK_PORT3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_DRP_CLK = 100.00
+CFG_pcs64 CONFIG.GT_DRP_DONE_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_DRP_DONE_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_DRP_DONE_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_DRP_DONE_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_GROUP_SELECT = Quad_X0Y0
+CFG_pcs64 CONFIG.GT_LOCATION = 1
+CFG_pcs64 CONFIG.GT_REFCLK_OUT.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_REF_CLK_FREQ = 161.1328125
+CFG_pcs64 CONFIG.GT_RESET_ALL_IN_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_RESET_ALL_IN_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_RESET_ALL_IN_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_RESET_ALL_IN_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_RESET_RX_DONE_OUT_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_RESET_RX_DONE_OUT_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_RESET_RX_DONE_OUT_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_RESET_RX_DONE_OUT_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_RESET_TX_DONE_OUT_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_RESET_TX_DONE_OUT_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_RESET_TX_DONE_OUT_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_RESET_TX_DONE_OUT_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_RX_RESET_IN_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_RX_RESET_IN_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_RX_RESET_IN_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_RX_RESET_IN_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_TX_RESET_IN_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_TX_RESET_IN_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_TX_RESET_IN_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_TX_RESET_IN_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.GT_TYPE = GTY
+CFG_pcs64 CONFIG.INCLUDE_AUTO_NEG_LT_LOGIC = None
+CFG_pcs64 CONFIG.INCLUDE_AXI4_INTERFACE = 0
+CFG_pcs64 CONFIG.INCLUDE_FEC_LOGIC = 0
+CFG_pcs64 CONFIG.INCLUDE_HYBRID_CMAC_RSFEC_LOGIC = 0
+CFG_pcs64 CONFIG.INCLUDE_RSFEC_LOGIC = 0
+CFG_pcs64 CONFIG.INCLUDE_SHARED_LOGIC = 1
+CFG_pcs64 CONFIG.INCLUDE_STATISTICS_COUNTERS = 0
+CFG_pcs64 CONFIG.INCLUDE_USER_FIFO = 0
+CFG_pcs64 CONFIG.INS_LOSS_NYQ = 30
+CFG_pcs64 CONFIG.IS_GT_WIZ_OLD = 0
+CFG_pcs64 CONFIG.LANE1_GT_LOC = X0Y0
+CFG_pcs64 CONFIG.LANE2_GT_LOC = NA
+CFG_pcs64 CONFIG.LANE3_GT_LOC = NA
+CFG_pcs64 CONFIG.LANE4_GT_LOC = NA
+CFG_pcs64 CONFIG.LINE_RATE = 25
+CFG_pcs64 CONFIG.MII_MAC_TX_CLK_PORT0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.MII_MAC_TX_CLK_PORT1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.MII_MAC_TX_CLK_PORT2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.MII_MAC_TX_CLK_PORT3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.NUM_OF_CORES = 1
+CFG_pcs64 CONFIG.PTP_CLOCKING_MODE = 0
+CFG_pcs64 CONFIG.PTP_OPERATION_MODE = 2
+CFG_pcs64 CONFIG.QPLL0CLK_IN_PORT.INSERT_VIP = 0
+CFG_pcs64 CONFIG.QPLL0REFCLK_IN_PORT.INSERT_VIP = 0
+CFG_pcs64 CONFIG.QPLL0_RESET_PORT.INSERT_VIP = 0
+CFG_pcs64 CONFIG.QPLL1CLK_IN_PORT.INSERT_VIP = 0
+CFG_pcs64 CONFIG.QPLL1REFCLK_IN_PORT.INSERT_VIP = 0
+CFG_pcs64 CONFIG.QPLL1_RESET_PORT.INSERT_VIP = 0
+CFG_pcs64 CONFIG.QPLLRESET_IN_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RUNTIME_SWITCH = 0
+CFG_pcs64 CONFIG.RXRECCLKOUT_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RXRECCLKOUT_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RXRECCLKOUT_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RXRECCLKOUT_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_CLK_PORT0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_CLK_PORT1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_CLK_PORT2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_CLK_PORT3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_CORE_CLK_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_CORE_CLK_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_CORE_CLK_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_CORE_CLK_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_EQ_MODE = AUTO
+CFG_pcs64 CONFIG.RX_MAC_MII_CLK_PORT0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_MAC_MII_CLK_PORT1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_MAC_MII_CLK_PORT2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_MAC_MII_CLK_PORT3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_MAC_MII_RESET_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_MAC_MII_RESET_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_MAC_MII_RESET_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_MAC_MII_RESET_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_RESET_PORT0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_RESET_PORT1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_RESET_PORT2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_RESET_PORT3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_SERDES_RESET_PORT0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_SERDES_RESET_PORT1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_SERDES_RESET_PORT2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.RX_SERDES_RESET_PORT3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.STATISTICS_REGS_TYPE = 0
+CFG_pcs64 CONFIG.SWITCH_1_10_25G = 0
+CFG_pcs64 CONFIG.SYS_CLK = 4000
+CFG_pcs64 CONFIG.SYS_RESET_PORT.INSERT_VIP = 0
+CFG_pcs64 CONFIG.S_AXI_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.S_AXI_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.S_AXI_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.S_AXI_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.S_AXI_SIGNAL_CLOCK0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.S_AXI_SIGNAL_CLOCK1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.S_AXI_SIGNAL_CLOCK2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.S_AXI_SIGNAL_CLOCK3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.S_AXI_SIGNAL_RESETN0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.S_AXI_SIGNAL_RESETN1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.S_AXI_SIGNAL_RESETN2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.S_AXI_SIGNAL_RESETN3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_CLK_PORT0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_CLK_PORT1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_CLK_PORT2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_CLK_PORT3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_CLK_PORT_GTM_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_CLK_PORT_GTM_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_CLK_PORT_GTM_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_CLK_PORT_GTM_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_CLK_PORT_NVGTM_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_CLK_PORT_NVGTM_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_CORE_CLK_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_CORE_CLK_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_CORE_CLK_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_CORE_CLK_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_LATENCY_ADJUST = 0
+CFG_pcs64 CONFIG.TX_MAC_MII_CLK0_OUT_PORT0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_MAC_MII_CLK0_OUT_PORT1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_MAC_MII_CLK0_OUT_PORT2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_MAC_MII_CLK0_OUT_PORT3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_MAC_MII_CLK90_OUT_PORT0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_MAC_MII_CLK90_OUT_PORT1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_MAC_MII_CLK90_OUT_PORT3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_MAC_MII_CLK90_PORT2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_MAC_MII_CLK_PORT0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_MAC_MII_CLK_PORT1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_MAC_MII_CLK_PORT2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_MAC_MII_CLK_PORT3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_MAC_MII_RESET_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_MAC_MII_RESET_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_MAC_MII_RESET_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_MAC_MII_RESET_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_MII_CLK_PORT0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_MII_CLK_PORT1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_MII_CLK_PORT2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_MII_CLK_PORT3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_RESET_PORT0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_RESET_PORT1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_RESET_PORT2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.TX_RESET_PORT3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.USER_RX_RESET_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.USER_RX_RESET_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.USER_RX_RESET_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.USER_RX_RESET_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.USER_TX_RESET_0.INSERT_VIP = 0
+CFG_pcs64 CONFIG.USER_TX_RESET_1.INSERT_VIP = 0
+CFG_pcs64 CONFIG.USER_TX_RESET_2.INSERT_VIP = 0
+CFG_pcs64 CONFIG.USER_TX_RESET_3.INSERT_VIP = 0
+CFG_pcs64 CONFIG.USE_BOARD_FLOW = false
+CFG_pcs64 CONFIG.XGMII_INTERFACE = 1
+S1_END pcs64
+# mk macpcs64 {Ethernet MAC+PCS/PMA 64-bit} {BASE-R}
+
+S1 >>>>>>>>>> S1_BEGIN macpcs64 core=<Ethernet MAC+PCS/PMA 64-bit> base_r_kr=<BASE-R>
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository 'C:/AMDDesignTools/2025.2/Vivado/data/ip'.
+S1_CREATE_IP = OK
+S1_IS_LOCKED_AT_CREATE = 0
+S1_SETPARAM_OK CONFIG.LINE_RATE = <10> readback=<10>
+S1_SETPARAM_OK CONFIG.CLOCKING = <Asynchronous> readback=<Asynchronous>
+S1_SETPARAM_OK CONFIG.BASE_R_KR = <BASE-R> readback=<BASE-R>
+S1_SETPARAM_OK CONFIG.GT_REF_CLK_FREQ = <156.25> readback=<156.25>
+S1_SETPARAM_OK CONFIG.GT_TYPE = <GTY> readback=<GTY>
+S1_SETPARAM_OK CONFIG.INCLUDE_SHARED_LOGIC = <1> readback=<1>
+S1_SETPARAM_OK CONFIG.CORE = <Ethernet MAC+PCS/PMA 64-bit> readback=<Ethernet MAC+PCS/PMA 64-bit>
+ERROR: [IP_Flow 19-3461] Value 'X0Y4' is out of the range for parameter 'GT LOCATION(GT_LOCATION)' for IP 'macpcs64' . Valid values are - 1, 0
+INFO: [IP_Flow 19-3438] Customization errors found on 'macpcs64'. Restoring to previous valid configuration.
+S1_GT_SET_FAIL CONFIG.GT_LOCATION = ERROR: [Common 17-39] 'set_property' failed due to earlier errors.
+
+ERROR: [Vivado 12-4371] Cannot find parameter 'LOCATE_GT' on IP 'macpcs64'.
+ERROR: [Vivado 12-1342] Failed to set property 'CONFIG.LOCATE_GT' on IP 'macpcs64'.
+S1_GT_SET_FAIL CONFIG.LOCATE_GT = ERROR: [Common 17-39] 'set_property' failed due to earlier errors.
+
+ERROR: [Vivado 12-4371] Cannot find parameter 'CHANNEL_ENABLE' on IP 'macpcs64'.
+ERROR: [Vivado 12-1342] Failed to set property 'CONFIG.CHANNEL_ENABLE' on IP 'macpcs64'.
+S1_GT_SET_FAIL CONFIG.CHANNEL_ENABLE = ERROR: [Common 17-39] 'set_property' failed due to earlier errors.
+
+S1_IS_LOCKED_POSTCFG = 0
+S1_LOCK_DETAILS_POSTCFG = IP is not locked
+INFO: [IP_Flow 19-1686] Generating 'Instantiation Template' target for IP 'macpcs64'...
+INFO: [IP_Flow 19-1686] Generating 'Synthesis' target for IP 'macpcs64'...
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_tsn_802d1cm@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_tsn_802d1cm@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_tsn_802d1cm@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_tsn_802d1cm@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+INFO: [IP_Flow 19-1686] Generating 'Simulation' target for IP 'macpcs64'...
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_tsn_802d1cm@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+INFO: [Common 17-14] Message 'IP_Flow 19-650' appears 100 times and further instances of the messages will be disabled. Use the Tcl command set_msg_config to change the current settings.
+INFO: [IP_Flow 19-1686] Generating 'Implementation' target for IP 'macpcs64'...
+INFO: [IP_Flow 19-1686] Generating 'Change Log' target for IP 'macpcs64'...
+generate_target: Time (s): cpu = 00:00:06 ; elapsed = 00:00:07 . Memory (MB): peak = 731.445 ; gain = 15.199
+S1_GENERATE rc = 0
+S1_IS_LOCKED_POSTGEN = 0
+S1_LOCK_DETAILS_POSTGEN = IP is not locked
+S1_USED_LICENSE_KEYS = {{implementation {xxv_eth_mac_pcs@2025.05 design_linking} {xxv_eth_basekr@2025.05 design_linking} {xxv_tsn_802d1cm@2025.05 design_linking}} {simulation {xxv_eth_mac_pcs@2025.05 design_linking} {xxv_eth_basekr@2025.05 design_linking} {xxv_tsn_802d1cm@2025.05 design_linking}} {synthesis {xxv_eth_mac_pcs@2025.05 design_linking} {xxv_eth_basekr@2025.05 design_linking} {xxv_tsn_802d1cm@2025.05 design_linking}} {changelog {xxv_eth_mac_pcs@2025.05 design_linking} {xxv_eth_basekr@2025.05 design_linking} {xxv_tsn_802d1cm@2025.05 design_linking}} {instantiation_template {xxv_eth_mac_pcs@2025.05 design_linking} {xxv_eth_basekr@2025.05 design_linking} {xxv_tsn_802d1cm@2025.05 design_linking}}}
+S1_ART *.v n=1
+S1_ARTF *.v macpcs64.v size=21861
+S1_ART *.veo n=1
+S1_ARTF *.veo macpcs64.veo size=18066
+S1_ART *.vho n=1
+S1_ARTF *.vho macpcs64.vho size=16581
+S1_ART *.xci n=0
+S1_ART hdl/*.sv n=1
+S1_ARTF hdl/*.sv xxv_ethernet_v5_0_vl_rfs.sv size=21560191
+S1_ART hdl/*.v n=0
+S1_ART synth/*.xdc n=3
+S1_ARTF synth/*.xdc macpcs64.xdc size=13027
+S1_ARTF synth/*.xdc macpcs64_board.xdc size=60
+S1_ARTF synth/*.xdc macpcs64_ooc.xdc size=3666
+S1_ART *.xdc n=0
+S1_ART doc/* n=1
+S1_ARTF doc/* xxv_ethernet_v5_0_changelog.txt size=15075
+S1_ART sim/*.v n=0
+S1_XCI_DIR = D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_probe/macpcs64/macpcs64.srcs/sources_1/ip/macpcs64
+S1_SRCF macpcs64.xci size=54631
+DUMP_macpcs64_IS_LOCKED      = 0
+DUMP_macpcs64_LOCK_DETAILS  = IP is not locked
+DUMP_macpcs64_USED_LIC_KEYS = {{implementation {xxv_eth_mac_pcs@2025.05 design_linking} {xxv_eth_basekr@2025.05 design_linking} {xxv_tsn_802d1cm@2025.05 design_linking}} {simulation {xxv_eth_mac_pcs@2025.05 design_linking} {xxv_eth_basekr@2025.05 design_linking} {xxv_tsn_802d1cm@2025.05 design_linking}} {synthesis {xxv_eth_mac_pcs@2025.05 design_linking} {xxv_eth_basekr@2025.05 design_linking} {xxv_tsn_802d1cm@2025.05 design_linking}} {changelog {xxv_eth_mac_pcs@2025.05 design_linking} {xxv_eth_basekr@2025.05 design_linking} {xxv_tsn_802d1cm@2025.05 design_linking}} {instantiation_template {xxv_eth_mac_pcs@2025.05 design_linking} {xxv_eth_basekr@2025.05 design_linking} {xxv_tsn_802d1cm@2025.05 design_linking}}}
+CFG_macpcs64 CONFIG.ADD_GT_CNTRL_STS_PORTS = 0
+CFG_macpcs64 CONFIG.ANLT_CLK_IN_MHZ = 100
+CFG_macpcs64 CONFIG.AN_CLK_PORT0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AN_CLK_PORT1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AN_CLK_PORT2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AN_CLK_PORT3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AN_RESET_PORT_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AN_RESET_PORT_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AN_RESET_PORT_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AN_RESET_PORT_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_RX_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_RX_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_RX_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_RX_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_RX_EXP_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_RX_EXP_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_RX_EXP_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_RX_EXP_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_RX_PREEMPT_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_RX_PREEMPT_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_RX_PREEMPT_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_RX_PREEMPT_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_TX_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_TX_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_TX_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_TX_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_TX_EXP_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_TX_EXP_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_TX_EXP_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_TX_EXP_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_TX_PREEMPT_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_TX_PREEMPT_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_TX_PREEMPT_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.AXIS_TX_PREEMPT_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.BASE_R_KR = BASE-KR
+CFG_macpcs64 CONFIG.CLOCKING = Asynchronous
+CFG_macpcs64 CONFIG.CMAC_CORE_SELECT = CMACE4_X0Y0
+CFG_macpcs64 CONFIG.CORE = Ethernet MAC+PCS/PMA 64-bit
+CFG_macpcs64 CONFIG.CTL_GT_RESET_ALL_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.CTL_GT_RESET_ALL_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.CTL_GT_RESET_ALL_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.CTL_GT_RESET_ALL_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.CTL_GT_RX_RESET_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.CTL_GT_RX_RESET_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.CTL_GT_RX_RESET_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.CTL_GT_RX_RESET_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.CTL_GT_TX_RESET_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.CTL_GT_TX_RESET_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.CTL_GT_TX_RESET_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.CTL_GT_TX_RESET_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.Component_Name = macpcs64
+CFG_macpcs64 CONFIG.DATA_PATH_INTERFACE = AXI Stream
+CFG_macpcs64 CONFIG.DIFFCLK_BOARD_INTERFACE = Custom
+CFG_macpcs64 CONFIG.DRP_CLK_PORT.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.ENABLE_DATAPATH_PARITY = 0
+CFG_macpcs64 CONFIG.ENABLE_GT_BOARD_INTERFACE = 0
+CFG_macpcs64 CONFIG.ENABLE_PIPELINE_REG = 0
+CFG_macpcs64 CONFIG.ENABLE_PREEMPTION = 0
+CFG_macpcs64 CONFIG.ENABLE_PREEMPTION_FIFO = 0
+CFG_macpcs64 CONFIG.ENABLE_RX_FLOW_CONTROL_LOGIC = 0
+CFG_macpcs64 CONFIG.ENABLE_TIME_STAMPING = 0
+CFG_macpcs64 CONFIG.ENABLE_TX_FLOW_CONTROL_LOGIC = 0
+CFG_macpcs64 CONFIG.ENABLE_VLANE_ADJUST_MODE = 0
+CFG_macpcs64 CONFIG.ETHERNET_BOARD_INTERFACE = Custom
+CFG_macpcs64 CONFIG.FAST_SIM_MODE = 0
+CFG_macpcs64 CONFIG.GTM_GROUP_SELECT = NA
+CFG_macpcs64 CONFIG.GTWIZ_RESET_FREERUN_CLK.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GTWIZ_RESET_RX_DATAPATH_0_PORT.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GTWIZ_RESET_RX_DATAPATH_1_PORT.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GTWIZ_RESET_RX_DATAPATH_2_PORT.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GTWIZ_RESET_RX_DATAPATH_3_PORT.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GTWIZ_RESET_TX_DATAPATH_0_PORT.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GTWIZ_RESET_TX_DATAPATH_1_PORT.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GTWIZ_RESET_TX_DATAPATH_2_PORT.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GTWIZ_RESET_TX_DATAPATH_3_PORT.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_DRPCLK_PORT0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_DRPCLK_PORT1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_DRPCLK_PORT2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_DRPCLK_PORT3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_DRP_CLK = 100.00
+CFG_macpcs64 CONFIG.GT_DRP_DONE_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_DRP_DONE_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_DRP_DONE_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_DRP_DONE_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_GROUP_SELECT = Quad_X0Y0
+CFG_macpcs64 CONFIG.GT_LOCATION = 1
+CFG_macpcs64 CONFIG.GT_REFCLK_OUT.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_REF_CLK_FREQ = 161.1328125
+CFG_macpcs64 CONFIG.GT_RESET_ALL_IN_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_RESET_ALL_IN_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_RESET_ALL_IN_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_RESET_ALL_IN_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_RESET_RX_DONE_OUT_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_RESET_RX_DONE_OUT_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_RESET_RX_DONE_OUT_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_RESET_RX_DONE_OUT_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_RESET_TX_DONE_OUT_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_RESET_TX_DONE_OUT_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_RESET_TX_DONE_OUT_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_RESET_TX_DONE_OUT_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_RX_RESET_IN_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_RX_RESET_IN_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_RX_RESET_IN_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_RX_RESET_IN_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_TX_RESET_IN_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_TX_RESET_IN_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_TX_RESET_IN_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_TX_RESET_IN_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.GT_TYPE = GTY
+CFG_macpcs64 CONFIG.INCLUDE_AUTO_NEG_LT_LOGIC = None
+CFG_macpcs64 CONFIG.INCLUDE_AXI4_INTERFACE = 0
+CFG_macpcs64 CONFIG.INCLUDE_FEC_LOGIC = 0
+CFG_macpcs64 CONFIG.INCLUDE_HYBRID_CMAC_RSFEC_LOGIC = 0
+CFG_macpcs64 CONFIG.INCLUDE_RSFEC_LOGIC = 0
+CFG_macpcs64 CONFIG.INCLUDE_SHARED_LOGIC = 1
+CFG_macpcs64 CONFIG.INCLUDE_STATISTICS_COUNTERS = 0
+CFG_macpcs64 CONFIG.INCLUDE_USER_FIFO = 1
+CFG_macpcs64 CONFIG.INS_LOSS_NYQ = 30
+CFG_macpcs64 CONFIG.IS_GT_WIZ_OLD = 0
+CFG_macpcs64 CONFIG.LANE1_GT_LOC = X0Y0
+CFG_macpcs64 CONFIG.LANE2_GT_LOC = NA
+CFG_macpcs64 CONFIG.LANE3_GT_LOC = NA
+CFG_macpcs64 CONFIG.LANE4_GT_LOC = NA
+CFG_macpcs64 CONFIG.LINE_RATE = 25
+CFG_macpcs64 CONFIG.MII_MAC_TX_CLK_PORT0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.MII_MAC_TX_CLK_PORT1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.MII_MAC_TX_CLK_PORT2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.MII_MAC_TX_CLK_PORT3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.NUM_OF_CORES = 1
+CFG_macpcs64 CONFIG.PTP_CLOCKING_MODE = 0
+CFG_macpcs64 CONFIG.PTP_OPERATION_MODE = 2
+CFG_macpcs64 CONFIG.QPLL0CLK_IN_PORT.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.QPLL0REFCLK_IN_PORT.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.QPLL0_RESET_PORT.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.QPLL1CLK_IN_PORT.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.QPLL1REFCLK_IN_PORT.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.QPLL1_RESET_PORT.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.QPLLRESET_IN_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RUNTIME_SWITCH = 0
+CFG_macpcs64 CONFIG.RXRECCLKOUT_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RXRECCLKOUT_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RXRECCLKOUT_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RXRECCLKOUT_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_CLK_PORT0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_CLK_PORT1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_CLK_PORT2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_CLK_PORT3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_CORE_CLK_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_CORE_CLK_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_CORE_CLK_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_CORE_CLK_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_EQ_MODE = AUTO
+CFG_macpcs64 CONFIG.RX_MAC_MII_CLK_PORT0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_MAC_MII_CLK_PORT1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_MAC_MII_CLK_PORT2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_MAC_MII_CLK_PORT3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_MAC_MII_RESET_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_MAC_MII_RESET_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_MAC_MII_RESET_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_MAC_MII_RESET_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_RESET_PORT0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_RESET_PORT1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_RESET_PORT2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_RESET_PORT3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_SERDES_RESET_PORT0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_SERDES_RESET_PORT1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_SERDES_RESET_PORT2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.RX_SERDES_RESET_PORT3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.STATISTICS_REGS_TYPE = 0
+CFG_macpcs64 CONFIG.SWITCH_1_10_25G = 0
+CFG_macpcs64 CONFIG.SYS_CLK = 4000
+CFG_macpcs64 CONFIG.SYS_RESET_PORT.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.S_AXI_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.S_AXI_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.S_AXI_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.S_AXI_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.S_AXI_SIGNAL_CLOCK0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.S_AXI_SIGNAL_CLOCK1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.S_AXI_SIGNAL_CLOCK2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.S_AXI_SIGNAL_CLOCK3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.S_AXI_SIGNAL_RESETN0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.S_AXI_SIGNAL_RESETN1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.S_AXI_SIGNAL_RESETN2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.S_AXI_SIGNAL_RESETN3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_CLK_PORT0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_CLK_PORT1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_CLK_PORT2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_CLK_PORT3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_CLK_PORT_GTM_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_CLK_PORT_GTM_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_CLK_PORT_GTM_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_CLK_PORT_GTM_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_CLK_PORT_NVGTM_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_CLK_PORT_NVGTM_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_CORE_CLK_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_CORE_CLK_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_CORE_CLK_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_CORE_CLK_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_LATENCY_ADJUST = 0
+CFG_macpcs64 CONFIG.TX_MAC_MII_CLK0_OUT_PORT0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_MAC_MII_CLK0_OUT_PORT1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_MAC_MII_CLK0_OUT_PORT2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_MAC_MII_CLK0_OUT_PORT3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_MAC_MII_CLK90_OUT_PORT0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_MAC_MII_CLK90_OUT_PORT1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_MAC_MII_CLK90_OUT_PORT3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_MAC_MII_CLK90_PORT2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_MAC_MII_CLK_PORT0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_MAC_MII_CLK_PORT1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_MAC_MII_CLK_PORT2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_MAC_MII_CLK_PORT3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_MAC_MII_RESET_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_MAC_MII_RESET_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_MAC_MII_RESET_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_MAC_MII_RESET_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_MII_CLK_PORT0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_MII_CLK_PORT1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_MII_CLK_PORT2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_MII_CLK_PORT3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_RESET_PORT0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_RESET_PORT1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_RESET_PORT2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.TX_RESET_PORT3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.USER_RX_RESET_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.USER_RX_RESET_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.USER_RX_RESET_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.USER_RX_RESET_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.USER_TX_RESET_0.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.USER_TX_RESET_1.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.USER_TX_RESET_2.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.USER_TX_RESET_3.INSERT_VIP = 0
+CFG_macpcs64 CONFIG.USE_BOARD_FLOW = false
+CFG_macpcs64 CONFIG.XGMII_INTERFACE = 1
+S1_END macpcs64
+# sec "S1 DONE"
+
+S1 >>>>>>>>>> S1 DONE
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 29 18:55:27 2026...
