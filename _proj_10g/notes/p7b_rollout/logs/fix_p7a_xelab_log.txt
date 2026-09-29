@@ -1,0 +1,64 @@
+line ending: CRLF
+PATCHED D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\tcl\run_lint_p7a.bat
+lines 38 -> 61
+  1| @echo off
+  2| REM run_lint_p7a.bat -- elaboration-level lint for EVERY P7a rtl file, including
+  3| REM   p7a_top.v (which the unit gate cannot analyze because it needs the VIO and
+  4| REM   GT IP modules, so it never appears in the gate's xvlog run).
+  5| REM
+  6| REM   Hard failures, same launcher as board\run_lint_p6e.bat:
+  7| REM     "8-11241/10-3091"  -> an undeclared net (silently becomes a 1-bit wire)
+  8| REM     "10-3091"     -> bit-width mismatch
+  9| REM     ERROR         -> any xvlog error
+ 10| REM   Exit: 0 = LINT-OK, 1 = a check fired, 97 = precondition refused.
+ 11| REM
+ 12| REM   Paths are absolute (from %~dp0) so the cd into lint\ cannot break them.
+ 13| REM   From Git Bash: cmd //c 'D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\tcl\run_lint_p7a.bat'
+ 14| setlocal
+ 15| set HERE=%~dp0
+ 16| set RTL=%~dp0..\rtl
+ 17| set XV=C:\AMDDesignTools\2025.2\Vivado\bin
+ 18| 
+ 19| REM ---- P7B: the IP sources p7a_top.v needs in order to ELABORATE ----
+ 20| REM   gt_10gbr  = the IP's own verilog (synth wrapper + hdl helper modules)
+ 21| REM   vio_p7a   = the synthesis STUB (the VIO core is not delivered as RTL)
+ 22| set IP=%~dp0..\vivado_prj\p7a_prj.gen\sources_1\ip
+ 23| set GTHDL=%IP%\gt_10gbr\hdl
+ 24| 
+ 25| if not exist "%RTL%\p7a_top.v" (echo [PATHGUARD FAIL] missing p7a_top.v & exit /b 97)
+ 26| if not exist "%RTL%\p7a_counters.v" (echo [PATHGUARD FAIL] missing p7a_counters.v & exit /b 97)
+ 27| REM   the xelab face needs the generated IP; refuse (97) rather than pass blind
+ 28| if not exist "%IP%\gt_10gbr\hdl\gtwizard_ultrascale_v1_7_gtwiz_reset.v" (echo [PATHGUARD FAIL] missing gt_10gbr hdl sources -- build p7a_prj first & exit /b 97)
+ 29| if not exist "%IP%\vio_p7a\vio_p7a_stub.v" (echo [PATHGUARD FAIL] missing vio_p7a_stub.v -- build p7a_prj first & exit /b 97)
+ 30| 
+ 31| if not exist "%HERE%lint" mkdir "%HERE%lint"
+ 32| cd /d "%HERE%lint"
+ 33| del /q files.f xvlog.txt xelab.txt >nul 2>&1
+ 34| 
+ 35| echo %RTL%\p7a_top.v> files.f
+ 36| for %%F in (p7a_counters.v p7a_tgl_sync.v p7a_bit_sync.v p7a_vio_ctrl.v p7a_ref_bucket.v clk_gen_p6b.v gt_10gbr_prbs_any.v gt_10gbr_example_stimulus_64b66b_async.v gt_10gbr_example_checking_64b66b_async.v gt_10gbr_example_reset_sync.v) do echo %RTL%\%%F>> files.f
+ 37| dir /b /s "%IP%\gt_10gbr\synth\*.v" >> files.f
+ 38| dir /b /s "%GTHDL%\*.v" >> files.f
+ 39| echo %IP%\vio_p7a\vio_p7a_stub.v >> files.f
+ 40| echo ---- files.f ----
+ 41| type files.f
+ 42| 
+ 43| call %XV%\xvlog.bat -work xil_defaultlib -i %RTL% -f files.f > xvlog.txt 2>&1
+ 44| echo ---- xvlog exit=%ERRORLEVEL% ----
+ 45| findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog.txt >NUL && (echo IMPLICIT-DECL-FAIL & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog.txt & exit /b 1)
+ 46| findstr /C:"10-3091" xvlog.txt >NUL && (echo BITWIDTH-MISMATCH-FAIL & findstr /C:"10-3091" xvlog.txt & exit /b 1)
+ 47| findstr /I /C:"ERROR" xvlog.txt >NUL && (echo XVLOG-ERROR-FAIL & findstr /I /C:"ERROR" xvlog.txt & exit /b 1)
+ 48| REM
+ 49| REM ---- xelab face (P7B): the PORT-CONNECTION form of trap 24 prints NOTHING
+ 50| REM   in xvlog (exit 0, empty log), so xvlog alone structurally cannot catch it.
+ 51| REM   Measured ~23 s.  vio_p7a_stub.v is a black box: we lint OUR rtl, not the
+ 52| REM   VIO core internals.
+ 53| call %XV%\xvlog.bat -work xil_defaultlib -i "%GTHDL%" "%XV%\..\data\verilog\src\glbl.v" >> xvlog.txt 2>&1
+ 54| call %XV%\xelab.bat -debug typical -L unisims_ver -L secureip xil_defaultlib.p7a_top xil_defaultlib.glbl -s lint_p7a -log xelab.txt > NUL 2>&1
+ 55| if errorlevel 1 (echo XELAB-FAIL & type xelab.txt & exit /b 1)
+ 56| REM   positive evidence: an empty/absent xelab log must NOT read as clean
+ 57| findstr /C:"Built simulation snapshot" xelab.txt >NUL || (echo XELAB-NO-SNAPSHOT & type xelab.txt & exit /b 1)
+ 58| findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab.txt >NUL && (echo IMPLICIT-DECL-FAIL-XELAB & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab.txt & exit /b 1)
+ 59| echo LINT-OK: no implicit nets, no width mismatch, no errors
+ 60| exit /b 0
+ 61| 

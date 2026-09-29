@@ -1,0 +1,569 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 20:24:56 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source s3_probe.tcl
+# set here [file normalize [file dirname [info script]]]
+# set root [file normalize [file join $here ..]]
+# set bit  [lindex $argv 0]
+# if {$bit eq ""} { set bit [file join $root pcs64_2ch pcs64_2ch.runs impl_1 xxv_loop_top.bit] }
+# if {![file exists $bit]} { error "bitstream not found: $bit" }
+# set ltx [file rootname $bit].ltx
+# proc sec {s} { puts "\nS3 >>>>>>>>>> $s" }
+# proc say {s} { puts $s }
+# sec "S3_ENV"
+
+S3 >>>>>>>>>> S3_ENV
+# say "S3_BIT $bit"
+S3_BIT D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_loop/pcs64_2ch/pcs64_2ch.runs/impl_1/xxv_loop_top.bit
+# say "S3_BIT_BYTES [file size $bit]"
+S3_BIT_BYTES 15431263
+# if {[catch {exec sha256sum $bit} sha]} { set sha "<sha256sum unavailable>" }
+# say "S3_BIT_SHA256 $sha"
+S3_BIT_SHA256 5560375b05850387b482e869e2734166db72631846d982339a2e1ec38b72ee2c *D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_loop/pcs64_2ch/pcs64_2ch.runs/impl_1/xxv_loop_top.bit
+# say "S3_LTX $ltx exists=[file exists $ltx]"
+S3_LTX D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_loop/pcs64_2ch/pcs64_2ch.runs/impl_1/xxv_loop_top.ltx exists=1
+# say "S3_TCL_VERSION [info patchlevel]"
+S3_TCL_VERSION 8.6.13
+# if {[catch {set big [expr {1 << 40}]} e]} { set big "<expr failed: $e>" }
+# say "S3_TCL_EXPR_1SHL40 $big"
+S3_TCL_EXPR_1SHL40 1099511627776
+# if {[catch {set fm [format %d 3000000000]} e2]} { set fm "<format failed: $e2>" }
+# say "S3_TCL_FMT_3E9 $fm"
+S3_TCL_FMT_3E9 -1294967296
+# sec "S3_PROGRAM"
+
+S3 >>>>>>>>>> S3_PROGRAM
+# open_hw_manager
+# connect_hw_server -url 192.168.0.38:3121
+INFO: [Labtools 27-2285] Connecting to hw_server url TCP:192.168.0.38:3121
+INFO: [Labtools 27-3415] Connecting to cs_server url TCP:localhost:0
+INFO: [Labtools 27-3417] Launching cs_server...
+INFO: [Labtools 27-2221] Launch Output:
+
+
+******** Xilinx cs_server v2025.2.0
+  ****** Build date   : Nov 14 2025-07:16:52
+    **** Build number : 2025.2.1763075812
+      ** Copyright 2017-2022 Xilinx, Inc. All Rights Reserved.
+      ** Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
+
+
+
+# current_hw_target [lindex [get_hw_targets] 0]
+# open_hw_target
+INFO: [Labtoolstcl 44-466] Opening hw_target 192.168.0.38:3121/xilinx_tcf/Digilent/210251391367
+# set dev [lindex [get_hw_devices] 0]
+# current_hw_device $dev
+# refresh_hw_device -update_hw_probes false $dev
+INFO: [Labtools 27-2302] Device xcku5p (JTAG device index = 0) is programmed with a design that has 1 VIO core(s).
+# say "S3_DEVICE $dev"
+S3_DEVICE xcku5p_0
+# set_property PROGRAM.FILE $bit $dev
+# if {[file exists $ltx]} {
+#     set_property PROBES.FILE $ltx $dev
+#     set_property FULL_PROBES.FILE $ltx $dev
+# }
+# program_hw_devices $dev
+INFO: [Labtools 27-3164] End of startup status: HIGH
+program_hw_devices: Time (s): cpu = 00:00:09 ; elapsed = 00:00:09 . Memory (MB): peak = 598.211 ; gain = 0.508
+# refresh_hw_device $dev
+INFO: [Labtools 27-2302] Device xcku5p (JTAG device index = 0) is programmed with a design that has 1 VIO core(s).
+INFO: [Labtools 27-1889] Uploading output probe values for VIO core [hw_vio_1]
+# say "S3_PROGRAMMED 1"
+S3_PROGRAMMED 1
+# set vio [lindex [get_hw_vios -of_objects $dev] 0]
+# if {$vio eq ""} { error "no VIO in the programmed design" }
+# say "S3_VIO $vio"
+S3_VIO hw_vio_1
+# say "S3_ALLPROBES [get_hw_probes -of_objects $vio]"
+S3_ALLPROBES oi00 oi01 oi02 oi03 oi04 oi05 oi06 oi07 oi08 oi09 oi10 oi11 oi12 oi13 oi14 oi15 oi16 oi17 oi18 oi19 oi20 oi21 oi22 oi23 oi24 oi25 oi26 oi27 oi28 oi29 oi30 oi31 oi32 oi33 u_vio/probe_in34 u_vio/probe_in35 sfp1_tx_dis_OBUF sfp2_tx_dis_OBUF vio_cmd_restart vio_cmd_snap vio_cmd_sysreset vio_send_cont
+# proc findprobe {vio names} {
+#     set all [get_hw_probes -of_objects $vio]
+#     foreach n $names { foreach p $all { if {$p eq $n} { return $p } } }
+#     return ""
+# }
+# set IN_NAMES {oi00 oi01 oi02 oi03 oi04 oi05 oi06 oi07 oi08 oi09 oi10 oi11 \
+#               oi12 oi13 oi14 oi15 oi16 oi17 oi18 oi19 oi20 oi21 oi22 oi23 \
+#               oi24 oi25 oi26 oi27 oi28 oi29 oi30 oi31 oi32 oi33}
+# set IN_LABEL {st0 st1 cnt0 cnt1 dclk_free tx0_free rx0_free rx1_free \
+#               c0_words c0_ctrl c0_idle c0_e c0_frames \
+#               c1_words c1_frames c1_ctrl c1_e c1_pay c1_badpay c1_badstart \
+#               c1_badhdr c1_badterm c1_badlen c1_abort c1_lastw c1_idle c1_misc \
+#               snap_gen c1_sword_lo c1_sword_hi c0_sword_lo flags               err_w dclk_snap}
+# set OUT_NAMES {send_cont cmd_restart cmd_sysreset cmd_sfp1_tx_dis cmd_sfp2_tx_dis cmd_snap}
+# set OUT_CANDS {
+#     {vio_send_cont probe_out0}
+#     {vio_cmd_restart probe_out1}
+#     {vio_cmd_sysreset probe_out2}
+#     {sfp1_tx_dis_OBUF vio_cmd_sfp1_tx_dis probe_out3}
+#     {sfp2_tx_dis_OBUF vio_cmd_sfp2_tx_dis probe_out4}
+#     {vio_cmd_snap probe_out5}
+# }
+# set NPROBE 34
+# array set PIN {}
+# for {set i 0} {$i < $NPROBE} {incr i} {
+#     set nm [lindex $IN_NAMES $i]
+#     set p [findprobe $vio [list $nm "probe_in$i"]]
+#     if {$p eq ""} { error "probe_in$i ($nm) not found" }
+#     set PIN(in,$i) $p
+#     say "S3_PIN in,$i = $p"
+# }
+S3_PIN in,0 = oi00
+S3_PIN in,1 = oi01
+S3_PIN in,2 = oi02
+S3_PIN in,3 = oi03
+S3_PIN in,4 = oi04
+S3_PIN in,5 = oi05
+S3_PIN in,6 = oi06
+S3_PIN in,7 = oi07
+S3_PIN in,8 = oi08
+S3_PIN in,9 = oi09
+S3_PIN in,10 = oi10
+S3_PIN in,11 = oi11
+S3_PIN in,12 = oi12
+S3_PIN in,13 = oi13
+S3_PIN in,14 = oi14
+S3_PIN in,15 = oi15
+S3_PIN in,16 = oi16
+S3_PIN in,17 = oi17
+S3_PIN in,18 = oi18
+S3_PIN in,19 = oi19
+S3_PIN in,20 = oi20
+S3_PIN in,21 = oi21
+S3_PIN in,22 = oi22
+S3_PIN in,23 = oi23
+S3_PIN in,24 = oi24
+S3_PIN in,25 = oi25
+S3_PIN in,26 = oi26
+S3_PIN in,27 = oi27
+S3_PIN in,28 = oi28
+S3_PIN in,29 = oi29
+S3_PIN in,30 = oi30
+S3_PIN in,31 = oi31
+S3_PIN in,32 = oi32
+S3_PIN in,33 = oi33
+# for {set i 0} {$i < 6} {incr i} {
+#     set nm [lindex $OUT_NAMES $i]
+#     set p [findprobe $vio [lindex $OUT_CANDS $i]]
+#     if {$p eq ""} { error "probe_out$i ($nm) not found" }
+#     set PIN(out,$i) $p
+#     say "S3_PIN out,$i ($nm) = $p"
+# }
+S3_PIN out,0 (send_cont) = vio_send_cont
+S3_PIN out,1 (cmd_restart) = vio_cmd_restart
+S3_PIN out,2 (cmd_sysreset) = vio_cmd_sysreset
+S3_PIN out,3 (cmd_sfp1_tx_dis) = sfp1_tx_dis_OBUF
+S3_PIN out,4 (cmd_sfp2_tx_dis) = sfp2_tx_dis_OBUF
+S3_PIN out,5 (cmd_snap) = vio_cmd_snap
+# say "S3_PROBE_MAP_OK $NPROBE in / 6 out"
+S3_PROBE_MAP_OK 34 in / 6 out
+# proc vset {vio p val} {
+#     set w 1
+#     catch {set w [get_property WIDTH $p]}
+#     set n [expr {int(ceil($w / 4.0))}]
+#     set s [format "%0${n}X" [expr {$val & ((1 << $w) - 1)}]]
+#     set_property OUTPUT_VALUE $s $p
+#     commit_hw_vio $vio
+# }
+# proc vget {vio p} {
+#     refresh_hw_vio $vio
+#     set s [get_property INPUT_VALUE $p]
+#     set r "HEX"
+#     catch {set r [get_property INPUT_VALUE_RADIX $p]}
+#     switch -- $r {
+#         HEX     { return [expr "0x$s"] }
+#         BIN     { return [expr "0b$s"] }
+#         OCT     { return [expr "0o$s"] }
+#         default { return [expr {$s}] }
+#     }
+# }
+# proc vget_s {vio p} {
+#     refresh_hw_vio $vio
+#     return [get_property INPUT_VALUE $p]
+# }
+# set GEN 0
+# proc snap {vio} {
+#     global PIN GEN
+#     set before [vget $vio $PIN(in,27)]
+#     set g0 [expr {($before >> 16) & 0xFFFF}]
+#     vset $vio $PIN(out,5) 1
+#     vset $vio $PIN(out,5) 0
+#     set g1 $g0
+#     for {set i 0} {$i < 50} {incr i} {
+#         after 20
+#         set v [vget $vio $PIN(in,27)]
+#         set g1 [expr {($v >> 16) & 0xFFFF}]
+#         if {$g1 != $g0} break
+#     }
+#     set GEN $g1
+#     set d [expr {($g1 - $g0) & 0xFFFF}]
+#     say "S3_SNAP_GEN before=$g0 after=$g1 delta=$d"
+#     if {$d != 1} { say "S3_SNAP_FAIL request counter did not advance by exactly 1" }
+#     return $d
+# }
+# proc readall {vio arrname} {
+#     upvar 1 $arrname A
+#     global PIN IN_LABEL NPROBE
+#     snap $vio
+#     global NPROBE
+#     for {set i 0} {$i < $NPROBE} {incr i} {
+#         set A([lindex $IN_LABEL $i]) [vget $vio $PIN(in,$i)]
+#     }
+#     # raw hex for the two bundles: decodes every bit without any formatting risk
+#     set A(st0_hex) [vget_s $vio $PIN(in,0)]
+#     set A(st1_hex) [vget_s $vio $PIN(in,1)]
+#     # ack bits from the snap_gen word: [3]=ack_dclk [2]=ack_tx0 [1]=ack_rx0 [0]=ack_rx1
+#     set sg $A(snap_gen)
+#     set A(ack_dclk) [expr {($sg >> 3) & 1}]
+#     set A(ack_tx0) [expr {($sg >> 2) & 1}]
+#     set A(ack_rx0) [expr {($sg >> 1) & 1}]
+#     set A(ack_rx1) [expr {($sg >> 0) & 1}]
+#     return
+# }
+# proc dump {arrname tag} {
+#     upvar 1 $arrname A
+#     foreach k [lsort [array names A]] { say "S3_RD $tag $k $A($k)" }
+# }
+# proc bits {v} {
+#     set s ""
+#     for {set i 15} {$i >= 0} {incr i -1} { append s [expr {($v >> $i) & 1}] }
+#     return $s
+# }
+# proc statline {tag v} {
+#     say "S3_ST $tag bits(15..0)=[bits $v] gtpg=[expr {($v>>0)&1}] blocklock=[expr {($v>>1)&1}] status=[expr {($v>>2)&1}] hiber=[expr {($v>>3)&1}] rlocalfault=[expr {($v>>4)&1}] framing=[expr {($v>>5)&1}] badcode=[expr {($v>>6)&1}] errvalid=[expr {($v>>7)&1}] fifoerr=[expr {($v>>8)&1}] txlocalfault=[expr {($v>>9)&1}] los=[expr {($v>>10)&1}] userrxrst=[expr {($v>>11)&1}] usertxrst=[expr {($v>>12)&1}]"
+# }
+# proc cstatus {v} { return [expr {($v >> 13) & 0x1F}] }
+# sec "S3_STEP1_LINK"
+
+S3 >>>>>>>>>> S3_STEP1_LINK
+# after 300
+# array set A {}
+# readall $vio A
+S3_SNAP_GEN before=0 after=1 delta=1
+# statline ch0 $A(st0)
+S3_ST ch0 bits(15..0)=1100000000000111 gtpg=1 blocklock=1 status=1 hiber=0 rlocalfault=0 framing=0 badcode=0 errvalid=0 fifoerr=0 txlocalfault=0 los=0 userrxrst=0 usertxrst=0
+# say "S3_STHEX ch0 $A(st0_hex) $A(st1_hex)"
+S3_STHEX ch0 000dc007 00000007
+# statline ch1 $A(st1)
+S3_ST ch1 bits(15..0)=0000000000000111 gtpg=1 blocklock=1 status=1 hiber=0 rlocalfault=0 framing=0 badcode=0 errvalid=0 fifoerr=0 txlocalfault=0 los=0 userrxrst=0 usertxrst=0
+# say "S3_COMPLETION_STATUS_STEP1 [cstatus $A(st0)]"
+S3_COMPLETION_STATUS_STEP1 14
+# say "S3_RATES_STEP1 dclk_free $A(dclk_free) tx0_free $A(tx0_free) rx0_free $A(rx0_free) rx1_free $A(rx1_free)"
+S3_RATES_STEP1 dclk_free 204209478 tx0_free 216278154 rx0_free 216216180 rx1_free 216216180
+# say "S3_C1_STEP1 words $A(c1_words) frames $A(c1_frames) ctrl $A(c1_ctrl) e $A(c1_e) pay $A(c1_pay) badpay $A(c1_badpay) badstart $A(c1_badstart) badhdr $A(c1_badhdr)"
+S3_C1_STEP1 words 216214451 frames 20 ctrl 216213831 e 81 pay 580 badpay 0 badstart 0 badhdr 0
+# say "S3_SWORD_STEP1 hi $A(c1_sword_hi) lo $A(c1_sword_lo) misc $A(c1_misc) lastw $A(c1_lastw)"
+S3_SWORD_STEP1 hi 3579139413 lo 1431655931 misc 16777216 lastw 32
+# say "S3_CNT0 $A(cnt0) CNT1 $A(cnt1)"
+S3_CNT0 4278190080 CNT1 4278190080
+# sec "S3_STEP2_SHORT_OFFICIAL_RUN"
+
+S3 >>>>>>>>>> S3_STEP2_SHORT_OFFICIAL_RUN
+# after 300
+# array set B {}
+# readall $vio B
+S3_SNAP_GEN before=1 after=2 delta=1
+# say "S3_STEP2_COMPLETION_STATUS [cstatus $B(st0)]"
+S3_STEP2_COMPLETION_STATUS 14
+# say "S3_STEP2_COMPLETION_STATUS_HEX [vget_s $vio $PIN(in,0)]"
+S3_STEP2_COMPLETION_STATUS_HEX 000dc007
+# say "S3_STEP2_C1 words $B(c1_words) frames $B(c1_frames) ctrl $B(c1_ctrl) e $B(c1_e) pay $B(c1_pay) badpay $B(c1_badpay) badstart $B(c1_badstart) badhdr $B(c1_badhdr) badterm $B(c1_badterm) badlen $B(c1_badlen) abort $B(c1_abort)"
+S3_STEP2_C1 words 439404151 frames 20 ctrl 439403531 e 81 pay 580 badpay 0 badstart 0 badhdr 0 badterm 0 badlen 0 abort 0
+# say "S3_STEP2_C1_LASTW $B(c1_lastw) IDLE $B(c1_idle)"
+S3_STEP2_C1_LASTW 32 IDLE 439403060
+# say "S3_STEP2_C0 words $B(c0_words) ctrl $B(c0_ctrl) idle $B(c0_idle) e $B(c0_e) frames $B(c0_frames)"
+S3_STEP2_C0 words 439404151 ctrl 439404151 idle 439403554 e 0 frames 0
+# say "S3_STEP2_CNT0 $B(cnt0) CNT1 $B(cnt1)"
+S3_STEP2_CNT0 4278190080 CNT1 4278190080
+# say "S3_STEP2_ACKS tx0 $B(ack_tx0) rx0 $B(ack_rx0) rx1 $B(ack_rx1)"
+S3_STEP2_ACKS tx0 0 rx0 0 rx1 0
+# say "S3_STEP2_ERRW hex $B(err_w) acc0 [expr {$B(err_w) & 0xFF}] nv0 [expr {($B(err_w) >> 8) & 0xFF}] acc1 [expr {($B(err_w) >> 16) & 0xFF}] nv1 [expr {($B(err_w) >> 24) & 0xFF}]"
+S3_STEP2_ERRW hex 0 acc0 0 nv0 0 acc1 0 nv1 0
+# sec "S3_STEP3_LONG_RUN"
+
+S3 >>>>>>>>>> S3_STEP3_LONG_RUN
+# vset $vio $PIN(out,0) 1
+# vset $vio $PIN(out,1) 1
+# vset $vio $PIN(out,1) 0
+# after 1500
+# say "S3_LONG_ARMED (send_cont=1, restart pulsed: the FSM re-runs and this time the generator streams)"
+S3_LONG_ARMED (send_cont=1, restart pulsed: the FSM re-runs and this time the generator streams)
+# array set C {}
+# readall $vio C
+S3_SNAP_GEN before=2 after=3 delta=1
+# say "S3_LONG_T0 dclk_free $C(dclk_free) tx0_free $C(tx0_free) rx0_free $C(rx0_free) rx1_free $C(rx1_free)"
+S3_LONG_T0 dclk_free 513364940 tx0_free 780248514 rx0_free 780186540 rx1_free 780186540
+# say "S3_LONG_T0 c1_words $C(c1_words) c1_frames $C(c1_frames) c1_pay $C(c1_pay) c1_e $C(c1_e) c1_badstart $C(c1_badstart) c1_badhdr $C(c1_badhdr) c1_badpay $C(c1_badpay) c1_badterm $C(c1_badterm) c1_badlen $C(c1_badlen) c1_abort $C(c1_abort)"
+S3_LONG_T0 c1_words 780184811 c1_frames 7536664 c1_pay 218563276 c1_e 81 c1_badstart 0 c1_badhdr 0 c1_badpay 0 c1_badterm 0 c1_badlen 0 c1_abort 0
+# say "S3_LONG_T0 c0_words $C(c0_words) c0_ctrl $C(c0_ctrl) c0_idle $C(c0_idle) c0_e $C(c0_e)"
+S3_LONG_T0 c0_words 780184811 c0_ctrl 780184811 c0_idle 780184214 c0_e 0
+# set t0 [clock milliseconds]
+# after 6000
+# array set D {}
+# readall $vio D
+S3_SNAP_GEN before=3 after=4 delta=1
+# set t1 [clock milliseconds]
+# set dt [expr {($t1 - $t0) / 1000.0}]
+# say "S3_LONG_T1 dclk_free $D(dclk_free) tx0_free $D(tx0_free) rx0_free $D(rx0_free) rx1_free $D(rx1_free)"
+S3_LONG_T1 dclk_free 1171913831 tx0_free 1802155735 rx0_free 1802093761 rx1_free 1802093761
+# say "S3_LONG_T1 c1_words $D(c1_words) c1_frames $D(c1_frames) c1_pay $D(c1_pay) c1_e $D(c1_e) c1_badstart $D(c1_badstart) c1_badhdr $D(c1_badhdr) c1_badpay $D(c1_badpay) c1_badterm $D(c1_badterm) c1_badlen $D(c1_badlen) c1_abort $D(c1_abort)"
+S3_LONG_T1 c1_words 1802092032 c1_frames 37592759 c1_pay 1090190022 c1_e 81 c1_badstart 0 c1_badhdr 0 c1_badpay 0 c1_badterm 0 c1_badlen 0 c1_abort 0
+# say "S3_LONG_T1 c0_words $D(c0_words) c0_ctrl $D(c0_ctrl) c0_idle $D(c0_idle) c0_e $D(c0_e)"
+S3_LONG_T1 c0_words 1802092032 c0_ctrl 1802092032 c0_idle 1802091435 c0_e 0
+# say "S3_LONG_DT_SECONDS $dt"
+S3_LONG_DT_SECONDS 6.609
+# foreach pair {dclk_free tx0_free rx0_free rx1_free c1_words c1_frames c1_pay c1_e c1_badstart c1_badhdr c1_badpay c1_badterm c1_badlen c1_abort c0_words c0_ctrl c0_idle c0_e} {
+#     set dv [expr {[set D($pair)] - [set C($pair)]}]
+#     say "S3_LONG_DELTA $pair $dv"
+# }
+S3_LONG_DELTA dclk_free 658548891
+S3_LONG_DELTA tx0_free 1021907221
+S3_LONG_DELTA rx0_free 1021907221
+S3_LONG_DELTA rx1_free 1021907221
+S3_LONG_DELTA c1_words 1021907221
+S3_LONG_DELTA c1_frames 30056095
+S3_LONG_DELTA c1_pay 871626746
+S3_LONG_DELTA c1_e 0
+S3_LONG_DELTA c1_badstart 0
+S3_LONG_DELTA c1_badhdr 0
+S3_LONG_DELTA c1_badpay 0
+S3_LONG_DELTA c1_badterm 0
+S3_LONG_DELTA c1_badlen 0
+S3_LONG_DELTA c1_abort 0
+S3_LONG_DELTA c0_words 1021907221
+S3_LONG_DELTA c0_ctrl 1021907221
+S3_LONG_DELTA c0_idle 1021907221
+S3_LONG_DELTA c0_e 0
+# set dd [expr {[set D(dclk_snap)] - [set C(dclk_snap)]}]
+# say "S3_LONG_DCLK_SNAP_T0 $C(dclk_snap) T1 $D(dclk_snap)  (live dclk_free $C(dclk_free) -> $D(dclk_free))"
+S3_LONG_DCLK_SNAP_T0 500410682 T1 1154434919  (live dclk_free 513364940 -> 1171913831)
+# say "S3_LONG_WALLCLOCK_SECONDS $dt" 
+S3_LONG_WALLCLOCK_SECONDS 6.609
+# say "S3_LONG_DD $dd"
+S3_LONG_DD 654024237
+# foreach pair {tx0_free rx0_free rx1_free} {
+#     set dv [expr {[set D($pair)] - [set C($pair)]}]
+#     say "S3_LONG_FREQ $pair mhz [expr {$dv / double($dd) * 100.0}]"
+# }
+S3_LONG_FREQ tx0_free mhz 156.2491362227605
+S3_LONG_FREQ rx0_free mhz 156.2491362227605
+S3_LONG_FREQ rx1_free mhz 156.2491362227605
+# set dw [expr {[set D(rx1_free)] - [set C(rx1_free)]}]
+# say "S3_LONG_XGMII_WORD_RATE mhz [expr {$dw / double($dd) * 100.0}]"
+S3_LONG_XGMII_WORD_RATE mhz 156.2491362227605
+# say "S3_LONG_LINE_RATE mbps [expr {$dw / double($dd) * 6400.0}]"
+S3_LONG_LINE_RATE mbps 9999.944718256673
+# set dfr [expr {[set D(c1_frames)] - [set C(c1_frames)]}]
+# set dpw [expr {[set D(c1_pay)] - [set C(c1_pay)]}]
+# if {$dfr > 0} {
+#     say "S3_LONG_PAYWORDS_PER_FRAME [expr {$dpw / double($dfr)}]"
+# } else {
+#     say "S3_LONG_PAYWORDS_PER_FRAME <no frames in this window>"
+# }
+S3_LONG_PAYWORDS_PER_FRAME 28.999999700559904
+# set dwds [expr {[set D(c1_words)] - [set C(c1_words)]}]
+# if {$dfr > 0} {
+#     say "S3_LONG_WORDS_PER_FRAME [expr {$dwds / double($dfr)}]"
+#     # wall-clock cross check: this counter's rate against the host clock
+#     say "S3_LONG_WALLCLOCK_FRAME_RATE_PER_S [expr {$dfr / $dt}]"
+#     say "S3_LONG_WALLCLOCK_WORD_RATE_MHZ [expr {$dwds / $dt / 1.0e6}]"
+# }
+S3_LONG_WORDS_PER_FRAME 33.999999700559904
+S3_LONG_WALLCLOCK_FRAME_RATE_PER_S 4547752.307459525
+S3_LONG_WALLCLOCK_WORD_RATE_MHZ 154.62357709184448
+# sec "S3_STEP4_STOP_AND_JUDGE"
+
+S3 >>>>>>>>>> S3_STEP4_STOP_AND_JUDGE
+# vset $vio $PIN(out,0) 0
+# after 200
+# array set E {}
+# readall $vio E
+S3_SNAP_GEN before=4 after=5 delta=1
+# say "S3_STEP4_COMPLETION_STATUS [cstatus $E(st0)]"
+S3_STEP4_COMPLETION_STATUS 1
+# say "S3_STEP4_CPL_HEX [vget_s $vio $PIN(in,0)]"
+S3_STEP4_CPL_HEX 000c2007
+# say "S3_STEP4_C1 words $E(c1_words) frames $E(c1_frames) ctrl $E(c1_ctrl) e $E(c1_e) pay $E(c1_pay) badpay $E(c1_badpay)"
+S3_STEP4_C1 words 1932165861 frames 40287842 ctrl 683242759 e 81 pay 1168347418 badpay 0
+# say "S3_STEP4_CNT0 $E(cnt0) CNT1 $E(cnt1)"
+S3_STEP4_CNT0 4278190080 CNT1 4278190080
+# say "S3_STEP4_ERRW hex $E(err_w) acc0 [expr {$E(err_w) & 0xFF}] nv0 [expr {($E(err_w) >> 8) & 0xFF}] acc1 [expr {($E(err_w) >> 16) & 0xFF}] nv1 [expr {($E(err_w) >> 24) & 0xFF}]"
+S3_STEP4_ERRW hex 0 acc0 0 nv0 0 acc1 0 nv1 0
+# say "S3_STHEX E $E(st0_hex) $E(st1_hex)"
+S3_STHEX E 000c2007 00000007
+# statline ch0 $E(st0)
+S3_ST ch0 bits(15..0)=0010000000000111 gtpg=1 blocklock=1 status=1 hiber=0 rlocalfault=0 framing=0 badcode=0 errvalid=0 fifoerr=0 txlocalfault=0 los=0 userrxrst=0 usertxrst=0
+# statline ch1 $E(st1)
+S3_ST ch1 bits(15..0)=0000000000000111 gtpg=1 blocklock=1 status=1 hiber=0 rlocalfault=0 framing=0 badcode=0 errvalid=0 fifoerr=0 txlocalfault=0 los=0 userrxrst=0 usertxrst=0
+# sec "S3_STEP5_NEGCTRL_SFP1_TX_DIS"
+
+S3 >>>>>>>>>> S3_STEP5_NEGCTRL_SFP1_TX_DIS
+# vset $vio $PIN(out,3) 1
+# after 500
+# array set F {}
+# readall $vio F
+S3_SNAP_GEN before=5 after=6 delta=1
+# say "S3_STHEX F $F(st0_hex) $F(st1_hex)"
+S3_STHEX F 00042007 00000411
+# statline ch0 $F(st0)
+S3_ST ch0 bits(15..0)=0010000000000111 gtpg=1 blocklock=1 status=1 hiber=0 rlocalfault=0 framing=0 badcode=0 errvalid=0 fifoerr=0 txlocalfault=0 los=0 userrxrst=0 usertxrst=0
+# statline ch1 $F(st1)
+S3_ST ch1 bits(15..0)=0000010000010001 gtpg=1 blocklock=0 status=0 hiber=0 rlocalfault=1 framing=0 badcode=0 errvalid=0 fifoerr=0 txlocalfault=0 los=1 userrxrst=0 usertxrst=0
+# say "S3_NEG1_LINK_KILLED_COMPLETION_STATUS_LATCHED [cstatus $F(st0)]"
+S3_NEG1_LINK_KILLED_COMPLETION_STATUS_LATCHED 1
+# say "S3_NEG1_C1 frames $F(c1_frames) e $F(c1_e) words $F(c1_words)"
+S3_NEG1_C1 frames 40287842 e 81 words 2106277435
+# set f0 [set F(c1_frames)]
+# set w0 [set F(c1_words)]
+# after 2500
+# array set G {}
+# readall $vio G
+S3_SNAP_GEN before=6 after=7 delta=1
+# say "S3_NEG1_FRAMES_DELTA_WHILE_DEAD [expr {([set G(c1_frames)] - $f0) & 0xFFFFFFFF}]"
+S3_NEG1_FRAMES_DELTA_WHILE_DEAD 4254679454
+# say "S3_NEG1_WORDS_DELTA_WHILE_DEAD [expr {([set G(c1_words)] - $w0) & 0xFFFFFFFF}]"
+S3_NEG1_WORDS_DELTA_WHILE_DEAD 2305020177
+# say "S3_STHEX G $G(st0_hex) $G(st1_hex)"
+S3_STHEX G 00042007 00000411
+# statline ch0 $G(st0)
+S3_ST ch0 bits(15..0)=0010000000000111 gtpg=1 blocklock=1 status=1 hiber=0 rlocalfault=0 framing=0 badcode=0 errvalid=0 fifoerr=0 txlocalfault=0 los=0 userrxrst=0 usertxrst=0
+# statline ch1 $G(st1)
+S3_ST ch1 bits(15..0)=0000010000010001 gtpg=1 blocklock=0 status=0 hiber=0 rlocalfault=1 framing=0 badcode=0 errvalid=0 fifoerr=0 txlocalfault=0 los=1 userrxrst=0 usertxrst=0
+# say "S3_NEG1_CNT1 $G(cnt1) CNT0 $G(cnt0)"
+S3_NEG1_CNT1 4279306752 CNT0 4278190080
+# sec "S3_STEP6_NEGCTRL_REARM"
+
+S3 >>>>>>>>>> S3_STEP6_NEGCTRL_REARM
+# vset $vio $PIN(out,1) 1
+# vset $vio $PIN(out,1) 0
+# after 600
+# array set H {}
+# readall $vio H
+S3_SNAP_GEN before=7 after=8 delta=1
+# say "S3_NEG1_REARM_COMPLETION_STATUS [cstatus $H(st0)]"
+S3_NEG1_REARM_COMPLETION_STATUS 2
+# say "S3_STHEX H $H(st0_hex) $H(st1_hex)"
+S3_STHEX H 00044007 00000411
+# statline ch0 $H(st0)
+S3_ST ch0 bits(15..0)=0100000000000111 gtpg=1 blocklock=1 status=1 hiber=0 rlocalfault=0 framing=0 badcode=0 errvalid=0 fifoerr=0 txlocalfault=0 los=0 userrxrst=0 usertxrst=0
+# statline ch1 $H(st1)
+S3_ST ch1 bits(15..0)=0000010000010001 gtpg=1 blocklock=0 status=0 hiber=0 rlocalfault=1 framing=0 badcode=0 errvalid=0 fifoerr=0 txlocalfault=0 los=1 userrxrst=0 usertxrst=0
+# sec "S3_STEP7_RECOVER"
+
+S3 >>>>>>>>>> S3_STEP7_RECOVER
+# vset $vio $PIN(out,3) 0
+# after 400
+# array set I {}
+# readall $vio I
+S3_SNAP_GEN before=8 after=9 delta=1
+# say "S3_STHEX I $I(st0_hex) $I(st1_hex)"
+S3_STHEX I 000c4007 00000007
+# statline ch0 $I(st0)
+S3_ST ch0 bits(15..0)=0100000000000111 gtpg=1 blocklock=1 status=1 hiber=0 rlocalfault=0 framing=0 badcode=0 errvalid=0 fifoerr=0 txlocalfault=0 los=0 userrxrst=0 usertxrst=0
+# statline ch1 $I(st1)
+S3_ST ch1 bits(15..0)=0000000000000111 gtpg=1 blocklock=1 status=1 hiber=0 rlocalfault=0 framing=0 badcode=0 errvalid=0 fifoerr=0 txlocalfault=0 los=0 userrxrst=0 usertxrst=0
+# vset $vio $PIN(out,1) 1
+# vset $vio $PIN(out,1) 0
+# after 600
+# array set J {}
+# readall $vio J
+S3_SNAP_GEN before=9 after=10 delta=1
+# say "S3_RECOV_COMPLETION_STATUS [cstatus $J(st0)]"
+S3_RECOV_COMPLETION_STATUS 1
+# say "S3_STHEX J $J(st0_hex) $J(st1_hex)"
+S3_STHEX J 000c2007 00000007
+# statline ch0 $J(st0)
+S3_ST ch0 bits(15..0)=0010000000000111 gtpg=1 blocklock=1 status=1 hiber=0 rlocalfault=0 framing=0 badcode=0 errvalid=0 fifoerr=0 txlocalfault=0 los=0 userrxrst=0 usertxrst=0
+# statline ch1 $J(st1)
+S3_ST ch1 bits(15..0)=0000000000000111 gtpg=1 blocklock=1 status=1 hiber=0 rlocalfault=0 framing=0 badcode=0 errvalid=0 fifoerr=0 txlocalfault=0 los=0 userrxrst=0 usertxrst=0
+# say "S3_RECOV_C1 frames $J(c1_frames) e $J(c1_e) badpay $J(c1_badpay) badstart $J(c1_badstart) badhdr $J(c1_badhdr)"
+S3_RECOV_C1 frames 20 e 66 badpay 0 badstart 0 badhdr 0
+# sec "S3_STEP8_NEGCTRL_SFP2_TX_DIS"
+
+S3 >>>>>>>>>> S3_STEP8_NEGCTRL_SFP2_TX_DIS
+# vset $vio $PIN(out,0) 1
+# after 500
+# array set K {}
+# readall $vio K
+S3_SNAP_GEN before=10 after=11 delta=1
+# set kw0 [set K(c1_words)]
+# vset $vio $PIN(out,4) 1
+# after 500
+# array set L {}
+# readall $vio L
+S3_SNAP_GEN before=11 after=12 delta=1
+# say "S3_STHEX L $L(st0_hex) $L(st1_hex)"
+S3_STHEX L 000c2411 00000007
+# statline ch0 $L(st0)
+S3_ST ch0 bits(15..0)=0010010000010001 gtpg=1 blocklock=0 status=0 hiber=0 rlocalfault=1 framing=0 badcode=0 errvalid=0 fifoerr=0 txlocalfault=0 los=1 userrxrst=0 usertxrst=0
+# statline ch1 $L(st1)
+S3_ST ch1 bits(15..0)=0000000000000111 gtpg=1 blocklock=1 status=1 hiber=0 rlocalfault=0 framing=0 badcode=0 errvalid=0 fifoerr=0 txlocalfault=0 los=0 userrxrst=0 usertxrst=0
+# say "S3_NEG2_C1_FRAMES_AT_KILL $L(c1_frames)"
+S3_NEG2_C1_FRAMES_AT_KILL 20
+# after 2000
+# array set M {}
+# readall $vio M
+S3_SNAP_GEN before=12 after=13 delta=1
+# say "S3_NEG2_C1_WORDS_DELTA_STILL_FLOWING [expr {([set M(c1_words)] - $kw0) & 0xFFFFFFFF}]"
+S3_NEG2_C1_WORDS_DELTA_STILL_FLOWING 578890843
+# say "S3_NEG2_C1_FRAMES_DELTA [expr {([set M(c1_frames)] - [set K(c1_frames)]) & 0xFFFFFFFF}]"
+S3_NEG2_C1_FRAMES_DELTA 0
+# say "S3_NEG2_C1_E_DELTA [expr {([set M(c1_e)] - [set K(c1_e)]) & 0xFFFFFFFF}]"
+S3_NEG2_C1_E_DELTA 0
+# say "S3_STHEX M $M(st0_hex) $M(st1_hex)"
+S3_STHEX M 000c2411 00000007
+# statline ch0 $M(st0)
+S3_ST ch0 bits(15..0)=0010010000010001 gtpg=1 blocklock=0 status=0 hiber=0 rlocalfault=1 framing=0 badcode=0 errvalid=0 fifoerr=0 txlocalfault=0 los=1 userrxrst=0 usertxrst=0
+# statline ch1 $M(st1)
+S3_ST ch1 bits(15..0)=0000000000000111 gtpg=1 blocklock=1 status=1 hiber=0 rlocalfault=0 framing=0 badcode=0 errvalid=0 fifoerr=0 txlocalfault=0 los=0 userrxrst=0 usertxrst=0
+# sec "S3_STEP9_RESTORE"
+
+S3 >>>>>>>>>> S3_STEP9_RESTORE
+# vset $vio $PIN(out,4) 0
+# after 300
+# vset $vio $PIN(out,0) 0
+# after 300
+# vset $vio $PIN(out,1) 1
+# vset $vio $PIN(out,1) 0
+# after 600
+# array set N {}
+# readall $vio N
+S3_SNAP_GEN before=13 after=14 delta=1
+# say "S3_FINAL_COMPLETION_STATUS [cstatus $N(st0)]"
+S3_FINAL_COMPLETION_STATUS 1
+# say "S3_STHEX N $N(st0_hex) $N(st1_hex)"
+S3_STHEX N 000c2007 00000007
+# statline ch0 $N(st0)
+S3_ST ch0 bits(15..0)=0010000000000111 gtpg=1 blocklock=1 status=1 hiber=0 rlocalfault=0 framing=0 badcode=0 errvalid=0 fifoerr=0 txlocalfault=0 los=0 userrxrst=0 usertxrst=0
+# statline ch1 $N(st1)
+S3_ST ch1 bits(15..0)=0000000000000111 gtpg=1 blocklock=1 status=1 hiber=0 rlocalfault=0 framing=0 badcode=0 errvalid=0 fifoerr=0 txlocalfault=0 los=0 userrxrst=0 usertxrst=0
+# say "S3_FINAL_C1 words $N(c1_words) frames $N(c1_frames) e $N(c1_e) badpay $N(c1_badpay) badstart $N(c1_badstart) badhdr $N(c1_badhdr) badterm $N(c1_badterm) badlen $N(c1_badlen) abort $N(c1_abort) pay $N(c1_pay)"
+S3_FINAL_C1 words 1372319854 frames 40 e 66 badpay 0 badstart 0 badhdr 0 badterm 0 badlen 0 abort 0 pay 1160
+# say "S3_FINAL_SWORD hi $N(c1_sword_hi) lo $N(c1_sword_lo)"
+S3_FINAL_SWORD hi 3579139413 lo 1431655931
+# say "S3_FINAL_MISC $N(c1_misc) LASTW $N(c1_lastw) IDLE $N(c1_idle)"
+S3_FINAL_MISC 16777216 LASTW 32 IDLE 1330759165
+# say "S3_FINAL_C0 words $N(c0_words) ctrl $N(c0_ctrl) idle $N(c0_idle) e $N(c0_e) frames $N(c0_frames)"
+S3_FINAL_C0 words 343092822 ctrl 343092822 idle 231462623 e 11808 frames 0
+# say "S3_FINAL_CNT0 $N(cnt0) CNT1 $N(cnt1)"
+S3_FINAL_CNT0 4278779648 CNT1 4280626944
+# say "S3_FINAL_ERRW hex $N(err_w) acc0 [expr {$N(err_w) & 0xFF}] nv0 [expr {($N(err_w) >> 8) & 0xFF}] acc1 [expr {($N(err_w) >> 16) & 0xFF}] nv1 [expr {($N(err_w) >> 24) & 0xFF}]"
+S3_FINAL_ERRW hex 0 acc0 0 nv0 0 acc1 0 nv1 0
+# say "S3_FINAL_DCLK_SNAP $N(dclk_snap) ACKS dclk $N(ack_dclk) tx0 $N(ack_tx0) rx0 $N(ack_rx0) rx1 $N(ack_rx1)"
+S3_FINAL_DCLK_SNAP 2696526678 ACKS dclk 0 tx0 0 rx0 0 rx1 0
+# say "S3_FINAL_ACKS tx0 $N(ack_tx0) rx0 $N(ack_rx0) rx1 $N(ack_rx1)"
+S3_FINAL_ACKS tx0 0 rx0 0 rx1 0
+# say "S3_FINAL_FLAGS $N(flags)"
+S3_FINAL_FLAGS 0
+# say "S3_FINAL_SNAP_PAST_DELTAS ok"
+S3_FINAL_SNAP_PAST_DELTAS ok
+# disconnect_hw_server
+# say "S3_DONE"
+S3_DONE
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 29 20:25:39 2026...

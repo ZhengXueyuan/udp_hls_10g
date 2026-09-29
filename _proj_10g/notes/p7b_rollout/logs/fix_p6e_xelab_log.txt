@@ -1,0 +1,43 @@
+PATCHED D:\repo\XCKU5PMini\udp_hls_10g\board\run_lint_p6e.bat
+  lines: 29 -> 39
+
+--- final file ---
+  1| @echo off
+  2| REM run_lint_p6e.bat -- fast elaboration lint for the P6e build config BEFORE the real build
+  3| REM   Checks (hard failures): implicit nets, bit-width mismatch, any xvlog ERROR.
+  4| REM   Rationale: a full P6e build takes ~30 min (XDMA + place/route); xvlog catches the
+  5| REM   whole class of "ifdefd branch has a typo / wire used before declared / an 8-word
+  6| REM   concat that is really 9 words" in seconds. Run this after EVERY rtl edit.
+  7| REM   NOTE: cmd does not glob *.v -- the file list is generated into lint_p6e\files.f
+  8| REM   from Git Bash: cmd //c 'D:\repo\XCKU5PMini\udp_hls_10g\board\run_lint_p6e.bat'
+  9| setlocal
+ 10| cd /d %~dp0
+ 11| set XV=C:\AMDDesignTools\2025.2\Vivado\bin
+ 12| set ROOT=D:\repo\XCKU5PMini\udp_hls_10g
+ 13| if exist lint_p6e rmdir /s /q lint_p6e
+ 14| mkdir lint_p6e
+ 15| cd lint_p6e
+ 16| dir /b /s "%ROOT%\rtl\*.v"                                  > files.f
+ 17| dir /b /s "%ROOT%\hls\slowstack_prj\solution1\syn\verilog\*.v" >> files.f
+ 18| echo %ROOT%\board\wrapper_p4.v                              >> files.f
+ 19| echo %ROOT%\board\util_gmii_to_rgmii_us.v                   >> files.f
+ 20| echo %ROOT%\board\util_gmii_to_rgmii.v                      >> files.f
+ 21| echo %ROOT%\board\uart_dbg.v                                >> files.f
+ 22| echo %ROOT%\_proj_pcie\rtl\axi_regs.v                       >> files.f
+ 23| echo %ROOT%\sim\p6e_pcie\xdma_0_sim_stub.v                >> files.f
+ 24| call %XV%\xvlog.bat -work xil_defaultlib -d PCIE_OBS -d DEV_USP -d APP_MODE -i %ROOT%\rtl -i %ROOT%\board -f files.f > xvlog_p6e.log 2>&1
+ 25| echo ---- xvlog exit=%ERRORLEVEL% ----
+ 26| findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_p6e.log >NUL && (echo IMPLICIT-DECL-FAIL & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_p6e.log & exit /b 1)
+ 27| findstr /C:"10-3091" xvlog_p6e.log >NUL && (echo BITWIDTH-MISMATCH-FAIL & findstr /C:"10-3091" xvlog_p6e.log & exit /b 1)
+ 28| findstr /I /C:"ERROR" xvlog_p6e.log >NUL && (echo XVLOG-ERROR-FAIL & findstr /I /C:"ERROR" xvlog_p6e.log & exit /b 1)
+ 29| REM
+ 30| REM ---- xelab face (P7B): the PORT-CONNECTION form of trap 24 prints NOTHING in
+ 31| REM   xvlog (exit 0, empty log) -- xelab is the only detector for it.  xdma_0 is a
+ 32| REM   Block-Design module with no RTL on disk, so the same sim stub the P6e gate
+ 33| REM   uses is compiled in.  Measured ~12 s end to end (run_matrix is unaffected).
+ 34| call %XV%\xvlog.bat -d PCIE_OBS -d DEV_USP -d APP_MODE -work xil_defaultlib "%XV%\..\data\verilog\src\glbl.v" >> xvlog_p6e.log 2>&1
+ 35| call %XV%\xelab.bat -debug typical -L unisims_ver xil_defaultlib.wrapper_p4 xil_defaultlib.glbl -s lint_p6e -log xelab_p6e.log > NUL 2>&1
+ 36| if errorlevel 1 (echo XELAB-FAIL & type xelab_p6e.log & exit /b 1)
+ 37| findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_p6e.log >NUL && (echo IMPLICIT-DECL-FAIL-XELAB & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_p6e.log & exit /b 1)
+ 38| echo LINT-OK: no implicit nets, no width mismatch, no errors
+ 39| 

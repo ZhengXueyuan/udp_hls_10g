@@ -1,0 +1,356 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 21:05:58 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source s7_probe2.tcl
+# set here [file normalize [file dirname [info script]]]
+# set root [file normalize [file join $here ..]]
+# set bit  [lindex $argv 0]
+# if {$bit eq ""} { set bit [file join $root pcs64_2ch pcs64_2ch.runs impl_1 xxv_loop_top.bit] }
+# if {![file exists $bit]} { error "bitstream not found: $bit" }
+# set ltx [file rootname $bit].ltx
+# proc sec {s} { puts "\nS7 >>>>>>>>>> $s" }
+# proc say {s} { puts $s }
+# sec "S7_ENV"
+
+S7 >>>>>>>>>> S7_ENV
+# say "S7_BIT $bit"
+S7_BIT D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_loop/pcs64_2ch/pcs64_2ch.runs/impl_1/xxv_loop_top.bit
+# say "S7_BIT_BYTES [file size $bit]"
+S7_BIT_BYTES 15431263
+# if {[catch {exec sha256sum $bit} sha]} { set sha "<sha256sum unavailable>" }
+# say "S7_BIT_SHA256 $sha"
+S7_BIT_SHA256 2acafb1f4c48c2ff22fcf78ce6fca079f5c3aae98695a49a8206427c7b767f0a *D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xxv_loop/pcs64_2ch/pcs64_2ch.runs/impl_1/xxv_loop_top.bit
+# open_hw_manager
+# connect_hw_server -url 192.168.0.38:3121
+INFO: [Labtools 27-2285] Connecting to hw_server url TCP:192.168.0.38:3121
+INFO: [Labtools 27-3415] Connecting to cs_server url TCP:localhost:0
+INFO: [Labtools 27-3417] Launching cs_server...
+INFO: [Labtools 27-2221] Launch Output:
+
+
+******** Xilinx cs_server v2025.2.0
+  ****** Build date   : Nov 14 2025-07:16:52
+    **** Build number : 2025.2.1763075812
+      ** Copyright 2017-2022 Xilinx, Inc. All Rights Reserved.
+      ** Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
+
+
+
+# current_hw_target [lindex [get_hw_targets] 0]
+# open_hw_target
+INFO: [Labtoolstcl 44-466] Opening hw_target 192.168.0.38:3121/xilinx_tcf/Digilent/210251391367
+# set dev [lindex [get_hw_devices] 0]
+# current_hw_device $dev
+# refresh_hw_device -update_hw_probes false $dev
+INFO: [Labtools 27-2302] Device xcku5p (JTAG device index = 0) is programmed with a design that has 1 VIO core(s).
+# set_property PROGRAM.FILE $bit $dev
+# if {[file exists $ltx]} {
+#     set_property PROBES.FILE $ltx $dev
+#     set_property FULL_PROBES.FILE $ltx $dev
+# }
+# program_hw_devices $dev
+INFO: [Labtools 27-3164] End of startup status: HIGH
+program_hw_devices: Time (s): cpu = 00:00:08 ; elapsed = 00:00:09 . Memory (MB): peak = 600.348 ; gain = 0.496
+# refresh_hw_device $dev
+INFO: [Labtools 27-2302] Device xcku5p (JTAG device index = 0) is programmed with a design that has 1 VIO core(s).
+INFO: [Labtools 27-1889] Uploading output probe values for VIO core [hw_vio_1]
+# say "S7_PROGRAMMED 1"
+S7_PROGRAMMED 1
+# set vio [lindex [get_hw_vios -of_objects $dev] 0]
+# if {$vio eq ""} { error "no VIO in the programmed design" }
+# say "S7_ALLPROBES [get_hw_probes -of_objects $vio]"
+S7_ALLPROBES oi00 oi01 oi02 oi03 oi04 oi05 oi06 oi07 oi08 oi09 oi10 oi11 oi12 oi13 oi14 oi15 oi16 oi17 oi18 oi19 oi20 oi21 oi22 oi23 oi24 oi25 oi26 oi27 oi28 oi29 oi30 oi31 oi32 oi33 oi34 oi35 oi36 oi37 oi38 oi39 oi40 oi41 oi42 oi43 oi44 oi45 oi46 oi47 sfp1_tx_dis_OBUF sfp2_tx_dis_OBUF vio_cmd_restart vio_cmd_snap vio_cmd_sysreset vio_gt_loopback vio_pay_sel vio_send_cont
+# proc findprobe {vio names} {
+#     set all [get_hw_probes -of_objects $vio]
+#     foreach n $names { foreach p $all { if {$p eq $n} { return $p } } }
+#     return ""
+# }
+# set NPROBE 48
+# set IN_NAMES {}
+# for {set i 0} {$i < $NPROBE} {incr i} { lappend IN_NAMES [format "oi%02d" $i] }
+# set IN_LABEL {st0 st1 cnt0 cnt1 dclk_free tx0_free rx0_free rx1_free \
+#               c0_words c0_ctrl c0_idle c0_e c0_frames \
+#               c1_words c1_frames c1_ctrl c1_e c1_pay c1_badpay c1_badstart \
+#               c1_badhdr c1_badterm c1_badlen c1_abort c1_lastw c1_idle c1_misc \
+#               snap_gen c1_sword_lo c1_sword_hi c0_sword_lo flags err_w dclk_snap \
+#               err_w2 dclk_snap2 vcc_d vcc_r ferr_d ferr_r bcd_d bcd_r ffe_d ffe_r \
+#               errv_r e_pre1 e_post1 e_pre0}
+# if {[llength $IN_LABEL] != $NPROBE} { error "IN_LABEL/NPROBE mismatch" }
+# set OUT_NAMES {send_cont cmd_restart cmd_sysreset cmd_sfp1_tx_dis cmd_sfp2_tx_dis \
+#                cmd_snap gt_loopback pay_sel}
+# set OUT_CANDS {
+#     {vio_send_cont probe_out0}
+#     {vio_cmd_restart probe_out1}
+#     {vio_cmd_sysreset probe_out2}
+#     {sfp1_tx_dis_OBUF vio_cmd_sfp1_tx_dis probe_out3}
+#     {sfp2_tx_dis_OBUF vio_cmd_sfp2_tx_dis probe_out4}
+#     {vio_cmd_snap probe_out5}
+#     {vio_gt_loopback probe_out6}
+#     {vio_pay_sel probe_out7}
+# }
+# array set PIN {}
+# for {set i 0} {$i < $NPROBE} {incr i} {
+#     set p [findprobe $vio [list [lindex $IN_NAMES $i] "probe_in$i"]]
+#     if {$p eq ""} { error "probe_in$i not found" }
+#     set PIN(in,$i) $p
+# }
+# for {set i 0} {$i < 8} {incr i} {
+#     set p [findprobe $vio [lindex $OUT_CANDS $i]]
+#     if {$p eq ""} { error "probe_out$i ([lindex $OUT_NAMES $i]) not found" }
+#     set PIN(out,$i) $p
+# }
+# say "S7_PROBE_MAP_OK $NPROBE in / 8 out"
+S7_PROBE_MAP_OK 48 in / 8 out
+# proc vset {vio p val} {
+#     set w 1 ; catch {set w [get_property WIDTH $p]}
+#     set n [expr {int(ceil($w / 4.0))}]
+#     set s [format "%0${n}X" [expr {$val & ((1 << $w) - 1)}]]
+#     set_property OUTPUT_VALUE $s $p
+#     commit_hw_vio $vio
+# }
+# proc vget {vio p} {
+#     refresh_hw_vio $vio
+#     set s [get_property INPUT_VALUE $p]
+#     set r "HEX" ; catch {set r [get_property INPUT_VALUE_RADIX $p]}
+#     switch -- $r {
+#         HEX { return [expr "0x$s"] } BIN { return [expr "0b$s"] }
+#         OCT { return [expr "0o$s"] } default { return [expr {$s}] }
+#     }
+# }
+# set GEN 0
+# proc snap {vio} {
+#     global PIN GEN
+#     set g0 [expr {([vget $vio $PIN(in,27)] >> 16) & 0xFFFF}]
+#     vset $vio $PIN(out,5) 1
+#     vset $vio $PIN(out,5) 0
+#     set g1 $g0
+#     for {set i 0} {$i < 50} {incr i} {
+#         after 20
+#         set g1 [expr {([vget $vio $PIN(in,27)] >> 16) & 0xFFFF}]
+#         if {$g1 != $g0} break
+#     }
+#     set GEN $g1
+#     set d [expr {($g1 - $g0) & 0xFFFF}]
+#     if {$d != 1} { say "S7_SNAP_FAIL gen $g0 -> $g1" }
+#     return $d
+# }
+# proc readall {vio arrname} {
+#     upvar 1 $arrname A
+#     global PIN IN_LABEL NPROBE
+#     snap $vio
+#     for {set i 0} {$i < $NPROBE} {incr i} {
+#         set A([lindex $IN_LABEL $i]) [vget $vio $PIN(in,$i)]
+#     }
+#     set sg $A(snap_gen)
+#     set A(ack_dclk) [expr {($sg >> 3) & 1}]
+#     set A(ack_tx0)  [expr {($sg >> 2) & 1}]
+#     set A(ack_rx0)  [expr {($sg >> 1) & 1}]
+#     set A(ack_rx1)  [expr {($sg >> 0) & 1}]
+#     set A(st0_hex)  [get_property INPUT_VALUE $PIN(in,0)]
+# }
+# proc cs {v} { return [expr {($v >> 13) & 0x1F}] }
+# proc st {tag v} {
+#     say "S7_ST $tag gtpg=[expr {($v>>0)&1}] blk=[expr {($v>>1)&1}] status=[expr {($v>>2)&1}] hiber=[expr {($v>>3)&1}] rxlf=[expr {($v>>4)&1}] frerr=[expr {($v>>5)&1}] badc=[expr {($v>>6)&1}] errv=[expr {($v>>7)&1}] fifo=[expr {($v>>8)&1}] txlf=[expr {($v>>9)&1}] los=[expr {($v>>10)&1}] urrst=[expr {($v>>11)&1}] utrst=[expr {($v>>12)&1}] cs=[expr {($v>>13)&0x1F}]"
+# }
+# proc restart {vio pinarr} {
+#     upvar 1 $pinarr PIN
+#     vset $vio $PIN(out,1) 1
+#     vset $vio $PIN(out,1) 0
+# }
+# proc set_level {vio p v} { vset $vio $p $v }
+# sec "S7_STEP1_LINK"
+
+S7 >>>>>>>>>> S7_STEP1_LINK
+# after 400
+# array set A {}
+# readall $vio A
+# st ch0 $A(st0)
+S7_ST ch0 gtpg=1 blk=1 status=1 hiber=0 rxlf=0 frerr=0 badc=0 errv=0 fifo=0 txlf=0 los=0 urrst=0 utrst=0 cs=1
+# st ch1 $A(st1)
+S7_ST ch1 gtpg=1 blk=1 status=1 hiber=0 rxlf=0 frerr=0 badc=0 errv=0 fifo=0 txlf=0 los=0 urrst=0 utrst=0 cs=0
+# say "S7_S1 st0_hex $A(st0_hex)"
+S7_S1 st0_hex 000c2007
+# say "S7_S1 c1 e=$A(c1_e) e_pre1=$A(e_pre1) e_post1=$A(e_post1) frames=$A(c1_frames)"
+S7_S1 c1 e=0 e_pre1=0 e_post1=0 frames=20
+# say "S7_S1 c0 e=$A(c0_e) e_pre0=$A(e_pre0) frames=$A(c0_frames)"
+S7_S1 c0 e=0 e_pre0=0 frames=0
+# say "S7_S1 statdom vcc_d=$A(vcc_d) vcc_r=$A(vcc_r) ferr_d=$A(ferr_d) ferr_r=$A(ferr_r) bcd_d=$A(bcd_d) bcd_r=$A(bcd_r) ffe_d=$A(ffe_d) ffe_r=$A(ffe_r) errv_r=$A(errv_r)"
+S7_S1 statdom vcc_d=269920187 vcc_r=226972579 ferr_d=0 ferr_r=0 bcd_d=0 bcd_r=0 ffe_d=0 ffe_r=0 errv_r=0
+# sec "S7_STEP2_VENDOR_20PKT_RUN"
+
+S7 >>>>>>>>>> S7_STEP2_VENDOR_20PKT_RUN
+# after 400
+# array set B {}
+# readall $vio B
+# say "S7_S2 cs [cs $B(st0)] cpl_hex $B(st0_hex)"
+S7_S2 cs 1 cpl_hex 000c2007
+# say "S7_S2 c1 frames=$B(c1_frames) pay=$B(c1_pay) e=$B(c1_e) badpay=$B(c1_badpay) badstart=$B(c1_badstart) badhdr=$B(c1_badhdr) badterm=$B(c1_badterm) badlen=$B(c1_badlen) lastw=$B(c1_lastw)"
+S7_S2 c1 frames=20 pay=580 e=0 badpay=0 badstart=0 badhdr=0 badterm=0 badlen=0 lastw=32
+# say "S7_S2 sword_hi $B(c1_sword_hi) sword_lo $B(c1_sword_lo)"
+S7_S2 sword_hi 3579139413 sword_lo 1431655931
+# sec "S7_STEP3_STAT_DOMAIN_WINDOW"
+
+S7 >>>>>>>>>> S7_STEP3_STAT_DOMAIN_WINDOW
+# vset $vio $PIN(out,0) 1
+# restart $vio PIN
+# after 1500
+# array set C {}
+# readall $vio C
+# say "S7_S3_T0 c1_words $C(c1_words) frames $C(c1_frames) e $C(c1_e) vcc_d $C(vcc_d) vcc_r $C(vcc_r) ferr_d $C(ferr_d) ferr_r $C(ferr_r) bcd_d $C(bcd_d) bcd_r $C(bcd_r) ffe_d $C(ffe_d) ffe_r $C(ffe_r) errv_r $C(errv_r) dclk_snap $C(dclk_snap)"
+S7_S3_T0 c1_words 918868393 frames 7247980 e 0 vcc_d 655227648 vcc_r 918867587 ferr_d 0 ferr_r 0 bcd_d 0 bcd_r 0 ffe_d 0 ffe_r 0 errv_r 0 dclk_snap 589168680
+# after 8000
+# array set D {}
+# readall $vio D
+# say "S7_S3_T1 c1_words $D(c1_words) frames $D(c1_frames) e $D(c1_e) vcc_d $D(vcc_d) vcc_r $D(vcc_r) ferr_d $D(ferr_d) ferr_r $D(ferr_r) bcd_d $D(bcd_d) bcd_r $D(bcd_r) ffe_d $D(ffe_d) ffe_r $D(ffe_r) errv_r $D(errv_r) dclk_snap $D(dclk_snap)"
+S7_S3_T1 c1_words 2331776804 frames 48804110 e 0 vcc_d 1540238927 vcc_r 2331775998 ferr_d 0 ferr_r 0 bcd_d 0 bcd_r 0 ffe_d 0 ffe_r 0 errv_r 0 dclk_snap 1493435090
+# foreach k {c1_words c1_frames c1_pay c1_e c1_badpay c1_badstart c1_badhdr c1_badterm c1_badlen c1_abort vcc_d vcc_r ferr_d ferr_r bcd_d bcd_r ffe_d ffe_r errv_r c0_frames c0_e} {
+#     say "S7_S3_D $k [expr {([set D($k)] - [set C($k)]) & 0xFFFFFFFF}]"
+# }
+S7_S3_D c1_words 1412908411
+S7_S3_D c1_frames 41556130
+S7_S3_D c1_pay 1205127761
+S7_S3_D c1_e 0
+S7_S3_D c1_badpay 0
+S7_S3_D c1_badstart 0
+S7_S3_D c1_badhdr 0
+S7_S3_D c1_badterm 0
+S7_S3_D c1_badlen 0
+S7_S3_D c1_abort 0
+S7_S3_D vcc_d 885011279
+S7_S3_D vcc_r 1412908411
+S7_S3_D ferr_d 0
+S7_S3_D ferr_r 0
+S7_S3_D bcd_d 0
+S7_S3_D bcd_r 0
+S7_S3_D ffe_d 0
+S7_S3_D ffe_r 0
+S7_S3_D errv_r 0
+S7_S3_D c0_frames 0
+S7_S3_D c0_e 0
+# set dd [expr {($D(dclk_snap) - $C(dclk_snap)) & 0xFFFFFFFF}]
+# say "S7_S3_DD $dd"
+S7_S3_DD 904266410
+# foreach pair {c1_words c1_frames c1_pay} {
+#     set dv [expr {([set D($pair)] - [set C($pair)]) & 0xFFFFFFFF}]
+#     say "S7_S3_RATE $pair per_dclk [expr {$dv / double($dd)}]"
+# }
+S7_S3_RATE c1_words per_dclk 1.562491313815361
+S7_S3_RATE c1_frames per_dclk 0.04595562716965236
+S7_S3_RATE c1_pay per_dclk 1.3327131779670993
+# foreach k {vcc ferr bcd ffe} {
+#     set dv [expr {([set D(${k}_d)] - [set C(${k}_d)]) & 0xFFFFFFFF}]
+#     set dr [expr {([set D(${k}_r)] - [set C(${k}_r)]) & 0xFFFFFFFF}]
+#     if {$dr > 0} {
+#         say "S7_U8 $k dclk=$dv rx=$dr ratio_rx_over_dclk [expr {$dr / double($dv)}] (1.00 => dclk-domain pulses; ~1.56 => rx-domain pulses)"
+#     } else {
+#         say "S7_U8 $k dclk=$dv rx=$dr (rx counter never advanced)"
+#     }
+# }
+S7_U8 vcc dclk=885011279 rx=1412908411 ratio_rx_over_dclk 1.5964863324640182 (1.00 => dclk-domain pulses; ~1.56 => rx-domain pulses)
+S7_U8 ferr dclk=0 rx=0 (rx counter never advanced)
+S7_U8 bcd dclk=0 rx=0 (rx counter never advanced)
+S7_U8 ffe dclk=0 rx=0 (rx counter never advanced)
+# sec "S7_STEP4_STOP_AND_JUDGE"
+
+S7 >>>>>>>>>> S7_STEP4_STOP_AND_JUDGE
+# vset $vio $PIN(out,0) 0
+# after 250
+# array set E {}
+# readall $vio E
+# say "S7_S4 cs [cs $E(st0)] cpl_hex $E(st0_hex)"
+S7_S4 cs 1 cpl_hex 000c2007
+# say "S7_S4 c1 frames=$E(c1_frames) e=$E(c1_e) e_pre1=$E(e_pre1) e_post1=$E(e_post1)"
+S7_S4 c1 frames=51652010 e=0 e_pre1=0 e_post1=0
+# st ch0 $E(st0)
+S7_ST ch0 gtpg=1 blk=1 status=1 hiber=0 rxlf=0 frerr=0 badc=0 errv=0 fifo=0 txlf=0 los=0 urrst=0 utrst=0 cs=1
+# st ch1 $E(st1)
+S7_ST ch1 gtpg=1 blk=1 status=1 hiber=0 rxlf=0 frerr=0 badc=0 errv=0 fifo=0 txlf=0 los=0 urrst=0 utrst=0 cs=0
+# sec "S7_STEP5_ONES_PAYLOAD"
+
+S7 >>>>>>>>>> S7_STEP5_ONES_PAYLOAD
+# vset $vio $PIN(out,7) 1
+# vset $vio $PIN(out,0) 1
+# restart $vio PIN
+# after 600
+# array set F {}
+# readall $vio F
+# say "S7_S5A c1 frames=$F(c1_frames) pay=$F(c1_pay) badpay=$F(c1_badpay) badstart=$F(c1_badstart) badhdr=$F(c1_badhdr) badterm=$F(c1_badterm) badlen=$F(c1_badlen) e=$F(c1_e) lastw=$F(c1_lastw)"
+S7_S5A c1 frames=55233209 pay=1601763061 badpay=0 badstart=0 badhdr=0 badterm=0 badlen=0 e=0 lastw=32
+# after 1500
+# array set G {}
+# readall $vio G
+# say "S7_S5B c1 frames=$G(c1_frames) pay=$G(c1_pay) badpay=$G(c1_badpay) badstart=$G(c1_badstart) badhdr=$G(c1_badhdr) badterm=$G(c1_badterm) badlen=$G(c1_badlen) e=$G(c1_e)"
+S7_S5B c1 frames=65267125 pay=1892746647 badpay=0 badstart=0 badhdr=0 badterm=0 badlen=0 e=0
+# set s5f [expr {([set G(c1_frames)] - [set F(c1_frames)]) & 0xFFFFFFFF}]
+# set s5p [expr {([set G(c1_pay)] - [set F(c1_pay)]) & 0xFFFFFFFF}]
+# set s5b [expr {([set G(c1_badpay)] - [set F(c1_badpay)]) & 0xFFFFFFFF}]
+# say "S7_S5_WIN frames=$s5f paywords=$s5p badpay=$s5b"
+S7_S5_WIN frames=10033916 paywords=290983586 badpay=0
+# if {$s5f > 0} { say "S7_S5_PAYWORDS_PER_FRAME [expr {$s5p / double($s5f)}] (expect 29.0)" }
+S7_S5_PAYWORDS_PER_FRAME 29.000002192563702 (expect 29.0)
+# vset $vio $PIN(out,0) 0
+# after 250
+# array set H {}
+# readall $vio H
+# say "S7_S5_CS [cs $H(st0)] (0x1F = never ran, 2 = no block lock, 1 = SUCCESSFUL)"
+S7_S5_CS 1 (0x1F = never ran, 2 = no block lock, 1 = SUCCESSFUL)
+# say "S7_S5_C1FINAL frames=$H(c1_frames) e=$H(c1_e)"
+S7_S5_C1FINAL frames=68263313 e=0
+# sec "S7_STEP6_BACK_TO_ZERO_PAYLOAD"
+
+S7 >>>>>>>>>> S7_STEP6_BACK_TO_ZERO_PAYLOAD
+# vset $vio $PIN(out,7) 0
+# vset $vio $PIN(out,0) 1
+# restart $vio PIN
+# after 600
+# array set I {}
+# readall $vio I
+# say "S7_S6 frames=$I(c1_frames) badpay=$I(c1_badpay) badstart=$I(c1_badstart) badhdr=$I(c1_badhdr)"
+S7_S6 frames=71704622 badpay=0 badstart=0 badhdr=0
+# vset $vio $PIN(out,0) 0
+# after 250
+# array set J {}
+# readall $vio J
+# say "S7_S6_CS [cs $J(st0)]"
+S7_S6_CS 1
+# sec "S7_STEP7_GATE1A_LOOPBACK"
+
+S7 >>>>>>>>>> S7_STEP7_GATE1A_LOOPBACK
+# vset $vio $PIN(out,0) 1
+# restart $vio PIN
+# foreach mode {0 2 1 4 6} {
+#     vset $vio $PIN(out,6) $mode
+#     after 1200
+#     array set L$mode {}
+#     set arrname "L$mode"
+#     upvar 0 $arrname LA
+#     readall $vio LA
+#     say "S7_1A mode=$mode ch0 blk=[expr {($LA(st0)>>1)&1}] status=[expr {($LA(st0)>>2)&1}] los=[expr {($LA(st0)>>10)&1}] frames=$LA(c0_frames) ctrl=$LA(c0_ctrl) e=$LA(c0_e) idle=$LA(c0_idle) e_pre0=$LA(e_pre0) sw_lo=$LA(c0_sword_lo) sw_hi=$LA(c0_sword_hi)"
+#     say "S7_1A mode=$mode ch1 blk=[expr {($LA(st1)>>1)&1}] frames=$LA(c1_frames) e=$LA(c1_e)"
+#     after 1500
+#     array set M$mode {}
+#     set arrname2 "M$mode"
+#     upvar 0 $arrname2 MA
+#     readall $vio MA
+#     say "S7_1A_WIN mode=$mode d_c0_frames [expr {([set MA(c0_frames)] - [set $arrname(c0_frames)]) & 0xFFFFFFFF}] d_c0_e [expr {([set MA(c0_e)] - [set $arrname(c0_e)]) & 0xFFFFFFFF}] d_c1_frames [expr {([set MA(c1_frames)] - [set $arrname(c1_frames)]) & 0xFFFFFFFF}]"
+# }
+can't read "LA(c0_sword_hi)": no such element in array
+    while executing
+"say "S7_1A mode=$mode ch0 blk=[expr {($LA(st0)>>1)&1}] status=[expr {($LA(st0)>>2)&1}] los=[expr {($LA(st0)>>10)&1}] frames=$LA(c0_frames) ctrl=$LA(c0..."
+    ("foreach" body line 8)
+    invoked from within
+"foreach mode {0 2 1 4 6} {
+    vset $vio $PIN(out,6) $mode
+    after 1200
+    array set L$mode {}
+    set arrname "L$mode"
+    upvar 0 $arrname LA
+   ..."
+    (file "s7_probe2.tcl" line 274)
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 29 21:06:42 2026...

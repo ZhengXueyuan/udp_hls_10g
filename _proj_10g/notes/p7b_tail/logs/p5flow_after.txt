@@ -1,0 +1,15 @@
+gen_stim_p5_app: stim 256 拍空闲; bad_frame=0
+FLOWB sink: bytes=524288 frames=368 words=65716 mismatch=0 kaerr=0 evfrm=0 pauses=2 gap_max=220069
+FLOWO occ: max=49336 soft_viol=0 hard_viol=0 (软界=53486 硬界=65528)
+FLOWP peer: acks=370 right_back=5 sent=524288 retx=0 mac_drop=0 peer_retx=0
+FLOWM rx pass=368 seq=0 crc=0 ipcsum=0 nonmatch=0 trunc=0 tx_ack=370 ack_drop=0
+FLOWS quiet=220068 psnd_nxt=20080001 praw=200861d9 conn0_rcv_nxt=20080001
+P5ACK 帧 370 条; window 取值集合 [0, 232, 368, 416, 584, 752, 928, 1096]
+接受裕度: ACC_MARGIN=4096 (wrapper/TB 一致), 物理余量上限 10550; 实测占用峰值 49336 + 裕度 + 单段 1500 = 54932 <= FIFO 65536
+右沿抖动: 回退 37 次 / 最大幅度 308 B (抖动容差 512 B; 安全界 = 接受裕度 4096 B)
+TB 侧右沿回退计数 5 (本 checker 实测最大幅度 308 B)
+窗 <= 1 段 @ACK#212 (win=368), 之后重开到 61d8 (@ACK#369)
+消费者帧数 368 (下界 360; 多出 = 窗口中流短段, C20 后为预期)
+寄存器: pool=0 redge0=2008c001 winq0=c000 wu_mark0=61d8 stat_fc_upd=861 stat_fc_wait_max=2
+P5 FLOW OK (窗口闭环: 收缩->收到 <= 1 段(对端停发)->重开->零重传完成)
+FLOW_EXIT=0

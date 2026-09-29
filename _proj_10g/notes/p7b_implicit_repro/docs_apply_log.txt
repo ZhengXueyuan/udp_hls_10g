@@ -1,0 +1,53 @@
+EDIT [prescriptive] CLAUDE.md
+  OLD:    ⇒ 门里必须把 **`findstr implicit` 当硬失败** (P5e-T3/T5 的门已加, 4 个日志命中 0)。
+  NEW:    ⇒ 门里必须把隐式网当**硬失败**。 |    ⚠️ **2026-09-29 订正 (P7B 实测)**: Vivado 2025.2 **不再打印 `implicitly declared`** (实测全部日志命中 0) ⇒ 旧关键字是**哑门**。2025.2 的真实签名分两种形态、**两个不同检测点**: ① 端口连接形式 (静默截断) —— **xvlog 一个字都不打印**，只有 `xelab` 报 `WARNING: [VRFC 10-3091] actual bit length 1 dif
+
+EDIT [prescriptive] PORT_NOTES.md
+  OLD: `findstr implicit` 做**硬失败** (T3/T5 的门已加, 4 个日志命中 0)。
+  NEW: **隐式网当硬失败** (T3/T5 的门已加)。 |   ⚠️ **2026-09-29 订正 (P7B 实测)**: Vivado 2025.2 **不再打印 `implicitly declared`** (实测全部日志命中 0) ⇒ 旧关键字是**哑门**。2025.2 的真实签名分两种形态、**两个不同检测点**: ① 端口连接形式 (静默截断) —— **xvlog 一个字都不打印**，只有 `xelab` 报 `WARNING: [VRFC 10-3091] actual bit length 1 d
+
+EDIT [prescriptive] PORT_NOTES.md
+  OLD: **DRC 级静态检查** (xvlog + xelab, **两个 ifdef 配置都查**): `implicit` (T2 建议加 ——
+  NEW: **DRC 级静态检查** (xvlog + xelab, **两个 ifdef 配置都查**): 隐式网 (T2 建议加 ——
+
+EDIT [reading] PORT_NOTES.md
+  OLD: (全是既有 `dbg_wptr`/`crc_nxt` 类), **无新增**。
+  NEW: (全是既有 `dbg_wptr`/`crc_nxt` 类), **无新增**。 |   ⚠️ **2026-09-29 订正 (P7B 实测)**: Vivado 2025.2 **不再打印 `implicitly declared`** (实测全部日志命中 0) ⇒ 旧关键字是**哑门**。2025.2 的真实签名分两种形态、**两个不同检测点**: ① 端口连接形式 (静默截断) —— **xvlog 一个字都不打印**，只有 `xelab` 报 `WARNING: [VRFC 10-3091] actual 
+
+EDIT [prescriptive] PORT_NOTES.md
+  OLD: ⇒ 已把 `findstr /C:"10-3091"` 与 `findstr /I /C:"implicitly"` 一并列为门里的**硬失败**。
+  NEW: ⇒ 已把 `10-3091` 与隐式网签名一并列为门里的**硬失败**。 |    ⚠️ **2026-09-29 订正 (P7B 实测)**: Vivado 2025.2 **不再打印 `implicitly declared`** (实测全部日志命中 0) ⇒ 旧关键字是**哑门**。2025.2 的真实签名分两种形态、**两个不同检测点**: ① 端口连接形式 (静默截断) —— **xvlog 一个字都不打印**，只有 `xelab` 报 `WARNING: [VRFC 10-3091] actual bi
+
+EDIT [prescriptive] P7B_SPEC.md
+  OLD: | F6 | `implicitly declared` 命中 **0**（当硬失败）· `10-3091` 计数 **0** |
+  NEW: | F6 | 隐式网签名命中 **0**（当硬失败：`Synth 8-11241` / `VRFC 10-3091` / `10-2989`）· `10-3091` 计数 **0** |
+
+EDIT [prescriptive] P7B_SPEC.md
+  OLD: | A14 | lint：`implicitly declared` = 0 · `10-3091` = 0 |
+  NEW: | A14 | lint：隐式网签名 = 0 (`Synth 8-11241` / `VRFC 10-3091` / `10-2989`) · `10-3091` = 0 |
+
+EDIT [prescriptive] P6B_SPEC.md
+  OLD: 4. 构建日志里 **无** `implicit` 隐式网
+  NEW: 4. 构建日志里 **无** 隐式网签名 (`Synth 8-11241` / `VRFC 10-3091`)、**无** `implicit` 隐式网
+
+EDIT [reading] P6B_INTEGRATION_REVIEW.md
+  OLD: 两条变异的 `xvlog` **位宽告警 `10-3091` 计数都是 0、`implicitly` 计数也是 0**
+  NEW: 两条变异的 `xvlog` **位宽告警 `10-3091` 计数都是 0、`implicitly` 计数也是 0** (⚠️ 后者 2026-09-29 实测已是**死关键字**, 0 命中 = 无话可说, 不能当证据; 见 `_proj_10g/notes/P7B_IMPLICIT_GATE_FIX.md`)
+
+EDIT [reading] P6B_INTEGRATION_REVIEW.md
+  OLD: ⇒ 四种组合**全部编过且能 elaborate**（四组合都没报 undeclared / implicit / 位宽）。
+  NEW: ⇒ 四种组合**全部编过且能 elaborate**（四组合都没报 undeclared / implicit / 位宽）。 |   ⚠️ **2026-09-29 订正**: 这里的 "implicit" 是**死关键字** ⇒ 该项实际只能证 "没有**表达式形式**的未声明"，**不能证 "没有隐式网"**（端口连接形式在 xvlog 里全静默）。见 `_proj_10g/notes/P7B_IMPLICIT_GATE_FIX.md`。
+
+EDIT [prescriptive] P7A_COMMIT_PLAN.md
+  OLD: - `tcl/run_lint_p7a.bat`: elaboration 级 lint(implicit net / 位宽 / ERROR 三类硬失败)。
+  NEW: - `tcl/run_lint_p7a.bat`: elaboration 级 lint(隐式网签名 `Synth 8-11241` / `VRFC 10-3091` / `10-2989` / 位宽 / ERROR 硬失败)。 |   ⚠️ **2026-09-29 订正 (P7B 实测)**: Vivado 2025.2 **不再打印 `implicitly declared`** (实测全部日志命中 0) ⇒ 旧关键字是**哑门**。2025.2 的真实签名分两种形态、**两个不同检测点**: ① 端口连接形
+
+EDIT [reading] P6E_OBS.md
+  OLD: **5 条 FAIL**）；两条变异的 xvlog `10-3091` 与 `implicitly` 计数**都是 0**
+  NEW: **5 条 FAIL**）；两条变异的 xvlog `10-3091` 与 `implicitly` 计数**都是 0** (⚠️ `implicitly` 2026-09-29 实测已是死关键字 ⇒ 这半句无证据力)
+
+EDIT [prescriptive] README.md
+  OLD: 内置负对照) / `run_tb_p5e_t2_wrapper.bat` (**T2 真 wrapper 全链**, 含 `implicit` 检查)。
+  NEW: 内置负对照) / `run_tb_p5e_t2_wrapper.bat` (**T2 真 wrapper 全链**, 含隐式网检查: `Synth 8-11241` / `VRFC 10-3091` / `10-2989`)。
+
+doc edits done (apply=True, skipped=0)
