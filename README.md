@@ -411,7 +411,14 @@ abort fence 单元门 F1-F5,判据文本未改、激励按真链路补 `rst_req`
   `mac_rx_64`/`mac_tx_64` 是**字节串行 (1B/拍) 的 GMII 模块** ⇒ 10G 下**必须整体替换**
   (否则 TX 天花板 **1.25 Gbps**)。"流水线不改"对**中间各级**成立, **对 MAC 边界不成立**。
 - **要做的 6 块**: A 时钟与前端 (换晶振 + PCS/PMA + shim) / B **MAC 语义 (FCS 改 8B/拍)** /
-  C 吞吐复核 (`rx_classify` **skid 改真 FIFO**: 现每帧停 6 拍 ⇒ 64B 帧下吞吐只剩 **57%**;
+  C 吞吐复核 (`rx_classify`: 现每帧停 3 拍 (非 TCP) / 6 拍 (TCP) ⇒ 上限 `N/(N+停顿)`、
+  **最小帧 57.1%**; ⚠️ **"skid 改真 FIFO"这个提法是错的** —— **2026-09-29 复核更正**：该 TODO
+  未落地（as-built 仍是 6 字寄存器 skid，`rtl/rx_classify.v:52,60-65`；`git log -1 -- rtl/rx_classify.v`
+  = `122b0c0`，P6a/P6b/F4/P7a 全未碰），但**它不是"静默丢字"那类**（DRAIN 是寄存器 hold + `tready=0`
+  顶背压，`:78-85,102-103`）—— **真实的病是硬吞吐上限**，**"加深上游 FIFO 修不了"**，只有
+  "收字与等 w5 决策解耦"能修；**10G 下必然触发**（156.25MHz 每拍有字时 TCP 每帧净赤字 ≈4.5 字，
+  现有 264 字弹性 ≈3.6 µs 填满 ⇒ MAC 层整帧丢，有计数 `W34`）。原件
+  `_proj_10g/notes/P7B_RXCLASSIFY_AUDIT.md`;
   VLAN 重构) / D 窗口与缓冲 (**DDR3 大窗**: BRAM 只有 2MB, retx 已占 1MB) /
   E HLS 慢路径 (`u_hls` = **38.7% LUT** ⇒ **单域/双域抉择**) / F 工具链 (校验器 8 路并行 + 10G 对端)。
 - **要准备**: 换晶振 (`SiT9120AI-2B3-33E156.25`) + **10G 对端** (现网卡 Killer E5000B 是
@@ -420,8 +427,14 @@ abort fence 单元门 F1-F5,判据文本未改、激励按真链路补 `rst_req`
   **若晶振真在 quad 115, 换晶振无效**。**买硬件之前先定案**。
 - **六个前置实验 K1-K6** (都不需要新硬件, 可现在做): K1 156.25MHz 时序尖峰 / K2 字节序实测 /
   K3 HLS 收敛探针 / K4 **license 核查** / K5 参考钟定案 / K6 BRAM 映射尖峰。
+  ⚠️ **2026-09-29 复核更正: K4 已答、且不阻断** —— 本机 `Xilinx.lic` 含
+  `INCREMENT xxv_eth_mac_pcs … permanent uncounted`，`_lic/prep_stdout.txt` 实测 `xxv_ethernet 5.0`
+  三种 CORE 配置 `IS_LOCKED` **全 0**、`generate_target all` 出**完整 RTL** ⇒ **"PG157 要买 license"这个
+  前提不成立**；缺 license 的失败形态是**综合期硬失败**（`Fatal Error. License Check failed for secure IP
+  for feature 'xxv_eth_mac_pcs@2025.05'`），**不是**位流超时。
 - **三个决策点**: ① 单域 vs 双域 ② **免费 10GBASE-R PCS/PMA (PG068) + 自写 shim** vs
-  PG157 (**收费核, eval 版硬件 8 小时停机**) ③ 10G 对端方案 (PCIe NIC+DPDK /
+  PG157 (~~**收费核, eval 版硬件 8 小时停机**~~ ⇒ **2026-09-29 复核更正: 本前提被证伪** —— 本机 license
+  **永久覆盖** `xxv_eth_mac_pcs`，**无 eval 停机计时**；抉择输入改成"判据直接性"而非 license) ③ 10G 对端方案 (PCIe NIC+DPDK /
   **同板双 SFP+ 自环对打** / 商用测试仪 / 仅物理层自环)。
 - **两个阻断级风险**: ① **156.25MHz 时序** (worst-400 slack 全在 **0.290–0.297ns**、**85% 是
   布线**、扇出 `fo=498` ⇒ 每条要砍 **≥1.6ns**, 属结构性改动) ② **TCP 吞吐 = 窗口 × RTT**

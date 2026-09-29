@@ -18,7 +18,7 @@
 |---|---|
 | wizard 提供 10GBASE-R 预设吗？ | **GUI 里有**（`presets/GTY-10GBASE-R.tcl`，加密文件），**Tcl/batch 里没有** —— `CONFIG.TX_PROTOCOL` 这个参数**不存在**（`[Vivado 12-4371]`）。batch 里只能直接设 GT 原语参数。 |
 | 对本器件可用吗？ | ✅ 可用。`IPDEF_SUPPORTED_PARTS` 显式列出 `xcku5p-ffvb676-1-e`。 |
-| license 干净吗？ | ⚠️ **在位 license 下干净**：`IS_LOCKED=0` / `LOCK_DETAILS = IP is not locked` / `USED_LICENSE_KEYS = <>`。"**免 license**"这一条**没有被直接证明**（见 §9.1）。 |
+| license 干净吗？ | ✅ **干净，且"免 license"已直证**（⚠️ 本行 2026-09-29 复核更正）：在位 license 下 `IS_LOCKED=0` / `LOCK_DETAILS = IP is not locked` / `USED_LICENSE_KEYS = <>`；**把 `Xilinx.lic` 藏掉后同样干净**（P2j / `_proj_10g/reports/p7a_lic_deny_stdout.txt`，恢复已核对 MD5）⇒ §9.1 那条已闭。⚠️ 同轮"`xxv_ethernet` 被锁"是**藏 license 造成的**，**不能**反推"该 IP 平时不可用 / 要另买 license"（见 §1.2 末的复核更正）。 |
 | fabric 侧接口 | **64 bit/ch @ 156.25 MHz**（实测，不是预期）。时钟名 `gtwiz_userclk_{tx,rx}_usrclk2_out`。 |
 | 有现成 example 带 PRBS 吗？ | ✅ **有**。`generate_target example` 产出 PRBS31 发生器/校验器（XAPP884 `prbs_any`）+ gearbox 滑位 hunt + 内建 VIO。 |
 | 建议路线 | **用 example 的 PRBS 三件套当零件，自己写 top**（判据要自己控，见 §2）。 |
@@ -98,6 +98,27 @@ CRITICAL WARNING: [filemgmt 20-1365] Unable to generate target(s) for the follow
 必须带 `PREGUARD` 检查，因为残留的 `Xilinx.lic.HIDDEN` 会让后续 `ABORT`）。
 - 若负对照确认干净 ⇒ 可以对外声称"免 license"，且不依赖本机安装目录。
 - 若负对照显示被锁 ⇒ 仍然走 wizard 路线（本机 license 在位，工程可交付），只是**不能**声称免 license。
+
+> ⭐ **2026-09-29 复核更正（本条已兑现 + 一处被纠正的延伸）**
+> 1. **负对照已补做并通过**：P7a 的 **P2j** 就是这条闸，读数在 `_proj_10g/reports/p7a_lic_deny_stdout.txt`
+>    —— 藏掉 `Xilinx.lic` 后 gtwizard 仍 `IS_LOCKED=0` / `LOCK_DETAILS = IP is not locked` /
+>    `USED_LICENSE_KEYS = <>` / `generate_target all rc=0` / 7 个 RTL 落盘，恢复已核对
+>    （MD5 前后同为 `9bab9853d542567cbae9e2152f04223e`，无残留 `.HIDDEN`）。⇒ **"gtwizard 免 license"成立**
+>    （见 `P7A_RESULT.md` §3.4，该结论**保留、不撤回**）。
+> 2. **必须纠正的一步延伸**：这里引的 `_lic/deny_stdout.txt` 是**在"把 license 藏起来"的状态下**测的，
+>    ⇒ 它**不能**反推出"`xxv_ethernet` 锁着 / 不可用 / 要另外买 license"。**事实相反**：license 在位时
+>    `xxv_ethernet 5.0` 的三种 CORE 配置 `IS_LOCKED` **建时/配后/生成后全 0**、`CONFIG.*` 均可设、
+>    `generate_target all` **产出完整 RTL**（`_lic/prep_stdout.txt:89,97,207/226,234,344/363,371,481`），
+>    而 `Xilinx.lic` 里本就有 `INCREMENT xxv_eth_mac_pcs xilinxd 2025.11 permanent uncounted`
+>    （同批 `xxv_eth_basekr`/`l_eth_baser`/`l_eth_mac_pcs`/`ten_gig_eth_mac` 等同样 `permanent`）。
+>    藏起来才锁，**锁定形态**恰恰是"有区分能力"的证据，不是"该 IP 平时不可用"的证据。
+>    补充：**缺 license 的失败形态是综合期硬失败**（`_lic/syn_stdout.txt:868,871`：
+>    `Fatal Error. License Check failed for secure IP for feature 'xxv_eth_mac_pcs@2025.05'` /
+>    `Feature: Internal_bitstream`），**不是**"位流能出但跑几小时就停"的位流超时。
+>    ⚠️ 且那次综合实验建在 **Kintex-7 `xc7k70tfbv676-1`**（`syn_stdout.txt:60,61,784,785` 的
+>    `does not support the current project part 'xc7k70tfbv676-1'`）⇒ **它对 KU5P 没有权威性**，
+>    引用时必须标注（KU5P 那部分的证据是 `_lic/prep_stdout.txt`，那条是 2026-09-27 phase A 在
+>    **本器件**上做的）。
 
 ### 1.3 ⭐ "10GBASE-R 预设"在 Tcl 里不存在 —— batch 的正确做法
 
@@ -281,7 +302,7 @@ ST_LINK_UP  : if (prbs_error) begin
 | P7a 主位流 | **1** |
 | 负对照孪生位流（RAW，可选，见 §4.3） | +1 |
 | 腿 1/腿 2 的 A/B 对照 | **0**（闸 0 已用 OOC 综合+布局做完，见 §4.1/§4.2） |
-| 板前 license 负对照（§1.2 建议） | 0（只建工程） |
+| 板前 license 负对照（§1.2 建议） | 0（只建工程）· ✅ **已执行（2026-09-29 复核更正）** = P7a 的 **P2j**，读数 `_proj_10g/reports/p7a_lic_deny_stdout.txt` |
 
 ---
 
@@ -305,7 +326,14 @@ ST_LINK_UP  : if (prbs_error) begin
 
 ### 2.3 路线 3（不推荐）：`xxv_ethernet` 的 PCS/PMA-only
 
-- 本工程已判定它的"standalone BASE-R 免费"是**文档级承诺、license manager 未实现**（`_lic/deny_stdout.txt` 实证）。
+- ~~本工程已判定它的"standalone BASE-R 免费"是**文档级承诺、license manager 未实现**（`_lic/deny_stdout.txt` 实证）。~~
+  ⚠️ **2026-09-29 复核更正：这句推理是错的，已作废。** `_lic/deny_stdout.txt` 是**在把 `Xilinx.lic`
+  藏起来的状态下**测的（实测：`IS_LOCKED=1`、连 `CONFIG.*` 都改不了、0 个 RTL 落盘），
+  在那种状态下**本来就该被锁** ⇒ 它不能证明"license manager 未实现"。**license 在位**时的实测是：
+  `xxv_ethernet 5.0` 三种 CORE 配置 `IS_LOCKED` 全 0、`generate_target all` 产出完整 RTL
+  （`_lic/prep_stdout.txt`，2026-09-27 phase A，**在本器件 KU5P 上**），且 `Xilinx.lic` 里本就有
+  `INCREMENT xxv_eth_mac_pcs … permanent uncounted` ⇒ **PCS/PMA-only 这条路是可用的**，
+  它被排除的理由只剩"会拖进 MAC/AXI 层次、判据不如路线 1 直接"（下一行），**不是** license。
 - 而且会拖进 MAC/AXI 层次，判据反而不如路线 1 直接。
 - **但它内部生成的那份 GT 实例是一份极有价值的黄金参照**（§1.3(c)）—— 用来对照参数，不用来当设计。
 
@@ -704,7 +732,7 @@ iBERT 的观测方式（`get_hw_sio_gts` 读 `RX_BER` / `RX_RECEIVED_BIT_COUNT`�
 
 | # | 风险 | 现象 | 早期信号 | 缓解 | 验证手段 |
 |---|---|---|---|---|---|
-| **R1** | **"免 license"未直证** | 换机/升级后被 design_linking 锁 | `IS_LOCKED=1`；`USED_LICENSE_KEYS` 出现 `xxv_eth_mac_pcs@... design_linking` | 板前做一次"藏 license"负对照（§1.2）；退路 = 接受依赖本机 `Xilinx.lic` | `_lic/tcl_b_deny.tcl` 式改名-恢复 + 读 `IS_LOCKED` |
+| **R1** | ~~**"免 license"未直证**~~ ⇒ ✅ **已闭（2026-09-29 复核更正）** | 换机/升级后被 design_linking 锁 | `IS_LOCKED=1`；`USED_LICENSE_KEYS` 出现 `xxv_eth_mac_pcs@... design_linking` | **已执行**：藏 license 负对照通过（gtwizard 仍 `IS_LOCKED=0`/`USED_LICENSE_KEYS=<>`/7 个 RTL 落盘），恢复已核对 MD5 ⇒ **"gtwizard 免 license"成立**（§1.2 末 / `P7A_RESULT.md` §3.4） | `_proj_10g/reports/p7a_lic_deny_stdout.txt`（P2j） |
 | **R2** | ⭐ **`link_down_latched==0` 被误当零误码** | **漏桶**容忍孤立错误（一次错只扣 34/67）⇒ 结论虚高 | 单次错后 `link_ctr` 67→33 但不掉链 | **自己加 `err_word_cnt`**，判据**不用** example 的 FSM | 计数器与 `bits_cnt` 对账（§5.4） |
 | **R3** | **同步头 2 bit/66 不被 fabric PRBS 覆盖** | gearbox 头位错误在净荷里不可见 | `hdr_err_cnt > 0` 而 `err_word_cnt == 0` | 加 `hdr_err_cnt`（`rxheadervalid && rxheader ≠ 常量`） | ⚠️ 机理**未确证**（§9.5）—— 先测出来再说 |
 | **R4** | ⚠️⚠️ **`TX_DIS` 悬空** | 两方向全黑，**误判成"板子做不了 10G"** | `link_status_out` 恒低；`rxpmaresetdone` 正常但 PRBS 永不锁 | **显式驱动 C11/D9 低** | 三态实验已定案；P7a 里同时读 `sfp{1,2}_rx_los` |
@@ -722,10 +750,17 @@ iBERT 的观测方式（`get_hw_sio_gts` 读 `RX_BER` / `RX_RECEIVED_BIT_COUNT`�
 
 ## 9. 我没确证的（诚实列出）
 
-1. **"gtwizard 免 license"没有被直接证明。** 只证了"license 在位时 `IS_LOCKED=0` / `USED_LICENSE_KEYS` 空"，
-   且同机同版本下 `xxv_ethernet` 在 license **缺席**时**确实**被 `design_linking` 锁（`_lic/deny_stdout.txt`）。
-   缺的是"把 `Xilinx.lic` 藏掉后 gtwizard 仍干净"这一条。没做的理由：改 `C:\AMDDesignTools\...` 有风险，
-   且任务未要求。**建议作为板前闸补做（§1.2）。**
+1. ~~**"gtwizard 免 license"没有被直接证明。**~~ ⚠️ **2026-09-29 复核更正：已补做并直证。**
+   当时只证了"license 在位时 `IS_LOCKED=0` / `USED_LICENSE_KEYS` 空"；缺的那条负对照（把 `Xilinx.lic`
+   藏掉后 gtwizard 仍干净）**已在 P7a 的 P2j 补做并通过**：`IS_LOCKED=0` / `LOCK_DETAILS = IP is not locked` /
+   `USED_LICENSE_KEYS = <>` / `generate_target all rc=0` / 7 个 RTL 落盘，恢复已核对 MD5
+   （`_proj_10g/reports/p7a_lic_deny_stdout.txt` + `p7a_lic_deny_state.txt`）。⇒ **"gtwizard 免 license"成立。**
+   ⚠️ **同时纠正一处被误延伸的推理**：同轮 `xxv_ethernet` 被 `design_linking` 锁是"**藏了 license**"的
+   直接后果（`_lic/deny_stdout.txt` 本身就是在藏 license 的状态下测的），**不能**反推"`xxv_ethernet`
+   平时锁着 / 要另买 license"。license 在位时它在 **KU5P** 上是 `IS_LOCKED=0` + 完整 RTL
+   （`_lic/prep_stdout.txt`）；详见 §1.2 末与 §2.3 的复核更正。
+   （`_lic/syn_stdout.txt` 那次综合实验建在 **Kintex-7 `xc7k70tfbv676-1`**，**对 KU5P 无权威性**，
+   只可用来读"缺 license 的失败形态 = 综合期硬失败"这一条。）
 2. **`RXHEADER[5:0]` 的字段编码没解码**（本地没查到 UG578 的对应表）。所以 §4.3 的判据写成"**稳定性**"
    而不是"等于某个具体值"。
 3. **RAW 构建里 `rxheader_out`/`rxheadervalid_out` 的实际运行值未知。** 只确证了**端口存在**
@@ -745,6 +780,14 @@ iBERT 的观测方式（`get_hw_sio_gts` 读 `RX_BER` / `RX_RECEIVED_BIT_COUNT`�
     只做了 GT IP 的 OOC 综合，没做**含计数器**的整设计综合。
 12. **`rxdatavalid_out` 在锁住后的实际占空比未确证**（我只知道它是 2 bit/ch）。`bits_cnt` 若用
     `rxdatavalid` 当使能，必须先实测它的行为；保守做法是用 `link_status` 当使能。
+13. ⭐ **范围限定：本轮的图案是"未加扰"的 PRBS31**（2026-09-29 复核补记）—— 已确证 **GT 不做
+    802.3 加扰**（58 位加扰器在 **soft logic**：`eth_phy_10g_tx_if.v:135-149`；
+    UG576 原文 "Scrambling of the data is done in the interconnect logic"，
+    `_proj_10g/notes/P7B_BASER_TABLES.md:341`；我方 `_proj_10g/tcl/build_p7a.tcl` 与生成 IP
+    **零命中 `scrambl`**，`P7B_LIB_SURVEY.md:828`）⇒ **GT 是纯 gearbox + PMA**。
+    ⇒ **P7a 证明了"这条物理通路能跑 10.3125 GBd"，没有证明"802.3 的加扰 + PCS 能跑"。**
+    （物理层结论不受影响：PRBS31 与加扰后的 64b/66b 都是宽带近直流平衡。）
+    该待办与两个决定性实验（**E2/E3**）已写在 `_proj_10g/notes/P7B_PHY_IFACE.md` §10.2 **U2** —— 本处只交叉引用。
 
 ---
 

@@ -3610,7 +3610,7 @@ P5d 记录的新风险族 `app_ctrl.c_snd_wnd → app_pattern` 同样**完全退
 |---|---|---|
 | **A 时钟与前端** | 换晶振 (10G 参考钟) + PCS/PMA + AXIS→左对齐字流 shim | 参考钟归属**必须先定案** (见"物理前提") |
 | **B MAC 语义** | **FCS 改 8B/拍** (现有逐字节 CRC 在 8B/拍 下要么 8 路并行要么换算法) + 前导/IFG/pad 语义复核 | 64B 帧下每帧开销敏感 |
-| **C 吞吐复核** | `rx_classify` 的 **skid 改真 FIFO** (现每帧停 6 拍 ⇒ 64B 帧下吞吐只剩 **57%**); VLAN 重构 | 1G 时代"停 6 拍"无所谓, 10G 是致命 |
+| **C 吞吐复核** | `rx_classify` 的吞吐上限: ~~**skid 改真 FIFO**~~ (现每帧停 3 拍 (非 TCP) / 6 拍 (TCP) ⇒ 上限 `N/(N+停顿)`、**最小帧 57.1%**); VLAN 重构 ⚠️ **2026-09-29 复核更正**（原件 `_proj_10g/notes/P7B_RXCLASSIFY_AUDIT.md`）：① 该 TODO **未落地**（as-built 仍是 6 字寄存器 skid，`rtl/rx_classify.v:52,60-65`；`git log -1 -- rtl/rx_classify.v` = `122b0c0`，P6a/P6b/F4/P7a 全未碰）；② 但**它不是"静默丢字"那类**（DRAIN 是寄存器 hold + `tready=0` 顶背压，`:78-85,102-103`；1G 下字间隔 10 dp 拍 > 6 拍停顿, 安全）；③ **真实的病是硬吞吐上限**（FILL 与 DRAIN 同 FSM 不重叠、FILL 期不输出，`:84-85`），**"加深上游 FIFO 修不了"**，只有"收字与等 w5 决策解耦"能修；④ **10G 下必然触发**（156.25MHz 每拍有字时 TCP 每帧净赤字 ≈4.5 字，现有 264 字弹性 ≈3.6 µs 填满 ⇒ MAC 层整帧丢，有计数 `W34` 已接出快照窗口） | 1G 时代"停 6 拍"无所谓, 10G 是致命 |
 | **D 窗口与缓冲** | **DDR3 大窗** (BRAM 只剩 ~30%, 且 retx 已用 16×64KB = 1MB) | 见风险 ②: 不换大窗, TCP 方向**测出来还是 ~1G** |
 | **E HLS 慢路径** | `u_hls` = **38.7% LUT** (层次面积实测) ⇒ **单域 vs 双域**抉择 (慢路径是否也跑 156.25MHz) | 单域省 CDC 但要重收敛最重的块; 双域省事但要 CDC 与一致性论证 |
 | **F 工具链** | 校验器 8 路并行 (图案/校验吞吐) + **10G 对端** (1G 的 C++ 合成对端 flush 上限 ~191k fps ≈ 1.1 Gbps, 必须换) | 见"要准备" |
@@ -3633,7 +3633,7 @@ P5d 记录的新风险族 `app_ctrl.c_snd_wnd → app_pattern` 同样**完全退
 | **K1** | 156.25MHz 时序尖峰: 用现有网表 + 收紧周期跑一次 impl, 看最差族的 slack 分布 | 判断 10G 时序是"紧"还是"崩" |
 | **K2** | 字节序实测: MAC 边界改 8B/拍后 FCS/前导的字节序在真链路上复核 | 避免"仿真对/板子错" |
 | **K3** | HLS 收敛探针: `u_hls` 单独在 156.25MHz 跑一次 | 单域/双域抉择的输入 |
-| **K4** | **license 核查**: PG157 (10G MAC) 是否在现有 license 覆盖范围内 | **可阻断**: 不覆盖则只能走免费 PCS/PMA 路线 |
+| **K4** | **license 核查**: PG157 (10G MAC) 是否在现有 license 覆盖范围内 | ~~**可阻断**: 不覆盖则只能走免费 PCS/PMA 路线~~ ⇒ ✅ **已答（2026-09-29 复核更正）：不阻断。** 本机 `Xilinx.lic` 含 `INCREMENT xxv_eth_mac_pcs … permanent uncounted`（同批 `ten_gig_eth_mac`/`l_eth_mac_pcs`/`xxv_eth_basekr` 等全部 permanent），`_lic/prep_stdout.txt` 实测 `xxv_ethernet 5.0` 三种 CORE 配置 `IS_LOCKED` **全 0** 且 `generate_target all` 出完整 RTL ⇒ **PG157 路线可用**；失败形态是**综合期硬失败**（`Fatal Error. License Check failed for secure IP for feature 'xxv_eth_mac_pcs@2025.05'`），**不是**位流超时 |
 | **K5** | 参考钟定案 (上面那条物理前提) | 决定 A 块是否要改板 |
 | **K6** | BRAM 映射尖峰: 8B/拍 下各级 FIFO/缓冲的 BRAM 映射 (现 312/445 = 70%) | 判断是否必须先上 DDR3 |
 
@@ -3641,7 +3641,13 @@ P5d 记录的新风险族 `app_ctrl.c_snd_wnd → app_pattern` 同样**完全退
 
 1. **单域 vs 双域** (数据面与 HLS 慢路径是否都跑 156.25MHz) —— 输入 = K3 + 风险 ①。
 2. **前端 IP 路线**: **免费 10GBASE-R PCS/PMA (PG068) + 自写 shim** vs **PG157** (10G MAC
-   收费核; **eval 版硬件有 8 小时停机限制** ⇒ 板级长时间测试不可行)。输入 = K4。
+   ~~收费核; **eval 版硬件有 8 小时停机限制** ⇒ 板级长时间测试不可行~~)。输入 = K4。
+   ⚠️ **2026-09-29 复核更正**：上面那个"收费核 + eval 版 8 小时停机"的前提**被证伪** —— 本机 license
+   **永久覆盖** `xxv_eth_mac_pcs`（`Xilinx.lic` 的 `permanent uncounted`），**没有** eval 停机计时；
+   而**缺** license 的失败形态是**综合期硬失败**（`Feature: Internal_bitstream` /
+   `Fatal Error. License Check failed for secure IP for feature 'xxv_eth_mac_pcs@2025.05'`），
+   **不是**"位流能出但跑几小时就停"。⇒ 路线抉择的输入不再是 license，而是判据直接性（仍推荐 PG068 路线，
+   理由见 `_proj_10g/notes/P7B_PHY_IFACE.md`；P7a 已实测 gtwizard 路线可用）。
 3. **10G 对端方案**: PCIe NIC + DPDK / **同板双 SFP+ 自环对打** (最省外部依赖) / 商用测试仪 /
    仅物理层自环 (只验链路不验数据面)。输入 = 预算 + 现有工具余量。
 
@@ -3661,6 +3667,11 @@ P5d 记录的新风险族 `app_ctrl.c_snd_wnd → app_pattern` 同样**完全退
 `P6-0` (前置 K1-K6 + 硬件定案) → `P6a` (时钟/前端替换, 含新 MAC 8B/拍) → `P6b` (数据面重收敛:
 `rx_classify` skid→FIFO / VLAN / 各级 FIFO 重映射) → `P6c` (BRAM/DDR3 大窗) → `P6d` (HLS 慢路径
 单域/双域 + 收敛) → `P6e` (工具链 + 对端) → `P6f` (板级验收: 线速/延迟/共存)。
+
+⚠️ **2026-09-29 复核更正**：上面的 `P6b` 阶段项 **`rx_classify` skid→FIFO 未落地**（P6b 已验收，
+该项仍留在"要做"栏；as-built = 6 字寄存器 skid，`git log -1 -- rtl/rx_classify.v` = `122b0c0`），
+且**"skid 改真 FIFO"本身不是正确修法** —— 真实病是**硬吞吐上限**（最小帧 57.1%，10G 必然触发），
+只有"收字与等 w5 决策解耦"能修。原件 `_proj_10g/notes/P7B_RXCLASSIFY_AUDIT.md`。
 
 **工期估计 33–66 天** (取决于单域/双域与 DDR3 是否进范围)。⚠️ `../udp_hls_eco/design_review/04`
 给的 **"8–15 人天"只覆盖了前端替换那一段** (A/B 块的一部分), 不含 C/D/E/F 与验收 ⇒ **不能引用
@@ -4207,9 +4218,15 @@ DEPTH=256 / FWFT=1）跨域；时钟由 `rtl/clk_gen_p6b.v` 从核心板 **Y1 10
 | **F-2**（🟠 中，**P6b 前就有**）| `mac_tx_64` 帧内中止（源断供）后**残字被当成新帧的开头发出去** ⇒ 线上出现一个 **FCS 完全正确的"幽灵帧"**，载荷是被中止帧的**中段残字**（对端无法分辨）| 新增 **`S_FLUSH`** 状态（唯一入口 = `S_DATA` 的 `!fempty` 中止分支）：中止后**一个字都不发**，逐字弹掉输入 FIFO 直到吞掉**本帧自己的 TLAST**，再等够 IFG 12 字节才回 `S_IDLE`；新增 `stat_flush_words/stat_flush_done`。**时序要点**：判据必须是 `frd && !fempty && fdout[0]`（本拍真弹且弹的就是 TLAST），用"上一拍看到的 tlast"会多弹一个字 | `audit_scratch/t3_txcdc/`：**幽灵帧 0**（撤回修复 ⇒ **FAIL**）；**无中止路径指纹逐位不变**（`33f82978` 修前/修后相同 + flush 计数器为 0 = 冲刷从未运行的正证据）；E3 的 `W20−W7 ∈{0,1}` **且** `W21==0` |
 | **F-1**（🟠 中，P6b 期新写模块的契约漏洞）| `fifo_async` 的 `full` 在**写域复位释放窗口**里读 0（复位值），而此时的 `wr_en` 被**静默丢弃**（无写入、无计数、无探针）⇒ `!full` 这个唯一闸门在此期间不可信；`fifo_sync` 有 `ovf_pulse` 自检，`fifo_async` **什么都没有** | 新增 **`ovf_pulse` + `ovf_cnt`** 端口（与 `fifo_sync` 的 `ovf_pulse` **同形同义**）：**拒写不再静默**，`ovf_cnt` 恒 0 才叫"无丢字" | `sim/fifoasync/run_all.bat` 的 **12 个基础门 + 7 个变异**；关键负对照 `run_mut_noovf.bat`（把 `ovf_pulse` 钉 0 = **撤回 F-1 修复**）实测 **FAIL（3 条判据不成立）**；`audit_scratch/t4_reset/` 的实测 `model_acc=3999 vs dut_acc=3996`（3 字静默丢弃）|
 
-⚠️ **F-1 的板级缺口没有闭环**（**必须记，否则后人会以为它已经可观测**）：`rtl/fifo_async.v` 有了探针，
+⚠️ **F-1 / F-2 的板级缺口都没有闭环**（**必须记，否则后人会以为它们已经可观测**）：`rtl/fifo_async.v` 有了探针，
 但 `board/wrapper_p4.v` 的两个例化 `.ovf_cnt()` **悬空**、快照字里**没有**对应字 ⇒ 板上仍**无法归因 CDC
 FIFO 自身的丢字**。板上的 `W35` 是 `mac_rx_64` **内部那个 8 深 `fifo_sync`** 的拒写数，**是另一个 FIFO**。
+⚠️ **同族缺口（F-2，2026-09-29 复核补记）**：`mac_tx_64` 的 **`stat_flush_words` / `stat_flush_done`**
+（声明在 `rtl/mac_tx_64.v:48-49`）在 `board/wrapper_p4.v` 里**未连接**（该文件内这两个名字**零出现**，
+全仓 grep 证实），36 字快照窗口里也**没有**对应字 ⇒ **F-2 修复在板级不可观测**：
+它只在仿真 TB 里被接过并判过（`audit_scratch/t3_txcdc/tb_tx_cdc_chain.v:109-110`、
+`p6b_final_verify/t3_f2/tb_tx_cdc_chain.v:109-110`），**板级从未观测过**（唯一痕迹是 xelab 的
+`VRFC 10-3645` 未连接告警）。含义：**F-2 是"仿真里验过的修复"，不是"板上验过的修复"。**
 **F-1 当前也不是活缺陷**（可达性论证：RX 侧最早 push 在复位释放后 ≥19 个 gmii 拍；TX 侧功能逻辑的释放
 含 `~locked` ⇒ 恒不早于 FIFO 写域释放），但它把"不丢字"押在一个**隐含时序假设**上。
 

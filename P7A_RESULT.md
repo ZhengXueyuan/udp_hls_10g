@@ -415,6 +415,20 @@ run2 的 delta=0 纯粹是台架没发请求**。
 8. **单元门汇总行里的 `ratio_abs_gb=0.974091` 口径本文未解释**
    （`sim/xsim_run.txt:85` 的 `SUMMARY` 行；它同行还有 `ratio_gb=1.000000` / `ratio_raw=1.031252`，
    **判据用的是后者那两个**）—— 列出来是防止后人把它误当成判据。
+9. ⭐ **范围限定：P7a 跑的是"未加扰"数据**（2026-09-29 复核补记，是第 7 条的延伸）——
+   已确证 **GT 不做 802.3 加扰**：`eth_phy_10g_tx_if.v:135-149` 把 58 位加扰器实现在 **soft logic**
+   里（逐位门 + `lfsr.v`，摘录见 `_proj_10g/notes/P7B_LIB_SURVEY.md:738-828`），
+   `_proj_10g/notes/P7B_BASER_TABLES.md:341` 引 UG576 原文 **"Scrambling of the data is done in the
+   interconnect logic"**，且我方 `_proj_10g/tcl/build_p7a.tcl` 与生成的 IP **零命中 `scrambl`**
+   （`P7B_LIB_SURVEY.md:828`）⇒ **GT 是纯 gearbox + PMA**。同一份 GT 配置下，官方 `xxv_ethernet` 的
+   PCS-only 变体把 **XGMII 摆在 fabric 面**（`rx_mii_d_0[63:0]` / `rx_mii_c_0[7:0]`，明文端口表
+   `D:\repo\XCKU5PMini\_lic\w_pcs64_baser\w_pcs64_baser.gen\sources_1\ip\w_pcs64_baser\w_pcs64_baser.veo:78-79,98-99`）
+   ⇒ 编码必在 GT 之外。
+   ⇒ **§4 那个 6.003×10¹² bit 零错的链接，线路上跑的是"未加扰的 PRBS31"。**
+   **物理层结论仍然成立**（连接器/板材/光模块支持 10.3125 GBd；PRBS31 与加扰后的 64b/66b 都是
+   宽带近直流平衡、无长连 0/1 问题），**但范围必须限定为：P7a 证明了"这条物理通路能跑 10.3125 GBd"，
+   没有证明"802.3 的加扰 + PCS 能跑"。** 该待办已写在 `_proj_10g/notes/P7B_PHY_IFACE.md`
+   （§10.2 的 **U2**"GT 内部是否做 802.3 加扰/解扰"、§7 的 **E2/E3** 两个决定性实验）——本处只做交叉引用。
 
 ---
 
