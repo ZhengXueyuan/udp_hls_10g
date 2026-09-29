@@ -1,0 +1,88 @@
+
+****** xsim v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 16:43:32 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source xsim.dir/tb_p7a/xsim_script.tcl
+# xsim {tb_p7a} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+===== P7a unit gate: PRBS chain + counters + atomic snapshot =====
+
+-- C1: acq is sticky through errors; a clear restarts it --
+  before: bits0=448 err0=0 acq0=1
+  [ ok ] C1a pre bits>0 : got=1 exp=1
+  under full corruption: err0=203 bits0=15232 acq0=1
+  [ ok ] C1b acq sticky through errors : got=1 exp=1
+  [ ok ] C1b errors counted : got=1 exp=1
+  [ ok ] C1b bits kept counting : got=1 exp=1
+  [ ok ] C1c err0==0 after clear : got=0 exp=0
+  [ ok ] C1c bits0==0 after clear : got=0 exp=0
+  [ ok ] C1c hdrs0==0 after clear : got=0 exp=0
+  [ ok ] C1c acq0 dropped : got=0 exp=0
+  [ ok ] C1c acq1 dropped : got=0 exp=0
+  [ ok ] C1c rxcyc small (not stale) : got=1 exp=1
+  [ ok ] C1d acq re-acquires : got=1 exp=1
+
+-- C2: clean run, acq sets, bits advance, err stays 0 --
+  bits0=322432 (words=5038) err0=0 hdrs0=5038 hdre0=0 rxcyc0=5172 fr=5172
+  [ ok ] C2 acq0 set : got=1 exp=1
+  [ ok ] C2 err0==0 : got=0 exp=0
+  [ ok ] C2 err1==0 : got=0 exp=0
+  [ ok ] C2 hdre0==0 : got=0 exp=0
+  [ ok ] C2 bits0>0 (positive control) : got=1 exp=1
+  [ ok ] C2 hdrs0==bits0/64 : got=5038 exp=5038
+  [ ok ] C2 hdr_ref ch0 captured : got=1 exp=1
+  [ ok ] C2 hdr_ref ch1 captured : got=1 exp=1
+  hdr_ref ch0 = 000001  (the TX header the checker model passed through)
+  [ ok ] C2 pos violations : got=0 exp=0
+  [ ok ] C2 rxdatavalid live sample : got=3 exp=3
+
+-- C3: K isolated bit errors -> exactly K*m errored words --
+  baseline err0=0
+  m (errored words per single injected bit error) = 2
+  [ ok ] C3 m >= 1 : got=1 exp=1
+  injected K=10 errors -> err0=20 (expect 20)
+  [ ok ] C3 err0 == 10*m : got=20 exp=20
+  [ ok ] C3 hdre0==0 for payload errors : got=0 exp=0
+
+-- C4: header corruption is INVISIBLE to the payload checker --
+  injected M=5 header errors -> hdre0=5 err0=0 hdrs0=517
+  [ ok ] C4 hdre0 == 5 : got=5 exp=5
+  [ ok ] C4 err0 == 0 (the gap R3 describes) : got=0 exp=0
+  [ ok ] C4 hdrs0 == bits0/64 : got=517 exp=517
+
+-- C5/C6: atomicity under race, with the torn twin as negative control --
+  snapshots evaluated = 200
+  POSITIVE (atomic)  invariant violations = 0
+  NEGATIVE (torn)    invariant violations = 200
+  last positive snapshot: err0=6400 bits0=413248 hdrs0=6457 rxcyc0=6521
+  [ ok ] C5 positive violations == 0 : got=0 exp=0
+  [ ok ] C6 negative violations >  0 : got=1 exp=1
+
+-- C7: a snapshot is FROZEN until the next request --
+  [ ok ] C7 bits frozen : got=415232 exp=415232
+  [ ok ] C7 hdrs frozen : got=6488 exp=6488
+  [ ok ] C7 err  frozen : got=6400 exp=6400
+  [ ok ] C7 bits advanced after a new request : got=1 exp=1
+
+-- C8: protocol -- N requests produce exactly N acks --
+  requests=212 acks=212
+  [ ok ] C8 acks == requests : got=212 exp=212
+
+-- C9: the ratio criterion must discriminate 156.25 vs 161.1328125 --
+  payload clock = 156.25 MHz -> delta ratio = 1.000000 (abs=0.974091, expect 1.0 +- 0.5%)
+  [ ok ] C9 ratio at 156.25 : 1.000000 in [0.995000,1.005000]
+  payload clock = 161.1328125 MHz -> ratio = 1.031252 (expect ~1.03125)
+  [ ok ] C9 ratio at 161.1328125 : 1.031252 outside [0.995000,1.005000] as required
+
+===== RESULT: checks=437 failures=0 =====
+GATE PASS
+SUMMARY m_words_per_injected_bit_error=2 nsnap=200 pos_inv=0 neg_inv=200 ratio_gb=1.000000 ratio_raw=1.031252 ratio_abs_gb=0.974091
+$finish called at time : 218249600 ps : File "D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/sim/tb_p7a_counters.v" Line 561
+exit
+INFO: [Common 17-206] Exiting xsim at Tue Sep 29 16:43:39 2026...

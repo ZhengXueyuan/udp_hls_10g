@@ -1,0 +1,78 @@
+# m8_v3_confirm.tcl -- confirm the CORRECTED pin map with v3:
+#   C11/D9 = TX_DIS driven low, B11/C9 = RX_LOS read back
+set ::out "D:/repo/XCKU5PMini/_ibert"
+set ::bitfile "$::out/archive_v3/ibert_top_v3_corrected_map.bit"
+set ::ltxfile "$::out/archive_v3/ibert_top_v3_corrected_map.ltx"
+
+proc sec {s} { puts "\n@@@ M8 >>> $s" }
+proc rd {o n} { if {[catch {set v [get_property $n $o]} e]} { return "<ERR>" }; return $v }
+proc h2d {h} { set v -1 ; catch {scan $h %x v} ; return $v }
+
+sec "OPEN / GATE / PROGRAM v3"
+open_hw_manager
+connect_hw_server
+open_hw_target
+set tdev ""
+foreach d [get_hw_devices] { if {[rd $d IDCODE_HEX] eq "04A62093"} { set tdev $d } }
+if {$tdev eq "" || [llength [get_hw_devices]] != 1} { puts "SAFETY_GATE=ABORT"; exit 0 }
+puts "SAFETY_GATE = PASS -> $tdev"
+current_hw_device $tdev
+catch {set_property PROBES.FILE $::ltxfile $tdev}
+catch {set_property FULL_PROBES.FILE $::ltxfile $tdev}
+set_property PROGRAM.FILE $::bitfile $tdev
+puts "program rc=[catch {program_hw_devices $tdev} emsg] $emsg"
+puts "DONE_PIN = [rd $tdev REGISTER.CONFIG_STATUS.BIT\[14\]_DONE_PIN]"
+catch {refresh_hw_device -update_hw_probes true $tdev}
+
+sec "VIO : heartbeat + RX_LOS  (probe_in1 = {SFP B LOS, SFP A LOS})"
+set vios [get_hw_vios]
+foreach v $vios {
+    for {set i 0} {$i < 4} {incr i} {
+        catch {refresh_hw_vio $v}
+        foreach p [get_hw_probes -of_objects $v] {
+            puts "   [rd $p NAME] = [rd $p INPUT_VALUE]"
+        }
+        puts "   ---"
+        after 1500
+    }
+}
+
+set ::ibs [get_hw_sio_iberts]
+catch {refresh_hw_sio $::ibs}
+set ::gts [lsort [get_hw_sio_gts]]
+set ::gtA [lindex $::gts 0]
+set ::gtB [lindex $::gts 1]
+
+sec "LINK STATE (v3 : only C11/D9 driven low)"
+foreach l [get_hw_sio_links] { catch {remove_hw_sio_link $l} }
+catch {create_hw_sio_link -description {A_to_B} [get_hw_sio_txs -of_objects $::gtA] [get_hw_sio_rxs -of_objects $::gtB]}
+catch {create_hw_sio_link -description {B_to_A} [get_hw_sio_txs -of_objects $::gtB] [get_hw_sio_rxs -of_objects $::gtA]}
+after 12000
+catch {refresh_hw_sio $::ibs}
+foreach g $::gts { puts "  [rd $g DISPLAY_NAME] LOOPBACK=[rd $g LOOPBACK] LINE_RATE=[rd $g LINE_RATE] RX_BER=[rd $g RX_BER]" }
+foreach l [get_hw_sio_links] { puts "  LINK $l STATUS=[rd $l STATUS] RX_BER=[rd $l RX_BER]" }
+
+sec "60 s BER (v3)"
+foreach g $::gts { catch {set_property LOGIC.MGT_ERRCNT_RESET_CTRL 1 $g} ; catch {set_property LOGIC.RXPRBSERRSTICKYRST 1 $g} }
+after 300
+foreach g $::gts { catch {set_property LOGIC.MGT_ERRCNT_RESET_CTRL 0 $g} ; catch {set_property LOGIC.RXPRBSERRSTICKYRST 0 $g} }
+after 300
+catch {refresh_hw_sio $::ibs}
+set t0 {}
+foreach g $::gts { lappend t0 [list [rd $g RX_RECEIVED_BIT_COUNT] [h2d [rd $g LOGIC.ERRBIT_COUNT]]] }
+after 60000
+catch {refresh_hw_sio $::ibs}
+set i 0
+foreach g $::gts {
+    set b0 [lindex [lindex $t0 $i] 0] ; set e0 [lindex [lindex $t0 $i] 1]
+    set b1 [rd $g RX_RECEIVED_BIT_COUNT] ; set e1 [h2d [rd $g LOGIC.ERRBIT_COUNT]]
+    set db [expr {$b1 - $b0}] ; set de [expr {$e1 - $e0}]
+    set ber "<n/a>" ; if {$db > 0 && $de >= 0} { set ber [expr {double($de)/double($db)}] }
+    puts [format "    %-10s dBITS=%-14s dERR=%-9s BER=%s" [rd $g DISPLAY_NAME] $db $de $ber]
+    incr i
+}
+
+sec "FINAL RX_LOS"
+foreach v $vios { catch {refresh_hw_vio $v} ; foreach p [get_hw_probes -of_objects $v] { puts "   [rd $p NAME] = [rd $p INPUT_VALUE]" } }
+sec "DONE"
+puts "M8-COMPLETE"

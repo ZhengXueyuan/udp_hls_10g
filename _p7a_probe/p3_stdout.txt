@@ -1,0 +1,160 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 16:03:52 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source p3_wizard.tcl
+# set outroot "D:/repo/XCKU5PMini/udp_hls_10g/_p7a_probe"
+# set part    "xcku5p-ffvb676-1-e"
+# proc sec {s} { puts "\nP3 >>>>>>>>>> $s" }
+# catch {set_param general.maxThreads 4}
+# sec "ENV"
+
+P3 >>>>>>>>>> ENV
+# puts "VIVADO = [version -short]"
+VIVADO = 2025.2
+# file delete -force "$outroot/pj_wiz3"
+# create_project -force p3_wiz "$outroot/pj_wiz3" -part $part
+# set_property target_language Verilog [current_project]
+# create_ip -name gtwizard_ultrascale -vendor xilinx.com -library ip -module_name p3_gt
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository 'C:/AMDDesignTools/2025.2/Vivado/data/ip'.
+# set gt [get_ips p3_gt]
+# puts "GT = $gt"
+GT = p3_gt
+# sec "CONFIGURE_ORDERED"
+
+P3 >>>>>>>>>> CONFIGURE_ORDERED
+# set cfg [list \
+#     CONFIG.CHANNEL_ENABLE        {X0Y4 X0Y5} \
+#     CONFIG.TX_REFCLK_SOURCE      {X0Y4 clk0 X0Y5 clk0} \
+#     CONFIG.RX_REFCLK_SOURCE      {X0Y4 clk0 X0Y5 clk0} \
+#     CONFIG.TX_REFCLK_FREQUENCY   {156.25} \
+#     CONFIG.RX_REFCLK_FREQUENCY   {156.25} \
+#     CONFIG.TX_LINE_RATE          {10.3125} \
+#     CONFIG.RX_LINE_RATE          {10.3125} \
+#     CONFIG.TX_DATA_ENCODING      {64B66B_ASYNC} \
+#     CONFIG.RX_DATA_DECODING      {64B66B_ASYNC} \
+#     CONFIG.TX_INT_DATA_WIDTH     {64} \
+#     CONFIG.RX_INT_DATA_WIDTH     {64} \
+#     CONFIG.TX_USER_DATA_WIDTH    {64} \
+#     CONFIG.RX_USER_DATA_WIDTH    {64} \
+#     CONFIG.TX_BUFFER_MODE        {1} \
+#     CONFIG.RX_BUFFER_MODE        {1} \
+#     CONFIG.TX_PLL_TYPE           {QPLL0} \
+#     CONFIG.RX_PLL_TYPE           {QPLL0} \
+#     CONFIG.TX_OUTCLK_SOURCE      {TXPROGDIVCLK} \
+#     CONFIG.RX_OUTCLK_SOURCE      {RXPROGDIVCLK} \
+#     CONFIG.LOCATE_RESET_CONTROLLER  {CORE} \
+#     CONFIG.LOCATE_TX_USER_CLOCKING  {CORE} \
+#     CONFIG.LOCATE_RX_USER_CLOCKING  {CORE} \
+#     CONFIG.LOCATE_COMMON            {CORE} \
+#     CONFIG.LOCATE_USER_DATA_WIDTH_SIZING {CORE} \
+# ]
+# foreach {k v} $cfg {
+#     set rc [catch {set_property $k $v $gt} e]
+#     if {$rc} { puts "SET $k = <$v> => FAIL : $e" } else { puts "SET $k = <$v> => OK" }
+# }
+SET CONFIG.CHANNEL_ENABLE = <X0Y4 X0Y5> => OK
+SET CONFIG.TX_REFCLK_SOURCE = <X0Y4 clk0 X0Y5 clk0> => OK
+SET CONFIG.RX_REFCLK_SOURCE = <X0Y4 clk0 X0Y5 clk0> => OK
+ERROR: [IP_Flow 19-3478] Validation failed for parameter 'Actual Reference clock (MHz)(RX_REFCLK_FREQUENCY)' with current value '64.453125' for IP 'p3_gt'. RX and TX frequencies do not allow for PLL sharing
+ERROR: [IP_Flow 19-3478] Validation failed for parameter 'Receiver reference clock source(RX_REFCLK_SOURCE)' with current value 'X0Y4 clk1 X0Y5 clk1' for IP 'p3_gt'. The TX and RX REFCLK sources must match for each quad in order to use QPLL0, see channels X0Y4 X0Y5
+ERROR: [IP_Flow 19-3478] Validation failed for parameter 'Transmitter reference clock source(TX_REFCLK_SOURCE)' with current value 'X0Y4 clk0 X0Y5 clk0' for IP 'p3_gt'. The TX and RX REFCLK sources must match for each quad in order to use QPLL0, see channels X0Y4 X0Y5
+INFO: [IP_Flow 19-3438] Customization errors found on 'p3_gt'. Restoring to previous valid configuration.
+SET CONFIG.TX_REFCLK_FREQUENCY = <156.25> => FAIL : ERROR: [Common 17-39] 'set_property' failed due to earlier errors.
+
+ERROR: [IP_Flow 19-3478] Validation failed for parameter 'Actual Reference clock (MHz)(RX_REFCLK_FREQUENCY)' with current value '156.25' for IP 'p3_gt'. RX and TX frequencies do not allow for PLL sharing
+ERROR: [IP_Flow 19-3478] Validation failed for parameter 'Receiver reference clock source(RX_REFCLK_SOURCE)' with current value 'X0Y4 clk1 X0Y5 clk1' for IP 'p3_gt'. The TX and RX REFCLK sources must match for each quad in order to use QPLL0, see channels X0Y4 X0Y5
+ERROR: [IP_Flow 19-3478] Validation failed for parameter 'Transmitter reference clock source(TX_REFCLK_SOURCE)' with current value 'X0Y4 clk0 X0Y5 clk0' for IP 'p3_gt'. The TX and RX REFCLK sources must match for each quad in order to use QPLL0, see channels X0Y4 X0Y5
+INFO: [IP_Flow 19-3438] Customization errors found on 'p3_gt'. Restoring to previous valid configuration.
+SET CONFIG.RX_REFCLK_FREQUENCY = <156.25> => FAIL : ERROR: [Common 17-39] 'set_property' failed due to earlier errors.
+
+SET CONFIG.TX_LINE_RATE = <10.3125> => OK
+SET CONFIG.RX_LINE_RATE = <10.3125> => OK
+SET CONFIG.TX_DATA_ENCODING = <64B66B_ASYNC> => OK
+SET CONFIG.RX_DATA_DECODING = <64B66B_ASYNC> => OK
+ERROR: [IP_Flow 19-3461] Value '64' is out of the range for parameter 'Internal data width(TX_INT_DATA_WIDTH)' for IP 'p3_gt' . Valid values are - 32
+INFO: [IP_Flow 19-3438] Customization errors found on 'p3_gt'. Restoring to previous valid configuration.
+SET CONFIG.TX_INT_DATA_WIDTH = <64> => FAIL : ERROR: [Common 17-39] 'set_property' failed due to earlier errors.
+
+ERROR: [IP_Flow 19-3461] Value '64' is out of the range for parameter 'Internal data width(RX_INT_DATA_WIDTH)' for IP 'p3_gt' . Valid values are - 32
+INFO: [IP_Flow 19-3438] Customization errors found on 'p3_gt'. Restoring to previous valid configuration.
+SET CONFIG.RX_INT_DATA_WIDTH = <64> => FAIL : ERROR: [Common 17-39] 'set_property' failed due to earlier errors.
+
+SET CONFIG.TX_USER_DATA_WIDTH = <64> => OK
+SET CONFIG.RX_USER_DATA_WIDTH = <64> => OK
+SET CONFIG.TX_BUFFER_MODE = <1> => OK
+SET CONFIG.RX_BUFFER_MODE = <1> => OK
+SET CONFIG.TX_PLL_TYPE = <QPLL0> => OK
+SET CONFIG.RX_PLL_TYPE = <QPLL0> => OK
+SET CONFIG.TX_OUTCLK_SOURCE = <TXPROGDIVCLK> => OK
+SET CONFIG.RX_OUTCLK_SOURCE = <RXPROGDIVCLK> => OK
+SET CONFIG.LOCATE_RESET_CONTROLLER = <CORE> => OK
+SET CONFIG.LOCATE_TX_USER_CLOCKING = <CORE> => OK
+SET CONFIG.LOCATE_RX_USER_CLOCKING = <CORE> => OK
+SET CONFIG.LOCATE_COMMON = <CORE> => OK
+SET CONFIG.LOCATE_USER_DATA_WIDTH_SIZING = <CORE> => OK
+# sec "EFFECTIVE"
+
+P3 >>>>>>>>>> EFFECTIVE
+# foreach k {CONFIG.TX_DATA_ENCODING CONFIG.RX_DATA_DECODING CONFIG.TX_INT_DATA_WIDTH \
+#            CONFIG.RX_INT_DATA_WIDTH CONFIG.TX_USER_DATA_WIDTH CONFIG.RX_USER_DATA_WIDTH \
+#            CONFIG.TX_BUFFER_MODE CONFIG.RX_BUFFER_MODE CONFIG.TX_PLL_TYPE CONFIG.RX_PLL_TYPE \
+#            CONFIG.TX_LINE_RATE CONFIG.RX_LINE_RATE \
+#            CONFIG.TX_REFCLK_FREQUENCY CONFIG.RX_REFCLK_FREQUENCY} {
+#     catch {puts "EFF $k = <[get_property $k $gt]>"}
+# }
+EFF CONFIG.TX_DATA_ENCODING = <64B66B_ASYNC>
+EFF CONFIG.RX_DATA_DECODING = <64B66B_ASYNC>
+EFF CONFIG.TX_INT_DATA_WIDTH = <32>
+EFF CONFIG.RX_INT_DATA_WIDTH = <32>
+EFF CONFIG.TX_USER_DATA_WIDTH = <64>
+EFF CONFIG.RX_USER_DATA_WIDTH = <64>
+EFF CONFIG.TX_BUFFER_MODE = <1>
+EFF CONFIG.RX_BUFFER_MODE = <1>
+EFF CONFIG.TX_PLL_TYPE = <QPLL0>
+EFF CONFIG.RX_PLL_TYPE = <QPLL0>
+EFF CONFIG.TX_LINE_RATE = <10.3125>
+EFF CONFIG.RX_LINE_RATE = <10.3125>
+EFF CONFIG.TX_REFCLK_FREQUENCY = <64.453125>
+EFF CONFIG.RX_REFCLK_FREQUENCY = <64.453125>
+# sec "GENERATE_ALL"
+
+P3 >>>>>>>>>> GENERATE_ALL
+INFO: [IP_Flow 19-1686] Generating 'Instantiation Template' target for IP 'p3_gt'...
+INFO: [IP_Flow 19-1686] Generating 'Synthesis' target for IP 'p3_gt'...
+INFO: [IP_Flow 19-1686] Generating 'Simulation' target for IP 'p3_gt'...
+INFO: [IP_Flow 19-1686] Generating 'Change Log' target for IP 'p3_gt'...
+# set gr [catch {generate_target all $gt} e]
+# puts "GENERATE_TARGET_ALL rc = $gr"
+GENERATE_TARGET_ALL rc = 0
+# if {$gr} { puts "ERR = $e" }
+# puts "IS_LOCKED = [get_property IS_LOCKED $gt]"
+IS_LOCKED = 0
+# catch {puts "LOCK_DETAILS = [get_property LOCK_DETAILS $gt]"}
+LOCK_DETAILS = IP is not locked
+# catch {puts "USED_LICENSE_KEYS = <[get_property USED_LICENSE_KEYS $gt]>"}
+USED_LICENSE_KEYS = <>
+# catch {puts "LICENSE_KEYS = <[get_property LICENSE_KEYS $gt]>"}
+ERROR: [Vivado 12-1341] Failed to get property 'LICENSE_KEYS' on IP 'p3_gt'.
+# sec "EXAMPLE_TARGET"
+
+P3 >>>>>>>>>> EXAMPLE_TARGET
+WARNING: [Vivado 12-4105] The example target will be deprecated in a future release. Instead, use open_example_project command to get the example design.
+INFO: [IP_Flow 19-1686] Generating 'Examples' target for IP 'p3_gt'...
+# set er [catch {generate_target example $gt} e]
+# puts "GENERATE_TARGET_EXAMPLE rc = $er"
+GENERATE_TARGET_EXAMPLE rc = 0
+# if {$er} { puts "ERR = $e" }
+# sec "DONE"
+
+P3 >>>>>>>>>> DONE
+# close_project -quiet
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 29 16:04:11 2026...
+EXITCODE=0 

@@ -1,0 +1,257 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 16:01:28 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source p1_wizard.tcl
+# set outroot "D:/repo/XCKU5PMini/udp_hls_10g/_p7a_probe"
+# set part    "xcku5p-ffvb676-1-e"
+# proc sec {s} { puts "\nP1 >>>>>>>>>> $s" }
+# catch {set_param general.maxThreads 4}
+# sec "ENV"
+
+P1 >>>>>>>>>> ENV
+# puts "VIVADO = [version -short]"
+VIVADO = 2025.2
+# puts "LIC_XILINX = [file exists C:/AMDDesignTools/2025.2/data/ip/core_licenses/Xilinx.lic]"
+LIC_XILINX = 1
+# puts "LIC_FREE   = [file exists C:/AMDDesignTools/2025.2/data/ip/core_licenses/XilinxFree.lic]"
+LIC_FREE   = 1
+# sec "CREATE_PROJECT"
+
+P1 >>>>>>>>>> CREATE_PROJECT
+# file delete -force "$outroot/pj_wiz"
+# create_project -force p1_wiz "$outroot/pj_wiz" -part $part
+# set_property target_language Verilog [current_project]
+# sec "IPDEF_LOOKUP"
+
+P1 >>>>>>>>>> IPDEF_LOOKUP
+# puts "CMD: get_ipdefs -filter {NAME == gtwizard_ultrascale}"
+CMD: get_ipdefs -filter {NAME == gtwizard_ultrascale}
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository 'C:/AMDDesignTools/2025.2/Vivado/data/ip'.
+# set rc [catch {set defs [get_ipdefs -filter {NAME == gtwizard_ultrascale}]} e]
+# puts "RC = $rc"
+RC = 0
+# puts "IPDEFS = <$defs>"
+IPDEFS = <xilinx.com:ip:gtwizard_ultrascale:1.7>
+# puts "COUNT = [llength $defs]"
+COUNT = 1
+# foreach d $defs {
+#     puts "IPDEF_VLN = [get_property VLNV $d]"
+#     catch {puts "IPDEF_NAME = [get_property NAME $d]"}
+#     catch {puts "IPDEF_VER  = [get_property VERSION $d]"}
+#     catch {puts "IPDEF_LIC  = [get_property LICENSE $d]"}
+#     catch {puts "IPDEF_LICKEYS = [get_property LICENSE_KEYS $d]"}
+#     catch {puts "IPDEF_SUPPORTED_PARTS = [get_property SUPPORTED_PARTS $d]"}
+#     catch {puts "IPDEF_PRODUCT = [get_property PRODUCT $d]"}
+#     catch {puts "IPDEF_PRODUCT_CATEGORY = [get_property PRODUCT_CATEGORY $d]"}
+#     # is this part in the supported family list?
+#     set fam [get_property SUPPORTED_FAMILIES $d]
+#     puts "IPDEF_SUPPORTED_FAMILIES = <$fam>"
+# }
+IPDEF_VLN = xilinx.com:ip:gtwizard_ultrascale:1.7
+IPDEF_NAME = gtwizard_ultrascale
+IPDEF_VER  = 1.7
+IPDEF_LICKEYS = 
+IPDEF_SUPPORTED_PARTS = xcku11p-ffva1156-1-e xcku11p-ffva1156-1-i xcku11p-ffva1156-1L-i xcku11p-ffva1156-1LV-i xcku11p-ffva1156-2-e xcku11p-ffva1156-2-i xcku11p-ffva1156-2L-e xcku11p-ffva1156-2LV-e xcku11p-ffva1156-3-e xcku11p-ffvd900-1-e xcku11p-ffvd900-1-i xcku11p-ffvd900-1L-i xcku11p-ffvd900-1LV-i xcku11p-ffvd900-2-e xcku11p-ffvd900-2-i xcku11p-ffvd900-2L-e xcku11p-ffvd900-2LV-e xcku11p-ffvd900-3-e xcku11p-ffve1517-1-e xcku11p-ffve1517-1-i xcku11p-ffve1517-1L-i xcku11p-ffve1517-1LV-i xcku11p-ffve1517-2-e xcku11p-ffve1517-2-i xcku11p-ffve1517-2L-e xcku11p-ffve1517-2LV-e xcku11p-ffve1517-3-e xcku11p_CIV-ffva1156-1-e xcku11p_CIV-ffva1156-1-i xcku11p_CIV-ffva1156-1L-i xcku11p_CIV-ffva1156-1LV-i xcku11p_CIV-ffva1156-2-e xcku11p_CIV-ffva1156-2-i xcku11p_CIV-ffva1156-2L-e xcku11p_CIV-ffva1156-2LV-e xcku11p_CIV-ffva1156-3-e xcku11p_CIV-ffvd900-1-e xcku11p_CIV-ffvd900-1-i xcku11p_CIV-ffvd900-1L-i xcku11p_CIV-ffvd900-1LV-i xcku11p_CIV-ffvd900-2-e xcku11p_CIV-ffvd900-2-i xcku11p_CIV-ffvd900-2L-e xcku11p_CIV-ffvd900-2LV-e xcku11p_CIV-ffvd900-3-e xcku11p_CIV-ffve1517-1-e xcku11p_CIV-ffve1517-1-i xcku11p_CIV-ffve1517-1L-i xcku11p_CIV-ffve1517-1LV-i xcku11p_CIV-ffve1517-2-e xcku11p_CIV-ffve1517-2-i xcku11p_CIV-ffve1517-2L-e xcku11p_CIV-ffve1517-2LV-e xcku11p_CIV-ffve1517-3-e xcku13p-ffve900-1-e xcku13p-ffve900-1-i xcku13p-ffve900-1L-i xcku13p-ffve900-1LV-i xcku13p-ffve900-2-e xcku13p-ffve900-2-i xcku13p-ffve900-2L-e xcku13p-ffve900-2LV-e xcku13p-ffve900-3-e xcku15p-ffva1156-1-e xcku15p-ffva1156-1-i xcku15p-ffva1156-1L-i xcku15p-ffva1156-1LV-i xcku15p-ffva1156-2-e xcku15p-ffva1156-2-i xcku15p-ffva1156-2L-e xcku15p-ffva1156-2LV-e xcku15p-ffva1156-3-e xcku15p-ffva1760-1-e xcku15p-ffva1760-1-i xcku15p-ffva1760-1L-i xcku15p-ffva1760-1LV-i xcku15p-ffva1760-2-e xcku15p-ffva1760-2-i xcku15p-ffva1760-2L-e xcku15p-ffva1760-2LV-e xcku15p-ffva1760-3-e xcku15p-ffve1517-1-e xcku15p-ffve1517-1-i xcku15p-ffve1517-1L-i xcku15p-ffve1517-1LV-i xcku15p-ffve1517-2-e xcku15p-ffve1517-2-i xcku15p-ffve1517-2L-e xcku15p-ffve1517-2LV-e xcku15p-ffve1517-3-e xcku15p-ffve1760-1-e xcku15p-ffve1760-1-i xcku15p-ffve1760-1L-i xcku15p-ffve1760-1LV-i xcku15p-ffve1760-2-e xcku15p-ffve1760-2-i xcku15p-ffve1760-2L-e xcku15p-ffve1760-2LV-e xcku15p-ffve1760-3-e xcku15p_CIV-ffva1156-1-e xcku15p_CIV-ffva1156-1-i xcku15p_CIV-ffva1156-1L-i xcku15p_CIV-ffva1156-1LV-i xcku15p_CIV-ffva1156-2-e xcku15p_CIV-ffva1156-2-i xcku15p_CIV-ffva1156-2L-e xcku15p_CIV-ffva1156-2LV-e xcku15p_CIV-ffva1156-3-e xcku15p_CIV-ffva1760-1-e xcku15p_CIV-ffva1760-1-i xcku15p_CIV-ffva1760-1L-i xcku15p_CIV-ffva1760-1LV-i xcku15p_CIV-ffva1760-2-e xcku15p_CIV-ffva1760-2-i xcku15p_CIV-ffva1760-2L-e xcku15p_CIV-ffva1760-2LV-e xcku15p_CIV-ffva1760-3-e xcku15p_CIV-ffve1517-1-e xcku15p_CIV-ffve1517-1-i xcku15p_CIV-ffve1517-1L-i xcku15p_CIV-ffve1517-1LV-i xcku15p_CIV-ffve1517-2-e xcku15p_CIV-ffve1517-2-i xcku15p_CIV-ffve1517-2L-e xcku15p_CIV-ffve1517-2LV-e xcku15p_CIV-ffve1517-3-e xcku15p_CIV-ffve1760-1-e xcku15p_CIV-ffve1760-1-i xcku15p_CIV-ffve1760-1L-i xcku15p_CIV-ffve1760-1LV-i xcku15p_CIV-ffve1760-2-e xcku15p_CIV-ffve1760-2-i xcku15p_CIV-ffve1760-2L-e xcku15p_CIV-ffve1760-2LV-e xcku15p_CIV-ffve1760-3-e xcku3p-ffva676-1-e xcku3p-ffva676-1-i xcku3p-ffva676-1L-i xcku3p-ffva676-1LV-i xcku3p-ffva676-2-e xcku3p-ffva676-2-i xcku3p-ffva676-2L-e xcku3p-ffva676-2LV-e xcku3p-ffva676-3-e xcku3p-ffvb676-1-e xcku3p-ffvb676-1-i xcku3p-ffvb676-1L-i xcku3p-ffvb676-1LV-i xcku3p-ffvb676-2-e xcku3p-ffvb676-2-i xcku3p-ffvb676-2L-e xcku3p-ffvb676-2LV-e xcku3p-ffvb676-3-e xcku3p-ffvd900-1-e xcku3p-ffvd900-1-i xcku3p-ffvd900-1L-i xcku3p-ffvd900-1LV-i xcku3p-ffvd900-2-e xcku3p-ffvd900-2-i xcku3p-ffvd900-2L-e xcku3p-ffvd900-2LV-e xcku3p-ffvd900-3-e xcku3p-sfvb784-1-e xcku3p-sfvb784-1-i xcku3p-sfvb784-1L-i xcku3p-sfvb784-1LV-i xcku3p-sfvb784-2-e xcku3p-sfvb784-2-i xcku3p-sfvb784-2L-e xcku3p-sfvb784-2LV-e xcku3p-sfvb784-3-e xcku5p-ffva676-1-e xcku5p-ffva676-1-i xcku5p-ffva676-1L-i xcku5p-ffva676-1LV-i xcku5p-ffva676-2-e xcku5p-ffva676-2-i xcku5p-ffva676-2L-e xcku5p-ffva676-2LV-e xcku5p-ffva676-3-e xcku5p-ffvb676-1-e xcku5p-ffvb676-1-i xcku5p-ffvb676-1L-i xcku5p-ffvb676-1LV-i xcku5p-ffvb676-2-e xcku5p-ffvb676-2-i xcku5p-ffvb676-2L-e xcku5p-ffvb676-2LV-e xcku5p-ffvb676-3-e xcku5p-ffvd900-1-e xcku5p-ffvd900-1-i xcku5p-ffvd900-1L-i xcku5p-ffvd900-1LV-i xcku5p-ffvd900-2-e xcku5p-ffvd900-2-i xcku5p-ffvd900-2L-e xcku5p-ffvd900-2LV-e xcku5p-ffvd900-3-e xcku5p-sfvb784-1-e xcku5p-sfvb784-1-i xcku5p-sfvb784-1L-i xcku5p-sfvb784-1LV-i xcku5p-sfvb784-2-e xcku5p-sfvb784-2-i xcku5p-sfvb784-2L-e xcku5p-sfvb784-2LV-e xcku5p-sfvb784-3-e xcku9p-ffve900-1-e xcku9p-ffve900-1-i xcku9p-ffve900-1L-i xcku9p-ffve900-1LV-i xcku9p-ffve900-2-e xcku9p-ffve900-2-i xcku9p-ffve900-2L-e xcku9p-ffve900-2LV-e xcku9p-ffve900-3-e  xcku19p-ffvb2104-1-e xcku19p-ffvb2104-1-i xcku19p-ffvb2104-1L-i xcku19p-ffvb2104-1LV-i xcku19p-ffvb2104-2-e xcku19p-ffvb2104-2-i xcku19p-ffvb2104-2L-e xcku19p-ffvb2104-2LV-e xcku19p-ffvb2104-3-e xcku19p-ffvj1760-1-e xcku19p-ffvj1760-1-i xcku19p-ffvj1760-1L-i xcku19p-ffvj1760-1LV-i xcku19p-ffvj1760-2-e xcku19p-ffvj1760-2-i xcku19p-ffvj1760-2L-e xcku19p-ffvj1760-2LV-e xcku19p-ffvj1760-3-e xcku19p_CIV-ffvb2104-1-e xcku19p_CIV-ffvb2104-1-i xcku19p_CIV-ffvb2104-1L-i xcku19p_CIV-ffvb2104-1LV-i xcku19p_CIV-ffvb2104-2-e xcku19p_CIV-ffvb2104-2-i xcku19p_CIV-ffvb2104-2L-e xcku19p_CIV-ffvb2104-2LV-e xcku19p_CIV-ffvb2104-3-e xcku19p_CIV-ffvj1760-1-e xcku19p_CIV-ffvj1760-1-i xcku19p_CIV-ffvj1760-1L-i xcku19p_CIV-ffvj1760-1LV-i xcku19p_CIV-ffvj1760-2-e xcku19p_CIV-ffvj1760-2-i xcku19p_CIV-ffvj1760-2L-e xcku19p_CIV-ffvj1760-2LV-e xcku19p_CIV-ffvj1760-3-e  xqku15p-ffra1156-1-i xqku15p-ffra1156-1L-i xqku15p-ffra1156-1LV-i xqku15p-ffra1156-1M-m xqku15p-ffra1156-2-i xqku15p-ffre1517-1-i xqku15p-ffre1517-1L-i xqku15p-ffre1517-1LV-i xqku15p-ffre1517-1M-m xqku15p-ffre1517-2-i xqku5p-ffrb676-1-i xqku5p-ffrb676-1L-i xqku5p-ffrb676-1LV-i xqku5p-ffrb676-1M-m xqku5p-ffrb676-2-i xqku5p-sfrb784-1-i xqku5p-sfrb784-1L-i xqku5p-sfrb784-1LV-i xqku5p-sfrb784-1M-m xqku5p-sfrb784-2-i 
+IPDEF_SUPPORTED_FAMILIES = <kintexuplus:ALL:Production>
+# sec "CREATE_IP"
+
+P1 >>>>>>>>>> CREATE_IP
+# create_ip -name gtwizard_ultrascale -vendor xilinx.com -library ip -module_name p1_gt
+# set ip [get_ips p1_gt]
+# puts "IP = $ip"
+IP = p1_gt
+# puts "IS_LOCKED_AT_CREATE = [get_property IS_LOCKED $ip]"
+IS_LOCKED_AT_CREATE = 0
+# catch {puts "USED_LICENSE_KEYS_AT_CREATE = [get_property USED_LICENSE_KEYS $ip]"}
+USED_LICENSE_KEYS_AT_CREATE = 
+# catch {puts "CORE_CONTAINER = [get_property CORE_CONTAINER $ip]"}
+ERROR: [Vivado 12-1341] Failed to get property 'CORE_CONTAINER' on IP 'p1_gt'.
+# sec "PROTOCOL_OPTIONS"
+
+P1 >>>>>>>>>> PROTOCOL_OPTIONS
+# foreach p {CONFIG.TX_PROTOCOL CONFIG.RX_PROTOCOL CONFIG.TX_DATA_ENCODING CONFIG.RX_DATA_DECODING \
+#            CONFIG.TX_USER_DATA_WIDTH CONFIG.TX_INT_DATA_WIDTH CONFIG.TX_BUFFER_MODE \
+#            CONFIG.TX_LINE_RATE CONFIG.TX_REFCLK_FREQUENCY CONFIG.CHANNEL_ENABLE \
+#            CONFIG.TX_PLL_TYPE CONFIG.TX_OUTCLK_SOURCE} {
+#     set r [catch {set vals [list_property_value $p $ip]} e]
+#     if {$r} { puts "ALLOWED $p = <ERR: $e>" } else { puts "ALLOWED $p = <$vals>" }
+# }
+ALLOWED CONFIG.TX_PROTOCOL = <>
+ALLOWED CONFIG.RX_PROTOCOL = <>
+ALLOWED CONFIG.TX_DATA_ENCODING = <>
+ALLOWED CONFIG.RX_DATA_DECODING = <>
+ALLOWED CONFIG.TX_USER_DATA_WIDTH = <>
+ALLOWED CONFIG.TX_INT_DATA_WIDTH = <>
+ALLOWED CONFIG.TX_BUFFER_MODE = <>
+ALLOWED CONFIG.TX_LINE_RATE = <>
+ALLOWED CONFIG.TX_REFCLK_FREQUENCY = <>
+ALLOWED CONFIG.CHANNEL_ENABLE = <>
+ALLOWED CONFIG.TX_PLL_TYPE = <>
+ALLOWED CONFIG.TX_OUTCLK_SOURCE = <>
+# sec "CONFIGURE_10GBASE-R"
+
+P1 >>>>>>>>>> CONFIGURE_10GBASE-R
+# set cfg [list \
+#     CONFIG.CHANNEL_ENABLE            {X0Y4} \
+#     CONFIG.TX_LINE_RATE              {10.3125} \
+#     CONFIG.RX_LINE_RATE              {10.3125} \
+#     CONFIG.TX_REFCLK_FREQUENCY       {156.25} \
+#     CONFIG.RX_REFCLK_FREQUENCY       {156.25} \
+#     CONFIG.TX_REFCLK_SOURCE          {MGTREFCLK0_Q225} \
+#     CONFIG.RX_REFCLK_SOURCE          {MGTREFCLK0_Q225} \
+#     CONFIG.TX_PROTOCOL               {10GBASE-R} \
+#     CONFIG.RX_PROTOCOL               {10GBASE-R} \
+#     CONFIG.TX_USER_DATA_WIDTH        {64} \
+#     CONFIG.RX_USER_DATA_WIDTH        {64} \
+#     CONFIG.TX_BUFFER_MODE            {1} \
+#     CONFIG.RX_BUFFER_MODE            {1} \
+#     CONFIG.LOCATE_RESET_CONTROLLER   {0} \
+#     CONFIG.LOCATE_TX_USER_CLOCKING   {0} \
+#     CONFIG.LOCATE_RX_USER_CLOCKING   {0} \
+#     CONFIG.LOCATE_COMMON             {0} \
+#     CONFIG.LOCATE_USER_DATA_WIDTH_SIZING {0} \
+# ]
+# foreach {k v} $cfg {
+#     set rc [catch {set_property $k $v $ip} e]
+#     if {$rc} { puts "SET $k = <$v> => FAIL : $e" } else { puts "SET $k = <$v> => OK" }
+# }
+SET CONFIG.CHANNEL_ENABLE = <X0Y4> => OK
+SET CONFIG.TX_LINE_RATE = <10.3125> => OK
+SET CONFIG.RX_LINE_RATE = <10.3125> => OK
+ERROR: [IP_Flow 19-3478] Validation failed for parameter 'Actual Reference clock (MHz)(RX_REFCLK_FREQUENCY)' with current value '64.453125' for IP 'p1_gt'. RX and TX frequencies do not allow for PLL sharing
+ERROR: [IP_Flow 19-3478] Validation failed for parameter 'Receiver reference clock source(RX_REFCLK_SOURCE)' with current value 'X0Y4 clk1' for IP 'p1_gt'. The TX and RX REFCLK sources must match for each quad in order to use QPLL0, see channels X0Y4 (some TX channels use the default REFCLK source of clk0)
+ERROR: [IP_Flow 19-3478] Validation failed for parameter 'Transmitter reference clock source(TX_REFCLK_SOURCE)' with current value '' for IP 'p1_gt'. The TX and RX REFCLK sources must match for each quad in order to use QPLL0, see channels X0Y4 (some TX channels use the default REFCLK source of clk0)
+INFO: [IP_Flow 19-3438] Customization errors found on 'p1_gt'. Restoring to previous valid configuration.
+SET CONFIG.TX_REFCLK_FREQUENCY = <156.25> => FAIL : ERROR: [Common 17-39] 'set_property' failed due to earlier errors.
+
+ERROR: [IP_Flow 19-3478] Validation failed for parameter 'Actual Reference clock (MHz)(RX_REFCLK_FREQUENCY)' with current value '156.25' for IP 'p1_gt'. RX and TX frequencies do not allow for PLL sharing
+ERROR: [IP_Flow 19-3478] Validation failed for parameter 'Receiver reference clock source(RX_REFCLK_SOURCE)' with current value 'X0Y4 clk1' for IP 'p1_gt'. The TX and RX REFCLK sources must match for each quad in order to use QPLL0, see channels X0Y4 (some TX channels use the default REFCLK source of clk0)
+ERROR: [IP_Flow 19-3478] Validation failed for parameter 'Transmitter reference clock source(TX_REFCLK_SOURCE)' with current value '' for IP 'p1_gt'. The TX and RX REFCLK sources must match for each quad in order to use QPLL0, see channels X0Y4 (some TX channels use the default REFCLK source of clk0)
+INFO: [IP_Flow 19-3438] Customization errors found on 'p1_gt'. Restoring to previous valid configuration.
+SET CONFIG.RX_REFCLK_FREQUENCY = <156.25> => FAIL : ERROR: [Common 17-39] 'set_property' failed due to earlier errors.
+
+missing value to go with key
+ERROR: [IP_Flow 19-3317] Tcl Error found in 'validate_0' method. missing value to go with key
+missing value to go with key
+ERROR: [IP_Flow 19-3317] Tcl Error found in 'validate_PARAM_VALUE.RX_RECCLK_OUTPUT' method. missing value to go with key
+ERROR: [IP_Flow 19-3317] Tcl Error found in 'validate_0' method. missing value to go with key
+ERROR: [IP_Flow 19-3317] Tcl Error found in 'validate_PARAM_VALUE.RX_RECCLK_OUTPUT' method. missing value to go with key
+INFO: [IP_Flow 19-3438] Customization errors found on 'p1_gt'. Restoring to previous valid configuration.
+SET CONFIG.TX_REFCLK_SOURCE = <MGTREFCLK0_Q225> => FAIL : ERROR: [Common 17-39] 'set_property' failed due to earlier errors.
+
+missing value to go with key
+ERROR: [IP_Flow 19-3317] Tcl Error found in 'validate_0' method. missing value to go with key
+missing value to go with key
+ERROR: [IP_Flow 19-3317] Tcl Error found in 'validate_PARAM_VALUE.RX_RECCLK_OUTPUT' method. missing value to go with key
+ERROR: [IP_Flow 19-3478] Validation failed for parameter 'Receiver reference clock source(RX_REFCLK_SOURCE)' with current value 'MGTREFCLK0_Q225' for IP 'p1_gt'. RX_REFCLK_SOURCE value is invalid, should be an even number of elements (key-values), found 1: MGTREFCLK0_Q225
+ERROR: [IP_Flow 19-3317] Tcl Error found in 'validate_0' method. missing value to go with key
+ERROR: [IP_Flow 19-3317] Tcl Error found in 'validate_PARAM_VALUE.RX_RECCLK_OUTPUT' method. missing value to go with key
+INFO: [IP_Flow 19-3438] Customization errors found on 'p1_gt'. Restoring to previous valid configuration.
+SET CONFIG.RX_REFCLK_SOURCE = <MGTREFCLK0_Q225> => FAIL : ERROR: [Common 17-39] 'set_property' failed due to earlier errors.
+
+ERROR: [Vivado 12-4371] Cannot find parameter 'TX_PROTOCOL' on IP 'p1_gt'.
+ERROR: [Vivado 12-1342] Failed to set property 'CONFIG.TX_PROTOCOL' on IP 'p1_gt'.
+SET CONFIG.TX_PROTOCOL = <10GBASE-R> => FAIL : ERROR: [Common 17-39] 'set_property' failed due to earlier errors.
+
+ERROR: [Vivado 12-4371] Cannot find parameter 'RX_PROTOCOL' on IP 'p1_gt'.
+ERROR: [Vivado 12-1342] Failed to set property 'CONFIG.RX_PROTOCOL' on IP 'p1_gt'.
+SET CONFIG.RX_PROTOCOL = <10GBASE-R> => FAIL : ERROR: [Common 17-39] 'set_property' failed due to earlier errors.
+
+SET CONFIG.TX_USER_DATA_WIDTH = <64> => OK
+SET CONFIG.RX_USER_DATA_WIDTH = <64> => OK
+SET CONFIG.TX_BUFFER_MODE = <1> => OK
+SET CONFIG.RX_BUFFER_MODE = <1> => OK
+ERROR: [IP_Flow 19-3461] Value '0' is out of the range for parameter 'Include reset controller in the(LOCATE_RESET_CONTROLLER)' for IP 'p1_gt' . Valid values are - CORE, EXAMPLE_DESIGN
+INFO: [IP_Flow 19-3438] Customization errors found on 'p1_gt'. Restoring to previous valid configuration.
+SET CONFIG.LOCATE_RESET_CONTROLLER = <0> => FAIL : ERROR: [Common 17-39] 'set_property' failed due to earlier errors.
+
+ERROR: [IP_Flow 19-3461] Value '0' is out of the range for parameter 'Include simple transmitter user clocking network in the(LOCATE_TX_USER_CLOCKING)' for IP 'p1_gt' . Valid values are - CORE, EXAMPLE_DESIGN
+INFO: [IP_Flow 19-3438] Customization errors found on 'p1_gt'. Restoring to previous valid configuration.
+SET CONFIG.LOCATE_TX_USER_CLOCKING = <0> => FAIL : ERROR: [Common 17-39] 'set_property' failed due to earlier errors.
+
+ERROR: [IP_Flow 19-3461] Value '0' is out of the range for parameter 'Include simple receiver user clocking network in the(LOCATE_RX_USER_CLOCKING)' for IP 'p1_gt' . Valid values are - CORE, EXAMPLE_DESIGN
+INFO: [IP_Flow 19-3438] Customization errors found on 'p1_gt'. Restoring to previous valid configuration.
+SET CONFIG.LOCATE_RX_USER_CLOCKING = <0> => FAIL : ERROR: [Common 17-39] 'set_property' failed due to earlier errors.
+
+ERROR: [IP_Flow 19-3461] Value '0' is out of the range for parameter 'Include transceiver COMMON in the(LOCATE_COMMON)' for IP 'p1_gt' . Valid values are - CORE, EXAMPLE_DESIGN
+INFO: [IP_Flow 19-3438] Customization errors found on 'p1_gt'. Restoring to previous valid configuration.
+SET CONFIG.LOCATE_COMMON = <0> => FAIL : ERROR: [Common 17-39] 'set_property' failed due to earlier errors.
+
+ERROR: [IP_Flow 19-3461] Value '0' is out of the range for parameter 'Include user data width sizing in the(LOCATE_USER_DATA_WIDTH_SIZING)' for IP 'p1_gt' . Valid values are - CORE, EXAMPLE_DESIGN
+INFO: [IP_Flow 19-3438] Customization errors found on 'p1_gt'. Restoring to previous valid configuration.
+SET CONFIG.LOCATE_USER_DATA_WIDTH_SIZING = <0> => FAIL : ERROR: [Common 17-39] 'set_property' failed due to earlier errors.
+
+# foreach k {CONFIG.TX_PROTOCOL CONFIG.RX_PROTOCOL CONFIG.TX_DATA_ENCODING CONFIG.RX_DATA_DECODING \
+#            CONFIG.TX_USER_DATA_WIDTH CONFIG.TX_INT_DATA_WIDTH CONFIG.RX_USER_DATA_WIDTH \
+#            CONFIG.RX_INT_DATA_WIDTH CONFIG.TX_USRCLK2_FREQUENCY CONFIG.RX_USRCLK2_FREQUENCY \
+#            CONFIG.TX_OUTCLK_FREQUENCY CONFIG.RX_OUTCLK_FREQUENCY} {
+#     catch {puts "EFF $k = <[get_property $k $ip]>"}
+# }
+ERROR: [Vivado 12-4371] Cannot find parameter 'TX_PROTOCOL' on IP 'p1_gt'.
+ERROR: [Vivado 12-1341] Failed to get property 'CONFIG.TX_PROTOCOL' on IP 'p1_gt'.
+ERROR: [Vivado 12-4371] Cannot find parameter 'RX_PROTOCOL' on IP 'p1_gt'.
+ERROR: [Vivado 12-1341] Failed to get property 'CONFIG.RX_PROTOCOL' on IP 'p1_gt'.
+EFF CONFIG.TX_DATA_ENCODING = <RAW>
+EFF CONFIG.RX_DATA_DECODING = <RAW>
+EFF CONFIG.TX_USER_DATA_WIDTH = <64>
+EFF CONFIG.TX_INT_DATA_WIDTH = <32>
+EFF CONFIG.RX_USER_DATA_WIDTH = <64>
+EFF CONFIG.RX_INT_DATA_WIDTH = <32>
+ERROR: [Vivado 12-4371] Cannot find parameter 'TX_USRCLK2_FREQUENCY' on IP 'p1_gt'.
+ERROR: [Vivado 12-1341] Failed to get property 'CONFIG.TX_USRCLK2_FREQUENCY' on IP 'p1_gt'.
+ERROR: [Vivado 12-4371] Cannot find parameter 'RX_USRCLK2_FREQUENCY' on IP 'p1_gt'.
+ERROR: [Vivado 12-1341] Failed to get property 'CONFIG.RX_USRCLK2_FREQUENCY' on IP 'p1_gt'.
+ERROR: [Vivado 12-4371] Cannot find parameter 'TX_OUTCLK_FREQUENCY' on IP 'p1_gt'.
+ERROR: [Vivado 12-1341] Failed to get property 'CONFIG.TX_OUTCLK_FREQUENCY' on IP 'p1_gt'.
+ERROR: [Vivado 12-4371] Cannot find parameter 'RX_OUTCLK_FREQUENCY' on IP 'p1_gt'.
+ERROR: [Vivado 12-1341] Failed to get property 'CONFIG.RX_OUTCLK_FREQUENCY' on IP 'p1_gt'.
+# sec "GENERATE"
+
+P1 >>>>>>>>>> GENERATE
+INFO: [IP_Flow 19-1686] Generating 'Instantiation Template' target for IP 'p1_gt'...
+INFO: [IP_Flow 19-1686] Generating 'Synthesis' target for IP 'p1_gt'...
+INFO: [IP_Flow 19-1686] Generating 'Simulation' target for IP 'p1_gt'...
+INFO: [IP_Flow 19-1686] Generating 'Change Log' target for IP 'p1_gt'...
+# set gr [catch {generate_target all $ip} e]
+# puts "GENERATE_TARGET_ALL rc = $gr"
+GENERATE_TARGET_ALL rc = 0
+# if {$gr} { puts "GENERATE_ERR = $e" }
+# puts "IS_LOCKED_AFTER_GENERATE = [get_property IS_LOCKED $ip]"
+IS_LOCKED_AFTER_GENERATE = 0
+# catch {puts "LOCK_DETAILS = [get_property LOCK_DETAILS $ip]"}
+LOCK_DETAILS = IP is not locked
+# catch {puts "USED_LICENSE_KEYS = [get_property USED_LICENSE_KEYS $ip]"}
+USED_LICENSE_KEYS = 
+# sec "TARGETS"
+
+P1 >>>>>>>>>> TARGETS
+# foreach t {{synthesis Synthesis} {simulation Simulation} {example_design Example_Design}} {
+#     lassign $t tn tl
+#     set r [catch {generate_target $tn $ip} e]
+#     puts "TARGET $tl rc = $r"
+#     if {$r} { puts "  ERR: $e" }
+# }
+INFO: [IP_Flow 19-1706] Not generating 'Synthesis' target for IP 'p1_gt'. Target already exists and is up to date.
+TARGET Synthesis rc = 0
+INFO: [IP_Flow 19-1706] Not generating 'Simulation' target for IP 'p1_gt'. Target already exists and is up to date.
+TARGET Simulation rc = 0
+WARNING: [Vivado 12-4105] The example_design target will be deprecated in a future release. Instead, use open_example_project command to get the example design.
+WARNING: [Vivado 12-1783] Unsupported target specified: 'example_design'. Supported targets for this IP are: 'all' 'elaborate_boundary' 'block_model' 'instantiation_template' 'synthesis' 'simulation' 'example' 'changelog'. File: 'p1_gt.xci'. 
+ERROR: [Vivado 12-1773] No legal targets specified.  Supported targets for this IP are: all elaborate_boundary block_model instantiation_template synthesis simulation example changelog. File: 'p1_gt.xci'.
+TARGET Example_Design rc = 1
+  ERR: ERROR: [Common 17-39] 'generate_target' failed due to earlier errors.
+
+# sec "DONE"
+
+P1 >>>>>>>>>> DONE
+# close_project -quiet
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 29 16:01:40 2026...
+EXITCODE=0 
