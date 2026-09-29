@@ -1,0 +1,45 @@
+########## P6b 冒烟对账 (stage D) 2026-09-29 11:24:12 —— 非最终位流 ##########
+MAGIC=0x50360001 BUILD_ID=0x00000006 MARKER=0xdeadbeef
+-- 未实现地址 0xB0 (SKIP 语义自检) = 0xffffffff --
+-- 网卡硬件计数 (独立口径) rx_packets=45308949 --
+-- kernel UDP 丢包计数 (/proc/net/snmp) --
+  hdr: Udp: InDatagrams NoPorts InErrors OutDatagrams RcvbufErrors SndbufErrors InCsumErrors IgnoredMulti MemErrors
+  val: Udp: 4441 558516 848879 597 848879 0 0 49 0
+
+=== 绝对值 (快照 W0..W35 @ 0x20..0xAC) ===
+  W0  (0x20) MAC收帧        = 270
+  W1  (0x24) MAC收字节      = 46236
+  W3  (0x2c) FCS错帧        = 0
+  W5  (0x34) 前端gmii_free  = 9551293
+  W6  (0x38) 交慢路径帧     = 269
+  W7  (0x3c) HLS发帧        = 84
+  W8  (0x40) 图案app发帧    = 45309320
+  W9  (0x44) 图案app发字节  = 2270810936
+  W10 (0x48) 图案app收帧    = 1
+  W13 (0x54) 图案失配       = 0
+  W17 (0x64) 看门狗拍       = 0
+  W18 (0x68) 整帧回卷       = 0
+  W19 (0x6c) 适配器丢帧     = 0
+  W20 (0x70) MAC发帧        = 45309401
+  W21 (0x74) MAC帧内中止    = 0
+  W24 (0x80) 数据面自由计数 = 1723092272
+  W25 (0x84) MMCM状态字     = 1   (bit0=locked)
+  W26/W27 (0x88/0x8c) rxcdc 满拍/占用峰值 = 0 / 3
+  W28/W29 (0x90/0x94) txcdc 峰值/DP等线拍 = 256 / 1227245574
+  W30 (0x98) rxcdc读侧帧数  = 270
+  W31 (0x9c) rxcdc读侧字节  = 45156
+  W32 (0xa0) drop_partial   = 0
+  W33 (0xa4) orphan_bytes   = 0
+  W34 (0xa8) drop_full      = 0
+  W35 (0xac) fifo_ovf       = 0
+
+=== 结构式守恒律 (mod 2^32) ===
+  律1 W30 == W0 + W32        : 实测 W30=270  期望 270  ⇒ PASS
+  律2 W31 == W1 - 4W0 + W33  : 实测 W31=45156  期望 45156  ⇒ PASS
+  有向 W0 - W30 >= -1        : 0 ⇒ PASS
+  W35 == 0 (fifo_sync 拒写)  : 0 ⇒ PASS
+  1s 窗口增量: dW0=0 dW1=0 dW6=0 dW7=0 dW8=88206 dW9=129838224 dW17=0 dW18=0 dW19=0 dW20=88206 dW30=0 dW31=0 dW32=0
+  恒 0 类 (绝对值): W3=0 W13=0 W17=0 W18=0 W19=0 W32=0 W33=0 W34=0 W35=0
+  1s 内网卡 rx_packets 增量 = 88375 ⇒ ≈ 1070.4 Mbps (线上口径 1514B/帧)
+  板子自报图案发帧 W8=45397526 ⇒ 累计 2400649160 字节 / 45397526 帧 = 52.88 B/帧
+日志: /tmp/p6b_smoke_account.log
