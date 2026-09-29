@@ -1,0 +1,256 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 16:42:34 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source xdc_cmd_support_probe.tcl
+# set here [file normalize [file dirname [info script]]]
+# set part "xcku5p-ffvb676-1-e"
+# set pdir [file join $here probe_xdc_prj]
+# file delete -force $pdir
+# create_project -force probe_xdc $pdir -part $part
+# set_property target_language Verilog [current_project]
+# set f [open [file join $pdir p7a_probe_top.v] w]
+# puts $f "module p7a_probe_top(input wire clk_p, input wire rst, output wire led);"
+# puts $f "  reg [3:0] c = 4'd0;"
+# puts $f "  always @(posedge clk_p) c <= c + 4'd1;"
+# puts $f "  assign led = c[3];"
+# puts $f "endmodule"
+# close $f
+# add_files -norecurse [file join $pdir p7a_probe_top.v]
+# set_property top p7a_probe_top [current_fileset]
+# set x [open [file join $pdir probe.xdc] w]
+# puts $x "# plan command (expected to be accepted)"
+# puts $x "create_clock -period 10.000 -name sys_clk \[get_ports clk_p\]"
+# puts $x "# guarded flavour -- the one that failed in the P7a build"
+# puts $x "set probe_clk \[get_clocks -quiet sys_clk\]"
+# puts $x "if {\[llength \$probe_clk\] > 0} {"
+# puts $x "    set_false_path -from \[get_ports rst\]"
+# puts $x "    puts \"if-block RAN\""
+# puts $x "}"
+# puts $x "foreach pp \[get_ports rst\] { set_false_path -from \$pp }"
+# puts $x "# plain flavour -- what the rewritten XDC uses"
+# puts $x "set_false_path -from \[get_ports rst\] -to \[get_ports led\]"
+# close $x
+# add_files -fileset constrs_1 -norecurse [file join $pdir probe.xdc]
+# puts "PROBE_XDC = [file join $pdir probe.xdc]"
+PROBE_XDC = D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/tcl/probe_xdc_prj/probe.xdc
+# puts "PROBE_LOG_MARKER_BEGIN"
+PROBE_LOG_MARKER_BEGIN
+# synth_design -top p7a_probe_top -part $part
+Command: synth_design -top p7a_probe_top -part xcku5p-ffvb676-1-e
+Starting synth_design
+Attempting to get a license for feature 'Synthesis' and/or device 'xcku5p'
+INFO: [Common 17-349] Got license for feature 'Synthesis' and/or device 'xcku5p'
+INFO: [Device 21-403] Loading part xcku5p-ffvb676-1-e
+INFO: [Synth 8-7079] Multithreading enabled for synth_design using a maximum of 2 processes.
+INFO: [Synth 8-7078] Launching helper process for spawning children vivado processes
+INFO: [Synth 8-7075] Helper process launched with PID 23196
+---------------------------------------------------------------------------------
+Starting RTL Elaboration : Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 1922.711 ; gain = 250.891
+---------------------------------------------------------------------------------
+INFO: [Synth 8-6157] synthesizing module 'p7a_probe_top' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/tcl/probe_xdc_prj/p7a_probe_top.v:1]
+INFO: [Synth 8-6155] done synthesizing module 'p7a_probe_top' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/tcl/probe_xdc_prj/p7a_probe_top.v:1]
+WARNING: [Synth 8-7129] Port rst in module p7a_probe_top is either unconnected or has no load
+---------------------------------------------------------------------------------
+Finished RTL Elaboration : Time (s): cpu = 00:00:04 ; elapsed = 00:00:04 . Memory (MB): peak = 2040.016 ; gain = 368.195
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Handling Custom Attributes
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Handling Custom Attributes : Time (s): cpu = 00:00:04 ; elapsed = 00:00:04 . Memory (MB): peak = 2040.016 ; gain = 368.195
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished RTL Optimization Phase 1 : Time (s): cpu = 00:00:04 ; elapsed = 00:00:04 . Memory (MB): peak = 2040.016 ; gain = 368.195
+---------------------------------------------------------------------------------
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2040.016 ; gain = 0.000
+INFO: [Project 1-570] Preparing netlist for logic optimization
+
+Processing XDC Constraints
+Initializing timing engine
+Parsing XDC File [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/tcl/probe_xdc_prj/probe.xdc]
+CRITICAL WARNING: [Designutils 20-1307] Command 'if' is not supported in the xdc constraint file. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/tcl/probe_xdc_prj/probe.xdc:5]
+CRITICAL WARNING: [Designutils 20-1307] Command 'foreach' is not supported in the xdc constraint file. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/tcl/probe_xdc_prj/probe.xdc:9]
+Finished Parsing XDC File [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/tcl/probe_xdc_prj/probe.xdc]
+Completed Processing XDC Constraints
+
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2068.551 ; gain = 0.000
+INFO: [Project 1-111] Unisim Transformation Summary:
+No Unisim elements were transformed.
+
+Constraint Validation Runtime : Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.003 . Memory (MB): peak = 2068.551 ; gain = 0.000
+---------------------------------------------------------------------------------
+Finished Constraint Validation : Time (s): cpu = 00:00:10 ; elapsed = 00:00:11 . Memory (MB): peak = 2068.551 ; gain = 396.730
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Loading Part and Timing Information
+---------------------------------------------------------------------------------
+Loading part: xcku5p-ffvb676-1-e
+INFO: [Synth 8-6742] Reading net delay rules and data
+---------------------------------------------------------------------------------
+Finished Loading Part and Timing Information : Time (s): cpu = 00:00:10 ; elapsed = 00:00:11 . Memory (MB): peak = 2068.551 ; gain = 396.730
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Applying 'set_property' XDC Constraints
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished applying 'set_property' XDC Constraints : Time (s): cpu = 00:00:10 ; elapsed = 00:00:11 . Memory (MB): peak = 2068.551 ; gain = 396.730
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished RTL Optimization Phase 2 : Time (s): cpu = 00:00:10 ; elapsed = 00:00:11 . Memory (MB): peak = 2068.551 ; gain = 396.730
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start RTL Component Statistics 
+---------------------------------------------------------------------------------
+Detailed RTL Component Info : 
++---Adders : 
+	   2 Input    4 Bit       Adders := 1     
++---Registers : 
+	                4 Bit    Registers := 1     
+---------------------------------------------------------------------------------
+Finished RTL Component Statistics 
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Part Resource Summary
+---------------------------------------------------------------------------------
+Part Resources:
+DSPs: 1824 (col length:96)
+BRAMs: 960 (col length: RAMB18 96 RAMB36 48)
+---------------------------------------------------------------------------------
+Finished Part Resource Summary
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Cross Boundary and Area Optimization
+---------------------------------------------------------------------------------
+WARNING: [Synth 8-7129] Port rst in module p7a_probe_top is either unconnected or has no load
+---------------------------------------------------------------------------------
+Finished Cross Boundary and Area Optimization : Time (s): cpu = 00:00:11 ; elapsed = 00:00:12 . Memory (MB): peak = 2068.551 ; gain = 396.730
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Applying XDC Timing Constraints
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Applying XDC Timing Constraints : Time (s): cpu = 00:00:16 ; elapsed = 00:00:17 . Memory (MB): peak = 2670.121 ; gain = 998.301
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Timing Optimization
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Timing Optimization : Time (s): cpu = 00:00:16 ; elapsed = 00:00:17 . Memory (MB): peak = 2670.121 ; gain = 998.301
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Technology Mapping
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Technology Mapping : Time (s): cpu = 00:00:16 ; elapsed = 00:00:17 . Memory (MB): peak = 2679.672 ; gain = 1007.852
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start IO Insertion
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Flattening Before IO Insertion
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Flattening Before IO Insertion
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Final Netlist Cleanup
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Final Netlist Cleanup
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished IO Insertion : Time (s): cpu = 00:00:18 ; elapsed = 00:00:19 . Memory (MB): peak = 2930.262 ; gain = 1258.441
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Renaming Generated Instances
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Renaming Generated Instances : Time (s): cpu = 00:00:18 ; elapsed = 00:00:19 . Memory (MB): peak = 2930.262 ; gain = 1258.441
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Rebuilding User Hierarchy
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Rebuilding User Hierarchy : Time (s): cpu = 00:00:18 ; elapsed = 00:00:19 . Memory (MB): peak = 2930.262 ; gain = 1258.441
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Renaming Generated Ports
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Renaming Generated Ports : Time (s): cpu = 00:00:18 ; elapsed = 00:00:19 . Memory (MB): peak = 2930.262 ; gain = 1258.441
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Handling Custom Attributes
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Handling Custom Attributes : Time (s): cpu = 00:00:18 ; elapsed = 00:00:19 . Memory (MB): peak = 2930.262 ; gain = 1258.441
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Renaming Generated Nets
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Renaming Generated Nets : Time (s): cpu = 00:00:18 ; elapsed = 00:00:19 . Memory (MB): peak = 2930.262 ; gain = 1258.441
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Writing Synthesis Report
+---------------------------------------------------------------------------------
+
+Report BlackBoxes: 
++-+--------------+----------+
+| |BlackBox name |Instances |
++-+--------------+----------+
++-+--------------+----------+
+
+Report Cell Usage: 
++------+-----+------+
+|      |Cell |Count |
++------+-----+------+
+|1     |BUFG |     1|
+|2     |LUT1 |     1|
+|3     |LUT2 |     1|
+|4     |LUT3 |     1|
+|5     |LUT4 |     1|
+|6     |FDRE |     4|
+|7     |IBUF |     1|
+|8     |OBUF |     1|
++------+-----+------+
+---------------------------------------------------------------------------------
+Finished Writing Synthesis Report : Time (s): cpu = 00:00:18 ; elapsed = 00:00:19 . Memory (MB): peak = 2930.262 ; gain = 1258.441
+---------------------------------------------------------------------------------
+Synthesis finished with 0 errors, 0 critical warnings and 1 warnings.
+Synthesis Optimization Runtime : Time (s): cpu = 00:00:12 ; elapsed = 00:00:16 . Memory (MB): peak = 2930.262 ; gain = 1229.906
+Synthesis Optimization Complete : Time (s): cpu = 00:00:19 ; elapsed = 00:00:20 . Memory (MB): peak = 2930.262 ; gain = 1258.441
+INFO: [Project 1-571] Translating synthesized netlist
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2930.262 ; gain = 0.000
+INFO: [Netlist 29-17] Analyzing 2 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
+INFO: [Project 1-570] Preparing netlist for logic optimization
+Parsing XDC File [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/tcl/probe_xdc_prj/probe.xdc]
+CRITICAL WARNING: [Designutils 20-1307] Command 'if' is not supported in the xdc constraint file. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/tcl/probe_xdc_prj/probe.xdc:5]
+CRITICAL WARNING: [Designutils 20-1307] Command 'foreach' is not supported in the xdc constraint file. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/tcl/probe_xdc_prj/probe.xdc:9]
+Finished Parsing XDC File [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/tcl/probe_xdc_prj/probe.xdc]
+INFO: [Opt 31-138] Pushed 0 inverter(s) to 0 load pin(s).
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2930.262 ; gain = 0.000
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 2 instances were transformed.
+  BUFG => BUFGCE: 1 instance 
+  IBUF => IBUF (IBUFCTRL, INBUF): 1 instance 
+
+Synth Design complete | Checksum: 7fd672c3
+INFO: [Common 17-83] Releasing license: Synthesis
+17 Infos, 2 Warnings, 4 Critical Warnings and 0 Errors encountered.
+synth_design completed successfully
+synth_design: Time (s): cpu = 00:00:25 ; elapsed = 00:00:28 . Memory (MB): peak = 2930.262 ; gain = 2395.297
+# puts "PROBE_SYNTH_RC = ok"
+PROBE_SYNTH_RC = ok
+# close_project -quiet
+# puts "PROBE_DONE"
+PROBE_DONE
+# exit
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 29 16:43:07 2026...

@@ -1,0 +1,387 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 16:59:37 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source {D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\ctrl_scratch\ctrl_ibert_v3.tcl}
+# set here [file normalize [file dirname [info script]]]
+# set bit  $here/ibert_top_v3_corrected_map.bit
+# set ltx  $here/ibert_top_v3_corrected_map.ltx
+# set p7a_bit "D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/impl_1/p7a_top.bit"
+# set p7a_ltx [file rootname $p7a_bit].ltx
+# set url 192.168.0.38:3121
+# if {[info exists ::env(CTRL_HWURL)]} { set url $::env(CTRL_HWURL) }
+# proc sec {s} { puts "\n@@@@@@ CTRL >>> $s" ; flush stdout }
+# proc pget {o n} { if {[catch {set v [get_property $n $o]} e]} { return "<ERR:$e>" } ; return $v }
+# proc bit  {v n} { expr {($v >> $n) & 1} }
+# proc hexint {s} { set s [string trim $s] ; return [expr "0x$s"] }
+# sec "STAGE 0 -- PREFLIGHT"
+
+@@@@@@ CTRL >>> STAGE 0 -- PREFLIGHT
+# puts "ctrl image  (to be burned) = $bit"
+ctrl image  (to be burned) = D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/ctrl_scratch/ibert_top_v3_corrected_map.bit
+# puts "              exists=[file exists $bit] size=[file size $bit]"
+              exists=1 size=15431260
+# puts "ctrl probes                 = $ltx"
+ctrl probes                 = D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/ctrl_scratch/ibert_top_v3_corrected_map.ltx
+# puts "              exists=[file exists $ltx] size=[file size $ltx]"
+              exists=1 size=26370
+# puts "p7a image   (loaded now?)   = $p7a_bit exists=[file exists $p7a_bit]"
+p7a image   (loaded now?)   = D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/impl_1/p7a_top.bit exists=1
+# puts "tcl = [info patchlevel] wordSize=$tcl_platform(wordSize)  (large values printed by interpolation, never format %d)"
+tcl = 8.6.13 wordSize=4  (large values printed by interpolation, never format %d)
+# foreach f [list $bit $ltx] {
+#     puts "  [file tail $f]  mtime=[clock format [file mtime $f] -format {%Y-%m-%d %H:%M:%S}]"
+# }
+  ibert_top_v3_corrected_map.bit  mtime=2026-09-29 16:58:43
+  ibert_top_v3_corrected_map.ltx  mtime=2026-09-29 16:58:43
+# puts "EXPECTED sha256 (from _ibert/archive_v3, verified byte-identical to _ibert/ibert_ku5p/ibert_ku5p.runs/impl_1/):"
+EXPECTED sha256 (from _ibert/archive_v3, verified byte-identical to _ibert/ibert_ku5p/ibert_ku5p.runs/impl_1/):
+# puts "  bit d5566b93b89f0a7b80a7901949e059464f2822f1d60f91e53170b1532b0f1ae0"
+  bit d5566b93b89f0a7b80a7901949e059464f2822f1d60f91e53170b1532b0f1ae0
+# puts "  ltx 48ddc17ebe6e60f8590a0035619cccf529529173681900236102097971f131a4"
+  ltx 48ddc17ebe6e60f8590a0035619cccf529529173681900236102097971f131a4
+# sec "STAGE 1 -- CONNECT + SAFETY GATE"
+
+@@@@@@ CTRL >>> STAGE 1 -- CONNECT + SAFETY GATE
+# open_hw_manager
+# connect_hw_server -url $url
+INFO: [Labtools 27-2285] Connecting to hw_server url TCP:192.168.0.38:3121
+INFO: [Labtools 27-3415] Connecting to cs_server url TCP:localhost:0
+INFO: [Labtools 27-3417] Launching cs_server...
+INFO: [Labtools 27-2221] Launch Output:
+
+
+******** Xilinx cs_server v2025.2.0
+  ****** Build date   : Nov 14 2025-07:16:52
+    **** Build number : 2025.2.1763075812
+      ** Copyright 2017-2022 Xilinx, Inc. All Rights Reserved.
+      ** Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
+
+
+
+# current_hw_target [lindex [get_hw_targets] 0]
+# open_hw_target
+INFO: [Labtoolstcl 44-466] Opening hw_target 192.168.0.38:3121/xilinx_tcf/Digilent/210251391367
+# set dlist [get_hw_devices]
+# puts "device count = [llength $dlist]"
+device count = 1
+# foreach d $dlist { puts "DEVICE $d PART=[pget $d PART] IDCODE=[pget $d IDCODE_HEX]" }
+DEVICE xcku5p_0 PART=xcku5p IDCODE=04A62093
+# set tdev ""
+# foreach d $dlist { if {[pget $d IDCODE_HEX] eq "04A62093"} { set tdev $d } }
+# if {$tdev eq "" || [llength $dlist] != 1} {
+#     puts "CTRL-SAFETY_ABORT: target='$tdev' count=[llength $dlist] -- NOT PROGRAMMING"
+#     exit 1
+# }
+# puts "SAFETY_GATE = PASS -> $tdev"
+SAFETY_GATE = PASS -> xcku5p_0
+# current_hw_device $tdev
+# sec "STAGE 2 -- IN-SESSION 'BEFORE': the P7a image still in the FPGA"
+
+@@@@@@ CTRL >>> STAGE 2 -- IN-SESSION 'BEFORE': the P7a image still in the FPGA
+# if {[file exists $p7a_ltx]} {
+#     catch {set_property PROBES.FILE $p7a_ltx $tdev}
+#     catch {set_property FULL_PROBES.FILE $p7a_ltx $tdev}
+#     catch {refresh_hw_device -update_hw_probes true $tdev}
+#     puts "P7a DONE_PIN = [pget $tdev REGISTER.CONFIG_STATUS.BIT\[14\]_DONE_PIN]"
+#     set pvio [lindex [get_hw_vios -of_objects $tdev] 0]
+#     if {$pvio eq ""} {
+#         puts "P7a VIO not enumerated (image may already be gone)"
+#     } else {
+#         array set PW {}
+#         foreach p [get_hw_probes -of_objects $pvio] { set PW([pget $p NAME]) $p }
+#         if {[info exists PW(vio_status)]} {
+#             foreach tag {BEFORE-1 BEFORE-2} {
+#                 catch {refresh_hw_vio $pvio}
+#                 set st [hexint [get_property INPUT_VALUE $PW(vio_status)]]
+#                 puts "@@@@ P7a $tag  status=$st"
+#                 puts "     sfp1_rx_los=[bit $st 55]  sfp2_rx_los=[bit $st 56]  (SFP A LOS, SFP B LOS)"
+#                 puts "     acq=[bit $st 57][bit $st 58] ref_link=[bit $st 59][bit $st 60] ref_down_latched=[bit $st 61][bit $st 62]"
+#                 puts "     rx_cdr_stable=[bit $st 54] tx_reset_done=[bit $st 52] rx_reset_done=[bit $st 53]"
+#                 after 2500
+#             }
+#         } else {
+#             puts "P7a VIO has no vio_status probe -- printing raw probe list"
+#             foreach p [get_hw_probes -of_objects $pvio] { puts "   [pget $p NAME] = [pget $p INPUT_VALUE]" }
+#         }
+#     }
+# } else {
+#     puts "P7a .ltx not found at $p7a_ltx -- skipping the before-read"
+# }
+INFO: [Labtools 27-2302] Device xcku5p (JTAG device index = 0) is programmed with a design that has 1 VIO core(s).
+INFO: [Labtools 27-1889] Uploading output probe values for VIO core [hw_vio_1]
+P7a DONE_PIN = 1
+@@@@ P7a BEFORE-1  status=580285580995666392995856384
+     sfp1_rx_los=1  sfp2_rx_los=0  (SFP A LOS, SFP B LOS)
+     acq=00 ref_link=00 ref_down_latched=11
+     rx_cdr_stable=1 tx_reset_done=1 rx_reset_done=1
+@@@@ P7a BEFORE-2  status=580285580995666392995856384
+     sfp1_rx_los=1  sfp2_rx_los=0  (SFP A LOS, SFP B LOS)
+     acq=00 ref_link=00 ref_down_latched=11
+     rx_cdr_stable=1 tx_reset_done=1 rx_reset_done=1
+# sec "STAGE 3 -- PROGRAM iBERT v3 (volatile, JTAG; QSPI untouched)"
+
+@@@@@@ CTRL >>> STAGE 3 -- PROGRAM iBERT v3 (volatile, JTAG; QSPI untouched)
+# set_property PROGRAM.FILE $bit $tdev
+# catch {set_property PROBES.FILE $ltx $tdev}
+# catch {set_property FULL_PROBES.FILE $ltx $tdev}
+# if {[catch {program_hw_devices $tdev} em]} {
+#     puts "CTRL-ABORT: program failed: $em"
+#     exit 1
+# }
+INFO: [Labtools 27-3164] End of startup status: HIGH
+program_hw_devices: Time (s): cpu = 00:00:09 ; elapsed = 00:00:09 . Memory (MB): peak = 598.230 ; gain = 0.520
+# set done [pget $tdev REGISTER.CONFIG_STATUS.BIT\[14\]_DONE_PIN]
+# puts "DONE_PIN = $done"
+DONE_PIN = 1
+# if {$done != 1} { puts "CTRL-ABORT: DONE != 1"; exit 1 }
+# catch {refresh_hw_device -update_hw_probes true $tdev}
+INFO: [Labtools 27-2302] Device xcku5p (JTAG device index = 0) is programmed with a design that has 1 IBERT core(s).
+INFO: [Labtools 27-2302] Device xcku5p (JTAG device index = 0) is programmed with a design that has 1 VIO core(s).
+# set ibs [get_hw_sio_iberts]
+# puts "ibert count = [llength $ibs]"
+ibert count = 1
+# puts "vio   count = [llength [get_hw_vios]]"
+vio   count = 1
+# sec "STAGE 4 -- iBERT VIO: SFP RX_LOS x6 + heartbeat"
+
+@@@@@@ CTRL >>> STAGE 4 -- iBERT VIO: SFP RX_LOS x6 + heartbeat
+# set vios [get_hw_vios]
+# if {[llength $vios] == 0} { puts "CTRL-ABORT: no VIO"; exit 1 }
+# set v [lindex $vios 0]
+# array set V {}
+# foreach p [get_hw_probes -of_objects $v] {
+#     set nm [pget $p NAME]
+#     set V($nm) $p
+#     puts "  PROBE name=$nm width=[pget $p WIDTH] value=[pget $p INPUT_VALUE]"
+# }
+  PROBE name=<const0> width=1 value=
+  PROBE name=<const0>_1 width=1 value=
+  PROBE name=<const0>_10 width=1 value=
+  PROBE name=<const0>_11 width=1 value=
+  PROBE name=<const0>_12 width=1 value=
+  PROBE name=<const0>_13 width=1 value=
+  PROBE name=<const0>_14 width=1 value=
+  PROBE name=<const0>_15 width=1 value=
+  PROBE name=<const0>_16 width=1 value=
+  PROBE name=<const0>_17 width=1 value=
+  PROBE name=<const0>_18 width=1 value=
+  PROBE name=<const0>_19 width=1 value=
+  PROBE name=<const0>_2 width=1 value=
+  PROBE name=<const0>_20 width=1 value=
+  PROBE name=<const0>_21 width=1 value=
+  PROBE name=<const0>_22 width=1 value=
+  PROBE name=<const0>_23 width=1 value=
+  PROBE name=<const0>_24 width=1 value=
+  PROBE name=<const0>_25 width=1 value=
+  PROBE name=<const0>_26 width=1 value=
+  PROBE name=<const0>_27 width=1 value=
+  PROBE name=<const0>_28 width=1 value=
+  PROBE name=<const0>_29 width=1 value=
+  PROBE name=<const0>_3 width=1 value=
+  PROBE name=<const0>_4 width=1 value=
+  PROBE name=<const0>_5 width=1 value=
+  PROBE name=<const0>_6 width=1 value=
+  PROBE name=<const0>_7 width=1 value=
+  PROBE name=<const0>_8 width=1 value=
+  PROBE name=<const0>_9 width=1 value=
+  PROBE name=hb_cnt width=2 value=
+  PROBE name=sfp1_rx_los_i_IBUF width=1 value=
+  PROBE name=sfp2_rx_los_i_IBUF width=1 value=
+# set p1 ""
+# set p2 ""
+# foreach nm [array names V] {
+#     if {[string match "sfp1_rx_los*" $nm]} { set p1 $V($nm) }
+#     if {[string match "sfp2_rx_los*" $nm]} { set p2 $V($nm) }
+# }
+# set phb ""
+# foreach nm [array names V] { if {[string match "hb_cnt*" $nm]} { set phb $V($nm) } }
+# puts ""
+
+# puts "resolved: sfp1(A)_probe='[expr {$p1 ne "" ? [pget $p1 NAME] : {<none>}}]' sfp2(B)_probe='[expr {$p2 ne "" ? [pget $p2 NAME] : {<none>}}]' hb='[expr {$phb ne "" ? [pget $phb NAME] : {<none>}}]'"
+resolved: sfp1(A)_probe='sfp1_rx_los_i_IBUF' sfp2(B)_probe='sfp2_rx_los_i_IBUF' hb='hb_cnt'
+# set hb_prev ""
+# for {set i 1} {$i <= 6} {incr i} {
+#     catch {refresh_hw_vio $v}
+#     set a "<n/a>" ; set b "<n/a>" ; set h "<n/a>"
+#     if {$p1 ne ""} { set a [get_property INPUT_VALUE $p1] }
+#     if {$p2 ne ""} { set b [get_property INPUT_VALUE $p2] }
+#     if {$phb ne ""} { set h [get_property INPUT_VALUE $phb] }
+#     set chg "<first>"
+#     if {$hb_prev ne ""} { set chg [expr {$h ne $hb_prev}] }
+#     set hb_prev $h
+#     puts "  SAMPLE-$i  sfp1_rx_los(SFP A)=$a  sfp2_rx_los(SFP B)=$b  hb_cnt=$h (changed=$chg)"
+#     after 1500
+# }
+  SAMPLE-1  sfp1_rx_los(SFP A)=1  sfp2_rx_los(SFP B)=0  hb_cnt=0 (changed=<first>)
+  SAMPLE-2  sfp1_rx_los(SFP A)=1  sfp2_rx_los(SFP B)=0  hb_cnt=1 (changed=1)
+  SAMPLE-3  sfp1_rx_los(SFP A)=1  sfp2_rx_los(SFP B)=0  hb_cnt=0 (changed=1)
+  SAMPLE-4  sfp1_rx_los(SFP A)=1  sfp2_rx_los(SFP B)=0  hb_cnt=2 (changed=1)
+  SAMPLE-5  sfp1_rx_los(SFP A)=1  sfp2_rx_los(SFP B)=0  hb_cnt=0 (changed=1)
+  SAMPLE-6  sfp1_rx_los(SFP A)=1  sfp2_rx_los(SFP B)=0  hb_cnt=0 (changed=0)
+# puts "  ^ heartbeat MUST change between samples: that is the positive evidence that"
+  ^ heartbeat MUST change between samples: that is the positive evidence that
+# puts "    the design is clocked and the VIO is not returning a stale/empty read."
+    the design is clocked and the VIO is not returning a stale/empty read.
+# sec "STAGE 5 -- PLL / per-GT status (RX_BER ~0.5 = no light or no lock)"
+
+@@@@@@ CTRL >>> STAGE 5 -- PLL / per-GT status (RX_BER ~0.5 = no light or no lock)
+# set gts [lsort [get_hw_sio_gts]]
+# foreach p [get_hw_sio_plls] {
+#     puts "  PLL [pget $p DISPLAY_NAME] QPLL0LOCK=[pget $p PORT.QPLL0LOCK] QPLL0REFCLKLOST=[pget $p PORT.QPLL0REFCLKLOST]"
+#     foreach q {PLL0_FBDIV PLL1_FBDIV QPLL0_FBDIV QPLL1_FBDIV} {
+#         set r [pget $p $q] ; if {$r ne "<ERR:invalid property>" } { puts "      $q = $r" }
+#     }
+# }
+  PLL COMMON_X0Y1/QPLL0 QPLL0LOCK=1 QPLL0REFCLKLOST=0
+      PLL0_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'PLL0_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/COMMON_X0Y1/QPLL0'
+>
+      PLL1_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'PLL1_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/COMMON_X0Y1/QPLL0'
+>
+      QPLL0_FBDIV = 66
+      QPLL1_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'QPLL1_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/COMMON_X0Y1/QPLL0'
+>
+  PLL COMMON_X0Y1/QPLL1 QPLL0LOCK=<ERR:ERROR: [Labtoolstcl 44-154] Property 'PORT.QPLL0LOCK' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/COMMON_X0Y1/QPLL1'
+> QPLL0REFCLKLOST=<ERR:ERROR: [Labtoolstcl 44-154] Property 'PORT.QPLL0REFCLKLOST' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/COMMON_X0Y1/QPLL1'
+>
+      PLL0_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'PLL0_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/COMMON_X0Y1/QPLL1'
+>
+      PLL1_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'PLL1_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/COMMON_X0Y1/QPLL1'
+>
+      QPLL0_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'QPLL0_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/COMMON_X0Y1/QPLL1'
+>
+      QPLL1_FBDIV = 66
+  PLL MGT_X0Y4/CPLL_0 QPLL0LOCK=<ERR:ERROR: [Labtoolstcl 44-154] Property 'PORT.QPLL0LOCK' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y4/CPLL_0'
+> QPLL0REFCLKLOST=<ERR:ERROR: [Labtoolstcl 44-154] Property 'PORT.QPLL0REFCLKLOST' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y4/CPLL_0'
+>
+      PLL0_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'PLL0_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y4/CPLL_0'
+>
+      PLL1_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'PLL1_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y4/CPLL_0'
+>
+      QPLL0_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'QPLL0_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y4/CPLL_0'
+>
+      QPLL1_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'QPLL1_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y4/CPLL_0'
+>
+  PLL MGT_X0Y5/CPLL_0 QPLL0LOCK=<ERR:ERROR: [Labtoolstcl 44-154] Property 'PORT.QPLL0LOCK' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y5/CPLL_0'
+> QPLL0REFCLKLOST=<ERR:ERROR: [Labtoolstcl 44-154] Property 'PORT.QPLL0REFCLKLOST' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y5/CPLL_0'
+>
+      PLL0_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'PLL0_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y5/CPLL_0'
+>
+      PLL1_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'PLL1_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y5/CPLL_0'
+>
+      QPLL0_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'QPLL0_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y5/CPLL_0'
+>
+      QPLL1_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'QPLL1_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y5/CPLL_0'
+>
+  PLL MGT_X0Y6/CPLL_0 QPLL0LOCK=<ERR:ERROR: [Labtoolstcl 44-154] Property 'PORT.QPLL0LOCK' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y6/CPLL_0'
+> QPLL0REFCLKLOST=<ERR:ERROR: [Labtoolstcl 44-154] Property 'PORT.QPLL0REFCLKLOST' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y6/CPLL_0'
+>
+      PLL0_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'PLL0_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y6/CPLL_0'
+>
+      PLL1_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'PLL1_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y6/CPLL_0'
+>
+      QPLL0_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'QPLL0_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y6/CPLL_0'
+>
+      QPLL1_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'QPLL1_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y6/CPLL_0'
+>
+  PLL MGT_X0Y7/CPLL_0 QPLL0LOCK=<ERR:ERROR: [Labtoolstcl 44-154] Property 'PORT.QPLL0LOCK' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y7/CPLL_0'
+> QPLL0REFCLKLOST=<ERR:ERROR: [Labtoolstcl 44-154] Property 'PORT.QPLL0REFCLKLOST' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y7/CPLL_0'
+>
+      PLL0_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'PLL0_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y7/CPLL_0'
+>
+      PLL1_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'PLL1_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y7/CPLL_0'
+>
+      QPLL0_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'QPLL0_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y7/CPLL_0'
+>
+      QPLL1_FBDIV = <ERR:ERROR: [Labtoolstcl 44-154] Property 'QPLL1_FBDIV' does not exist in hw_sio_pll '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y7/CPLL_0'
+>
+# foreach g $gts {
+#     puts "  [pget $g DISPLAY_NAME] LINE_RATE=[pget $g LINE_RATE] LOOPBACK=[pget $g LOOPBACK] RX_BER=[pget $g RX_BER]"
+#     puts "      RX_RECEIVED_BIT_COUNT(t0) = [pget $g RX_RECEIVED_BIT_COUNT]"
+# }
+  MGT_X0Y4 LINE_RATE=10.313 LOOPBACK=None RX_BER=0.49994311655159918
+      RX_RECEIVED_BIT_COUNT(t0) = 2353285600
+  MGT_X0Y5 LINE_RATE=10.313 LOOPBACK=None RX_BER=0.50000288556810346
+      RX_RECEIVED_BIT_COUNT(t0) = 2761328000
+  MGT_X0Y6 LINE_RATE=10.304 LOOPBACK=None RX_BER=0.49972028172579303
+      RX_RECEIVED_BIT_COUNT(t0) = 3213519040
+  MGT_X0Y7 LINE_RATE=10.304 LOOPBACK=None RX_BER=0.49867074913263243
+      RX_RECEIVED_BIT_COUNT(t0) = 3705626320
+# sec "STAGE 5b -- create links X0Y4<->X0Y5 (host-side only) and settle 12 s"
+
+@@@@@@ CTRL >>> STAGE 5b -- create links X0Y4<->X0Y5 (host-side only) and settle 12 s
+WARNING: [Labtoolstcl 44-158] No matching hw_sio_links were found.
+# foreach l [get_hw_sio_links] { catch {remove_hw_sio_link $l} }
+# set gtA [lindex $gts 0]
+# set gtB [lindex $gts 1]
+# puts "gtA = [pget $gtA DISPLAY_NAME] (SFP A, X0Y4)   gtB = [pget $gtB DISPLAY_NAME] (SFP B, X0Y5)"
+gtA = MGT_X0Y4 (SFP A, X0Y4)   gtB = MGT_X0Y5 (SFP B, X0Y5)
+# create_hw_sio_link -description {A_to_B} [get_hw_sio_txs -of_objects $gtA] [get_hw_sio_rxs -of_objects $gtB]
+# create_hw_sio_link -description {B_to_A} [get_hw_sio_txs -of_objects $gtB] [get_hw_sio_rxs -of_objects $gtA]
+# after 12000
+# catch {refresh_hw_sio $ibs}
+# foreach g $gts {
+#     puts "  [pget $g DISPLAY_NAME] RX_BER=[pget $g RX_BER]  LOCK-hint=(BER<<0.5 means locked)"
+# }
+  MGT_X0Y4 RX_BER=0.49994990426843461  LOCK-hint=(BER<<0.5 means locked)
+  MGT_X0Y5 RX_BER=0.50000103028349985  LOCK-hint=(BER<<0.5 means locked)
+  MGT_X0Y6 RX_BER=0.49973606469016657  LOCK-hint=(BER<<0.5 means locked)
+  MGT_X0Y7 RX_BER=0.49871921671574465  LOCK-hint=(BER<<0.5 means locked)
+# foreach l [get_hw_sio_links] { puts "  LINK [pget $l DESCRIPTION] STATUS=[pget $l STATUS] RX_BER=[pget $l RX_BER]" }
+  LINK A_to_B STATUS=NO LINK RX_BER=0.50000103028349985
+  LINK B_to_A STATUS=NO LINK RX_BER=0.49994990426843461
+# sec "STAGE 6 -- 60 s differential BER (identical protocol to M8)"
+
+@@@@@@ CTRL >>> STAGE 6 -- 60 s differential BER (identical protocol to M8)
+# foreach g $gts { catch {set_property LOGIC.MGT_ERRCNT_RESET_CTRL 1 $g} ; catch {set_property LOGIC.RXPRBSERRSTICKYRST 1 $g} }
+# after 300
+# foreach g $gts { catch {set_property LOGIC.MGT_ERRCNT_RESET_CTRL 0 $g} ; catch {set_property LOGIC.RXPRBSERRSTICKYRST 0 $g} }
+# after 300
+# catch {refresh_hw_sio $ibs}
+# set t0 {}
+# foreach g $gts { lappend t0 [list [pget $g RX_RECEIVED_BIT_COUNT] [hexint [pget $g LOGIC.ERRBIT_COUNT]]] }
+# after 60000
+# catch {refresh_hw_sio $ibs}
+# set i 0
+# foreach g $gts {
+#     set b0 [lindex [lindex $t0 $i] 0] ; set e0 [lindex [lindex $t0 $i] 1]
+#     set b1 [pget $g RX_RECEIVED_BIT_COUNT] ; set e1 [hexint [pget $g LOGIC.ERRBIT_COUNT]]
+#     set db [expr {$b1 - $b0}] ; set de [expr {$e1 - $e0}]
+#     set ber "<n/a>" ; if {$db > 0 && $de >= 0} { set ber [expr {double($de)/double($db)}] }
+#     puts "    [pget $g DISPLAY_NAME]  dBITS=$db  dERR=$de  BER=$ber   (RX_BER now = [pget $g RX_BER])"
+#     incr i
+# }
+    MGT_X0Y4  dBITS=627597515840  dERR=313773150534  BER=0.4999591977575537   (RX_BER now = 0.49995630810157871)
+    MGT_X0Y5  dBITS=627588612720  dERR=313794420259  BER=0.5000001814867219   (RX_BER now = 0.50000044185375636)
+    MGT_X0Y6  dBITS=627063695600  dERR=313378512961  BER=0.49975547166886564   (RX_BER now = 0.4997494907412427)
+    MGT_X0Y7  dBITS=627021638960  dERR=312720399404  BER=0.49873940542576645   (RX_BER now = 0.49873304514815664)
+# puts "  NOTE: dERR=0 on X0Y6/X0Y7 (nothing cabled) is an ARTIFACT -- an unlocked"
+  NOTE: dERR=0 on X0Y6/X0Y7 (nothing cabled) is an ARTIFACT -- an unlocked
+# puts "        PRBS checker does not count.  Only X0Y4/X0Y5 carry information."
+        PRBS checker does not count.  Only X0Y4/X0Y5 carry information.
+# sec "STAGE 7 -- final LOS"
+
+@@@@@@ CTRL >>> STAGE 7 -- final LOS
+# catch {refresh_hw_vio $v}
+# set a "<n/a>" 
+# set b "<n/a>"
+# if {$p1 ne ""} { set a [get_property INPUT_VALUE $p1] }
+# if {$p2 ne ""} { set b [get_property INPUT_VALUE $p2] }
+# puts "  FINAL  sfp1_rx_los(SFP A)=$a   sfp2_rx_los(SFP B)=$b"
+  FINAL  sfp1_rx_los(SFP A)=1   sfp2_rx_los(SFP B)=0
+# puts ""
+
+# puts "CTRL-COMPLETE -- board now runs the iBERT v3 reference image (volatile)."
+CTRL-COMPLETE -- board now runs the iBERT v3 reference image (volatile).
+# puts "Reflash to return to P7a: $p7a_bit"
+Reflash to return to P7a: D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/impl_1/p7a_top.bit
+# disconnect_hw_server
+# puts "DONE"
+DONE
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 29 17:01:28 2026...
+BAT_EXIT=0

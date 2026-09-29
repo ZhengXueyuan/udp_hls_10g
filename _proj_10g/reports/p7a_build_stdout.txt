@@ -1,0 +1,1674 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 16:35:51 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source build_p7a.tcl
+# set here      [file normalize [file dirname [info script]]]
+# set root      [file normalize [file join $here ..]]
+# set proj_dir  [file join $root vivado_prj]
+# set part_name xcku5p-ffvb676-1-e
+# set top       p7a_top
+# proc sec {s} { puts "\n===== P7A >>>>>>>> $s" }
+# if {[info exists ::env(P7A_STRATEGY)]} { set strategy $::env(P7A_STRATEGY) } else { set strategy Performance_ExtraTimingOpt }
+# sec "ENV"
+
+===== P7A >>>>>>>> ENV
+# puts "VIVADO = [version -short]"
+VIVADO = 2025.2
+# puts "PART   = $part_name"
+PART   = xcku5p-ffvb676-1-e
+# puts "TOP    = $top"
+TOP    = p7a_top
+# puts "STRATEGY = $strategy"
+STRATEGY = Performance_ExtraTimingOpt
+# catch {set_param general.maxThreads 8}
+# file mkdir [file join $root reports]
+# file delete -force $proj_dir
+# create_project -force p7a_prj $proj_dir -part $part_name
+create_project: Time (s): cpu = 00:00:33 ; elapsed = 00:00:05 . Memory (MB): peak = 550.590 ; gain = 237.055
+# set_property target_language Verilog [current_project]
+# sec "RTL"
+
+===== P7A >>>>>>>> RTL
+# add_files -norecurse [list \
+#     [file join $root rtl p7a_top.v] \
+#     [file join $root rtl p7a_counters.v] \
+#     [file join $root rtl p7a_tgl_sync.v] \
+#     [file join $root rtl p7a_bit_sync.v] \
+#     [file join $root rtl p7a_vio_ctrl.v] \
+#     [file join $root rtl p7a_ref_bucket.v] \
+#     [file join $root rtl clk_gen_p6b.v] \
+#     [file join $root rtl gt_10gbr_prbs_any.v] \
+#     [file join $root rtl gt_10gbr_example_stimulus_64b66b_async.v] \
+#     [file join $root rtl gt_10gbr_example_checking_64b66b_async.v] \
+#     [file join $root rtl gt_10gbr_example_reset_sync.v] ]
+# add_files -fileset constrs_1 -norecurse [file join $root xdc ku5p_p7a.xdc]
+# add_files -fileset constrs_1 -norecurse [file join $root xdc ku5p_p7a_impl.xdc]
+# set_property used_in_synthesis false [get_files [file join $root xdc ku5p_p7a_impl.xdc]]
+# sec "GT IP"
+
+===== P7A >>>>>>>> GT IP
+# create_ip -name gtwizard_ultrascale -vendor xilinx.com -library ip -module_name gt_10gbr
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository 'C:/AMDDesignTools/2025.2/Vivado/data/ip'.
+# set gt [get_ips gt_10gbr]
+# set cfg [dict create \
+#     CONFIG.CHANNEL_ENABLE        {X0Y4 X0Y5} \
+#     CONFIG.TX_DATA_ENCODING      {64B66B_ASYNC} \
+#     CONFIG.RX_DATA_DECODING      {64B66B_ASYNC} \
+#     CONFIG.TX_USER_DATA_WIDTH    {64} \
+#     CONFIG.RX_USER_DATA_WIDTH    {64} \
+#     CONFIG.TX_INT_DATA_WIDTH     {64} \
+#     CONFIG.RX_INT_DATA_WIDTH     {64} \
+#     CONFIG.TX_BUFFER_MODE        {1} \
+#     CONFIG.RX_BUFFER_MODE        {1} \
+#     CONFIG.TX_LINE_RATE          {10.3125} \
+#     CONFIG.RX_LINE_RATE          {10.3125} \
+#     CONFIG.TX_PLL_TYPE           {QPLL0} \
+#     CONFIG.RX_PLL_TYPE           {QPLL0} \
+#     CONFIG.TX_REFCLK_SOURCE      {X0Y4 clk0 X0Y5 clk0} \
+#     CONFIG.RX_REFCLK_SOURCE      {X0Y4 clk0 X0Y5 clk0} \
+#     CONFIG.TX_REFCLK_FREQUENCY   {156.25} \
+#     CONFIG.RX_REFCLK_FREQUENCY   {156.25} \
+#     CONFIG.TX_OUTCLK_SOURCE      {TXPROGDIVCLK} \
+#     CONFIG.RX_OUTCLK_SOURCE      {RXPROGDIVCLK} \
+#     CONFIG.LOCATE_RESET_CONTROLLER       {CORE} \
+#     CONFIG.LOCATE_TX_USER_CLOCKING       {CORE} \
+#     CONFIG.LOCATE_RX_USER_CLOCKING       {CORE} \
+#     CONFIG.LOCATE_COMMON                 {CORE} \
+#     CONFIG.LOCATE_USER_DATA_WIDTH_SIZING {CORE} ]
+# set rc [catch {set_property -dict $cfg $gt} e]
+# puts "ATOMIC_SET rc = $rc"
+ATOMIC_SET rc = 0
+# if {$rc} { error "GT atomic config failed: $e" }
+# set expect {
+#     CONFIG.TX_DATA_ENCODING    64B66B_ASYNC
+#     CONFIG.RX_DATA_DECODING    64B66B_ASYNC
+#     CONFIG.TX_INT_DATA_WIDTH   64
+#     CONFIG.RX_INT_DATA_WIDTH   64
+#     CONFIG.TX_USER_DATA_WIDTH  64
+#     CONFIG.RX_USER_DATA_WIDTH  64
+#     CONFIG.TX_BUFFER_MODE      1
+#     CONFIG.RX_BUFFER_MODE      1
+#     CONFIG.TX_PLL_TYPE         QPLL0
+#     CONFIG.RX_PLL_TYPE         QPLL0
+#     CONFIG.TX_LINE_RATE        10.3125
+#     CONFIG.RX_LINE_RATE        10.3125
+#     CONFIG.TX_REFCLK_FREQUENCY 156.25
+#     CONFIG.RX_REFCLK_FREQUENCY 156.25
+#     CONFIG.TX_OUTCLK_SOURCE    TXPROGDIVCLK
+#     CONFIG.RX_OUTCLK_SOURCE    RXPROGDIVCLK
+#     CONFIG.TXPROGDIV_FREQ_VAL  156.25
+# }
+# set cfglog [open [file join $root reports p7a_ip_config.txt] w]
+# puts $cfglog "GT wizard effective configuration read back after the atomic set"
+# set bad 0
+# foreach {k v} $expect {
+#     set got [get_property $k $gt]
+#     set ok [expr {$got eq $v}]
+#     if {!$ok} { incr bad }
+#     puts "EFF $k = <$got> expect=<$v> [expr {$ok ? {OK} : {MISMATCH}}]"
+#     puts $cfglog "EFF $k = <$got> expect=<$v> [expr {$ok ? {OK} : {MISMATCH}}]"
+# }
+EFF CONFIG.TX_DATA_ENCODING = <64B66B_ASYNC> expect=<64B66B_ASYNC> OK
+EFF CONFIG.RX_DATA_DECODING = <64B66B_ASYNC> expect=<64B66B_ASYNC> OK
+EFF CONFIG.TX_INT_DATA_WIDTH = <64> expect=<64> OK
+EFF CONFIG.RX_INT_DATA_WIDTH = <64> expect=<64> OK
+EFF CONFIG.TX_USER_DATA_WIDTH = <64> expect=<64> OK
+EFF CONFIG.RX_USER_DATA_WIDTH = <64> expect=<64> OK
+EFF CONFIG.TX_BUFFER_MODE = <1> expect=<1> OK
+EFF CONFIG.RX_BUFFER_MODE = <1> expect=<1> OK
+EFF CONFIG.TX_PLL_TYPE = <QPLL0> expect=<QPLL0> OK
+EFF CONFIG.RX_PLL_TYPE = <QPLL0> expect=<QPLL0> OK
+EFF CONFIG.TX_LINE_RATE = <10.3125> expect=<10.3125> OK
+EFF CONFIG.RX_LINE_RATE = <10.3125> expect=<10.3125> OK
+EFF CONFIG.TX_REFCLK_FREQUENCY = <156.25> expect=<156.25> OK
+EFF CONFIG.RX_REFCLK_FREQUENCY = <156.25> expect=<156.25> OK
+EFF CONFIG.TX_OUTCLK_SOURCE = <TXPROGDIVCLK> expect=<TXPROGDIVCLK> OK
+EFF CONFIG.RX_OUTCLK_SOURCE = <RXPROGDIVCLK> expect=<RXPROGDIVCLK> OK
+EFF CONFIG.TXPROGDIV_FREQ_VAL = <156.25> expect=<156.25> OK
+# foreach k {CONFIG.CHANNEL_ENABLE CONFIG.TX_REFCLK_SOURCE CONFIG.RX_REFCLK_SOURCE \
+#            CONFIG.LOCATE_RESET_CONTROLLER CONFIG.FREERUN_FREQUENCY} {
+#     catch { puts "EFF $k = <[get_property $k $gt]>" ; puts $cfglog "EFF $k = <[get_property $k $gt]>" }
+# }
+EFF CONFIG.CHANNEL_ENABLE = <X0Y4 X0Y5>
+EFF CONFIG.TX_REFCLK_SOURCE = <X0Y4 clk0 X0Y5 clk0>
+EFF CONFIG.RX_REFCLK_SOURCE = <X0Y4 clk0 X0Y5 clk0>
+EFF CONFIG.LOCATE_RESET_CONTROLLER = <CORE>
+EFF CONFIG.FREERUN_FREQUENCY = <156.25>
+# puts $cfglog "MISMATCHES = $bad"
+# close $cfglog
+# if {$bad != 0} { error "GT configuration readback mismatch count = $bad" }
+# sec "VIO IP"
+
+===== P7A >>>>>>>> VIO IP
+# create_ip -name vio -vendor xilinx.com -library ip -module_name vio_p7a
+# set_property -dict [list \
+#     CONFIG.C_NUM_PROBE_IN    {7} \
+#     CONFIG.C_PROBE_IN0_WIDTH {64} \
+#     CONFIG.C_PROBE_IN1_WIDTH {96} \
+#     CONFIG.C_PROBE_IN2_WIDTH {96} \
+#     CONFIG.C_PROBE_IN3_WIDTH {64} \
+#     CONFIG.C_PROBE_IN4_WIDTH {96} \
+#     CONFIG.C_PROBE_IN5_WIDTH {96} \
+#     CONFIG.C_PROBE_IN6_WIDTH {96} \
+#     CONFIG.C_NUM_PROBE_OUT   {4} \
+#     CONFIG.C_PROBE_OUT0_WIDTH {1} \
+#     CONFIG.C_PROBE_OUT1_WIDTH {1} \
+#     CONFIG.C_PROBE_OUT2_WIDTH {1} \
+#     CONFIG.C_PROBE_OUT3_WIDTH {1} \
+# ] [get_ips vio_p7a]
+# sec "GENERATE"
+
+===== P7A >>>>>>>> GENERATE
+INFO: [IP_Flow 19-1686] Generating 'Instantiation Template' target for IP 'gt_10gbr'...
+INFO: [IP_Flow 19-1686] Generating 'Synthesis' target for IP 'gt_10gbr'...
+INFO: [IP_Flow 19-1686] Generating 'Simulation' target for IP 'gt_10gbr'...
+INFO: [IP_Flow 19-1686] Generating 'Change Log' target for IP 'gt_10gbr'...
+# puts "GT  GENERATE rc = [catch {generate_target all $gt} e1]"
+GT  GENERATE rc = 0
+# if {$e1 ne ""} { puts "GT  GEN_ERR = $e1" }
+# puts "GT  IS_LOCKED = [get_property IS_LOCKED $gt]"
+GT  IS_LOCKED = 0
+# catch {puts "GT  LOCK_DETAILS = [get_property LOCK_DETAILS $gt]"}
+GT  LOCK_DETAILS = IP is not locked
+# catch {puts "GT  USED_LICENSE_KEYS = <[get_property USED_LICENSE_KEYS $gt]>"}
+GT  USED_LICENSE_KEYS = <>
+INFO: [IP_Flow 19-1686] Generating 'Instantiation Template' target for IP 'vio_p7a'...
+INFO: [IP_Flow 19-1686] Generating 'Synthesis' target for IP 'vio_p7a'...
+INFO: [IP_Flow 19-1686] Generating 'Simulation' target for IP 'vio_p7a'...
+INFO: [IP_Flow 19-1686] Generating 'Change Log' target for IP 'vio_p7a'...
+# puts "VIO GENERATE rc = [catch {generate_target all [get_ips vio_p7a]} e2]"
+VIO GENERATE rc = 0
+# if {$e2 ne ""} { puts "VIO GEN_ERR = $e2" }
+# sec "EXAMPLE_PROVENANCE"
+
+===== P7A >>>>>>>> EXAMPLE_PROVENANCE
+WARNING: [Vivado 12-4105] The example target will be deprecated in a future release. Instead, use open_example_project command to get the example design.
+INFO: [IP_Flow 19-1686] Generating 'Examples' target for IP 'gt_10gbr'...
+# puts "EXAMPLE rc = [catch {generate_target example $gt} e3]"
+EXAMPLE rc = 0
+# if {$e3 ne ""} { puts "EXAMPLE_ERR = $e3" }
+# set exdir [file join $proj_dir "p7a_prj.gen" sources_1 ip gt_10gbr gt_10gbr example_design]
+# proc p7a_file_eq {a b} {
+#     if {![file exists $a] || ![file exists $b]} { return -1 }
+#     if {[file size $a] != [file size $b]} { return 0 }
+#     set fa [open $a rb] ; set d1 [read $fa] ; close $fa
+#     set fb [open $b rb] ; set d2 [read $fb] ; close $fb
+#     return [expr {$d1 eq $d2 ? 1 : 0}]
+# }
+# set prov_bad 0
+# foreach f {gt_10gbr_prbs_any.v gt_10gbr_example_stimulus_64b66b_async.v \
+#            gt_10gbr_example_checking_64b66b_async.v gt_10gbr_example_reset_sync.v} {
+#     set mine [file join $root rtl $f]
+#     set gen  [file join $exdir $f]
+#     set eq   [p7a_file_eq $mine $gen]
+#     set sz   [expr {[file exists $mine] ? [file size $mine] : -1}]
+#     puts "PROV $f bytes=$sz cmp=$eq [expr {$eq == 1 ? {IDENTICAL} : {DIFFERENT_OR_MISSING}}]"
+#     if {$eq != 1} { incr prov_bad }
+# }
+PROV gt_10gbr_prbs_any.v bytes=8670 cmp=1 IDENTICAL
+PROV gt_10gbr_example_stimulus_64b66b_async.v bytes=6377 cmp=1 IDENTICAL
+PROV gt_10gbr_example_checking_64b66b_async.v bytes=7118 cmp=1 IDENTICAL
+PROV gt_10gbr_example_reset_sync.v bytes=4231 cmp=1 IDENTICAL
+# puts "PROV_BAD = $prov_bad"
+PROV_BAD = 0
+# set_property top $top [current_fileset]
+# update_compile_order -fileset sources_1
+# sec "SYNTH"
+
+===== P7A >>>>>>>> SYNTH
+# launch_runs synth_1 -jobs 8
+WARNING: [Vivado 12-7122] Auto Incremental Compile:: No reference checkpoint was found in run synth_1. Auto-incremental flow will not be run, the standard flow will be run instead.
+[Tue Sep 29 16:36:07 2026] Launched vio_p7a_synth_1, gt_10gbr_synth_1...
+Run output will be captured here:
+vio_p7a_synth_1: D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/vio_p7a_synth_1/runme.log
+gt_10gbr_synth_1: D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/gt_10gbr_synth_1/runme.log
+[Tue Sep 29 16:36:07 2026] Launched synth_1...
+Run output will be captured here: D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/synth_1/runme.log
+# wait_on_run synth_1
+[Tue Sep 29 16:36:07 2026] Waiting for synth_1 to finish...
+
+
+*** Running vivado
+    with args -log p7a_top.vds -m64 -product Vivado -mode batch -messageDb vivado.pb -notrace -source p7a_top.tcl
+
+
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 16:36:53 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source p7a_top.tcl -notrace
+create_project: Time (s): cpu = 00:00:32 ; elapsed = 00:00:05 . Memory (MB): peak = 550.906 ; gain = 240.191
+Command: synth_design -top p7a_top -part xcku5p-ffvb676-1-e
+Starting synth_design
+Attempting to get a license for feature 'Synthesis' and/or device 'xcku5p'
+INFO: [Common 17-349] Got license for feature 'Synthesis' and/or device 'xcku5p'
+INFO: [Device 21-403] Loading part xcku5p-ffvb676-1-e
+INFO: [Synth 8-7079] Multithreading enabled for synth_design using a maximum of 7 processes.
+INFO: [Synth 8-7078] Launching helper process for spawning children vivado processes
+INFO: [Synth 8-7075] Helper process launched with PID 28412
+---------------------------------------------------------------------------------
+Starting RTL Elaboration : Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 1953.004 ; gain = 251.883
+---------------------------------------------------------------------------------
+INFO: [Synth 8-6157] synthesizing module 'p7a_top' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_top.v:51]
+INFO: [Synth 8-6157] synthesizing module 'clk_gen_p6b' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/clk_gen_p6b.v:104]
+INFO: [Synth 8-6157] synthesizing module 'IBUFDS' [C:/AMDDesignTools/2025.2/Vivado/scripts/rt/data/unisim_comp.v:82819]
+	Parameter DIFF_TERM bound to: FALSE - type: string 
+	Parameter IOSTANDARD bound to: DIFF_SSTL12 - type: string 
+INFO: [Synth 8-6155] done synthesizing module 'IBUFDS' (0#1) [C:/AMDDesignTools/2025.2/Vivado/scripts/rt/data/unisim_comp.v:82819]
+INFO: [Synth 8-6157] synthesizing module 'BUFG' [C:/AMDDesignTools/2025.2/Vivado/scripts/rt/data/unisim_comp.v:2678]
+INFO: [Synth 8-6155] done synthesizing module 'BUFG' (0#1) [C:/AMDDesignTools/2025.2/Vivado/scripts/rt/data/unisim_comp.v:2678]
+INFO: [Synth 8-6157] synthesizing module 'MMCME4_BASE' [C:/AMDDesignTools/2025.2/Vivado/scripts/rt/data/unisim_comp.v:96364]
+	Parameter BANDWIDTH bound to: OPTIMIZED - type: string 
+	Parameter CLKFBOUT_MULT_F bound to: 1.250000e+01 - type: double 
+	Parameter CLKFBOUT_PHASE bound to: 0.000000e+00 - type: double 
+	Parameter CLKIN1_PERIOD bound to: 1.000000e+01 - type: double 
+	Parameter CLKOUT0_DIVIDE_F bound to: 8.000000e+00 - type: double 
+	Parameter CLKOUT0_DUTY_CYCLE bound to: 5.000000e-01 - type: double 
+	Parameter CLKOUT0_PHASE bound to: 0.000000e+00 - type: double 
+	Parameter DIVCLK_DIVIDE bound to: 1 - type: integer 
+	Parameter REF_JITTER1 bound to: 1.000000e-02 - type: double 
+	Parameter STARTUP_WAIT bound to: FALSE - type: string 
+INFO: [Synth 8-6155] done synthesizing module 'MMCME4_BASE' (0#1) [C:/AMDDesignTools/2025.2/Vivado/scripts/rt/data/unisim_comp.v:96364]
+WARNING: [Synth 8-7071] port 'CLKFBOUTB' of module 'MMCME4_BASE' is unconnected for instance 'u_mmcm' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/clk_gen_p6b.v:204]
+WARNING: [Synth 8-7071] port 'CLKOUT0B' of module 'MMCME4_BASE' is unconnected for instance 'u_mmcm' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/clk_gen_p6b.v:204]
+WARNING: [Synth 8-7071] port 'CLKOUT1' of module 'MMCME4_BASE' is unconnected for instance 'u_mmcm' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/clk_gen_p6b.v:204]
+WARNING: [Synth 8-7071] port 'CLKOUT1B' of module 'MMCME4_BASE' is unconnected for instance 'u_mmcm' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/clk_gen_p6b.v:204]
+WARNING: [Synth 8-7071] port 'CLKOUT2' of module 'MMCME4_BASE' is unconnected for instance 'u_mmcm' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/clk_gen_p6b.v:204]
+WARNING: [Synth 8-7071] port 'CLKOUT2B' of module 'MMCME4_BASE' is unconnected for instance 'u_mmcm' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/clk_gen_p6b.v:204]
+WARNING: [Synth 8-7071] port 'CLKOUT3' of module 'MMCME4_BASE' is unconnected for instance 'u_mmcm' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/clk_gen_p6b.v:204]
+WARNING: [Synth 8-7071] port 'CLKOUT3B' of module 'MMCME4_BASE' is unconnected for instance 'u_mmcm' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/clk_gen_p6b.v:204]
+WARNING: [Synth 8-7071] port 'CLKOUT4' of module 'MMCME4_BASE' is unconnected for instance 'u_mmcm' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/clk_gen_p6b.v:204]
+WARNING: [Synth 8-7071] port 'CLKOUT5' of module 'MMCME4_BASE' is unconnected for instance 'u_mmcm' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/clk_gen_p6b.v:204]
+WARNING: [Synth 8-7071] port 'CLKOUT6' of module 'MMCME4_BASE' is unconnected for instance 'u_mmcm' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/clk_gen_p6b.v:204]
+WARNING: [Synth 8-7023] instance 'u_mmcm' of module 'MMCME4_BASE' has 18 connections declared, but only 7 given [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/clk_gen_p6b.v:204]
+INFO: [Synth 8-6155] done synthesizing module 'clk_gen_p6b' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/clk_gen_p6b.v:104]
+INFO: [Synth 8-6157] synthesizing module 'IBUFDS_GTE4' [C:/AMDDesignTools/2025.2/Vivado/scripts/rt/data/unisim_comp.v:83082]
+	Parameter REFCLK_EN_TX_PATH bound to: 1'b0 
+	Parameter REFCLK_HROW_CK_SEL bound to: 2'b00 
+	Parameter REFCLK_ICNTL_RX bound to: 2'b00 
+INFO: [Synth 8-6155] done synthesizing module 'IBUFDS_GTE4' (0#1) [C:/AMDDesignTools/2025.2/Vivado/scripts/rt/data/unisim_comp.v:83082]
+INFO: [Synth 8-6157] synthesizing module 'gt_10gbr' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/synth_1/.Xil/Vivado-25848-xyz-intel/realtime/gt_10gbr_stub.v:6]
+INFO: [Synth 8-6155] done synthesizing module 'gt_10gbr' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/synth_1/.Xil/Vivado-25848-xyz-intel/realtime/gt_10gbr_stub.v:6]
+INFO: [Synth 8-6157] synthesizing module 'gt_10gbr_example_stimulus_64b66b_async' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/gt_10gbr_example_stimulus_64b66b_async.v:58]
+INFO: [Synth 8-6157] synthesizing module 'gt_10gbr_example_reset_synchronizer' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/gt_10gbr_example_reset_sync.v:58]
+INFO: [Synth 8-6155] done synthesizing module 'gt_10gbr_example_reset_synchronizer' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/gt_10gbr_example_reset_sync.v:58]
+INFO: [Synth 8-6157] synthesizing module 'gt_10gbr_prbs_any' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/gt_10gbr_prbs_any.v:136]
+	Parameter CHK_MODE bound to: 0 - type: integer 
+	Parameter INV_PATTERN bound to: 1 - type: integer 
+	Parameter POLY_LENGHT bound to: 31 - type: integer 
+	Parameter POLY_TAP bound to: 28 - type: integer 
+	Parameter NBITS bound to: 64 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'gt_10gbr_prbs_any' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/gt_10gbr_prbs_any.v:136]
+INFO: [Synth 8-6155] done synthesizing module 'gt_10gbr_example_stimulus_64b66b_async' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/gt_10gbr_example_stimulus_64b66b_async.v:58]
+INFO: [Synth 8-6157] synthesizing module 'gt_10gbr_example_checking_64b66b_async' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/gt_10gbr_example_checking_64b66b_async.v:58]
+INFO: [Synth 8-6157] synthesizing module 'gt_10gbr_prbs_any__parameterized0' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/gt_10gbr_prbs_any.v:136]
+	Parameter CHK_MODE bound to: 1 - type: integer 
+	Parameter INV_PATTERN bound to: 1 - type: integer 
+	Parameter POLY_LENGHT bound to: 31 - type: integer 
+	Parameter POLY_TAP bound to: 28 - type: integer 
+	Parameter NBITS bound to: 64 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'gt_10gbr_prbs_any__parameterized0' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/gt_10gbr_prbs_any.v:136]
+INFO: [Synth 8-6155] done synthesizing module 'gt_10gbr_example_checking_64b66b_async' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/gt_10gbr_example_checking_64b66b_async.v:58]
+INFO: [Synth 8-6157] synthesizing module 'p7a_vio_ctrl' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_vio_ctrl.v:28]
+INFO: [Synth 8-6155] done synthesizing module 'p7a_vio_ctrl' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_vio_ctrl.v:28]
+INFO: [Synth 8-6157] synthesizing module 'p7a_tgl_sync' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_tgl_sync.v:37]
+INFO: [Synth 8-6155] done synthesizing module 'p7a_tgl_sync' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_tgl_sync.v:37]
+INFO: [Synth 8-6157] synthesizing module 'p7a_counters' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_counters.v:91]
+INFO: [Synth 8-6155] done synthesizing module 'p7a_counters' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_counters.v:91]
+INFO: [Synth 8-6157] synthesizing module 'p7a_bit_sync' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_bit_sync.v:21]
+	Parameter W bound to: 2 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'p7a_bit_sync' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_bit_sync.v:21]
+INFO: [Synth 8-6157] synthesizing module 'p7a_bit_sync__parameterized0' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_bit_sync.v:21]
+	Parameter W bound to: 4 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'p7a_bit_sync__parameterized0' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_bit_sync.v:21]
+INFO: [Synth 8-6157] synthesizing module 'p7a_bit_sync__parameterized1' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_bit_sync.v:21]
+	Parameter W bound to: 14 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'p7a_bit_sync__parameterized1' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_bit_sync.v:21]
+INFO: [Synth 8-6157] synthesizing module 'p7a_ref_bucket' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_ref_bucket.v:28]
+WARNING: [Synth 8-589] replacing case/wildcard equality operator !== with logical equality operator != [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_ref_bucket.v:51]
+WARNING: [Synth 8-589] replacing case/wildcard equality operator !== with logical equality operator != [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_ref_bucket.v:59]
+INFO: [Synth 8-6155] done synthesizing module 'p7a_ref_bucket' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_ref_bucket.v:28]
+INFO: [Synth 8-6157] synthesizing module 'vio_p7a' [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/synth_1/.Xil/Vivado-25848-xyz-intel/realtime/vio_p7a_stub.v:6]
+INFO: [Synth 8-6155] done synthesizing module 'vio_p7a' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/synth_1/.Xil/Vivado-25848-xyz-intel/realtime/vio_p7a_stub.v:6]
+INFO: [Synth 8-6155] done synthesizing module 'p7a_top' (0#1) [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_top.v:51]
+WARNING: [Synth 8-6014] Unused sequential element ack_sr_d_reg was removed.  [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_counters.v:325]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'u_vio'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_top.v:480]
+INFO: [Synth 8-6071] Mark debug on the nets applies keep_hierarchy on instance 'u_vio_ctrl'. This will prevent further optimization [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_top.v:287]
+WARNING: [Synth 8-3848] Net gtwiz_userdata_tx_int in module/entity p7a_top does not have driver. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/rtl/p7a_top.v:127]
+WARNING: [Synth 8-3917] design p7a_top has port sfp1_tx_dis driven by constant 0
+WARNING: [Synth 8-3917] design p7a_top has port sfp2_tx_dis driven by constant 0
+WARNING: [Synth 8-7129] Port rxdatavalid_in[1] in module gt_10gbr_example_checking_64b66b_async is either unconnected or has no load
+WARNING: [Synth 8-7129] Port rxdatavalid_in[0] in module gt_10gbr_example_checking_64b66b_async is either unconnected or has no load
+---------------------------------------------------------------------------------
+Finished RTL Elaboration : Time (s): cpu = 00:00:04 ; elapsed = 00:00:04 . Memory (MB): peak = 2081.125 ; gain = 380.004
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Handling Custom Attributes
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Handling Custom Attributes : Time (s): cpu = 00:00:04 ; elapsed = 00:00:04 . Memory (MB): peak = 2081.125 ; gain = 380.004
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished RTL Optimization Phase 1 : Time (s): cpu = 00:00:04 ; elapsed = 00:00:04 . Memory (MB): peak = 2081.125 ; gain = 380.004
+---------------------------------------------------------------------------------
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.015 . Memory (MB): peak = 2081.125 ; gain = 0.000
+INFO: [Netlist 29-17] Analyzing 4 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
+INFO: [Project 1-570] Preparing netlist for logic optimization
+
+Processing XDC Constraints
+Initializing timing engine
+Parsing XDC File [d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.gen/sources_1/ip/vio_p7a/vio_p7a/vio_p7a_in_context.xdc] for cell 'u_vio'
+Finished Parsing XDC File [d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.gen/sources_1/ip/vio_p7a/vio_p7a/vio_p7a_in_context.xdc] for cell 'u_vio'
+Parsing XDC File [d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.gen/sources_1/ip/gt_10gbr/gt_10gbr/gt_10gbr_in_context.xdc] for cell 'u_gt'
+Finished Parsing XDC File [d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.gen/sources_1/ip/gt_10gbr/gt_10gbr/gt_10gbr_in_context.xdc] for cell 'u_gt'
+Parsing XDC File [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a.xdc]
+Finished Parsing XDC File [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a.xdc]
+INFO: [Project 1-236] Implementation specific constraints were found while reading constraint file [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a.xdc]. These constraints will be ignored for synthesis but will be used in implementation. Impacted constraints are listed in the file [.Xil/p7a_top_propImpl.xdc].
+Resolution: To avoid this warning, move constraints listed in [.Xil/p7a_top_propImpl.xdc] to another XDC file and exclude this new file from synthesis with the used_in_synthesis property (File Properties dialog in GUI) and re-run elaboration/synthesis.
+INFO: [Timing 38-2] Deriving generated clocks
+Completed Processing XDC Constraints
+
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.001 . Memory (MB): peak = 2175.086 ; gain = 0.000
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 4 instances were transformed.
+  BUFG => BUFGCE: 2 instances
+  IBUFDS => IBUFDS (DIFFINBUF, IBUFCTRL): 1 instance 
+  MMCME4_BASE => MMCME4_ADV: 1 instance 
+
+Constraint Validation Runtime : Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.016 . Memory (MB): peak = 2175.086 ; gain = 0.000
+WARNING: [Timing 38-316] Clock period '10.000' specified during out-of-context synthesis of instance 'u_vio' at clock pin 'clk' is different from the actual clock period '6.400', this can lead to different synthesis results.
+---------------------------------------------------------------------------------
+Finished Constraint Validation : Time (s): cpu = 00:00:10 ; elapsed = 00:00:11 . Memory (MB): peak = 2175.086 ; gain = 473.965
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Loading Part and Timing Information
+---------------------------------------------------------------------------------
+Loading part: xcku5p-ffvb676-1-e
+INFO: [Synth 8-6742] Reading net delay rules and data
+---------------------------------------------------------------------------------
+Finished Loading Part and Timing Information : Time (s): cpu = 00:00:10 ; elapsed = 00:00:11 . Memory (MB): peak = 2175.086 ; gain = 473.965
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Applying 'set_property' XDC Constraints
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished applying 'set_property' XDC Constraints : Time (s): cpu = 00:00:10 ; elapsed = 00:00:11 . Memory (MB): peak = 2175.086 ; gain = 473.965
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished RTL Optimization Phase 2 : Time (s): cpu = 00:00:11 ; elapsed = 00:00:11 . Memory (MB): peak = 2175.086 ; gain = 473.965
+---------------------------------------------------------------------------------
+INFO: [Synth 8-223] decloning instance 'u_stim0' (gt_10gbr_example_stimulus_64b66b_async) to 'u_stim1'
+---------------------------------------------------------------------------------
+Start RTL Component Statistics 
+---------------------------------------------------------------------------------
+Detailed RTL Component Info : 
++---Adders : 
+	   2 Input   16 Bit       Adders := 4     
+	   2 Input    8 Bit       Adders := 2     
+	   2 Input    7 Bit       Adders := 2     
++---XORs : 
+	   2 Input      1 Bit         XORs := 133   
+	   3 Input      1 Bit         XORs := 128   
++---Registers : 
+	               64 Bit    Registers := 3     
+	               48 Bit    Registers := 9     
+	               32 Bit    Registers := 4     
+	               31 Bit    Registers := 3     
+	               16 Bit    Registers := 2     
+	               14 Bit    Registers := 2     
+	                8 Bit    Registers := 2     
+	                7 Bit    Registers := 2     
+	                6 Bit    Registers := 4     
+	                4 Bit    Registers := 3     
+	                3 Bit    Registers := 6     
+	                2 Bit    Registers := 4     
+	                1 Bit    Registers := 45    
++---Muxes : 
+	   3 Input    7 Bit        Muxes := 2     
+	   2 Input    1 Bit        Muxes := 19    
+---------------------------------------------------------------------------------
+Finished RTL Component Statistics 
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Part Resource Summary
+---------------------------------------------------------------------------------
+Part Resources:
+DSPs: 1824 (col length:96)
+BRAMs: 960 (col length: RAMB18 96 RAMB36 48)
+---------------------------------------------------------------------------------
+Finished Part Resource Summary
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Cross Boundary and Area Optimization
+---------------------------------------------------------------------------------
+WARNING: [Synth 8-3917] design p7a_top has port sfp1_tx_dis driven by constant 0
+WARNING: [Synth 8-3917] design p7a_top has port sfp2_tx_dis driven by constant 0
+---------------------------------------------------------------------------------
+Finished Cross Boundary and Area Optimization : Time (s): cpu = 00:00:12 ; elapsed = 00:00:13 . Memory (MB): peak = 2175.086 ; gain = 473.965
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Applying XDC Timing Constraints
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Applying XDC Timing Constraints : Time (s): cpu = 00:00:17 ; elapsed = 00:00:19 . Memory (MB): peak = 2726.148 ; gain = 1025.027
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Timing Optimization
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Timing Optimization : Time (s): cpu = 00:00:18 ; elapsed = 00:00:19 . Memory (MB): peak = 2763.191 ; gain = 1062.070
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Technology Mapping
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Technology Mapping : Time (s): cpu = 00:00:18 ; elapsed = 00:00:19 . Memory (MB): peak = 2763.191 ; gain = 1062.070
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start IO Insertion
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Flattening Before IO Insertion
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Flattening Before IO Insertion
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Final Netlist Cleanup
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Final Netlist Cleanup
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished IO Insertion : Time (s): cpu = 00:00:20 ; elapsed = 00:00:21 . Memory (MB): peak = 2992.094 ; gain = 1290.973
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Renaming Generated Instances
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Renaming Generated Instances : Time (s): cpu = 00:00:20 ; elapsed = 00:00:21 . Memory (MB): peak = 2992.094 ; gain = 1290.973
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Rebuilding User Hierarchy
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Rebuilding User Hierarchy : Time (s): cpu = 00:00:20 ; elapsed = 00:00:22 . Memory (MB): peak = 2992.094 ; gain = 1290.973
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Renaming Generated Ports
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Renaming Generated Ports : Time (s): cpu = 00:00:20 ; elapsed = 00:00:22 . Memory (MB): peak = 2992.094 ; gain = 1290.973
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Handling Custom Attributes
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Handling Custom Attributes : Time (s): cpu = 00:00:20 ; elapsed = 00:00:22 . Memory (MB): peak = 2992.094 ; gain = 1290.973
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Renaming Generated Nets
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Renaming Generated Nets : Time (s): cpu = 00:00:20 ; elapsed = 00:00:22 . Memory (MB): peak = 2992.094 ; gain = 1290.973
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Writing Synthesis Report
+---------------------------------------------------------------------------------
+
+Report BlackBoxes: 
++------+--------------+----------+
+|      |BlackBox name |Instances |
++------+--------------+----------+
+|1     |gt_10gbr      |         1|
+|2     |vio_p7a       |         1|
++------+--------------+----------+
+
+Report Cell Usage: 
++------+------------+------+
+|      |Cell        |Count |
++------+------------+------+
+|1     |gt_10gbr    |     1|
+|2     |vio_p7a     |     1|
+|3     |BUFG        |     2|
+|4     |CARRY8      |    66|
+|5     |IBUFDS_GTE4 |     1|
+|6     |LUT1        |   150|
+|7     |LUT2        |    90|
+|8     |LUT3        |   180|
+|9     |LUT4        |    22|
+|10    |LUT5        |    16|
+|11    |LUT6        |    42|
+|12    |MMCME4_BASE |     1|
+|13    |FDCE        |     4|
+|14    |FDPE        |    15|
+|15    |FDRE        |  1164|
+|16    |FDSE        |   287|
+|17    |IBUF        |     2|
+|18    |IBUFDS      |     1|
+|19    |OBUF        |     2|
++------+------------+------+
+---------------------------------------------------------------------------------
+Finished Writing Synthesis Report : Time (s): cpu = 00:00:20 ; elapsed = 00:00:22 . Memory (MB): peak = 2992.094 ; gain = 1290.973
+---------------------------------------------------------------------------------
+Synthesis finished with 0 errors, 0 critical warnings and 2 warnings.
+Synthesis Optimization Runtime : Time (s): cpu = 00:00:14 ; elapsed = 00:00:18 . Memory (MB): peak = 2992.094 ; gain = 1197.012
+Synthesis Optimization Complete : Time (s): cpu = 00:00:21 ; elapsed = 00:00:22 . Memory (MB): peak = 2992.094 ; gain = 1290.973
+INFO: [Project 1-571] Translating synthesized netlist
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.012 . Memory (MB): peak = 2992.094 ; gain = 0.000
+INFO: [Netlist 29-17] Analyzing 72 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
+INFO: [Project 1-570] Preparing netlist for logic optimization
+INFO: [Opt 31-138] Pushed 0 inverter(s) to 0 load pin(s).
+INFO: [Opt 31-326] The CLKFBOUT to CLKFBIN net for instance u_clk_gen_p6b/g_hw.u_mmcm with COMPENSATION=INTERNAL is optimized away to aid design routability
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2992.094 ; gain = 0.000
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 6 instances were transformed.
+  BUFG => BUFGCE: 2 instances
+  IBUF => IBUF (IBUFCTRL, INBUF): 2 instances
+  IBUFDS => IBUFDS (DIFFINBUF, IBUFCTRL): 1 instance 
+  MMCME4_BASE => MMCME4_ADV: 1 instance 
+
+Synth Design complete | Checksum: 2e13f2f7
+INFO: [Common 17-83] Releasing license: Synthesis
+63 Infos, 23 Warnings, 0 Critical Warnings and 0 Errors encountered.
+synth_design completed successfully
+synth_design: Time (s): cpu = 00:00:26 ; elapsed = 00:00:28 . Memory (MB): peak = 2992.094 ; gain = 2389.660
+Write ShapeDB Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.002 . Memory (MB): peak = 2992.094 ; gain = 0.000
+INFO: [Common 17-1381] The checkpoint 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/synth_1/p7a_top.dcp' has been generated.
+INFO: [Vivado 12-24828] Executing command : report_utilization -file p7a_top_utilization_synth.rpt -pb p7a_top_utilization_synth.pb
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 29 16:37:29 2026...
+[Tue Sep 29 16:37:33 2026] synth_1 finished
+wait_on_runs: Time (s): cpu = 00:00:00 ; elapsed = 00:01:25 . Memory (MB): peak = 653.324 ; gain = 0.000
+# set sp [get_property PROGRESS [get_runs synth_1]]
+# set ss [get_property STATUS   [get_runs synth_1]]
+# puts "SYNTH progress=$sp status=$ss"
+SYNTH progress=100% status=synth_design Complete!
+# if {$sp ne "100%"} { error "synth_1 did not complete: $ss" }
+# sec "IMPL"
+
+===== P7A >>>>>>>> IMPL
+# set_property strategy $strategy [get_runs impl_1]
+# launch_runs impl_1 -to_step write_bitstream -jobs 8
+[Tue Sep 29 16:37:33 2026] Launched impl_1...
+Run output will be captured here: D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/impl_1/runme.log
+# wait_on_run impl_1
+[Tue Sep 29 16:37:33 2026] Waiting for impl_1 to finish...
+
+
+*** Running vivado
+    with args -log p7a_top.vdi -applog -m64 -product Vivado -messageDb vivado.pb -mode batch -source p7a_top.tcl -notrace
+
+
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 16:37:39 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source p7a_top.tcl -notrace
+Command: link_design -top p7a_top -part xcku5p-ffvb676-1-e
+Design is defaulting to srcset: sources_1
+Design is defaulting to constrset: constrs_1
+INFO: [Device 21-403] Loading part xcku5p-ffvb676-1-e
+INFO: [Project 1-5699] Read binary netlist with skipMacroContent - 1
+INFO: [Project 1-454] Reading design checkpoint 'd:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.gen/sources_1/ip/gt_10gbr/gt_10gbr.dcp' for cell 'u_gt'
+INFO: [Project 1-454] Reading design checkpoint 'd:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.gen/sources_1/ip/vio_p7a/vio_p7a.dcp' for cell 'u_vio'
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.030 . Memory (MB): peak = 1701.633 ; gain = 0.000
+INFO: [Netlist 29-17] Analyzing 426 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
+INFO: [Project 1-479] Netlist was created with Vivado 2025.2
+INFO: [Project 1-570] Preparing netlist for logic optimization
+INFO: [Chipscope 16-324] Core: u_vio UUID: 407d14e8-1cc9-58ef-8c2e-354d7bf170fd 
+Parsing XDC File [d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.gen/sources_1/ip/vio_p7a/vio_p7a.xdc] for cell 'u_vio'
+Finished Parsing XDC File [d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.gen/sources_1/ip/vio_p7a/vio_p7a.xdc] for cell 'u_vio'
+Parsing XDC File [d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.gen/sources_1/ip/gt_10gbr/synth/gt_10gbr.xdc] for cell 'u_gt/inst'
+Finished Parsing XDC File [d:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.gen/sources_1/ip/gt_10gbr/synth/gt_10gbr.xdc] for cell 'u_gt/inst'
+Parsing XDC File [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a.xdc]
+Finished Parsing XDC File [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a.xdc]
+Parsing XDC File [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc]
+INFO: [Timing 38-35] Done setting XDC timing constraints. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:42]
+INFO: [Timing 38-2] Deriving generated clocks [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:42]
+get_clocks: Time (s): cpu = 00:00:06 ; elapsed = 00:00:06 . Memory (MB): peak = 2385.605 ; gain = 683.973
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/GND' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/GND' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_WIDTH_INST' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_OUT_ALL_INST' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/U_XSDB_SLAVE' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/VCC' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Bus_data_out[0]_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Bus_data_out[0]_i_2' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Bus_data_out[10]_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Bus_data_out[11]_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Bus_data_out[12]_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Bus_data_out[13]_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Bus_data_out[14]_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Bus_data_out[15]_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Bus_data_out[15]_i_2' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Bus_data_out[1]_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Bus_data_out[1]_i_2' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Bus_data_out[2]_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Bus_data_out[2]_i_2' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Bus_data_out[3]_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Bus_data_out[4]_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Bus_data_out[5]_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Bus_data_out[6]_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Bus_data_out[7]_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Bus_data_out[8]_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Bus_data_out[9]_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/GND' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Read_int_i_2' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Read_int_i_3' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/Read_int_i_4' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/VCC' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/addr_count[7]_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/probe_in_reg[607]_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/rd_en[5]_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/rd_en_p1_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/wr_en[2]_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/wr_en[4]_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/DECODER_INST/xsdb_drdy_i_1' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_2' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_26' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_27' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_28' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_29' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_3' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_30' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_31' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_32' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_33' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_34' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_35' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_36' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_37' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_38' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_39' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_40' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_41' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_42' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_43' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_44' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_45' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_46' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_47' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_48' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_49' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_50' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_51' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_52' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_53' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[0]_i_8' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_2' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_26' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_27' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_28' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_29' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_3' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_30' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_31' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_32' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_33' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_34' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_35' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_36' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_37' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_38' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_39' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_40' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_41' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_42' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_43' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_44' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_45' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_46' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_47' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_48' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_49' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_50' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+WARNING: [Constraints 18-401] set_false_path: 'u_vio/inst/PROBE_IN_INST/Bus_Data_out[10]_i_51' is not a valid endpoint. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Resolution: A valid end point is a data pin of a sequential cell or a primary output or inout port. Please validate that all the objects returned by your query belong to this list.
+INFO: [Common 17-14] Message 'Constraints 18-401' appears 100 times and further instances of the messages will be disabled. Use the Tcl command set_msg_config to change the current settings. [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc:60]
+Finished Parsing XDC File [D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/xdc/ku5p_p7a_impl.xdc]
+INFO: [Opt 31-138] Pushed 0 inverter(s) to 0 load pin(s).
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.001 . Memory (MB): peak = 2390.695 ; gain = 0.000
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 3 instances were transformed.
+  IBUF => IBUF (IBUFCTRL, INBUF): 2 instances
+  IBUFDS => IBUFDS (DIFFINBUF, IBUFCTRL): 1 instance 
+
+14 Infos, 100 Warnings, 0 Critical Warnings and 0 Errors encountered.
+link_design completed successfully
+link_design: Time (s): cpu = 00:00:14 ; elapsed = 00:00:15 . Memory (MB): peak = 2390.695 ; gain = 1788.328
+Command: opt_design
+Attempting to get a license for feature 'Implementation' and/or device 'xcku5p'
+INFO: [Common 17-349] Got license for feature 'Implementation' and/or device 'xcku5p'
+Running DRC as a precondition to command opt_design
+
+Starting DRC Task
+INFO: [DRC 23-27] Running DRC with 8 threads
+INFO: [Project 1-461] DRC finished with 0 Errors
+INFO: [Project 1-462] Please refer to the DRC report (report_drc) for more information.
+
+Time (s): cpu = 00:00:01 ; elapsed = 00:00:00.323 . Memory (MB): peak = 2416.008 ; gain = 25.312
+
+Starting Cache Timing Information Task
+INFO: [Timing 38-35] Done setting XDC timing constraints.
+Ending Cache Timing Information Task | Checksum: 1bc37e5cf
+
+Time (s): cpu = 00:00:01 ; elapsed = 00:00:00.125 . Memory (MB): peak = 2449.879 ; gain = 33.871
+
+Starting Logic Optimization Task
+
+Phase 1 Initialization
+
+Phase 1.1 Core Generation And Design Setup
+
+Phase 1.1.1 Generate And Synthesize Debug Cores
+INFO: [Chipscope 16-329] Generating Script for core instance : dbg_hub 
+INFO: [IP_Flow 19-3806] Processing IP xilinx.com:ip:xsdbm:3.0 for cell dbg_hub_CV.
+Done building netlist checker database: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.001 . Memory (MB): peak = 2896.469 ; gain = 0.000
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.012 . Memory (MB): peak = 2896.469 ; gain = 0.000
+Phase 1.1.1 Generate And Synthesize Debug Cores | Checksum: 1e2a806f4
+
+Time (s): cpu = 00:00:02 ; elapsed = 00:00:55 . Memory (MB): peak = 2896.469 ; gain = 22.164
+Phase 1.1 Core Generation And Design Setup | Checksum: 1e2a806f4
+
+Time (s): cpu = 00:00:02 ; elapsed = 00:00:55 . Memory (MB): peak = 2896.469 ; gain = 22.164
+
+Phase 1.2 Setup Constraints And Sort Netlist
+Phase 1.2 Setup Constraints And Sort Netlist | Checksum: 1e2a806f4
+
+Time (s): cpu = 00:00:02 ; elapsed = 00:00:55 . Memory (MB): peak = 2896.469 ; gain = 22.164
+Phase 1 Initialization | Checksum: 1e2a806f4
+
+Time (s): cpu = 00:00:02 ; elapsed = 00:00:55 . Memory (MB): peak = 2896.469 ; gain = 22.164
+
+Phase 2 Timer Update And Timing Data Collection
+
+Phase 2.1 Detect if minReqCache needed
+Phase 2.1 Detect if minReqCache needed | Checksum: 1e2a806f4
+
+Time (s): cpu = 00:00:02 ; elapsed = 00:00:55 . Memory (MB): peak = 2896.469 ; gain = 22.164
+
+Phase 2.2 Timer Update
+Phase 2.2 Timer Update | Checksum: 1e2a806f4
+
+Time (s): cpu = 00:00:02 ; elapsed = 00:00:55 . Memory (MB): peak = 2896.469 ; gain = 22.164
+
+Phase 2.3 Timing Data Collection
+Phase 2.3 Timing Data Collection | Checksum: 1e2a806f4
+
+Time (s): cpu = 00:00:02 ; elapsed = 00:00:55 . Memory (MB): peak = 2896.469 ; gain = 22.164
+Phase 2 Timer Update And Timing Data Collection | Checksum: 1e2a806f4
+
+Time (s): cpu = 00:00:02 ; elapsed = 00:00:55 . Memory (MB): peak = 2896.469 ; gain = 22.164
+
+Phase 3 Retarget
+INFO: [Opt 31-1851] Number of loadless carry chains removed were: 0
+INFO: [Opt 31-1834] Total Chains To Be Transformed Were: 0 AND Number of Transformed insts Created are: 0
+INFO: [Opt 31-138] Pushed 13 inverter(s) to 600 load pin(s).
+INFO: [Opt 31-49] Retargeted 0 cell(s).
+Phase 3 Retarget | Checksum: 1c058c2bd
+
+Time (s): cpu = 00:00:03 ; elapsed = 00:00:55 . Memory (MB): peak = 2896.469 ; gain = 22.164
+Retarget | Checksum: 1c058c2bd
+INFO: [Opt 31-389] Phase Retarget created 5 cells and removed 23 cells
+INFO: [Opt 31-1021] In phase Retarget, 747 netlist objects are constrained preventing optimization. Please run opt_design with -debug_log to get more detail. 
+
+Phase 4 Constant propagation
+INFO: [Opt 31-138] Pushed 0 inverter(s) to 0 load pin(s).
+Phase 4 Constant propagation | Checksum: 1a234ee9a
+
+Time (s): cpu = 00:00:03 ; elapsed = 00:00:55 . Memory (MB): peak = 2896.469 ; gain = 22.164
+Constant propagation | Checksum: 1a234ee9a
+INFO: [Opt 31-389] Phase Constant propagation created 0 cells and removed 4 cells
+INFO: [Opt 31-1021] In phase Constant propagation, 773 netlist objects are constrained preventing optimization. Please run opt_design with -debug_log to get more detail. 
+
+Phase 5 Sweep
+INFO: [Constraints 18-11670] Building netlist checker database with flags, 0x8
+Done building netlist checker database: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.001 . Memory (MB): peak = 2896.469 ; gain = 0.000
+INFO: [Constraints 18-11670] Building netlist checker database with flags, 0x8
+Done building netlist checker database: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.002 . Memory (MB): peak = 2896.469 ; gain = 0.000
+Phase 5 Sweep | Checksum: 1afc7d4a3
+
+Time (s): cpu = 00:00:03 ; elapsed = 00:00:55 . Memory (MB): peak = 2896.469 ; gain = 22.164
+Sweep | Checksum: 1afc7d4a3
+INFO: [Opt 31-389] Phase Sweep created 0 cells and removed 2 cells
+INFO: [Opt 31-1021] In phase Sweep, 2651 netlist objects are constrained preventing optimization. Please run opt_design with -debug_log to get more detail. 
+
+Phase 6 BUFG optimization
+INFO: [Opt 31-1077] Phase BUFG optimization inserted 0 global clock buffer(s) for CLOCK_LOW_FANOUT.
+Phase 6 BUFG optimization | Checksum: 1afc7d4a3
+
+Time (s): cpu = 00:00:03 ; elapsed = 00:00:55 . Memory (MB): peak = 2896.469 ; gain = 22.164
+BUFG optimization | Checksum: 1afc7d4a3
+INFO: [Opt 31-662] Phase BUFG optimization created 0 cells of which 0 are BUFGs and removed 0 cells.
+
+Phase 7 Shift Register Optimization
+INFO: [Opt 31-1064] SRL Remap converted 0 SRLs to 0 registers and converted 0 registers of register chains to 0 SRLs
+Phase 7 Shift Register Optimization | Checksum: 1afc7d4a3
+
+Time (s): cpu = 00:00:03 ; elapsed = 00:00:55 . Memory (MB): peak = 2896.469 ; gain = 22.164
+Shift Register Optimization | Checksum: 1afc7d4a3
+INFO: [Opt 31-389] Phase Shift Register Optimization created 0 cells and removed 0 cells
+
+Phase 8 Post Processing Netlist
+Phase 8 Post Processing Netlist | Checksum: 1afc7d4a3
+
+Time (s): cpu = 00:00:03 ; elapsed = 00:00:55 . Memory (MB): peak = 2896.469 ; gain = 22.164
+Post Processing Netlist | Checksum: 1afc7d4a3
+INFO: [Opt 31-389] Phase Post Processing Netlist created 0 cells and removed 0 cells
+INFO: [Opt 31-1021] In phase Post Processing Netlist, 733 netlist objects are constrained preventing optimization. Please run opt_design with -debug_log to get more detail. 
+
+Phase 9 Finalization
+
+Phase 9.1 Finalizing Design Cores and Updating Shapes
+Phase 9.1 Finalizing Design Cores and Updating Shapes | Checksum: 184bd3216
+
+Time (s): cpu = 00:00:03 ; elapsed = 00:00:55 . Memory (MB): peak = 2896.469 ; gain = 22.164
+
+Phase 9.2 Verifying Netlist Connectivity
+
+Starting Connectivity Check Task
+
+Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.009 . Memory (MB): peak = 2896.469 ; gain = 0.000
+Phase 9.2 Verifying Netlist Connectivity | Checksum: 184bd3216
+
+Time (s): cpu = 00:00:03 ; elapsed = 00:00:55 . Memory (MB): peak = 2896.469 ; gain = 22.164
+Phase 9 Finalization | Checksum: 184bd3216
+
+Time (s): cpu = 00:00:03 ; elapsed = 00:00:55 . Memory (MB): peak = 2896.469 ; gain = 22.164
+Opt_design Change Summary
+=========================
+
+
+-------------------------------------------------------------------------------------------------------------------------
+|  Phase                        |  #Cells created  |  #Cells Removed  |  #Constrained objects preventing optimizations  |
+-------------------------------------------------------------------------------------------------------------------------
+|  Retarget                     |               5  |              23  |                                            747  |
+|  Constant propagation         |               0  |               4  |                                            773  |
+|  Sweep                        |               0  |               2  |                                           2651  |
+|  BUFG optimization            |               0  |               0  |                                              0  |
+|  Shift Register Optimization  |               0  |               0  |                                              0  |
+|  Post Processing Netlist      |               0  |               0  |                                            733  |
+-------------------------------------------------------------------------------------------------------------------------
+
+
+Ending Logic Optimization Task | Checksum: 184bd3216
+
+Time (s): cpu = 00:00:03 ; elapsed = 00:00:55 . Memory (MB): peak = 2896.469 ; gain = 22.164
+
+Starting Power Optimization Task
+INFO: [Pwropt 34-132] Skipping clock gating for clocks with a period < 2.00 ns.
+Ending Power Optimization Task | Checksum: 184bd3216
+
+Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.009 . Memory (MB): peak = 2896.469 ; gain = 0.000
+
+Starting Final Cleanup Task
+Ending Final Cleanup Task | Checksum: 184bd3216
+
+Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.001 . Memory (MB): peak = 2896.469 ; gain = 0.000
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.002 . Memory (MB): peak = 2896.469 ; gain = 0.000
+INFO: [Common 17-83] Releasing license: Implementation
+47 Infos, 100 Warnings, 0 Critical Warnings and 0 Errors encountered.
+opt_design completed successfully
+opt_design: Time (s): cpu = 00:00:06 ; elapsed = 00:00:58 . Memory (MB): peak = 2896.469 ; gain = 505.773
+INFO: [Vivado 12-24828] Executing command : report_drc -file p7a_top_drc_opted.rpt -pb p7a_top_drc_opted.pb -rpx p7a_top_drc_opted.rpx
+Command: report_drc -file p7a_top_drc_opted.rpt -pb p7a_top_drc_opted.pb -rpx p7a_top_drc_opted.rpx
+INFO: [IP_Flow 19-1839] IP Catalog is up to date.
+INFO: [DRC 23-27] Running DRC with 8 threads
+INFO: [Vivado_Tcl 2-168] The results of DRC are in file D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/impl_1/p7a_top_drc_opted.rpt.
+report_drc completed successfully
+INFO: [Timing 38-480] Writing timing data to binary archive.
+Wrote PlaceDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.003 . Memory (MB): peak = 2896.469 ; gain = 0.000
+Wrote PulsedLatchDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2896.469 ; gain = 0.000
+Writing XDEF routing.
+Write ShapeDB Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.007 . Memory (MB): peak = 2896.469 ; gain = 0.000
+Writing XDEF routing logical nets.
+Writing XDEF routing special nets.
+Wrote RouteStorage: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.036 . Memory (MB): peak = 2896.469 ; gain = 0.000
+Wrote Netlist Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.001 . Memory (MB): peak = 2896.469 ; gain = 0.000
+Wrote Device Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.013 . Memory (MB): peak = 2896.469 ; gain = 0.000
+Write Physdb Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.061 . Memory (MB): peak = 2896.469 ; gain = 0.000
+INFO: [Common 17-1381] The checkpoint 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/impl_1/p7a_top_opt.dcp' has been generated.
+INFO: [Chipscope 16-240] Debug cores have already been implemented
+Command: place_design -directive ExtraTimingOpt
+Attempting to get a license for feature 'Implementation' and/or device 'xcku5p'
+INFO: [Common 17-349] Got license for feature 'Implementation' and/or device 'xcku5p'
+INFO: [Common 17-83] Releasing license: Implementation
+INFO: [DRC 23-27] Running DRC with 8 threads
+INFO: [Vivado_Tcl 4-198] DRC finished with 0 Errors
+INFO: [Vivado_Tcl 4-199] Please refer to the DRC report (report_drc) for more information.
+INFO: [Timing 38-35] Done setting XDC timing constraints.
+INFO: [Vivado_Tcl 4-2302] The placer was invoked with the 'ExtraTimingOpt' directive.
+Running DRC as a precondition to command place_design
+INFO: [DRC 23-27] Running DRC with 8 threads
+INFO: [Vivado_Tcl 4-198] DRC finished with 0 Errors
+INFO: [Vivado_Tcl 4-199] Please refer to the DRC report (report_drc) for more information.
+INFO: [Place 30-611] Multithreading enabled for place_design using a maximum of 8 CPUs
+
+Starting Placer Task
+
+Phase 1 Placer Initialization
+
+Phase 1.1 Placer Initialization Netlist Sorting
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.002 . Memory (MB): peak = 2896.469 ; gain = 0.000
+Phase 1.1 Placer Initialization Netlist Sorting | Checksum: 14dfcc0e5
+
+Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.006 . Memory (MB): peak = 2896.469 ; gain = 0.000
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.001 . Memory (MB): peak = 2896.469 ; gain = 0.000
+
+Phase 1.2 IO Placement/ Clock Placement/ Build Placer Device
+Phase 1.2 IO Placement/ Clock Placement/ Build Placer Device | Checksum: 26c58a67e
+
+Time (s): cpu = 00:00:07 ; elapsed = 00:00:07 . Memory (MB): peak = 3405.152 ; gain = 508.684
+
+Phase 1.3 Build Placer Netlist Model
+Phase 1.3 Build Placer Netlist Model | Checksum: 325d952ce
+
+Time (s): cpu = 00:00:10 ; elapsed = 00:00:07 . Memory (MB): peak = 3405.152 ; gain = 508.684
+
+Phase 1.4 Constrain Clocks/Macros
+Phase 1.4 Constrain Clocks/Macros | Checksum: 325d952ce
+
+Time (s): cpu = 00:00:10 ; elapsed = 00:00:07 . Memory (MB): peak = 3405.152 ; gain = 508.684
+Phase 1 Placer Initialization | Checksum: 325d952ce
+
+Time (s): cpu = 00:00:10 ; elapsed = 00:00:07 . Memory (MB): peak = 3405.152 ; gain = 508.684
+
+Phase 2 Global Placement
+
+Phase 2.1 Floorplanning
+
+Phase 2.1.1 Partition Driven Placement
+
+Phase 2.1.1.1 PBP: Partition Driven Placement
+Phase 2.1.1.1 PBP: Partition Driven Placement | Checksum: 30cfbc7f2
+
+Time (s): cpu = 00:00:11 ; elapsed = 00:00:08 . Memory (MB): peak = 3405.152 ; gain = 508.684
+
+Phase 2.1.1.2 PBP: Clock Region Placement
+INFO: [Place 30-3162] Check ILP status : ILP-based clock placer completed successfully.
+Phase 2.1.1.2 PBP: Clock Region Placement | Checksum: 2de0c2ecc
+
+Time (s): cpu = 00:00:11 ; elapsed = 00:00:08 . Memory (MB): peak = 3405.152 ; gain = 508.684
+
+Phase 2.1.1.3 PBP: Compute Congestion
+Phase 2.1.1.3 PBP: Compute Congestion | Checksum: 2de0c2ecc
+
+Time (s): cpu = 00:00:20 ; elapsed = 00:00:11 . Memory (MB): peak = 3776.164 ; gain = 879.695
+
+Phase 2.1.1.4 PBP: UpdateTiming
+Phase 2.1.1.4 PBP: UpdateTiming | Checksum: 2c1dac8bf
+
+Time (s): cpu = 00:00:21 ; elapsed = 00:00:11 . Memory (MB): peak = 3776.164 ; gain = 879.695
+
+Phase 2.1.1.5 PBP: Add part constraints
+Phase 2.1.1.5 PBP: Add part constraints | Checksum: 2c1dac8bf
+
+Time (s): cpu = 00:00:21 ; elapsed = 00:00:11 . Memory (MB): peak = 3776.164 ; gain = 879.695
+Phase 2.1.1 Partition Driven Placement | Checksum: 2c1dac8bf
+
+Time (s): cpu = 00:00:21 ; elapsed = 00:00:11 . Memory (MB): peak = 3776.164 ; gain = 879.695
+Phase 2.1 Floorplanning | Checksum: 2d1d5562d
+
+Time (s): cpu = 00:00:21 ; elapsed = 00:00:11 . Memory (MB): peak = 3776.164 ; gain = 879.695
+
+Phase 2.2 Update Timing before SLR Path Opt
+Phase 2.2 Update Timing before SLR Path Opt | Checksum: 2d1d5562d
+
+Time (s): cpu = 00:00:21 ; elapsed = 00:00:11 . Memory (MB): peak = 3776.164 ; gain = 879.695
+
+Phase 2.3 Post-Processing in Floorplanning
+Phase 2.3 Post-Processing in Floorplanning | Checksum: 2d1d5562d
+
+Time (s): cpu = 00:00:21 ; elapsed = 00:00:11 . Memory (MB): peak = 3776.164 ; gain = 879.695
+
+Phase 2.4 Global Place Phase1
+Phase 2.4 Global Place Phase1 | Checksum: 3449dc7af
+
+Time (s): cpu = 00:00:47 ; elapsed = 00:00:19 . Memory (MB): peak = 3872.547 ; gain = 976.078
+
+Phase 2.5 Global Place Phase2
+
+Phase 2.5.1 UpdateTiming Before Physical Synthesis
+Phase 2.5.1 UpdateTiming Before Physical Synthesis | Checksum: 3449dc7af
+
+Time (s): cpu = 00:00:48 ; elapsed = 00:00:19 . Memory (MB): peak = 3872.547 ; gain = 976.078
+
+Phase 2.5.2 Physical Synthesis In Placer
+INFO: [Physopt 32-1035] Found 0 LUTNM shape to break, 83 LUT instances to create LUTNM shape
+INFO: [Physopt 32-1044] Break lutnm for timing: one critical 0, two critical 0, total 0, new lutff created 0
+INFO: [Physopt 32-1138] End 1 Pass. Optimized 38 nets or LUTs. Breaked 0 LUT, combined 38 existing LUTs and moved 0 existing LUT
+INFO: [Physopt 32-670] No setup violation found.  Equivalent Driver Rewiring was not performed.
+INFO: [Physopt 32-65] No nets found for high-fanout optimization.
+INFO: [Physopt 32-232] Optimized 0 net. Created 0 new instance.
+INFO: [Physopt 32-775] End 1 Pass. Optimized 0 net or cell. Created 0 new cell, deleted 0 existing cell and moved 0 existing cell
+INFO: [Physopt 32-670] No setup violation found.  DSP Register Optimization was not performed.
+INFO: [Physopt 32-670] No setup violation found.  Shift Register to Pipeline Optimization was not performed.
+INFO: [Physopt 32-670] No setup violation found.  Shift Register Optimization was not performed.
+INFO: [Physopt 32-670] No setup violation found.  BRAM Register Optimization was not performed.
+INFO: [Physopt 32-670] No setup violation found.  URAM Register Optimization was not performed.
+INFO: [Physopt 32-949] No candidate nets found for dynamic/static region interface net replication
+INFO: [Physopt 32-775] End 1 Pass. Optimized 0 net or cell. Created 0 new cell, deleted 0 existing cell and moved 0 existing cell
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.002 . Memory (MB): peak = 3872.547 ; gain = 0.000
+
+Summary of Physical Synthesis Optimizations
+============================================
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+|  Optimization                                     |  Added Cells  |  Removed Cells  |  Optimized Cells/Nets  |  Dont Touch  |  Iterations  |  Elapsed   |
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+|  LUT Combining                                    |            0  |             38  |                    38  |           0  |           1  |  00:00:00  |
+|  Retime                                           |            0  |              0  |                     0  |           0  |           1  |  00:00:00  |
+|  Equivalent Driver Rewiring                       |            0  |              0  |                     0  |           0  |           0  |  00:00:00  |
+|  Very High Fanout                                 |            0  |              0  |                     0  |           0  |           1  |  00:00:00  |
+|  DSP Register                                     |            0  |              0  |                     0  |           0  |           0  |  00:00:00  |
+|  Shift Register to Pipeline                       |            0  |              0  |                     0  |           0  |           0  |  00:00:00  |
+|  Shift Register                                   |            0  |              0  |                     0  |           0  |           0  |  00:00:00  |
+|  BRAM Register                                    |            0  |              0  |                     0  |           0  |           0  |  00:00:00  |
+|  URAM Register                                    |            0  |              0  |                     0  |           0  |           0  |  00:00:00  |
+|  Dynamic/Static Region Interface Net Replication  |            0  |              0  |                     0  |           0  |           1  |  00:00:00  |
+|  Total                                            |            0  |             38  |                    38  |           0  |           4  |  00:00:00  |
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+Phase 2.5.2 Physical Synthesis In Placer | Checksum: 24dccebbd
+
+Time (s): cpu = 00:00:49 ; elapsed = 00:00:19 . Memory (MB): peak = 3872.547 ; gain = 976.078
+Phase 2.5 Global Place Phase2 | Checksum: 22014f232
+
+Time (s): cpu = 00:01:00 ; elapsed = 00:00:23 . Memory (MB): peak = 3872.547 ; gain = 976.078
+Phase 2 Global Placement | Checksum: 22014f232
+
+Time (s): cpu = 00:01:00 ; elapsed = 00:00:23 . Memory (MB): peak = 3872.547 ; gain = 976.078
+
+Phase 3 Detail Placement
+
+Phase 3.1 Commit Multi Column Macros
+Phase 3.1 Commit Multi Column Macros | Checksum: 242a5ba80
+
+Time (s): cpu = 00:01:10 ; elapsed = 00:00:26 . Memory (MB): peak = 3872.547 ; gain = 976.078
+
+Phase 3.2 Commit Most Macros & LUTRAMs
+Phase 3.2 Commit Most Macros & LUTRAMs | Checksum: 213917113
+
+Time (s): cpu = 00:01:10 ; elapsed = 00:00:26 . Memory (MB): peak = 3872.547 ; gain = 976.078
+
+Phase 3.3 Small Shape DP
+
+Phase 3.3.1 Small Shape Clustering
+Phase 3.3.1 Small Shape Clustering | Checksum: 2185fc034
+
+Time (s): cpu = 00:01:31 ; elapsed = 00:00:32 . Memory (MB): peak = 3884.590 ; gain = 988.121
+
+Phase 3.3.2 Slice Area Swap
+
+Phase 3.3.2.1 Slice Area Swap Initial
+Phase 3.3.2.1 Slice Area Swap Initial | Checksum: 27df1c94a
+
+Time (s): cpu = 00:01:41 ; elapsed = 00:00:36 . Memory (MB): peak = 3903.113 ; gain = 1006.645
+Phase 3.3.2 Slice Area Swap | Checksum: 27df1c94a
+
+Time (s): cpu = 00:01:41 ; elapsed = 00:00:36 . Memory (MB): peak = 3903.113 ; gain = 1006.645
+Phase 3.3 Small Shape DP | Checksum: 1f7a2d56d
+
+Time (s): cpu = 00:02:01 ; elapsed = 00:00:42 . Memory (MB): peak = 3928.613 ; gain = 1032.145
+
+Phase 3.4 Re-assign LUT pins
+Phase 3.4 Re-assign LUT pins | Checksum: 23d3fa104
+
+Time (s): cpu = 00:02:02 ; elapsed = 00:00:43 . Memory (MB): peak = 3928.613 ; gain = 1032.145
+
+Phase 3.5 Pipeline Register Optimization
+Phase 3.5 Pipeline Register Optimization | Checksum: 28e97fb77
+
+Time (s): cpu = 00:02:02 ; elapsed = 00:00:43 . Memory (MB): peak = 3928.613 ; gain = 1032.145
+Phase 3 Detail Placement | Checksum: 28e97fb77
+
+Time (s): cpu = 00:02:02 ; elapsed = 00:00:43 . Memory (MB): peak = 3928.613 ; gain = 1032.145
+
+Phase 4 Post Placement Optimization and Clean-Up
+
+Phase 4.1 Post Commit Optimization
+INFO: [Timing 38-35] Done setting XDC timing constraints.
+
+Phase 4.1.1 Post Placement Optimization
+Post Placement Optimization Initialization | Checksum: 23a7c095b
+
+Phase 4.1.1.1 BUFG Insertion
+
+Starting Physical Synthesis Task
+
+Phase 1 Physical Synthesis Initialization
+INFO: [Physopt 32-721] Multithreading enabled for phys_opt_design using a maximum of 8 CPUs
+INFO: [Physopt 32-619] Estimated Timing Summary | WNS=3.267 | TNS=0.000 |
+Phase 1 Physical Synthesis Initialization | Checksum: 11734cf58
+
+Time (s): cpu = 00:00:01 ; elapsed = 00:00:00.069 . Memory (MB): peak = 3928.613 ; gain = 0.000
+INFO: [Place 46-56] BUFG insertion identified 0 candidate nets. Inserted BUFG: 0, Replicated BUFG Driver: 0, Skipped due to Placement/Routing Conflicts: 0, Skipped due to Timing Degradation: 0, Skipped due to netlist editing failed: 0.
+Ending Physical Synthesis Task | Checksum: 1d3ed119a
+
+Time (s): cpu = 00:00:01 ; elapsed = 00:00:00.090 . Memory (MB): peak = 3928.613 ; gain = 0.000
+Phase 4.1.1.1 BUFG Insertion | Checksum: 23a7c095b
+
+Time (s): cpu = 00:02:15 ; elapsed = 00:00:47 . Memory (MB): peak = 3928.613 ; gain = 1032.145
+
+Phase 4.1.1.2 Post Placement Timing Optimization
+INFO: [Place 30-746] Post Placement Timing Summary WNS=3.267. For the most accurate timing information please run report_timing.
+Phase 4.1.1.2 Post Placement Timing Optimization | Checksum: 1cc888e33
+
+Time (s): cpu = 00:02:15 ; elapsed = 00:00:47 . Memory (MB): peak = 3928.613 ; gain = 1032.145
+
+Time (s): cpu = 00:02:15 ; elapsed = 00:00:47 . Memory (MB): peak = 3928.613 ; gain = 1032.145
+Phase 4.1 Post Commit Optimization | Checksum: 1cc888e33
+
+Time (s): cpu = 00:02:15 ; elapsed = 00:00:47 . Memory (MB): peak = 3928.613 ; gain = 1032.145
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.003 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Phase 4.2 Post Placement Cleanup
+Phase 4.2 Post Placement Cleanup | Checksum: 194f3ecf7
+
+Time (s): cpu = 00:02:27 ; elapsed = 00:00:52 . Memory (MB): peak = 3962.648 ; gain = 1066.180
+
+Phase 4.3 Placer Reporting
+
+Phase 4.3.1 Print Estimated Congestion
+INFO: [Place 30-612] Post-Placement Estimated Congestion 
+ ________________________________________________________________________
+|           | Global Congestion | Long Congestion   | Short Congestion  |
+| Direction | Region Size       | Region Size       | Region Size       |
+|___________|___________________|___________________|___________________|
+|      North|                1x1|                1x1|                1x1|
+|___________|___________________|___________________|___________________|
+|      South|                1x1|                1x1|                1x1|
+|___________|___________________|___________________|___________________|
+|       East|                1x1|                1x1|                1x1|
+|___________|___________________|___________________|___________________|
+|       West|                1x1|                1x1|                1x1|
+|___________|___________________|___________________|___________________|
+
+Phase 4.3.1 Print Estimated Congestion | Checksum: 194f3ecf7
+
+Time (s): cpu = 00:02:27 ; elapsed = 00:00:52 . Memory (MB): peak = 3962.648 ; gain = 1066.180
+Phase 4.3 Placer Reporting | Checksum: 194f3ecf7
+
+Time (s): cpu = 00:02:27 ; elapsed = 00:00:52 . Memory (MB): peak = 3962.648 ; gain = 1066.180
+
+Phase 4.4 Final Placement Cleanup
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.002 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Time (s): cpu = 00:02:27 ; elapsed = 00:00:52 . Memory (MB): peak = 3962.648 ; gain = 1066.180
+Phase 4 Post Placement Optimization and Clean-Up | Checksum: 195ad0016
+
+Time (s): cpu = 00:02:27 ; elapsed = 00:00:52 . Memory (MB): peak = 3962.648 ; gain = 1066.180
+Ending Placer Task | Checksum: 16651124c
+
+Time (s): cpu = 00:02:27 ; elapsed = 00:00:52 . Memory (MB): peak = 3962.648 ; gain = 1066.180
+86 Infos, 100 Warnings, 0 Critical Warnings and 0 Errors encountered.
+place_design completed successfully
+place_design: Time (s): cpu = 00:02:30 ; elapsed = 00:00:53 . Memory (MB): peak = 3962.648 ; gain = 1066.180
+INFO: [Vivado 12-24838] Running report commands "report_control_sets, report_io, report_utilization" in parallel.
+Running report generation with 3 threads.
+INFO: [Vivado 12-24828] Executing command : report_control_sets -verbose -file p7a_top_control_sets_placed.rpt
+report_control_sets: Time (s): cpu = 00:00:01 ; elapsed = 00:00:00.022 . Memory (MB): peak = 3962.648 ; gain = 0.000
+INFO: [Vivado 12-24828] Executing command : report_utilization -file p7a_top_utilization_placed.rpt -pb p7a_top_utilization_placed.pb
+INFO: [Vivado 12-24828] Executing command : report_io -file p7a_top_io_placed.rpt
+report_io: Time (s): cpu = 00:00:01 ; elapsed = 00:00:00.084 . Memory (MB): peak = 3962.648 ; gain = 0.000
+INFO: [Timing 38-480] Writing timing data to binary archive.
+Write ShapeDB Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.010 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Wrote PlaceDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.189 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Wrote PulsedLatchDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Writing XDEF routing.
+Writing XDEF routing logical nets.
+Writing XDEF routing special nets.
+Wrote RouteStorage: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.035 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Wrote Netlist Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.006 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Wrote Device Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.013 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Write Physdb Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.252 . Memory (MB): peak = 3962.648 ; gain = 0.000
+INFO: [Common 17-1381] The checkpoint 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/impl_1/p7a_top_placed.dcp' has been generated.
+Command: phys_opt_design -directive Explore
+Attempting to get a license for feature 'Implementation' and/or device 'xcku5p'
+INFO: [Common 17-349] Got license for feature 'Implementation' and/or device 'xcku5p'
+INFO: [Vivado_Tcl 4-137] Directive used for phys_opt_design is: Explore
+
+Starting Initial Update Timing Task
+
+Time (s): cpu = 00:00:01 ; elapsed = 00:00:00.332 . Memory (MB): peak = 3962.648 ; gain = 0.000
+INFO: [Vivado_Tcl 4-2279] Estimated Timing Summary | WNS= 3.271 | TNS= 0.000 | 
+INFO: [Vivado_Tcl 4-383] Design worst setup slack (WNS) is greater than or equal to 0.000 ns. All physical synthesis setup optimizations will be skipped.
+INFO: [Vivado_Tcl 4-232] No setup violation found. The netlist was not modified.
+INFO: [Common 17-83] Releasing license: Implementation
+98 Infos, 100 Warnings, 0 Critical Warnings and 0 Errors encountered.
+phys_opt_design completed successfully
+INFO: [Timing 38-480] Writing timing data to binary archive.
+Write ShapeDB Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.011 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Wrote PlaceDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.185 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Wrote PulsedLatchDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Writing XDEF routing.
+Writing XDEF routing logical nets.
+Writing XDEF routing special nets.
+Wrote RouteStorage: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.036 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Wrote Netlist Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.006 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Wrote Device Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.013 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Write Physdb Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.248 . Memory (MB): peak = 3962.648 ; gain = 0.000
+INFO: [Common 17-1381] The checkpoint 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/impl_1/p7a_top_physopt.dcp' has been generated.
+Command: route_design -directive NoTimingRelaxation
+Attempting to get a license for feature 'Implementation' and/or device 'xcku5p'
+INFO: [Common 17-349] Got license for feature 'Implementation' and/or device 'xcku5p'
+
+
+Starting Routing Task
+INFO: [Route 35-270] Using Router directive 'NoTimingRelaxation'.
+INFO: [Route 35-254] Multithreading enabled for route_design using a maximum of 8 CPUs
+
+Phase 1 Build RT Design
+Checksum: PlaceDB: a360b7d8 ConstDB: 0 ShapeSum: 43de0854 RouteDB: 7f125220
+Nodegraph reading from file.  Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.429 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Post Restoration Checksum: NetGraph: 5a2cf435 | NumContArr: b21ad7ea | Constraints: c57b0a4f | Timing: c2a8fa9d
+Phase 1 Build RT Design | Checksum: 2946bd10b
+
+Time (s): cpu = 00:00:03 ; elapsed = 00:00:02 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Phase 2 Router Initialization
+
+Phase 2.1 Fix Topology Constraints
+Phase 2.1 Fix Topology Constraints | Checksum: 2946bd10b
+
+Time (s): cpu = 00:00:03 ; elapsed = 00:00:02 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Phase 2.2 Pre Route Cleanup
+Phase 2.2 Pre Route Cleanup | Checksum: 2946bd10b
+
+Time (s): cpu = 00:00:03 ; elapsed = 00:00:02 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Phase 2.3 Global Clock Net Routing
+ Number of Nodes with overlaps = 0
+Phase 2.3 Global Clock Net Routing | Checksum: 2a666bff0
+
+Time (s): cpu = 00:00:04 ; elapsed = 00:00:03 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Phase 2.4 Update Timing
+Phase 2.4 Update Timing | Checksum: 17c9ca37c
+
+Time (s): cpu = 00:00:06 ; elapsed = 00:00:04 . Memory (MB): peak = 3962.648 ; gain = 0.000
+INFO: [Route 35-416] Intermediate Timing Summary | WNS=3.333  | TNS=0.000  | WHS=-0.144 | THS=-4.856 |
+
+
+Phase 2.5 Update Timing for Bus Skew
+
+Phase 2.5.1 Update Timing
+Phase 2.5.1 Update Timing | Checksum: 19a3890db
+
+Time (s): cpu = 00:00:07 ; elapsed = 00:00:04 . Memory (MB): peak = 3962.648 ; gain = 0.000
+INFO: [Route 35-416] Intermediate Timing Summary | WNS=3.333  | TNS=0.000  | WHS=-0.366 | THS=-14.814|
+
+Phase 2.5 Update Timing for Bus Skew | Checksum: 21b0fc887
+
+Time (s): cpu = 00:00:07 ; elapsed = 00:00:04 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Phase 2.6 Soft Constraint Pins - Fast Budgeting
+Phase 2.6 Soft Constraint Pins - Fast Budgeting | Checksum: 21b0fc887
+
+Time (s): cpu = 00:00:07 ; elapsed = 00:00:04 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Router Utilization Summary
+  Global Vertical Routing Utilization    = 0.00228108 %
+  Global Horizontal Routing Utilization  = 0.00239186 %
+  Routable Net Status*
+  *Does not include unroutable nets such as driverless and loadless.
+  Run report_route_status for detailed report.
+  Number of Failed Nets               = 6597
+    (Failed Nets is the sum of unrouted and partially routed nets)
+  Number of Unrouted Nets             = 6277
+  Number of Partially Routed Nets     = 320
+  Number of Node Overlaps             = 0
+
+Phase 2 Router Initialization | Checksum: 21760ebbf
+
+Time (s): cpu = 00:00:08 ; elapsed = 00:00:05 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Phase 3 Global Routing
+Phase 3 Global Routing | Checksum: 21760ebbf
+
+Time (s): cpu = 00:00:08 ; elapsed = 00:00:05 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Phase 4 Initial Routing
+
+Phase 4.1 Initial Net Routing Pass
+Phase 4.1 Initial Net Routing Pass | Checksum: 1c80df378
+
+Time (s): cpu = 00:00:09 ; elapsed = 00:00:05 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Phase 4 Initial Routing | Checksum: 1a1aca319
+
+Time (s): cpu = 00:00:09 ; elapsed = 00:00:05 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Phase 5 Rip-up And Reroute
+
+Phase 5.1 Global Iteration 0
+ Number of Nodes with overlaps = 768
+ Number of Nodes with overlaps = 39
+ Number of Nodes with overlaps = 2
+ Number of Nodes with overlaps = 1
+ Number of Nodes with overlaps = 0
+INFO: [Route 35-416] Intermediate Timing Summary | WNS=3.176  | TNS=0.000  | WHS=0.018  | THS=0.000  |
+
+Phase 5.1 Global Iteration 0 | Checksum: 26ef0a271
+
+Time (s): cpu = 00:00:14 ; elapsed = 00:00:07 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Phase 5.2 Additional Iteration for Hold
+Phase 5.2 Additional Iteration for Hold | Checksum: 24fa6cea0
+
+Time (s): cpu = 00:00:14 ; elapsed = 00:00:07 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Phase 5 Rip-up And Reroute | Checksum: 24fa6cea0
+
+Time (s): cpu = 00:00:14 ; elapsed = 00:00:07 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Phase 6 Delay and Skew Optimization
+
+Phase 6.1 Delay CleanUp
+Phase 6.1 Delay CleanUp | Checksum: 24fa6cea0
+
+Time (s): cpu = 00:00:14 ; elapsed = 00:00:07 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Phase 6.2 Clock Skew Optimization
+Phase 6.2 Clock Skew Optimization | Checksum: 24fa6cea0
+
+Time (s): cpu = 00:00:14 ; elapsed = 00:00:07 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Phase 6 Delay and Skew Optimization | Checksum: 24fa6cea0
+
+Time (s): cpu = 00:00:14 ; elapsed = 00:00:07 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Phase 7 Post Hold Fix
+
+Phase 7.1 Hold Fix Iter
+INFO: [Route 35-416] Intermediate Timing Summary | WNS=3.176  | TNS=0.000  | WHS=0.018  | THS=0.000  |
+
+Phase 7.1 Hold Fix Iter | Checksum: 261531f78
+
+Time (s): cpu = 00:00:15 ; elapsed = 00:00:07 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Phase 7 Post Hold Fix | Checksum: 261531f78
+
+Time (s): cpu = 00:00:15 ; elapsed = 00:00:07 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Phase 8 Route finalize
+
+Router Utilization Summary
+  Global Vertical Routing Utilization    = 0.260961 %
+  Global Horizontal Routing Utilization  = 0.342627 %
+  Routable Net Status*
+  *Does not include unroutable nets such as driverless and loadless.
+  Run report_route_status for detailed report.
+  Number of Failed Nets               = 0
+    (Failed Nets is the sum of unrouted and partially routed nets)
+  Number of Unrouted Nets             = 0
+  Number of Partially Routed Nets     = 0
+  Number of Node Overlaps             = 0
+
+Phase 8 Route finalize | Checksum: 261531f78
+
+Time (s): cpu = 00:00:15 ; elapsed = 00:00:07 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Phase 9 Verifying routed nets
+
+ Verification completed successfully
+Phase 9 Verifying routed nets | Checksum: 261531f78
+
+Time (s): cpu = 00:00:15 ; elapsed = 00:00:07 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Phase 10 Depositing Routes
+Phase 10 Depositing Routes | Checksum: 261531f78
+
+Time (s): cpu = 00:00:16 ; elapsed = 00:00:07 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Phase 11 Resolve XTalk
+Phase 11 Resolve XTalk | Checksum: 261531f78
+
+Time (s): cpu = 00:00:16 ; elapsed = 00:00:07 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Phase 12 Post Process Routing
+Phase 12 Post Process Routing | Checksum: 261531f78
+
+Time (s): cpu = 00:00:16 ; elapsed = 00:00:07 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Phase 13 Route finalize
+Phase 13 Route finalize | Checksum: 261531f78
+
+Time (s): cpu = 00:00:16 ; elapsed = 00:00:07 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Phase 14 Post Router Timing
+INFO: [Route 35-20] Post Routing Timing Summary | WNS=3.178  | TNS=0.000  | WHS=0.018  | THS=0.000  |
+
+Phase 14 Post Router Timing | Checksum: 26c2c2978
+
+Time (s): cpu = 00:00:17 ; elapsed = 00:00:08 . Memory (MB): peak = 3962.648 ; gain = 0.000
+INFO: [Route 35-61] The design met the timing requirement.
+Total Elapsed time in route_design: 7.699 secs
+
+Phase 15 Post-Route Event Processing
+Phase 15 Post-Route Event Processing | Checksum: 18a40a36f
+
+Time (s): cpu = 00:00:18 ; elapsed = 00:00:08 . Memory (MB): peak = 3962.648 ; gain = 0.000
+INFO: [Route 35-16] Router Completed Successfully
+Ending Routing Task | Checksum: 18a40a36f
+
+Time (s): cpu = 00:00:18 ; elapsed = 00:00:08 . Memory (MB): peak = 3962.648 ; gain = 0.000
+
+Routing Is Done.
+INFO: [Common 17-83] Releasing license: Implementation
+111 Infos, 100 Warnings, 0 Critical Warnings and 0 Errors encountered.
+route_design completed successfully
+route_design: Time (s): cpu = 00:00:18 ; elapsed = 00:00:08 . Memory (MB): peak = 3962.648 ; gain = 0.000
+INFO: [Vivado 12-24828] Executing command : report_drc -file p7a_top_drc_routed.rpt -pb p7a_top_drc_routed.pb -rpx p7a_top_drc_routed.rpx
+Command: report_drc -file p7a_top_drc_routed.rpt -pb p7a_top_drc_routed.pb -rpx p7a_top_drc_routed.rpx
+INFO: [IP_Flow 19-1839] IP Catalog is up to date.
+INFO: [DRC 23-27] Running DRC with 8 threads
+INFO: [Vivado_Tcl 2-168] The results of DRC are in file D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/impl_1/p7a_top_drc_routed.rpt.
+report_drc completed successfully
+INFO: [Vivado 12-24828] Executing command : report_methodology -file p7a_top_methodology_drc_routed.rpt -pb p7a_top_methodology_drc_routed.pb -rpx p7a_top_methodology_drc_routed.rpx
+Command: report_methodology -file p7a_top_methodology_drc_routed.rpt -pb p7a_top_methodology_drc_routed.pb -rpx p7a_top_methodology_drc_routed.rpx
+INFO: [Timing 38-35] Done setting XDC timing constraints.
+INFO: [DRC 23-133] Running Methodology with 8 threads
+INFO: [Vivado_Tcl 2-1520] The results of Report Methodology are in file D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/impl_1/p7a_top_methodology_drc_routed.rpt.
+report_methodology completed successfully
+INFO: [Vivado 12-24828] Executing command : report_timing_summary -max_paths 10 -routable_nets -report_unconstrained -file p7a_top_timing_summary_routed.rpt -pb p7a_top_timing_summary_routed.pb -rpx p7a_top_timing_summary_routed.rpx -warn_on_violation 
+INFO: [Timing 38-35] Done setting XDC timing constraints.
+INFO: [Timing 38-91] UpdateTimingParams: Speed grade: -1, Temperature grade: E, Delay Type: min_max.
+INFO: [Timing 38-191] Multithreading enabled for timing update using a maximum of 8 CPUs
+WARNING: [Timing 38-436] There are set_bus_skew constraint(s) in this design. Please run report_bus_skew to ensure that bus skew requirements are met.
+INFO: [Vivado 12-24838] Running report commands "report_incremental_reuse, report_route_status" in parallel.
+Running report generation with 2 threads.
+INFO: [Vivado 12-24828] Executing command : report_incremental_reuse -file p7a_top_incremental_reuse_routed.rpt
+INFO: [Vivado_Tcl 4-1062] Incremental flow is disabled. No incremental reuse Info to report.
+INFO: [Vivado 12-24828] Executing command : report_route_status -file p7a_top_route_status.rpt -pb p7a_top_route_status.pb
+INFO: [Vivado 12-24828] Executing command : report_power -file p7a_top_power_routed.rpt -pb p7a_top_power_summary_routed.pb -rpx p7a_top_power_routed.rpx
+Command: report_power -file p7a_top_power_routed.rpt -pb p7a_top_power_summary_routed.pb -rpx p7a_top_power_routed.rpx
+Running Vector-less Activity Propagation...
+
+Finished Running Vector-less Activity Propagation
+WARNING: [Power 33-332] Found switching activity that implies high-fanout reset nets being asserted for excessive periods of time which may result in inaccurate power analysis.
+Resolution: To review and fix problems, please run Power Constraints Advisor in the GUI from Tools > Power Constraints Advisor or run report_power with the -advisory option to generate a text report.
+128 Infos, 102 Warnings, 0 Critical Warnings and 0 Errors encountered.
+report_power completed successfully
+INFO: [Vivado 12-24828] Executing command : report_clock_utilization -file p7a_top_clock_utilization_routed.rpt
+INFO: [Vivado 12-24828] Executing command : report_bus_skew -warn_on_violation -file p7a_top_bus_skew_routed.rpt -pb p7a_top_bus_skew_routed.pb -rpx p7a_top_bus_skew_routed.rpx
+INFO: [Timing 38-91] UpdateTimingParams: Speed grade: -1, Temperature grade: E, Delay Type: min_max.
+INFO: [Timing 38-191] Multithreading enabled for timing update using a maximum of 8 CPUs
+generate_parallel_reports: Time (s): cpu = 00:00:15 ; elapsed = 00:00:08 . Memory (MB): peak = 3962.648 ; gain = 0.000
+INFO: [Timing 38-480] Writing timing data to binary archive.
+Write ShapeDB Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.011 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Wrote PlaceDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.185 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Wrote PulsedLatchDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Writing XDEF routing.
+Writing XDEF routing logical nets.
+Writing XDEF routing special nets.
+Wrote RouteStorage: Time (s): cpu = 00:00:01 ; elapsed = 00:00:00.068 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Wrote Netlist Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.006 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Wrote Device Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.013 . Memory (MB): peak = 3962.648 ; gain = 0.000
+Write Physdb Complete: Time (s): cpu = 00:00:01 ; elapsed = 00:00:00.282 . Memory (MB): peak = 3962.648 ; gain = 0.000
+INFO: [Common 17-1381] The checkpoint 'D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/impl_1/p7a_top_routed.dcp' has been generated.
+Command: write_bitstream -force p7a_top.bit
+Attempting to get a license for feature 'Implementation' and/or device 'xcku5p'
+INFO: [Common 17-349] Got license for feature 'Implementation' and/or device 'xcku5p'
+Running DRC as a precondition to command write_bitstream
+INFO: [IP_Flow 19-1839] IP Catalog is up to date.
+INFO: [DRC 23-27] Running DRC with 8 threads
+INFO: [Vivado 12-3199] DRC finished with 0 Errors
+INFO: [Vivado 12-3200] Please refer to the DRC report (report_drc) for more information.
+Integrating Hard IP ELF/MEM with the PDI.
+INFO: [Designutils 20-2272] Running write_bitstream with 8 threads.
+Loading data files...
+Loading site data...
+Loading route data...
+Processing options...
+Creating bitmap...
+Creating bitstream...
+Writing bitstream ./p7a_top.bit...
+INFO: [Vivado 12-1842] Bitgen Completed Successfully.
+INFO: [Common 17-83] Releasing license: Implementation
+142 Infos, 102 Warnings, 0 Critical Warnings and 0 Errors encountered.
+write_bitstream completed successfully
+write_bitstream: Time (s): cpu = 00:00:16 ; elapsed = 00:00:11 . Memory (MB): peak = 3962.648 ; gain = 0.000
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 29 16:40:23 2026...
+[Tue Sep 29 16:40:28 2026] impl_1 finished
+wait_on_runs: Time (s): cpu = 00:00:00 ; elapsed = 00:02:56 . Memory (MB): peak = 653.324 ; gain = 0.000
+# set ip_ [get_property PROGRESS [get_runs impl_1]]
+# set is_ [get_property STATUS   [get_runs impl_1]]
+# puts "IMPL progress=$ip_ status=$is_"
+IMPL progress=100% status=write_bitstream Complete!
+# if {$ip_ ne "100%"} { error "impl_1 did not complete: $is_" }
+# set bit [file join $proj_dir p7a_prj.runs impl_1 ${top}.bit]
+# puts "BITSTREAM = $bit"
+BITSTREAM = D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/impl_1/p7a_top.bit
+# if {![file exists $bit]} { error "bitstream missing: $bit" }
+# puts "BITSTREAM_BYTES = [file size $bit]"
+BITSTREAM_BYTES = 15431258
+# sec "DONE"
+
+===== P7A >>>>>>>> DONE
+# puts "Now run: vivado -mode batch -source readback_p7a.tcl  (static criteria 1/2/3)"
+Now run: vivado -mode batch -source readback_p7a.tcl  (static criteria 1/2/3)
+# exit
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 29 16:40:28 2026...

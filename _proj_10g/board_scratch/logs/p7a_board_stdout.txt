@@ -1,0 +1,748 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 17:28:09 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source probe_p7a_board.tcl
+# set here [file normalize [file dirname [info script]]]
+# set p10  [file normalize [file join $here ..]]
+# set bit  $p10/vivado_prj/p7a_prj.runs/impl_1/p7a_top.bit
+# if {[info exists ::env(P7A_BIT)]}    { set bit $::env(P7A_BIT) }
+# set secs 600
+# if {[info exists ::env(P7A_SECS)]}   { set secs $::env(P7A_SECS) }
+# set short 30
+# if {[info exists ::env(P7A_SHORT)]}  { set short $::env(P7A_SHORT) }
+# set url  192.168.0.38:3121
+# if {[info exists ::env(P7A_HWURL)]}  { set url $::env(P7A_HWURL) }
+# set allow_short_err 0
+# if {[info exists ::env(P7A_ALLOW_SHORT_ERR)]} { set allow_short_err $::env(P7A_ALLOW_SHORT_ERR) }
+# proc sec {s} { puts "\n@@@@@@ P7A >>> $s" ; flush stdout }
+# proc pget {o n} { if {[catch {set v [get_property $n $o]} e]} { return "<ERR:$e>" } ; return $v }
+# proc bit  {v n} { expr {($v >> $n) & 1} }
+# proc usec {} { if {[catch {set t [clock microseconds]} e]} { return [expr {[clock milliseconds]*1000}] } ; return $t }
+# proc hexint {s} {
+#     set s [string trim $s]
+#     if {$s eq ""} { error "empty probe value" }
+#     if {[catch {expr "0x$s"} v]} { error "bad hex '$s'" }
+#     return $v
+# }
+# sec "STAGE A0 -- PREFLIGHT"
+
+@@@@@@ P7A >>> STAGE A0 -- PREFLIGHT
+# puts "BIT   = $bit"
+BIT   = D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/impl_1/p7a_top.bit
+# puts "SECS  = $secs   SHORT = $short   URL = $url"
+SECS  = 600   SHORT = 60   URL = 192.168.0.38:3121
+# puts "host  = [info hostname]   vivado = [version -short]"
+host  = xyz-intel   vivado = 2025.2
+# puts "tcl   = [info patchlevel]   wordSize = [expr {$tcl_platform(wordSize)}] (informational only: every large value below is printed by string interpolation, never through format %d/%X, so it is correct on a 32-bit Tcl too -- found via the dry-run harness)"
+tcl   = 8.6.13   wordSize = 4 (informational only: every large value below is printed by string interpolation, never through format %d/%X, so it is correct on a 32-bit Tcl too -- found via the dry-run harness)
+# if {![file exists $bit]} { puts "P7A-ABORT: bitstream not found"; exit 1 }
+# set ltx [file rootname $bit].ltx
+# puts "LTX   = $ltx exists=[file exists $ltx]"
+LTX   = D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/impl_1/p7a_top.ltx exists=1
+# if {![file exists $ltx]} { puts "P7A-ABORT: .ltx missing (VIO cannot be enumerated)"; exit 1 }
+# foreach f [list $bit $ltx] {
+#     puts [format "  %s  size=%d  mtime=%s" [file tail $f] [file size $f] \
+#           [clock format [file mtime $f] -format "%Y-%m-%d %H:%M:%S"]]
+# }
+  p7a_top.bit  size=15431258  mtime=2026-09-29 16:40:23
+  p7a_top.ltx  size=114407  mtime=2026-09-29 16:40:23
+# puts "  sha256 of both artifacts + all 11 RTL files: board_scratch/logs/hashes.txt"
+  sha256 of both artifacts + all 11 RTL files: board_scratch/logs/hashes.txt
+# puts "  expected bit f88d019f...8651d / ltx 5dd5fa69...5455db (verified on disk before this run)"
+  expected bit f88d019f...8651d / ltx 5dd5fa69...5455db (verified on disk before this run)
+# sec "STAGE A1 -- CONNECT / SAFETY GATE (IDCODE 04A62093, device count 1)"
+
+@@@@@@ P7A >>> STAGE A1 -- CONNECT / SAFETY GATE (IDCODE 04A62093, device count 1)
+# open_hw_manager
+# connect_hw_server -url $url
+INFO: [Labtools 27-2285] Connecting to hw_server url TCP:192.168.0.38:3121
+INFO: [Labtools 27-3415] Connecting to cs_server url TCP:localhost:0
+INFO: [Labtools 27-3417] Launching cs_server...
+INFO: [Labtools 27-2221] Launch Output:
+
+
+******** Xilinx cs_server v2025.2.0
+  ****** Build date   : Nov 14 2025-07:16:52
+    **** Build number : 2025.2.1763075812
+      ** Copyright 2017-2022 Xilinx, Inc. All Rights Reserved.
+      ** Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
+
+
+
+# current_hw_target [lindex [get_hw_targets] 0]
+# open_hw_target
+INFO: [Labtoolstcl 44-466] Opening hw_target 192.168.0.38:3121/xilinx_tcf/Digilent/210251391367
+# set dlist [get_hw_devices]
+# puts "device count = [llength $dlist]"
+device count = 1
+# foreach d $dlist { puts "DEVICE $d PART=[pget $d PART] IDCODE=[pget $d IDCODE_HEX]" }
+DEVICE xcku5p_0 PART=xcku5p IDCODE=04A62093
+# set tdev ""
+# foreach d $dlist { if {[pget $d IDCODE_HEX] eq "04A62093"} { set tdev $d } }
+# if {$tdev eq "" || [llength $dlist] != 1} {
+#     puts "P7A-SAFETY_ABORT: target='$tdev' count=[llength $dlist] -- NOT PROGRAMMING"
+#     exit 1
+# }
+# puts "SAFETY_GATE = PASS -> $tdev"
+SAFETY_GATE = PASS -> xcku5p_0
+# puts "PRE-PROGRAM DONE_PIN = [pget $tdev REGISTER.CONFIG_STATUS.BIT\[14\]_DONE_PIN]"
+PRE-PROGRAM DONE_PIN = 1
+# sec "STAGE A2 -- PROGRAM (volatile, JTAG) + DONE"
+
+@@@@@@ P7A >>> STAGE A2 -- PROGRAM (volatile, JTAG) + DONE
+# current_hw_device $tdev
+# refresh_hw_device -update_hw_probes false $tdev
+INFO: [Labtools 27-2302] Device xcku5p (JTAG device index = 0) is programmed with a design that has 1 VIO core(s).
+# set_property PROGRAM.FILE $bit $tdev
+# set_property PROBES.FILE $ltx $tdev
+# set_property FULL_PROBES.FILE $ltx $tdev
+# if {[catch {program_hw_devices $tdev} em]} { puts "P7A-ABORT: program failed: $em"; exit 1 }
+INFO: [Labtools 27-3164] End of startup status: HIGH
+program_hw_devices: Time (s): cpu = 00:00:09 ; elapsed = 00:00:09 . Memory (MB): peak = 600.547 ; gain = 0.508
+# set done [pget $tdev REGISTER.CONFIG_STATUS.BIT\[14\]_DONE_PIN]
+# puts "DONE_PIN = $done"
+DONE_PIN = 1
+# if {$done != 1} { puts "P7A-ABORT: DONE != 1"; exit 1 }
+# refresh_hw_device $tdev
+INFO: [Labtools 27-2302] Device xcku5p (JTAG device index = 0) is programmed with a design that has 1 VIO core(s).
+INFO: [Labtools 27-1889] Uploading output probe values for VIO core [hw_vio_1]
+# puts "programming OK, DONE=HIGH"
+programming OK, DONE=HIGH
+# sec "STAGE A3 -- VIO PROBE RESOLUTION (names + width assertions)"
+
+@@@@@@ P7A >>> STAGE A3 -- VIO PROBE RESOLUTION (names + width assertions)
+# set vio [lindex [get_hw_vios -of_objects $tdev] 0]
+# if {$vio eq ""} { puts "P7A-ABORT: no VIO in this design"; exit 1 }
+# puts "VIO = $vio"
+VIO = hw_vio_1
+# foreach p [get_hw_probes -of_objects $vio] {
+#     puts "  PROBE name=[pget $p NAME] width=[pget $p WIDTH]"
+# }
+  PROBE name=vio_bits_snap width=96
+  PROBE name=vio_err_snap width=64
+  PROBE name=vio_hdre_snap width=64
+  PROBE name=vio_hdrs_snap width=96
+  PROBE name=vio_rxcyc_snap width=96
+  PROBE name=vio_rxdvcyc_snap width=96
+  PROBE name=vio_status width=96
+  PROBE name=raw_clear width=1
+  PROBE name=raw_gt_reset width=1
+  PROBE name=raw_slip width=1
+  PROBE name=raw_snap width=1
+# proc findprobe {vio names} {
+#     set all [get_hw_probes -of_objects $vio]
+#     foreach n $names { foreach p $all { if {$p eq $n} { return $p } } }
+#     foreach n $names { foreach p $all { if {[string match $n $p]} { return $p } } }
+#     return ""
+# }
+# proc wof {p} { set w 1 ; catch {set w [get_property WIDTH $p]} ; return $w }
+# array set P {}
+# set P(err)     [findprobe $vio {vio_err_snap probe_in0}]
+# set P(bits)    [findprobe $vio {vio_bits_snap probe_in1}]
+# set P(hdrs)    [findprobe $vio {vio_hdrs_snap probe_in2}]
+# set P(hdre)    [findprobe $vio {vio_hdre_snap probe_in3}]
+# set P(rxcyc)   [findprobe $vio {vio_rxcyc_snap probe_in4}]
+# set P(rxdvcyc) [findprobe $vio {vio_rxdvcyc_snap probe_in5}]
+# set P(stat)    [findprobe $vio {vio_status probe_in6}]
+# set P(snap)    [findprobe $vio {raw_snap probe_out0}]
+# set P(clear)   [findprobe $vio {raw_clear probe_out1}]
+# set P(slip)    [findprobe $vio {raw_slip probe_out2}]
+# set P(gtrst)   [findprobe $vio {raw_gt_reset probe_out3}]
+# foreach {nm key w} {err err 64 bits bits 96 hdrs hdrs 96 hdre hdre 64 \
+#                     rxcyc rxcyc 96 rxdvcyc rxdvcyc 96 status stat 96 \
+#                     snap snap 1 clear clear 1 slip slip 1 gt_reset gtrst 1} {
+#     if {$P($key) eq ""} { puts "P7A-ABORT: probe '$nm' not found"; exit 1 }
+#     if {[wof $P($key)] != $w} {
+#         puts "P7A-ABORT: probe '$nm' width=[wof $P($key)] expected $w -- packing changed"
+#         exit 1
+#     }
+# }
+# puts "PROBES RESOLVED -- all 11 present, all widths match the RTL packing"
+PROBES RESOLVED -- all 11 present, all widths match the RTL packing
+# proc vset {vio p val} {
+#     set w [wof $p]
+#     set n [expr {int(ceil($w / 4.0))}]
+#     set s [format "%0${n}X" [expr {$val & ((1 << $w) - 1)}]]
+#     set_property OUTPUT_VALUE $s $p
+#     commit_hw_vio $vio
+# }
+# proc pulse {vio p} { vset $vio $p 1 ; vset $vio $p 0 }
+# proc rdall {vio} {
+#     global P
+#     refresh_hw_vio $vio
+#     set o [dict create]
+#     foreach k {err bits hdrs hdre rxcyc rxdvcyc stat} {
+#         set s [get_property INPUT_VALUE $P($k)]
+#         set r HEX
+#         catch { set r [get_property INPUT_VALUE_RADIX $P($k)] }
+#         switch -- $r {
+#             HEX     { dict set o $k [hexint $s] }
+#             BIN     { dict set o $k [expr "0b$s"] }
+#             OCT     { dict set o $k [expr "0o$s"] }
+#             default { dict set o $k [hexint $s] }
+#         }
+#     }
+#     # --- split the packed probes into per-channel scalars, ONCE, here. -------
+#     # The packing is {ch1, ch0} but the two groups have DIFFERENT widths:
+#     #   err  [64] = {err1[31:0],  err0[31:0]}   -> ch1 at bits [63:32]
+#     #   hdre [64] = {hdre1[31:0], hdre0[31:0]}  -> ch1 at bits [63:32]
+#     #   bits/hdrs/rxcyc/rxdvcyc [96] = {ch1[47:0], ch0[47:0]} -> ch1 at [95:48]
+#     # A single "shift by 48" accessor is therefore WRONG for err/hdre; the
+#     # dry-run harness caught exactly that. No call site shifts anything now.
+#     dict set o err0  [expr {[dict get $o err] & 0xFFFFFFFF}]
+#     dict set o err1  [expr {([dict get $o err] >> 32) & 0xFFFFFFFF}]
+#     dict set o hdre0 [expr {[dict get $o hdre] & 0xFFFFFFFF}]
+#     dict set o hdre1 [expr {([dict get $o hdre] >> 32) & 0xFFFFFFFF}]
+#     foreach k {bits hdrs rxcyc rxdvcyc} {
+#         dict set o ${k}0 [expr {[dict get $o $k] & 0xFFFFFFFFFFFF}]
+#         dict set o ${k}1 [expr {([dict get $o $k] >> 48) & 0xFFFFFFFFFFFF}]
+#     }
+#     return $o
+# }
+# proc rd1 {vio p} {
+#     refresh_hw_vio $vio
+#     return [hexint [get_property INPUT_VALUE $p]]
+# }
+# proc snapwait {vio} {
+#     global P
+#     set before [bit [rd1 $vio $P(stat)] 48]
+#     pulse $vio $P(snap)
+#     set t0 [clock milliseconds]
+#     while {1} {
+#         set st [rd1 $vio $P(stat)]
+#         if {[bit $st 48] != $before} { return $st }
+#         if {[clock milliseconds] - $t0 > 4000} { error "snapshot ack timeout" }
+#     }
+# }
+# proc dec_status {st} {
+#     set s {}
+#     lappend s "mmcm_locked=[bit $st 49]"
+#     lappend s "gtpowergood(ch1,ch0)=[bit $st 51][bit $st 50]"
+#     lappend s "tx_reset_done=[bit $st 52]"
+#     lappend s "rx_reset_done=[bit $st 53]"
+#     lappend s "rx_cdr_stable=[bit $st 54]"
+#     lappend s "sfp1_rx_los=[bit $st 55]"
+#     lappend s "sfp2_rx_los=[bit $st 56]"
+#     lappend s "acq(ch0,ch1)=[bit $st 57][bit $st 58]"
+#     lappend s "ref_link(ch0,ch1)=[bit $st 59][bit $st 60]"
+#     lappend s "ref_down_latched(ch0,ch1)=[bit $st 61][bit $st 62]"
+#     lappend s "hdr_ref_valid(ch0,ch1)=[bit $st 63][bit $st 64]"
+#     lappend s "echo(snap,clr,slip,gtrst)=[bit $st 65][bit $st 66][bit $st 67][bit $st 68]"
+#     lappend s "rst_obs=[bit $st 69]"
+#     lappend s "fingerprint=[bit $st 70]"
+#     lappend s "hdr_ref(ch0)=0x[format %02X [expr {($st>>71)&63}]]"
+#     lappend s "hdr_ref(ch1)=0x[format %02X [expr {($st>>77)&63}]]"
+#     lappend s "rxdv(ch0,ch1)=[expr {($st>>85)&3}][expr {($st>>87)&3}]"
+#     return [join $s " "]
+# }
+# proc field {v lo hi} { expr {($v >> $lo) & ((1 << ($hi - $lo + 1)) - 1)} }
+# sec "STAGE B1 -- STATUS BEFORE ANY CLEAR (live readback)"
+
+@@@@@@ P7A >>> STAGE B1 -- STATUS BEFORE ANY CLEAR (live readback)
+# set st [rd1 $vio $P(stat)]
+# puts "STATUS $st"
+STATUS 580439087702174791148503040
+# puts "  [dec_status $st]"
+  mmcm_locked=1 gtpowergood(ch1,ch0)=11 tx_reset_done=1 rx_reset_done=1 rx_cdr_stable=1 sfp1_rx_los=0 sfp2_rx_los=0 acq(ch0,ch1)=11 ref_link(ch0,ch1)=11 ref_down_latched(ch0,ch1)=11 hdr_ref_valid(ch0,ch1)=11 echo(snap,clr,slip,gtrst)=0000 rst_obs=0 fingerprint=1 hdr_ref(ch0)=0x01 hdr_ref(ch1)=0x01 rxdv(ch0,ch1)=33
+# puts "  fingerprint bit [bit $st 70] must be 1 (proves the probe maps to THIS build)"
+  fingerprint bit 1 must be 1 (proves the probe maps to THIS build)
+# if {[bit $st 70] != 1} { puts "P7A-ABORT: build fingerprint bit is 0 -- wrong bitstream/probes"; exit 1 }
+# set sfp1_los [bit $st 55]
+# set sfp2_los [bit $st 56]
+# puts ""
+
+# puts "RX_LOS READBACK:  sfp1_rx_los=$sfp1_los  sfp2_rx_los=$sfp2_los"
+RX_LOS READBACK:  sfp1_rx_los=0  sfp2_rx_los=0
+# puts "  (SFP RX_LOS is an open-collector module OUTPUT, active HIGH on loss of"
+  (SFP RX_LOS is an open-collector module OUTPUT, active HIGH on loss of
+# puts "   signal; XDC sets PULLTYPE PULLUP so an empty cage reads 1.)"
+   signal; XDC sets PULLTYPE PULLUP so an empty cage reads 1.)
+# puts "  => AOC present and emitting on BOTH cages requires 0/0. Got $sfp1_los/$sfp2_los"
+  => AOC present and emitting on BOTH cages requires 0/0. Got 0/0
+# if {$sfp1_los != 0 || $sfp2_los != 0} {
+#     puts "P7A-WARN: at least one cage reports LOSS OF SIGNAL."
+# }
+# puts ""
+
+# puts "TX_DIS: RTL drives both sfp*_tx_dis = 1'b0 unconditionally (p7a_top.v s.9)."
+TX_DIS: RTL drives both sfp*_tx_dis = 1'b0 unconditionally (p7a_top.v s.9).
+# puts "  Board-level consequence of that being wrong is a DARK link: with TX_DIS"
+  Board-level consequence of that being wrong is a DARK link: with TX_DIS
+# puts "  high both modules stop emitting => RX_LOS would be 1/1 and no PRBS lock."
+  high both modules stop emitting => RX_LOS would be 1/1 and no PRBS lock.
+# puts "  So the lock + LOS=0/0 below is the board evidence that TX_DIS really is low."
+  So the lock + LOS=0/0 below is the board evidence that TX_DIS really is low.
+# if {[bit $st 49] != 1} { puts "P7A-WARN: mmcm_locked=0" }
+# if {[bit $st 50] != 1 || [bit $st 51] != 1} { puts "P7A-WARN: gtpowergood != 11" }
+# if {[bit $st 52] != 1 || [bit $st 53] != 1} {
+#     puts "P7A-WARN: tx/rx reset not done ([bit $st 52]/[bit $st 53]) -- will retry after clear"
+# }
+# sec "STAGE B2 -- RESTART MEASUREMENT WINDOW (VIO clear) AND WAIT FOR PRBS31 LOCK"
+
+@@@@@@ P7A >>> STAGE B2 -- RESTART MEASUREMENT WINDOW (VIO clear) AND WAIT FOR PRBS31 LOCK
+# pulse $vio $P(clear)
+# after 100
+# set st [rd1 $vio $P(stat)]
+# puts "after clear: [dec_status $st]"
+after clear: mmcm_locked=1 gtpowergood(ch1,ch0)=11 tx_reset_done=1 rx_reset_done=1 rx_cdr_stable=1 sfp1_rx_los=0 sfp2_rx_los=0 acq(ch0,ch1)=11 ref_link(ch0,ch1)=11 ref_down_latched(ch0,ch1)=00 hdr_ref_valid(ch0,ch1)=11 echo(snap,clr,slip,gtrst)=0000 rst_obs=0 fingerprint=1 hdr_ref(ch0)=0x01 hdr_ref(ch1)=0x01 rxdv(ch0,ch1)=33
+# puts "  (clear resets counters AND acq; acq re-arms after 64 consecutive matched words)"
+  (clear resets counters AND acq; acq re-arms after 64 consecutive matched words)
+# puts "waiting for acq on BOTH channels ..."
+waiting for acq on BOTH channels ...
+# set t0 [clock milliseconds]
+# set acqu 0
+# while {[clock milliseconds] - $t0 < 20000} {
+#     set st [rd1 $vio $P(stat)]
+#     set acqu [expr {[bit $st 57] && [bit $st 58]}]
+#     if {$acqu} break
+#     after 250
+# }
+# puts "acq(both) = $acqu after [expr {[clock milliseconds]-$t0}] ms"
+acq(both) = 1 after 81 ms
+# puts "  [dec_status $st]"
+  mmcm_locked=1 gtpowergood(ch1,ch0)=11 tx_reset_done=1 rx_reset_done=1 rx_cdr_stable=1 sfp1_rx_los=0 sfp2_rx_los=0 acq(ch0,ch1)=11 ref_link(ch0,ch1)=11 ref_down_latched(ch0,ch1)=00 hdr_ref_valid(ch0,ch1)=11 echo(snap,clr,slip,gtrst)=0000 rst_obs=0 fingerprint=1 hdr_ref(ch0)=0x01 hdr_ref(ch1)=0x01 rxdv(ch0,ch1)=33
+# if {!$acqu} {
+#     puts "P7A-STOP: NO PRBS LOCK. Diagnostic readouts, nothing else was attempted:"
+#     puts "  hdr_ref ch0=0x[format %02X [expr {($st>>71)&63}]] ch1=0x[format %02X [expr {($st>>77)&63}]] (0 = no header ever seen)"
+#     puts "  hdr_ref_valid=[bit $st 63][bit $st 64]  ref_link=[bit $st 59][bit $st 60]  ref_down_latched=[bit $st 61][bit $st 62]"
+#     puts "  rx_cdr_stable=[bit $st 54]  tx_reset_done=[bit $st 52]  rx_reset_done=[bit $st 53]"
+#     puts "  rxdv live=[expr {($st>>85)&3}][expr {($st>>87)&3}]  (0 = no rxdatavalid at all)"
+#     puts "  P7A_BOARD_VERDICT = STOP_NO_PRBS_LOCK"
+#     disconnect_hw_server
+#     exit 2
+# }
+# sec "STAGE B3 -- LEG 3: rxheader STABILITY (the criterion is STABILITY, not a value)"
+
+@@@@@@ P7A >>> STAGE B3 -- LEG 3: rxheader STABILITY (the criterion is STABILITY, not a value)
+# set D [rdall $vio]
+# set nbad 0
+# set samples {}
+# for {set i 0} {$i < 5} {incr i} {
+#     set st [snapwait $vio]
+#     set D [rdall $vio]
+#     set hr0 [expr {($st>>71)&63}]
+#     set hr1 [expr {($st>>77)&63}]
+#     set v0 [bit $st 63]
+#     set v1 [bit $st 64]
+#     set hd  [dict get $D hdrs0]
+#     set he  [dict get $D hdre0]
+#     set hd1 [dict get $D hdrs1]
+#     set he1 [dict get $D hdre1]
+#     lappend samples "$hr0/$hr1"
+#     puts "  sample $i: hdr_ref ch0=0x[format %02X $hr0] ch1=0x[format %02X $hr1]  valid=$v0$v1  hdrs_cnt ch0=$hd ch1=$hd1  hdr_err_cnt ch0=$he ch1=$he1"
+#     if {$v0 != 1 || $v1 != 1} { incr nbad }
+#     if {$he != 0 || $he1 != 0} { incr nbad }
+#     after 400
+# }
+  sample 0: hdr_ref ch0=0x01 ch1=0x01  valid=11  hdrs_cnt ch0=86406580 ch1=86406580  hdr_err_cnt ch0=0 ch1=0
+  sample 1: hdr_ref ch0=0x01 ch1=0x01  valid=11  hdrs_cnt ch0=227214675 ch1=227214675  hdr_err_cnt ch0=0 ch1=0
+  sample 2: hdr_ref ch0=0x01 ch1=0x01  valid=11  hdrs_cnt ch0=366013781 ch1=366013781  hdr_err_cnt ch0=0 ch1=0
+  sample 3: hdr_ref ch0=0x01 ch1=0x01  valid=11  hdrs_cnt ch0=524064164 ch1=524064164  hdr_err_cnt ch0=0 ch1=0
+  sample 4: hdr_ref ch0=0x01 ch1=0x01  valid=11  hdrs_cnt ch0=689213482 ch1=689213482  hdr_err_cnt ch0=0 ch1=0
+# set st [rd1 $vio $P(stat)]
+# set hdr_ref0 [expr {($st>>71)&63}]
+# set hdr_ref1 [expr {($st>>77)&63}]
+# set D [rdall $vio]
+# puts ""
+
+# puts "LEG3_ACQ              = [bit $st 57][bit $st 58]"
+LEG3_ACQ              = 11
+# puts "LEG3_HDR_REF          = ch0=0x[format %02X $hdr_ref0] ([format %d $hdr_ref0])   ch1=0x[format %02X $hdr_ref1] ([format %d $hdr_ref1])"
+LEG3_HDR_REF          = ch0=0x01 (1)   ch1=0x01 (1)
+# puts "LEG3_HDR_REF_VALID    = [bit $st 63][bit $st 64]"
+LEG3_HDR_REF_VALID    = 11
+# puts "LEG3_HDRS_CNT         = ch0=[dict get $D hdrs0]  ch1=[dict get $D hdrs1]"
+LEG3_HDRS_CNT         = ch0=689213482  ch1=689213482
+# puts "LEG3_HDR_ERR_CNT      = ch0=[dict get $D hdre0]  ch1=[dict get $D hdre1]   <-- must be 0 (header never deviates)"
+LEG3_HDR_ERR_CNT      = ch0=0  ch1=0   <-- must be 0 (header never deviates)
+# puts "LEG3_SAMPLES          = $samples"
+LEG3_SAMPLES          = 1/1 1/1 1/1 1/1 1/1
+# if {$nbad > 0} { puts "P7A-STOP: leg 3 failed (bad samples=$nbad)"; puts "P7A_BOARD_VERDICT = STOP_LEG3"; disconnect_hw_server; exit 2 }
+# puts "LEG3 = PASS (PRBS31 locked; 6-bit rxheader stable at the same constant while rxheadervalid)"
+LEG3 = PASS (PRBS31 locked; 6-bit rxheader stable at the same constant while rxheadervalid)
+# sec "STAGE C -- NEGATIVE CONTROL A: forced rxgearboxslip must DROP and RE-LOCK"
+
+@@@@@@ P7A >>> STAGE C -- NEGATIVE CONTROL A: forced rxgearboxslip must DROP and RE-LOCK
+# puts "Rationale: rxgearboxslip moves the 64b/66b receiver block boundary. In a RAW"
+Rationale: rxgearboxslip moves the 64b/66b receiver block boundary. In a RAW
+# puts "datapath there is no gearbox to slip, so this action has no effect at all."
+datapath there is no gearbox to slip, so this action has no effect at all.
+# puts "While the link is locked the example checker emits NO slips of its own"
+While the link is locked the example checker emits NO slips of its own
+# puts "(_checking_64b66b_async.v: rxgearboxslip_ctr only advances while !match),"
+(_checking_64b66b_async.v: rxgearboxslip_ctr only advances while !match),
+# puts "so any error burst after this pulse is attributable to the pulse."
+so any error burst after this pulse is attributable to the pulse.
+# puts ""
+
+# pulse $vio $P(clear)
+# after 100
+# set t0 [clock milliseconds]
+# while {[clock milliseconds] - $t0 < 20000} {
+#     set st [rd1 $vio $P(stat)]
+#     if {[bit $st 57] && [bit $st 58]} { break }
+#     after 250
+# }
+# after 2000
+# set st [snapwait $vio]
+# set D  [rdall $vio]
+# set e0c0 [dict get $D err0] 
+# set e0c1 [dict get $D err1]
+# set b0  [dict get $D bits0]
+# set rl_before [list [bit $st 59] [bit $st 60]]
+# set dl_before [list [bit $st 61] [bit $st 62]]
+# set SLIP_ECHO_BEFORE [list [bit $st 67]]
+# puts "BEFORE SLIP: err ch0=$e0c0 ch1=$e0c1  ref_link=[lindex $rl_before 0][lindex $rl_before 1]  ref_down_latched=[lindex $dl_before 0][lindex $dl_before 1]  slip_echo=[lindex $SLIP_ECHO_BEFORE 0]"
+BEFORE SLIP: err ch0=0 ch1=0  ref_link=11  ref_down_latched=00  slip_echo=0
+# puts ">>> pulsing raw_slip (one rising edge -> one gearbox slip on each channel)"
+>>> pulsing raw_slip (one rising edge -> one gearbox slip on each channel)
+# pulse $vio $P(slip)
+# after 2000
+# set st [snapwait $vio]
+# set D  [rdall $vio]
+# set e1c0 [dict get $D err0] 
+# set e1c1 [dict get $D err1]
+# set b1  [dict get $D bits0]
+# set de0 [expr {$e1c0 - $e0c0}] 
+# set de1 [expr {$e1c1 - $e0c1}]
+# set dbits_after [expr {$b1 - $b0}]
+# set rl_after  [list [bit $st 59] [bit $st 60]]
+# set dl_after  [list [bit $st 61] [bit $st 62]]
+# set SLIP_ECHO_AFTER [list [bit $st 67]]
+# puts "AFTER SLIP +2 s: err ch0=$e1c0 ch1=$e1c1  (delta ch0=$de0 ch1=$de1)"
+AFTER SLIP +2 s: err ch0=16640 ch1=16628  (delta ch0=16640 ch1=16628)
+# puts "  ref_link=[lindex $rl_after 0][lindex $rl_after 1]  ref_down_latched=[lindex $dl_after 0][lindex $dl_after 1]"
+  ref_link=11  ref_down_latched=11
+# puts "  slip_echo=[lindex $SLIP_ECHO_AFTER 0]   bits advanced since before-slip = $dbits_after"
+  slip_echo=0   bits advanced since before-slip = 21408463488
+# puts "  ref_down_latched BEFORE=[lindex $dl_before 0][lindex $dl_before 1] -> AFTER=[lindex $dl_after 0][lindex $dl_after 1]   (sticky: 1 = the example bucket saw the link go down)"
+  ref_down_latched BEFORE=00 -> AFTER=11   (sticky: 1 = the example bucket saw the link go down)
+# puts "  -> ref_down_latched latched 0->1 : [expr {[lindex $dl_before 0]==0 && [lindex $dl_before 1]==0 && [lindex $dl_after 0]==1 && [lindex $dl_after 1]==1}]"
+  -> ref_down_latched latched 0->1 : 1
+# puts ">>> now measuring a CLEAN interval (re-lock check): 6 s with NO further slip"
+>>> now measuring a CLEAN interval (re-lock check): 6 s with NO further slip
+# set e2c0 [dict get $D err0] 
+# set e2c1 [dict get $D err1]
+# set b2  [dict get $D bits0]
+# after 6000
+# set st [snapwait $vio]
+# set D  [rdall $vio]
+# set e3c0 [dict get $D err0] 
+# set e3c1 [dict get $D err1]
+# set de2 [expr {$e3c0 - $e2c0}] 
+# set de3 [expr {$e3c1 - $e2c1}]
+# set dbits_clean [expr {[dict get $D bits0] - $b2}]
+# set rl_final [list [bit $st 59] [bit $st 60]]
+# puts "CLEAN 6 s AFTER SLIP: err delta ch0=$de2 ch1=$de3   bits advanced=$dbits_clean"
+CLEAN 6 s AFTER SLIP: err delta ch0=0 ch1=0   bits advanced=60829119552
+# puts "  ref_link=[lindex $rl_final 0][lindex $rl_final 1]  acq=[bit $st 57][bit $st 58]"
+  ref_link=11  acq=11
+# puts "  [dec_status $st]"
+  mmcm_locked=1 gtpowergood(ch1,ch0)=11 tx_reset_done=1 rx_reset_done=1 rx_cdr_stable=1 sfp1_rx_los=0 sfp2_rx_los=0 acq(ch0,ch1)=11 ref_link(ch0,ch1)=11 ref_down_latched(ch0,ch1)=11 hdr_ref_valid(ch0,ch1)=11 echo(snap,clr,slip,gtrst)=0000 rst_obs=0 fingerprint=1 hdr_ref(ch0)=0x01 hdr_ref(ch1)=0x01 rxdv(ch0,ch1)=33
+# set negA_burst [expr {($de0 > 0) && ($de1 > 0)}]
+# set negA_drop  [expr {[lindex $dl_before 0]==0 && [lindex $dl_before 1]==0 && [lindex $dl_after 0]==1 && [lindex $dl_after 1]==1}]
+# set negA_relock [expr {($de2 == 0) && ($de3 == 0) && ($dbits_clean > 0) && [lindex $rl_final 0]==1 && [lindex $rl_final 1]==1}]
+# puts ""
+
+# puts "NEGCTRL_A_ERR_BURST   = $negA_burst   (ch0 delta=$de0, ch1 delta=$de1, both must be >0)"
+NEGCTRL_A_ERR_BURST   = 1   (ch0 delta=16640, ch1 delta=16628, both must be >0)
+# puts "NEGCTRL_A_LINK_DROP   = $negA_drop   (ref_down_latched 0/0 -> 1/1)"
+NEGCTRL_A_LINK_DROP   = 1   (ref_down_latched 0/0 -> 1/1)
+# puts "NEGCTRL_A_RELOCK      = $negA_relock   (next 6 s: 0 further errors, bits still advancing, ref_link back to 1/1)"
+NEGCTRL_A_RELOCK      = 1   (next 6 s: 0 further errors, bits still advancing, ref_link back to 1/1)
+# if {!($negA_burst && $negA_drop && $negA_relock)} {
+#     puts "P7A-STOP: negative control A did not show drop+relock; the gearbox-slip"
+#     puts "          discriminator is not demonstrated on this board. Reporting raw"
+#     puts "          readings above instead of proceeding to BER."
+#     puts "P7A_BOARD_VERDICT = STOP_NEGCTRL_A"
+#     disconnect_hw_server
+#     exit 2
+# }
+# puts "NEGCTRL_A = PASS (slip -> errors on BOTH channels + link-down latched, then clean re-lock)"
+NEGCTRL_A = PASS (slip -> errors on BOTH channels + link-down latched, then clean re-lock)
+# proc run_window {vio tag secs} {
+#     global P
+#     puts ""
+#     puts "@@@@@@ P7A >>> $tag: restart window, wait lock, measure ${secs} s"
+#     pulse $vio $P(clear)
+#     after 100
+#     set t0 [clock milliseconds]
+#     while {[clock milliseconds] - $t0 < 20000} {
+#         set st [rd1 $vio $P(stat)]
+#         if {[bit $st 57] && [bit $st 58]} { break }
+#         after 250
+#     }
+#     puts "  locked after [expr {[clock milliseconds]-$t0}] ms; [dec_status $st]"
+#     # ---- start endpoint: same read order as the end endpoint --------------
+#     set stA [snapwait $vio]
+#     set DA  [rdall $vio]
+#     set tA  [usec]
+#     set fA  [expr {$stA & 0xFFFFFFFFFFFF}]
+#     puts "  START  t=$tA  err(ch0,ch1)=[dict get $DA err0],[dict get $DA err1] bits(ch0,ch1)=[dict get $DA bits0],[dict get $DA bits1] hdrs(ch0,ch1)=[dict get $DA hdrs0],[dict get $DA hdrs1] hdre(ch0,ch1)=[dict get $DA hdre0],[dict get $DA hdre1] fr_cyc=$fA rxcyc(ch0)=[dict get $DA rxcyc0] rxdvcyc(ch0)=[dict get $DA rxdvcyc0]"
+#     set t_wall0 [clock milliseconds]
+#     set nwin 0 ; set rmin 1e9 ; set rmax 0.0 ; set err_all 0 ; set trmax 0.0 ; set trmin 1e9
+#     set fprev $fA ; set bprev [dict get $DA bits0] ; set eprev0 [dict get $DA err0] ; set eprev1 [dict get $DA err1]
+#     set lastrpt $t_wall0
+#     # Sub-window report interval. It must be small enough that even a short
+#     # window yields >=1 differential-ratio sample (a fixed 10 s interval made the
+#     # ratio criterion UNEVALUABLE for any window shorter than 10 s -- found by
+#     # the dry-run harness), and <=10 s so the 600 s run gets ~60 samples.
+#     set rpt_ms [expr {max(2000, min(10000, $secs * 250))}]
+#     while {[clock milliseconds] - $t_wall0 < ($secs * 1000)} {
+#         after 200
+#         if {[clock milliseconds] - $lastrpt < $rpt_ms} { continue }
+#         set lastrpt [clock milliseconds]
+#         set stW [snapwait $vio]
+#         set DW  [rdall $vio]
+#         set fW  [expr {$stW & 0xFFFFFFFFFFFF}]
+#         set bW  [dict get $DW bits0]
+#         set eW0 [dict get $DW err0] ; set eW1 [dict get $DW err1]
+#         set dw [expr {($bW - $bprev) / 64}]
+#         set df [expr {$fW - $fprev}]
+#         set de0 [expr {$eW0 - $eprev0}] ; set de1 [expr {$eW1 - $eprev1}]
+#         incr err_all [expr {$de0 + $de1}]
+#         if {$df > 0 && $dw > 0} {
+#             set r [expr {double($dw)/double($df)}]
+#             if {$r < $rmin} { set rmin $r }
+#             if {$r > $rmax} { set rmax $r }
+#             set tr [expr {double($dw)/(double($df)/156.25e6)}]
+#             if {$tr < $trmin} { set trmin $tr }
+#             if {$tr > $trmax} { set trmax $tr }
+#             incr nwin
+#             puts "  win $nwin: dWords=$dw dErr=$de0,$de1 dFr=$df ratio=[format %.6f $r]  (= [format %.6e $tr] 64-bit words/s on the obs clock)  elapsed=[expr {([clock milliseconds]-$t_wall0)/1000}]s"
+#         } else {
+#             puts "  win ??: NO RX ACTIVITY (dWords=$dw dFr=$df) -- is the link up?"
+#         }
+#         set fprev $fW ; set bprev $bW ; set eprev0 $eW0 ; set eprev1 $eW1
+#     }
+#     set stB [snapwait $vio]
+#     set DB  [rdall $vio]
+#     set tB  [usec]
+#     set fB  [expr {$stB & 0xFFFFFFFFFFFF}]
+#     puts "  END    t=$tB  err(ch0,ch1)=[dict get $DB err0],[dict get $DB err1] bits(ch0,ch1)=[dict get $DB bits0],[dict get $DB bits1] hdrs(ch0,ch1)=[dict get $DB hdrs0],[dict get $DB hdrs1] hdre(ch0,ch1)=[dict get $DB hdre0],[dict get $DB hdre1] fr_cyc=$fB"
+# 
+#     set wall [expr {($tB - $tA) / 1.0e6}]
+#     set dfr  [expr {$fB - $fA}]
+#     set out [dict create]
+#     dict set out wall $wall
+#     dict set out dfr $dfr
+#     dict set out nwin $nwin
+#     dict set out rmin [expr {$nwin>0 ? $rmin : 0}]
+#     dict set out rmax $rmax
+#     dict set out trmin [expr {$nwin>0 ? $trmin : 0}]
+#     dict set out trmax $trmax
+#     dict set out errall $err_all
+#     foreach c {0 1} {
+#         set bits [expr {[dict get $DB bits$c] - [dict get $DA bits$c]}]
+#         # whole-window differential ratio for this channel (a single number over
+#         # the entire run: the constant snapshot skew cancels, and even a +/-1
+#         # cycle residual is 6e-10 of a 600 s window)
+#         if {$dfr > 0 && $bits > 0} {
+#             dict set out ratio_all$c [expr {double($bits / 64.0) / double($dfr)}]
+#         } else {
+#             dict set out ratio_all$c 0.0
+#         }
+#         set errs [expr {[dict get $DB err$c]  - [dict get $DA err$c]}]
+#         set hdrs [expr {[dict get $DB hdrs$c] - [dict get $DA hdrs$c]}]
+#         set hdre [expr {[dict get $DB hdre$c] - [dict get $DA hdre$c]}]
+#         dict set out bits$c $bits
+#         dict set out err$c  $errs
+#         dict set out hdrs$c $hdrs
+#         dict set out hdre$c $hdre
+#         dict set out rate$c [expr {$wall > 0 ? double($bits)/$wall : 0}]
+#         dict set out wrate$c [expr {$dfr > 0 ? double($bits)/64.0/(double($dfr)/156.25e6) : 0}]
+#         dict set out ber$c [expr {$bits > 0 ? double($errs)/double($bits) : -1.0}]
+#         dict set out berup$c [expr {$bits > 0 ? 3.0/double($bits) : -1.0}]
+#     }
+#     return $out
+# }
+# if {$short > 0} {
+#     set RS [run_window $vio "STAGE D -- SHORT SANITY WINDOW" $short]
+#     puts ""
+#     puts "STAGE D RESULT ($short s)"
+#     puts "  wall = [format %.6f [dict get $RS wall]] s   dFr = [dict get $RS dfr] (obs cycles)   windows = [dict get $RS nwin]   ratio = [format %.6f [dict get $RS rmin]] .. [format %.6f [dict get $RS rmax]]"
+#     foreach c {0 1} {
+#         puts "  ch$c: bits=[dict get $RS bits$c] err=[dict get $RS err$c] hdrs=[dict get $RS hdrs$c] hdre=[dict get $RS hdre$c]  rate=[format %.6e [dict get $RS rate$c]] bit/s (bits/wall)  [format %.6e [dict get $RS wrate$c]] words/s (dWords/dFr)  BER=[format %.3e [dict get $RS ber$c]]"
+#     }
+#     set serr [expr {[dict get $RS err0] + [dict get $RS err1]}]
+#     if {$serr > 0 && $allow_short_err == 0} {
+#         puts "P7A-STOP: $serr errored words already in the $short s sanity window."
+#         puts "          Not spending the long window: zero errors is the criterion."
+#         puts "P7A_BOARD_VERDICT = STOP_ERRORS_IN_SHORT_WINDOW"
+#         disconnect_hw_server
+#         exit 2
+#     }
+# }
+
+@@@@@@ P7A >>> STAGE D -- SHORT SANITY WINDOW: restart window, wait lock, measure 60 s
+  locked after 14 ms; mmcm_locked=1 gtpowergood(ch1,ch0)=11 tx_reset_done=1 rx_reset_done=1 rx_cdr_stable=1 sfp1_rx_los=0 sfp2_rx_los=0 acq(ch0,ch1)=11 ref_link(ch0,ch1)=11 ref_down_latched(ch0,ch1)=00 hdr_ref_valid(ch0,ch1)=11 echo(snap,clr,slip,gtrst)=0000 rst_obs=0 fingerprint=1 hdr_ref(ch0)=0x01 hdr_ref(ch1)=0x01 rxdv(ch0,ch1)=33
+  START  t=1790674123287410  err(ch0,ch1)=0,0 bits(ch0,ch1)=1857959744,1857959744 hdrs(ch0,ch1)=29030621,29030621 hdre(ch0,ch1)=0,0 fr_cyc=29030838 rxcyc(ch0)=29030685 rxdvcyc(ch0)=29030685
+  win 1: dWords=1667453302 dErr=0,0 dFr=1667462098 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=10s
+  win 2: dWords=1505775825 dErr=0,0 dFr=1505783793 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=20s
+  win 3: dWords=1676954786 dErr=0,0 dFr=1676963676 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=31s
+  win 4: dWords=1477622790 dErr=0,0 dFr=1477630633 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=40s
+  win 5: dWords=1674780529 dErr=0,0 dFr=1674789427 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=51s
+  END    t=1790674184332003  err(ch0,ch1)=0,0 bits(ch0,ch1)=612259769920,612259769920 hdrs(ch0,ch1)=9566558905,9566558905 hdre(ch0,ch1)=0,0 fr_cyc=9566609674
+
+STAGE D RESULT (60 s)
+  wall = 61.044593 s   dFr = 9537578836 (obs cycles)   windows = 5   ratio = 0.999995 .. 0.999995
+  ch0: bits=610401810176 err=0 hdrs=9537528284 hdre=0  rate=9.999277e+09 bit/s (bits/wall)  1.562492e+08 words/s (dWords/dFr)  BER=0.000e+00
+  ch1: bits=610401810176 err=0 hdrs=9537528284 hdre=0  rate=9.999277e+09 bit/s (bits/wall)  1.562492e+08 words/s (dWords/dFr)  BER=0.000e+00
+# sec "STAGE E -- ACCEPTANCE BER WINDOW ($secs s)"
+
+@@@@@@ P7A >>> STAGE E -- ACCEPTANCE BER WINDOW (600 s)
+
+@@@@@@ P7A >>> STAGE E -- ACCEPTANCE: restart window, wait lock, measure 600 s
+  locked after 15 ms; mmcm_locked=1 gtpowergood(ch1,ch0)=11 tx_reset_done=1 rx_reset_done=1 rx_cdr_stable=1 sfp1_rx_los=0 sfp2_rx_los=0 acq(ch0,ch1)=11 ref_link(ch0,ch1)=11 ref_down_latched(ch0,ch1)=00 hdr_ref_valid(ch0,ch1)=11 echo(snap,clr,slip,gtrst)=0000 rst_obs=0 fingerprint=1 hdr_ref(ch0)=0x01 hdr_ref(ch1)=0x01 rxdv(ch0,ch1)=33
+  START  t=1790674184593103  err(ch0,ch1)=0,0 bits(ch0,ch1)=1978398528,1978398528 hdrs(ch0,ch1)=30912477,30912477 hdre(ch0,ch1)=0,0 fr_cyc=30912706 rxcyc(ch0)=30912541 rxdvcyc(ch0)=30912541
+  win 1: dWords=1601332839 dErr=0,0 dFr=1601341354 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=10s
+  win 2: dWords=1670277416 dErr=0,0 dFr=1670286305 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=20s
+  win 3: dWords=1807791502 dErr=0,0 dFr=1807801127 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=32s
+  win 4: dWords=1255041063 dErr=0,0 dFr=1255047745 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=40s
+  win 5: dWords=1582484069 dErr=0,0 dFr=1582492484 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=50s
+  win 6: dWords=1626658937 dErr=0,0 dFr=1626667589 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=61s
+  win 7: dWords=1552149617 dErr=0,0 dFr=1552157885 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=71s
+  win 8: dWords=1584532693 dErr=0,0 dFr=1584541133 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=81s
+  win 9: dWords=1576634020 dErr=0,0 dFr=1576642415 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=91s
+  win 10: dWords=1878290943 dErr=0,0 dFr=1878300942 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=103s
+  win 11: dWords=1273044882 dErr=0,0 dFr=1273051663 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=111s
+  win 12: dWords=1567044458 dErr=0,0 dFr=1567052808 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=121s
+  win 13: dWords=1677161813 dErr=0,0 dFr=1677170750 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=132s
+  win 14: dWords=1520137139 dErr=0,0 dFr=1520145236 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=141s
+  win 15: dWords=1514078296 dErr=0,0 dFr=1514086368 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=151s
+  win 16: dWords=1840882103 dErr=0,0 dFr=1840891921 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=163s
+  win 17: dWords=1806470294 dErr=0,0 dFr=1806479932 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=174s
+  win 18: dWords=1138154793 dErr=0,0 dFr=1138160865 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=182s
+  win 19: dWords=1996309299 dErr=0,0 dFr=1996319951 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=194s
+  win 20: dWords=1268975447 dErr=0,0 dFr=1268982216 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=203s
+  win 21: dWords=2186305201 dErr=0,0 dFr=2186316858 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=220s
+  win 22: dWords=1236974889 dErr=0,0 dFr=1236981482 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=225s
+  win 23: dWords=1153260335 dErr=0,0 dFr=1153266480 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=232s
+  win 24: dWords=1885731569 dErr=0,0 dFr=1885741623 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=244s
+  win 25: dWords=1251666151 dErr=0,0 dFr=1251672830 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=252s
+  win 26: dWords=1725103592 dErr=0,0 dFr=1725112797 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=263s
+  win 27: dWords=1494465811 dErr=0,0 dFr=1494473786 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=273s
+  win 28: dWords=1641023608 dErr=0,0 dFr=1641032367 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=283s
+  win 29: dWords=1473255977 dErr=0,0 dFr=1473263835 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=293s
+  win 30: dWords=1586181984 dErr=0,0 dFr=1586190442 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=303s
+  win 31: dWords=1551609653 dErr=0,0 dFr=1551617914 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=313s
+  win 32: dWords=1899830249 dErr=0,0 dFr=1899840358 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=325s
+  win 33: dWords=1651822503 dErr=0,0 dFr=1651831295 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=335s
+  win 34: dWords=1212669069 dErr=0,0 dFr=1212675520 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=343s
+  win 35: dWords=1601169877 dErr=0,0 dFr=1601178397 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=353s
+  win 36: dWords=1663866738 dErr=0,0 dFr=1663875589 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=364s
+  win 37: dWords=1471941831 dErr=0,0 dFr=1471949658 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=373s
+  win 38: dWords=1551357737 dErr=0,0 dFr=1551365986 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=383s
+  win 39: dWords=1599227992 dErr=0,0 dFr=1599236486 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=394s
+  win 40: dWords=1569822191 dErr=0,0 dFr=1569830523 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=404s
+  win 41: dWords=1579943598 dErr=0,0 dFr=1579951985 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=414s
+  win 42: dWords=1574692955 dErr=0,0 dFr=1574701320 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=424s
+  win 43: dWords=1645002056 dErr=0,0 dFr=1645010798 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=434s
+  win 44: dWords=1519685259 dErr=0,0 dFr=1519693338 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=444s
+  win 45: dWords=1663329796 dErr=0,0 dFr=1663338641 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=455s
+  win 46: dWords=1522466870 dErr=0,0 dFr=1522474967 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=464s
+  win 47: dWords=1517746188 dErr=0,0 dFr=1517754261 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=474s
+  win 48: dWords=1607568603 dErr=0,0 dFr=1607577154 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=484s
+  win 49: dWords=1546059178 dErr=0,0 dFr=1546067400 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=494s
+  win 50: dWords=1572141829 dErr=0,0 dFr=1572150194 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=504s
+  win 51: dWords=1682239304 dErr=0,0 dFr=1682248256 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=515s
+  win 52: dWords=1478999036 dErr=0,0 dFr=1479006907 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=525s
+  win 53: dWords=1580135005 dErr=0,0 dFr=1580143417 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=535s
+  win 54: dWords=1590388075 dErr=0,0 dFr=1590396545 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=545s
+  win 55: dWords=1585401665 dErr=0,0 dFr=1585410111 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=555s
+  win 56: dWords=1598541673 dErr=0,0 dFr=1598550183 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=565s
+  win 57: dWords=1582646359 dErr=0,0 dFr=1582654780 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=575s
+  win 58: dWords=1600136817 dErr=0,0 dFr=1600145332 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=586s
+  win 59: dWords=1584053752 dErr=0,0 dFr=1584062189 ratio=0.999995  (= 1.562492e+08 64-bit words/s on the obs clock)  elapsed=596s
+  END    t=1790674784904420  err(ch0,ch1)=0,0 bits(ch0,ch1)=6005243624000,6005243624000 hdrs(ch0,ch1)=93831931625,93831931625 hdre(ch0,ch1)=0,0 fr_cyc=93832431279
+# set R [run_window $vio "STAGE E -- ACCEPTANCE" $secs]
+# puts ""
+
+# puts "=================== P7a BOARD ACCEPTANCE READOUT ==================="
+=================== P7a BOARD ACCEPTANCE READOUT ===================
+# puts "ELAPSED WALL     = [format %.6f [dict get $R wall]] s   (dFr = [dict get $R dfr] obs-domain 156.25 MHz cycles = [format %.6f [expr {[dict get $R dfr]/156.25e6}]] s)"
+ELAPSED WALL     = 600.311317 s   (dFr = 93801518573 obs-domain 156.25 MHz cycles = 600.329719 s)
+# puts "SUB-WINDOWS      = [dict get $R nwin]   ratio(dWords/dFr) range = [format %.6f [dict get $R rmin]] .. [format %.6f [dict get $R rmax]]"
+SUB-WINDOWS      = 59   ratio(dWords/dFr) range = 0.999995 .. 0.999995
+# puts [format "                   -> expected 1.000000 for a 66/64 gearbox, 1.031250 for raw"]
+                   -> expected 1.000000 for a 66/64 gearbox, 1.031250 for raw
+# set verdicts {}
+# foreach c {0 1} {
+#     set dir [expr {$c==0 ? "B->A (ch0 RX receives ch1 TX)" : "A->B (ch1 RX receives ch0 TX)"}]
+#     puts ""
+#     puts "--- channel $c  = $dir ---"
+#     puts "BITS_CNT (payload) = [dict get $R bits$c]   (= [expr {[dict get $R bits$c]/64}] x 64-bit words)"
+#     puts "ERR_WORD_CNT       = [dict get $R err$c]"
+#     puts "HDRS_CNT           = [dict get $R hdrs$c]   (words with rxheadervalid)"
+#     puts "HDR_ERR_CNT        = [dict get $R hdre$c]"
+#     puts "RATE (bits/wall)   = [format %.6e [dict get $R rate$c]] bit/s   target 1.0e10 +-0.1%  dev=[format %.4f [expr {100.0*([dict get $R rate$c]-1.0e10)/1.0e10}]]%"
+#     puts "RATE (words/dFr)   = [format %.6e [dict get $R wrate$c]] 64-bit words/s  (x64 = [format %.6e [expr {64.0*[dict get $R wrate$c]}]] bit/s; 1.5625e8 words/s is the 66/64 gearbox answer)"
+#     puts "RATIO whole window = [format %.6f [dict get $R ratio_all$c]]   (dWords/dFr over the WHOLE run: 1.000000 = 66/64 gearbox, 1.031250 = raw)"
+#     if {[dict get $R bits$c] > 0} {
+#         if {[dict get $R err$c] == 0} {
+#             puts "BER upper bound 95%CL = [format %.3e [dict get $R berup$c]]  (0 errors in [dict get $R bits$c] bit < 3/B)"
+#         } else {
+#             puts "BER MEASURED       = [format %.3e [dict get $R ber$c]]"
+#         }
+#     } else {
+#         puts "BER = UNDEFINED -- bits_cnt did not advance (an empty reading is not a zero)"
+#     }
+#     set ok_bits  [expr {[dict get $R bits$c] > 0}]
+#     set ok_err   [expr {[dict get $R err$c] == 0}]
+#     set ok_hdre  [expr {[dict get $R hdre$c] == 0}]
+#     set ok_rate  [expr {abs([dict get $R rate$c]-1.0e10)/1.0e10 <= 0.001}]
+#     set ok_ratio [expr {[dict get $R rmin] > 0.999 && [dict get $R rmax] < 1.001}]
+#     set ok_ratio_all [expr {[dict get $R ratio_all$c] > 0.999 && [dict get $R ratio_all$c] < 1.001}]
+#     lappend verdicts [list $c $ok_bits $ok_err $ok_hdre $ok_rate $ok_ratio $ok_ratio_all]
+#     puts "  criteria: bits>0=$ok_bits  err==0=$ok_err  hdre==0=$ok_hdre  rate+-0.1%=$ok_rate  subwindow-ratio==1.000=$ok_ratio  wholewindow-ratio==1.000=$ok_ratio_all  (subwindows=[dict get $R nwin])"
+# }
+
+--- channel 0  = B->A (ch0 RX receives ch1 TX) ---
+BITS_CNT (payload) = 6003265225472   (= 93801019148 x 64-bit words)
+ERR_WORD_CNT       = 0
+HDRS_CNT           = 93801019148   (words with rxheadervalid)
+HDR_ERR_CNT        = 0
+RATE (bits/wall)   = 1.000025e+10 bit/s   target 1.0e10 +-0.1%  dev=0.0025%
+RATE (words/dFr)   = 1.562492e+08 64-bit words/s  (x64 = 9.999947e+09 bit/s; 1.5625e8 words/s is the 66/64 gearbox answer)
+RATIO whole window = 0.999995   (dWords/dFr over the WHOLE run: 1.000000 = 66/64 gearbox, 1.031250 = raw)
+BER upper bound 95%CL = 4.997e-13  (0 errors in 6003265225472 bit < 3/B)
+  criteria: bits>0=1  err==0=1  hdre==0=1  rate+-0.1%=1  subwindow-ratio==1.000=1  wholewindow-ratio==1.000=1  (subwindows=59)
+
+--- channel 1  = A->B (ch1 RX receives ch0 TX) ---
+BITS_CNT (payload) = 6003265225472   (= 93801019148 x 64-bit words)
+ERR_WORD_CNT       = 0
+HDRS_CNT           = 93801019148   (words with rxheadervalid)
+HDR_ERR_CNT        = 0
+RATE (bits/wall)   = 1.000025e+10 bit/s   target 1.0e10 +-0.1%  dev=0.0025%
+RATE (words/dFr)   = 1.562492e+08 64-bit words/s  (x64 = 9.999947e+09 bit/s; 1.5625e8 words/s is the 66/64 gearbox answer)
+RATIO whole window = 0.999995   (dWords/dFr over the WHOLE run: 1.000000 = 66/64 gearbox, 1.031250 = raw)
+BER upper bound 95%CL = 4.997e-13  (0 errors in 6003265225472 bit < 3/B)
+  criteria: bits>0=1  err==0=1  hdre==0=1  rate+-0.1%=1  subwindow-ratio==1.000=1  wholewindow-ratio==1.000=1  (subwindows=59)
+# set allok 1
+# foreach v $verdicts { foreach f [lrange $v 1 end] { if {!$f} { set allok 0 } } }
+# puts ""
+
+# if {$allok} {
+#     puts "GEARBOX_RATIO_VERDICT = 1.000000 => the fabric interface carries 64 payload bits"
+#     puts "                        per 66 baud => the 64b/66b gearbox is IN THE DATAPATH"
+#     puts "                        (raw would read 1.031250 and ~1.0313e10 bit/s)"
+#     puts "P7A_BOARD_VERDICT = PASS"
+# } else {
+#     puts "P7A_BOARD_VERDICT = FAIL (see the per-channel criteria flags above)"
+# }
+GEARBOX_RATIO_VERDICT = 1.000000 => the fabric interface carries 64 payload bits
+                        per 66 baud => the 64b/66b gearbox is IN THE DATAPATH
+                        (raw would read 1.031250 and ~1.0313e10 bit/s)
+P7A_BOARD_VERDICT = PASS
+# puts "P7A_VERDICT_END"
+P7A_VERDICT_END
+# disconnect_hw_server
+# puts "DONE"
+DONE
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 29 17:39:44 2026...

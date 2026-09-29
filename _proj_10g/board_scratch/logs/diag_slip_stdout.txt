@@ -1,0 +1,191 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 17:27:13 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source diag_slip.tcl
+# set here [file normalize [file dirname [info script]]]
+# set p10  [file normalize [file join $here ..]]
+# set bit  $p10/vivado_prj/p7a_prj.runs/impl_1/p7a_top.bit
+# set ltx  [file rootname $bit].ltx
+# set url  192.168.0.38:3121
+# if {[info exists ::env(P7A_HWURL)]} { set url $::env(P7A_HWURL) }
+# proc sec {s} { puts "\n@@@@@@ DIAG >>> $s" ; flush stdout }
+# proc pget {o n} { if {[catch {set v [get_property $n $o]} e]} { return "<ERR:$e>" } ; return $v }
+# proc bit  {v n} { expr {($v >> $n) & 1} }
+# proc hexint {s} {
+#     set s [string trim $s]
+#     if {$s eq ""} { error "empty probe value" }
+#     if {[catch {expr "0x$s"} v]} { error "bad hex '$s'" }
+#     return $v
+# }
+# sec "D0 -- CONNECT (no programming) + attach the P7a probes"
+
+@@@@@@ DIAG >>> D0 -- CONNECT (no programming) + attach the P7a probes
+# open_hw_manager
+# connect_hw_server -url $url
+INFO: [Labtools 27-2285] Connecting to hw_server url TCP:192.168.0.38:3121
+INFO: [Labtools 27-3415] Connecting to cs_server url TCP:localhost:0
+INFO: [Labtools 27-3417] Launching cs_server...
+INFO: [Labtools 27-2221] Launch Output:
+
+
+******** Xilinx cs_server v2025.2.0
+  ****** Build date   : Nov 14 2025-07:16:52
+    **** Build number : 2025.2.1763075812
+      ** Copyright 2017-2022 Xilinx, Inc. All Rights Reserved.
+      ** Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
+
+
+
+# current_hw_target [lindex [get_hw_targets] 0]
+# open_hw_target
+INFO: [Labtoolstcl 44-466] Opening hw_target 192.168.0.38:3121/xilinx_tcf/Digilent/210251391367
+# set dlist [get_hw_devices]
+# puts "device count = [llength $dlist]"
+device count = 1
+# set tdev ""
+# foreach d $dlist { if {[pget $d IDCODE_HEX] eq "04A62093"} { set tdev $d } }
+# if {$tdev eq "" || [llength $dlist] != 1} { puts "DIAG-ABORT: bad target"; exit 1 }
+# current_hw_device $tdev
+# puts "DONE_PIN (image in the FPGA right now) = [pget $tdev REGISTER.CONFIG_STATUS.BIT\[14\]_DONE_PIN]"
+DONE_PIN (image in the FPGA right now) = 1
+# set_property PROBES.FILE $ltx $tdev
+# set_property FULL_PROBES.FILE $ltx $tdev
+# refresh_hw_device -update_hw_probes true $tdev
+INFO: [Labtools 27-2302] Device xcku5p (JTAG device index = 0) is programmed with a design that has 1 VIO core(s).
+INFO: [Labtools 27-1889] Uploading output probe values for VIO core [hw_vio_1]
+# set vio [lindex [get_hw_vios -of_objects $tdev] 0]
+# if {$vio eq ""} { puts "DIAG-ABORT: no VIO"; exit 1 }
+# proc findprobe {vio names} {
+#     set all [get_hw_probes -of_objects $vio]
+#     foreach n $names { foreach p $all { if {$p eq $n} { return $p } } }
+#     foreach n $names { foreach p $all { if {[string match $n $p]} { return $p } } }
+#     return ""
+# }
+# proc wof {p} { set w 1 ; catch {set w [get_property WIDTH $p]} ; return $w }
+# array set P {}
+# set P(err)     [findprobe $vio {vio_err_snap probe_in0}]
+# set P(bits)    [findprobe $vio {vio_bits_snap probe_in1}]
+# set P(hdrs)    [findprobe $vio {vio_hdrs_snap probe_in2}]
+# set P(hdre)    [findprobe $vio {vio_hdre_snap probe_in3}]
+# set P(rxcyc)   [findprobe $vio {vio_rxcyc_snap probe_in4}]
+# set P(rxdvcyc) [findprobe $vio {vio_rxdvcyc_snap probe_in5}]
+# set P(stat)    [findprobe $vio {vio_status probe_in6}]
+# set P(snap)    [findprobe $vio {raw_snap probe_out0}]
+# set P(clear)   [findprobe $vio {raw_clear probe_out1}]
+# set P(slip)    [findprobe $vio {raw_slip probe_out2}]
+# set P(gtrst)   [findprobe $vio {raw_gt_reset probe_out3}]
+# foreach k {err bits hdrs hdre rxcyc rxdvcyc stat snap clear slip gtrst} {
+#     if {$P($k) eq ""} { puts "DIAG-ABORT: probe '$k' not found"; exit 1 }
+# }
+# puts "probes resolved; status width = [wof $P(stat)]"
+probes resolved; status width = 96
+# proc vset {vio p val} {
+#     set w [wof $p]
+#     set n [expr {int(ceil($w / 4.0))}]
+#     set s [format "%0${n}X" [expr {$val & ((1 << $w) - 1)}]]
+#     set_property OUTPUT_VALUE $s $p
+#     commit_hw_vio $vio
+# }
+# proc pulse {vio p} { vset $vio $p 1 ; vset $vio $p 0 }
+# proc rd1 {vio p} { refresh_hw_vio $vio ; return [hexint [get_property INPUT_VALUE $p]] }
+# proc rdall {vio} {
+#     global P
+#     refresh_hw_vio $vio
+#     set o [dict create]
+#     foreach k {err bits hdrs hdre rxcyc rxdvcyc stat} {
+#         set s [get_property INPUT_VALUE $P($k)]
+#         set r HEX
+#         catch { set r [get_property INPUT_VALUE_RADIX $P($k)] }
+#         switch -- $r {
+#             HEX     { dict set o $k [hexint $s] }
+#             BIN     { dict set o $k [expr "0b$s"] }
+#             OCT     { dict set o $k [expr "0o$s"] }
+#             default { dict set o $k [hexint $s] }
+#         }
+#     }
+#     dict set o err0  [expr {[dict get $o err] & 0xFFFFFFFF}]
+#     dict set o err1  [expr {([dict get $o err] >> 32) & 0xFFFFFFFF}]
+#     dict set o hdre0 [expr {[dict get $o hdre] & 0xFFFFFFFF}]
+#     dict set o hdre1 [expr {([dict get $o hdre] >> 32) & 0xFFFFFFFF}]
+#     foreach k {bits hdrs rxcyc rxdvcyc} {
+#         dict set o ${k}0 [expr {[dict get $o $k] & 0xFFFFFFFFFFFF}]
+#         dict set o ${k}1 [expr {([dict get $o $k] >> 48) & 0xFFFFFFFFFFFF}]
+#     }
+#     return $o
+# }
+# proc snapwait {vio} {
+#     global P
+#     set before [bit [rd1 $vio $P(stat)] 48]
+#     pulse $vio $P(snap)
+#     set t0 [clock milliseconds]
+#     while {1} {
+#         set st [rd1 $vio $P(stat)]
+#         if {[bit $st 48] != $before} { return [list $st [expr {[clock milliseconds]-$t0}]] }
+#         if {[clock milliseconds] - $t0 > 4000} { error "snapshot ack timeout (payload clock dead?)" }
+#     }
+# }
+# proc dec_status {st} {
+#     set s {}
+#     lappend s "mmcm_locked=[bit $st 49]"
+#     lappend s "gtpowergood(ch1,ch0)=[bit $st 51][bit $st 50]"
+#     lappend s "tx_reset_done=[bit $st 52]"
+#     lappend s "rx_reset_done=[bit $st 53]"
+#     lappend s "rx_cdr_stable=[bit $st 54]"
+#     lappend s "sfp1_rx_los=[bit $st 55]"
+#     lappend s "sfp2_rx_los=[bit $st 56]"
+#     lappend s "acq(ch0,ch1)=[bit $st 57][bit $st 58]"
+#     lappend s "ref_link(ch0,ch1)=[bit $st 59][bit $st 60]"
+#     lappend s "ref_down_latched(ch0,ch1)=[bit $st 61][bit $st 62]"
+#     lappend s "hdr_ref_valid(ch0,ch1)=[bit $st 63][bit $st 64]"
+#     lappend s "snap_ack=[bit $st 48]"
+#     lappend s "slip_echo=[bit $st 67]"
+#     lappend s "hdr_ref(ch0)=0x[format %02X [expr {($st>>71)&63}]]"
+#     lappend s "hdr_ref(ch1)=0x[format %02X [expr {($st>>77)&63}]]"
+#     lappend s "rxdv(ch0,ch1)=[expr {($st>>85)&3}][expr {($st>>87)&3}]"
+#     return [join $s " "]
+# }
+# sec "D1 -- IS IT LOCKED AND ARE THE COUNTERS MOVING? (two REAL snapshots, 5 s apart)"
+
+@@@@@@ DIAG >>> D1 -- IS IT LOCKED AND ARE THE COUNTERS MOVING? (two REAL snapshots, 5 s apart)
+# set st [rd1 $vio $P(stat)]
+# puts "live status: $st"
+live status: 580439087702456267005152356
+# puts "  [dec_status $st]"
+  mmcm_locked=1 gtpowergood(ch1,ch0)=11 tx_reset_done=1 rx_reset_done=1 rx_cdr_stable=1 sfp1_rx_los=0 sfp2_rx_los=0 acq(ch0,ch1)=11 ref_link(ch0,ch1)=11 ref_down_latched(ch0,ch1)=11 hdr_ref_valid(ch0,ch1)=11 snap_ack=1 slip_echo=0 hdr_ref(ch0)=0x01 hdr_ref(ch1)=0x01 rxdv(ch0,ch1)=33
+# foreach tag {D1-a D1-b D1-c} {
+#     if {[catch {set r [snapwait $vio]} e]} { puts "SNAPSHOT FAILED ($tag): $e" ; puts "DIAG_VERDICT = PAYLOAD_DOMAIN_FROZEN"; disconnect_hw_server ; exit 2 }
+#     set st [lindex $r 0] ; set ack_ms [lindex $r 1]
+#     set D [rdall $vio]
+#     puts "  $tag ack_flip_after=${ack_ms}ms  bits(ch0,ch1)=[dict get $D bits0],[dict get $D bits1] err=[dict get $D err0],[dict get $D err1] hdrs=[dict get $D hdrs0],[dict get $D hdrs1] hdre=[dict get $D hdre0],[dict get $D hdre1] rxcyc=[dict get $D rxcyc0] rxdvcyc=[dict get $D rxdvcyc0] fr_cyc=[expr {$st & 0xFFFFFFFFFFFF}]"
+#     set v$tag $D
+#     after 5000
+# }
+  D1-a ack_flip_after=9ms  bits(ch0,ch1)=1154998693248,1154998693248 err=16643,16623 hdrs=18046854582,18046854582 hdre=13024,12978 rxcyc=18046854646 rxdvcyc=18046854646 fr_cyc=18046950480
+  D1-b ack_flip_after=9ms  bits(ch0,ch1)=1223479928704,1223479928704 err=16643,16623 hdrs=19116873886,19116873886 hdre=13024,12978 rxcyc=19116873950 rxdvcyc=19116873950 fr_cyc=19116975452
+  D1-c ack_flip_after=10ms  bits(ch0,ch1)=1275746220352,1275746220352 err=16643,16623 hdrs=19933534693,19933534693 hdre=13024,12978 rxcyc=19933534757 rxdvcyc=19933534757 fr_cyc=19933640583
+# foreach c {0 1} {
+#     set b0 [dict get $D1-a bits$c] ; set b1 [dict get $D1-c bits$c]
+#     set e0 [dict get $D1-a err$c]  ; set e1 [dict get $D1-c err$c]
+#     set h0 [dict get $D1-a hdrs$c] ; set h1 [dict get $D1-c hdrs$c]
+#     set rc0 [dict get $D1-a rxcyc$c] ; set rc1 [dict get $D1-c rxcyc$c]
+#     set f0 [expr {[lindex $D1-a stat] & 0xFFFFFFFFFFFF}]
+#     set f1 [expr {[lindex $D1-c stat] & 0xFFFFFFFFFFFF}]
+#     puts "  ch$c DELTA over ~10 s: bits=$b1-$b0=[expr {$b1-$b0}]  err=[expr {$e1-$e0}]  hdrs=[expr {$h1-$h0}]  rxcyc=[expr {$rc1-$rc0}]"
+#     if {$f1 > $f0} { puts "     ratio dWords/dFr = [format %.6f [expr {double(($b1-$b0)/64.0)/double($f1-$f0)}]]  (1.000000 = 66/64 gearbox in datapath, 1.031250 = raw)" }
+# }
+can't read "D1": no such variable
+    while executing
+"dict get $D1-a bits$c"
+    ("foreach" body line 2)
+    invoked from within
+"foreach c {0 1} {
+    set b0 [dict get $D1-a bits$c] ; set b1 [dict get $D1-c bits$c]
+    set e0 [dict get $D1-a err$c]  ; set e1 [dict get $D1-c err$..."
+    (file "diag_slip.tcl" line 166)
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 29 17:27:38 2026...

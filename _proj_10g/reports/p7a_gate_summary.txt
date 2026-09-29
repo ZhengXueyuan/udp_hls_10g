@@ -1,0 +1,134 @@
+P7a gate summary (2026-09-29) -- raw evidence is in the files named below
+========================================================================
+
+[A] UNIT GATE (no board): sim/run_tb_p7a_counters.bat
+    logs: sim/xvlog.txt sim/xelab.txt sim/xsim_run.txt
+  m (errored words per single injected bit error) = 2
+  injected K=10 errors -> err0=20 (expect 20)
+  injected M=5 header errors -> hdre0=5 err0=0 hdrs0=517
+  snapshots evaluated = 200
+  POSITIVE (atomic)  invariant violations = 0
+  NEGATIVE (torn)    invariant violations = 200
+  requests=212 acks=212
+  payload clock = 156.25 MHz -> delta ratio = 1.000000 (abs=0.974091, expect 1.0 +- 0.5%)
+===== RESULT: checks=437 failures=0 =====
+GATE PASS
+SUMMARY m_words_per_injected_bit_error=2 nsnap=200 pos_inv=0 neg_inv=200 ratio_gb=1.000000 ratio_raw=1.031252 ratio_abs_gb=0.974091
+
+[B] LINT (project launcher): tcl/run_lint_p7a.bat
+    log: tcl/lint/xvlog.txt
+    LINT-OK: no implicit nets, no width mismatch, no errors
+
+[C] STATIC CRITERION 1 -- gearbox attributes, read from the ROUTED netlist
+    raw: reports/p7a_readback.txt section [1]
+GT_CELL_COUNT = 2
+  GEARBOX_MODE = 5'b10001
+  TXGEARBOX_EN = TRUE
+  RXGEARBOX_EN = TRUE
+  TX_DATA_WIDTH = 64
+  GEARBOX_MODE = 5'b10001
+  TXGEARBOX_EN = TRUE
+  RXGEARBOX_EN = TRUE
+  TX_DATA_WIDTH = 64
+
+[D] STATIC CRITERION 2 -- fabric clock frequency (tool-computed), raw: section [2]/[2b]
+CLK sys_clk                                                 period=10.000 ns  src=
+CLK gtrefclk0                                               period=6.400 ns  src=
+CLK g_hw.clk_out0                                           period=6.400 ns  src=u_clk_gen_p6b/g_hw.u_mmcm/CLKIN1
+CLK gtwiz_userclk_rx_srcclk_out[0]                          period=6.400 ns  src=u_gt/inst/gen_gtwizard_gtye4_top.gt_10gbr_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/QPLL0CLK
+CLK gtwiz_userclk_tx_srcclk_out[0]                          period=6.400 ns  src=u_gt/inst/gen_gtwizard_gtye4_top.gt_10gbr_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/QPLL0CLK
+CLK GTYE4_CHANNEL_TXOUTCLKPCS[0]                            period=6.206 ns  src=u_gt/inst/gen_gtwizard_gtye4_top.gt_10gbr_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[0].GTYE4_CHANNEL_PRIM_INST/QPLL0CLK
+CLK GTYE4_CHANNEL_TXOUTCLKPCS[1]                            period=6.206 ns  src=u_gt/inst/gen_gtwizard_gtye4_top.gt_10gbr_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[1].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[1].GTYE4_CHANNEL_PRIM_INST/QPLL0CLK
+  CLKFBOUT_MULT_F = 38.000
+  DIVCLK_DIVIDE = 5
+  CLKOUT0_DIVIDE_F = 11.875
+  CLKIN1_PERIOD = 6.400
+  CLKFBOUT_MULT_F = 12.500
+  DIVCLK_DIVIDE = 1
+  CLKOUT0_DIVIDE_F = 8.000
+  CLKIN1_PERIOD = 10.000
+    IP-side: reports/p7a_ip_config.txt
+EFF CONFIG.TX_DATA_ENCODING = <64B66B_ASYNC> expect=<64B66B_ASYNC> OK
+EFF CONFIG.TX_LINE_RATE = <10.3125> expect=<10.3125> OK
+EFF CONFIG.TXPROGDIV_FREQ_VAL = <156.25> expect=<156.25> OK
+MISMATCHES = 0
+
+[E] STATIC CRITERION 3 -- timing, raw: section [3]
+WNS = 3.178 ns
+WHS = 0.018 ns
+SETUP_FAILING_ENDPOINTS = 0   (max_paths capped at 20000)
+HOLD_FAILING_ENDPOINTS  = 0
+
+[F] RESOURCES + counter cost (spec 9.11), raw: section [5]/[7]
+UT: | CLB LUTs                   | 2726 |     0 |          0 |    216960 |  1.26 |
+UT: | CLB Registers              | 5787 |     0 |          0 |    433920 |  1.33 |
+UT: | CLB Registers                              | 5787 |     0 |          0 |    433920 |  1.33 |
+UT: | Block RAM Tile |    0 |     0 |          0 |       480 |  0.00 |
+UT: | URAM           |    0 |     0 |          0 |        64 |  0.00 |
+UT: | DSPs      |    0 |     0 |          0 |      1824 |  0.00 |
+UT: | Bonded IOB       |    6 |     6 |          0 |       280 |  2.14 |
+UT: | GTYE4_CHANNEL   |    2 |     2 |          0 |        16 | 12.50 |
+UT: | GTYE4_CHANNEL |    2 |            Advanced |
+HU: | p7a_top                                                                                           |                                                (top) |       2726 |       2706 |      20 |    0 | 5787 |      0 |      0 |    0 |          0 |
+HU: |   u_counters                                                                                      |                                         p7a_counters |         46 |         46 |       0 |    0 | 1070 |      0 |      0 |    0 |          0 |
+HU: |   u_gt                                                                                            |                                             gt_10gbr |        103 |        103 |       0 |    0 |  242 |      0 |      0 |    0 |          0 |
+
+[G] XDC support defect found and fixed during this phase
+    build #1: [Designutils 20-1307] if/foreach/puts not supported in an xdc file
+              => dbg_hub freq + clock groups + CDC false paths were SILENTLY SKIPPED
+    build #2: constraints split into ku5p_p7a.xdc (synth+impl) + ku5p_p7a_impl.xdc
+              (used_in_synthesis false), plain commands only
+P8 dbg_hub freq AS DELIVERED = 156250000
+P8 dbg_hub divider AS DELIVERED = true
+P8 set_clock_groups rc = 0 msg=
+    12-4739 occurrences in the final build log: 0
+    20-1307 occurrences in the final build log: 0
+    reproducible raw evidence for the defect itself (the build-1 log was overwritten
+    by the rebuild, so the defect was reproduced in isolation):
+      tcl/run_xdc_probe.bat -> reports/p7a_xdc_probe_stdout.txt
+      [Designutils 20-1307] Command 'if' is not supported ... probe.xdc:5
+      [Designutils 20-1307] Command 'foreach' is not supported ... probe.xdc:9
+      PROBE_SYNTH_RC = ok     <- synthesis completes anyway, i.e. the loss is SILENT
+
+[H] LICENCE NEGATIVE CONTROL (spec 1.2 / 9.1) with same-session control
+    raw: reports/p7a_lic_deny_stdout.txt + reports/p7a_lic_deny_state.txt
+SUBJ_AT_CREATE_IS_LOCKED = 0
+SUBJ_AT_CREATE_USED_LICENSE_KEYS = <>
+SUBJ_CONFIG rc = 0
+SUBJ_EFF_ENCODING = 64B66B_ASYNC
+SUBJ_EFF_PROGDIV = 156.25
+SUBJ_GENERATE_TARGET_ALL rc = 0
+SUBJ_POSTGEN_IS_LOCKED = 0
+SUBJ_POSTGEN_LOCK_DETAILS = IP is not locked
+SUBJ_POSTGEN_USED_LICENSE_KEYS = <>
+SUBJ_GENDIR_EXISTS = 1
+SUBJ_ART *.v n=0
+SUBJ_ART synth/*.v n=7
+CTRL_IS_LOCKED = 1
+CTRL_LOCK_DETAILS = * IP 'w2_pcs64_baser' requires one or more mandatory licenses but no valid licenses were found. However license checkpoints may prevent use of this IP in some tool flows.
+CTRL_AFTER_RESET_IS_LOCKED = 1
+RESTORE_LIC_PRESENT=OK 
+RESTORE_HIDDEN_STILL_THERE=NO_OK 
+
+[I] ARTIFACT
+f88d019fc53a8d07d04d14670188f8148d36e09bb9ba8d1b0df366cbf9f8651d *vivado_prj/p7a_prj.runs/impl_1/p7a_top.bit
+5dd5fa692c315c51fa72d7283e67a8b97c235b9b0a63dd78f5137ab1045455db *vivado_prj/p7a_prj.runs/impl_1/p7a_top.ltx
+
+[J] REVISION FINGERPRINT -- the gate above and the bitstream above were produced from these RTL bytes
+c154a95e0dcdb6e60028b9ce59ff9db602a31b95a18078b102d82c3a9b135a17 *clk_gen_p6b.v
+f45c61f02f5dde686577ddc480130bfbef4996e03b34ad8e357db73c58cb64aa *gt_10gbr_example_checking_64b66b_async.v
+d99c5eee30a40f61ad91affc27b637be950fac094d54fe3447917016b54cf032 *gt_10gbr_example_reset_sync.v
+b5c87ba78925a41486cd8007daac063b27d63706e9408d7117810a13dcb2d4c0 *gt_10gbr_example_stimulus_64b66b_async.v
+7109795039531f4472b1fb17a07a3565dc2f2f8d6c0f3269dbf61c868aa1b360 *gt_10gbr_prbs_any.v
+fb0a8e48c6ff6740e617ed0233df4c73dde9c8fb5580799db776539459df5b2d *p7a_bit_sync.v
+9138a6108aa9b6612a334630f6bda34a3936d978f84d152974ca289ccbd13182 *p7a_counters.v
+25359404967d70b12d3bba259b3f7e4a10b8bde7e40ea5529913d1747c83731f *p7a_ref_bucket.v
+f2f857a497e87759ec5872fb606196b21d75328124f499b3a990c4e1b5cd0e9d *p7a_tgl_sync.v
+573e54cbe25bf19859eedfaff3e7552a722b3ad0fbcfabf37442a72526f9ac5e *p7a_top.v
+42c403781ba11ea095dee2c6fcec38278da770c3c496abf9a9b65c1620a5ff14 *p7a_vio_ctrl.v
+gate re-run after this fingerprint: 1 GATE PASS line(s)
+    independent confirmation that the groups take effect IN TIMING ANALYSIS
+    (raw: reports/p7a_clock_interaction.rpt -- the pairs that matter read
+     "Ignored / Asynchronous Groups" with 0 paths analysed):
+g_hw.clk_out0 gtwiz_userclk_rx_srcclk_out[0] 0 18 0 18 Ignored Asynchronous Groups 
+g_hw.clk_out0 gtwiz_userclk_tx_srcclk_out[0] 0 10 0 10 Ignored Asynchronous Groups 

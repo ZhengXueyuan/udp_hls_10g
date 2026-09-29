@@ -1,0 +1,474 @@
+P7A_SECS=600 P7A_SHORT=60
+---- vivado exit=2 ----
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 17:25:01 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source probe_p7a_board.tcl
+# set here [file normalize [file dirname [info script]]]
+# set p10  [file normalize [file join $here ..]]
+# set bit  $p10/vivado_prj/p7a_prj.runs/impl_1/p7a_top.bit
+# if {[info exists ::env(P7A_BIT)]}    { set bit $::env(P7A_BIT) }
+# set secs 600
+# if {[info exists ::env(P7A_SECS)]}   { set secs $::env(P7A_SECS) }
+# set short 30
+# if {[info exists ::env(P7A_SHORT)]}  { set short $::env(P7A_SHORT) }
+# set url  192.168.0.38:3121
+# if {[info exists ::env(P7A_HWURL)]}  { set url $::env(P7A_HWURL) }
+# set allow_short_err 0
+# if {[info exists ::env(P7A_ALLOW_SHORT_ERR)]} { set allow_short_err $::env(P7A_ALLOW_SHORT_ERR) }
+# proc sec {s} { puts "\n@@@@@@ P7A >>> $s" ; flush stdout }
+# proc pget {o n} { if {[catch {set v [get_property $n $o]} e]} { return "<ERR:$e>" } ; return $v }
+# proc bit  {v n} { expr {($v >> $n) & 1} }
+# proc usec {} { if {[catch {set t [clock microseconds]} e]} { return [expr {[clock milliseconds]*1000}] } ; return $t }
+# proc hexint {s} {
+#     set s [string trim $s]
+#     if {$s eq ""} { error "empty probe value" }
+#     if {[catch {expr "0x$s"} v]} { error "bad hex '$s'" }
+#     return $v
+# }
+# sec "STAGE A0 -- PREFLIGHT"
+
+@@@@@@ P7A >>> STAGE A0 -- PREFLIGHT
+# puts "BIT   = $bit"
+BIT   = D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/impl_1/p7a_top.bit
+# puts "SECS  = $secs   SHORT = $short   URL = $url"
+SECS  = 600   SHORT = 60   URL = 192.168.0.38:3121
+# puts "host  = [info hostname]   vivado = [version -short]"
+host  = xyz-intel   vivado = 2025.2
+# puts "tcl   = [info patchlevel]   wordSize = [expr {$tcl_platform(wordSize)}] (informational only: every large value below is printed by string interpolation, never through format %d/%X, so it is correct on a 32-bit Tcl too -- found via the dry-run harness)"
+tcl   = 8.6.13   wordSize = 4 (informational only: every large value below is printed by string interpolation, never through format %d/%X, so it is correct on a 32-bit Tcl too -- found via the dry-run harness)
+# if {![file exists $bit]} { puts "P7A-ABORT: bitstream not found"; exit 1 }
+# set ltx [file rootname $bit].ltx
+# puts "LTX   = $ltx exists=[file exists $ltx]"
+LTX   = D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/impl_1/p7a_top.ltx exists=1
+# if {![file exists $ltx]} { puts "P7A-ABORT: .ltx missing (VIO cannot be enumerated)"; exit 1 }
+# foreach f [list $bit $ltx] {
+#     puts [format "  %s  size=%d  mtime=%s" [file tail $f] [file size $f] \
+#           [clock format [file mtime $f] -format "%Y-%m-%d %H:%M:%S"]]
+# }
+  p7a_top.bit  size=15431258  mtime=2026-09-29 16:40:23
+  p7a_top.ltx  size=114407  mtime=2026-09-29 16:40:23
+# puts "  sha256 of both artifacts + all 11 RTL files: board_scratch/logs/hashes.txt"
+  sha256 of both artifacts + all 11 RTL files: board_scratch/logs/hashes.txt
+# puts "  expected bit f88d019f...8651d / ltx 5dd5fa69...5455db (verified on disk before this run)"
+  expected bit f88d019f...8651d / ltx 5dd5fa69...5455db (verified on disk before this run)
+# sec "STAGE A1 -- CONNECT / SAFETY GATE (IDCODE 04A62093, device count 1)"
+
+@@@@@@ P7A >>> STAGE A1 -- CONNECT / SAFETY GATE (IDCODE 04A62093, device count 1)
+# open_hw_manager
+# connect_hw_server -url $url
+INFO: [Labtools 27-2285] Connecting to hw_server url TCP:192.168.0.38:3121
+INFO: [Labtools 27-3415] Connecting to cs_server url TCP:localhost:0
+INFO: [Labtools 27-3417] Launching cs_server...
+INFO: [Labtools 27-2221] Launch Output:
+
+
+******** Xilinx cs_server v2025.2.0
+  ****** Build date   : Nov 14 2025-07:16:52
+    **** Build number : 2025.2.1763075812
+      ** Copyright 2017-2022 Xilinx, Inc. All Rights Reserved.
+      ** Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
+
+
+
+# current_hw_target [lindex [get_hw_targets] 0]
+# open_hw_target
+INFO: [Labtoolstcl 44-466] Opening hw_target 192.168.0.38:3121/xilinx_tcf/Digilent/210251391367
+# set dlist [get_hw_devices]
+# puts "device count = [llength $dlist]"
+device count = 1
+# foreach d $dlist { puts "DEVICE $d PART=[pget $d PART] IDCODE=[pget $d IDCODE_HEX]" }
+DEVICE xcku5p_0 PART=xcku5p IDCODE=04A62093
+# set tdev ""
+# foreach d $dlist { if {[pget $d IDCODE_HEX] eq "04A62093"} { set tdev $d } }
+# if {$tdev eq "" || [llength $dlist] != 1} {
+#     puts "P7A-SAFETY_ABORT: target='$tdev' count=[llength $dlist] -- NOT PROGRAMMING"
+#     exit 1
+# }
+# puts "SAFETY_GATE = PASS -> $tdev"
+SAFETY_GATE = PASS -> xcku5p_0
+# puts "PRE-PROGRAM DONE_PIN = [pget $tdev REGISTER.CONFIG_STATUS.BIT\[14\]_DONE_PIN]"
+PRE-PROGRAM DONE_PIN = 1
+# sec "STAGE A2 -- PROGRAM (volatile, JTAG) + DONE"
+
+@@@@@@ P7A >>> STAGE A2 -- PROGRAM (volatile, JTAG) + DONE
+# current_hw_device $tdev
+# refresh_hw_device -update_hw_probes false $tdev
+INFO: [Labtools 27-2302] Device xcku5p (JTAG device index = 0) is programmed with a design that has 1 IBERT core(s).
+INFO: [Labtools 27-2302] Device xcku5p (JTAG device index = 0) is programmed with a design that has 1 VIO core(s).
+# set_property PROGRAM.FILE $bit $tdev
+# set_property PROBES.FILE $ltx $tdev
+# set_property FULL_PROBES.FILE $ltx $tdev
+# if {[catch {program_hw_devices $tdev} em]} { puts "P7A-ABORT: program failed: $em"; exit 1 }
+INFO: [Labtools 27-3164] End of startup status: HIGH
+program_hw_devices: Time (s): cpu = 00:00:09 ; elapsed = 00:00:09 . Memory (MB): peak = 618.609 ; gain = 0.508
+# set done [pget $tdev REGISTER.CONFIG_STATUS.BIT\[14\]_DONE_PIN]
+# puts "DONE_PIN = $done"
+DONE_PIN = 1
+# if {$done != 1} { puts "P7A-ABORT: DONE != 1"; exit 1 }
+# refresh_hw_device $tdev
+INFO: [Labtools 27-2302] Device xcku5p (JTAG device index = 0) is programmed with a design that has 1 VIO core(s).
+INFO: [Labtools 27-1889] Uploading output probe values for VIO core [hw_vio_1]
+# puts "programming OK, DONE=HIGH"
+programming OK, DONE=HIGH
+# sec "STAGE A3 -- VIO PROBE RESOLUTION (names + width assertions)"
+
+@@@@@@ P7A >>> STAGE A3 -- VIO PROBE RESOLUTION (names + width assertions)
+# set vio [lindex [get_hw_vios -of_objects $tdev] 0]
+# if {$vio eq ""} { puts "P7A-ABORT: no VIO in this design"; exit 1 }
+# puts "VIO = $vio"
+VIO = hw_vio_1
+# foreach p [get_hw_probes -of_objects $vio] {
+#     puts "  PROBE name=[pget $p NAME] width=[pget $p WIDTH]"
+# }
+  PROBE name=vio_bits_snap width=96
+  PROBE name=vio_err_snap width=64
+  PROBE name=vio_hdre_snap width=64
+  PROBE name=vio_hdrs_snap width=96
+  PROBE name=vio_rxcyc_snap width=96
+  PROBE name=vio_rxdvcyc_snap width=96
+  PROBE name=vio_status width=96
+  PROBE name=raw_clear width=1
+  PROBE name=raw_gt_reset width=1
+  PROBE name=raw_slip width=1
+  PROBE name=raw_snap width=1
+# proc findprobe {vio names} {
+#     set all [get_hw_probes -of_objects $vio]
+#     foreach n $names { foreach p $all { if {$p eq $n} { return $p } } }
+#     foreach n $names { foreach p $all { if {[string match $n $p]} { return $p } } }
+#     return ""
+# }
+# proc wof {p} { set w 1 ; catch {set w [get_property WIDTH $p]} ; return $w }
+# array set P {}
+# set P(err)     [findprobe $vio {vio_err_snap probe_in0}]
+# set P(bits)    [findprobe $vio {vio_bits_snap probe_in1}]
+# set P(hdrs)    [findprobe $vio {vio_hdrs_snap probe_in2}]
+# set P(hdre)    [findprobe $vio {vio_hdre_snap probe_in3}]
+# set P(rxcyc)   [findprobe $vio {vio_rxcyc_snap probe_in4}]
+# set P(rxdvcyc) [findprobe $vio {vio_rxdvcyc_snap probe_in5}]
+# set P(stat)    [findprobe $vio {vio_status probe_in6}]
+# set P(snap)    [findprobe $vio {raw_snap probe_out0}]
+# set P(clear)   [findprobe $vio {raw_clear probe_out1}]
+# set P(slip)    [findprobe $vio {raw_slip probe_out2}]
+# set P(gtrst)   [findprobe $vio {raw_gt_reset probe_out3}]
+# foreach {nm key w} {err err 64 bits bits 96 hdrs hdrs 96 hdre hdre 64 \
+#                     rxcyc rxcyc 96 rxdvcyc rxdvcyc 96 status stat 96 \
+#                     snap snap 1 clear clear 1 slip slip 1 gt_reset gtrst 1} {
+#     if {$P($key) eq ""} { puts "P7A-ABORT: probe '$nm' not found"; exit 1 }
+#     if {[wof $P($key)] != $w} {
+#         puts "P7A-ABORT: probe '$nm' width=[wof $P($key)] expected $w -- packing changed"
+#         exit 1
+#     }
+# }
+# puts "PROBES RESOLVED -- all 11 present, all widths match the RTL packing"
+PROBES RESOLVED -- all 11 present, all widths match the RTL packing
+# proc vset {vio p val} {
+#     set w [wof $p]
+#     set n [expr {int(ceil($w / 4.0))}]
+#     set s [format "%0${n}X" [expr {$val & ((1 << $w) - 1)}]]
+#     set_property OUTPUT_VALUE $s $p
+#     commit_hw_vio $vio
+# }
+# proc pulse {vio p} { vset $vio $p 1 ; vset $vio $p 0 }
+# proc rdall {vio} {
+#     global P
+#     refresh_hw_vio $vio
+#     set o [dict create]
+#     foreach k {err bits hdrs hdre rxcyc rxdvcyc stat} {
+#         set s [get_property INPUT_VALUE $P($k)]
+#         set r HEX
+#         catch { set r [get_property INPUT_VALUE_RADIX $P($k)] }
+#         switch -- $r {
+#             HEX     { dict set o $k [hexint $s] }
+#             BIN     { dict set o $k [expr "0b$s"] }
+#             OCT     { dict set o $k [expr "0o$s"] }
+#             default { dict set o $k [hexint $s] }
+#         }
+#     }
+#     # --- split the packed probes into per-channel scalars, ONCE, here. -------
+#     # The packing is {ch1, ch0} but the two groups have DIFFERENT widths:
+#     #   err  [64] = {err1[31:0],  err0[31:0]}   -> ch1 at bits [63:32]
+#     #   hdre [64] = {hdre1[31:0], hdre0[31:0]}  -> ch1 at bits [63:32]
+#     #   bits/hdrs/rxcyc/rxdvcyc [96] = {ch1[47:0], ch0[47:0]} -> ch1 at [95:48]
+#     # A single "shift by 48" accessor is therefore WRONG for err/hdre; the
+#     # dry-run harness caught exactly that. No call site shifts anything now.
+#     dict set o err0  [expr {[dict get $o err] & 0xFFFFFFFF}]
+#     dict set o err1  [expr {([dict get $o err] >> 32) & 0xFFFFFFFF}]
+#     dict set o hdre0 [expr {[dict get $o hdre] & 0xFFFFFFFF}]
+#     dict set o hdre1 [expr {([dict get $o hdre] >> 32) & 0xFFFFFFFF}]
+#     foreach k {bits hdrs rxcyc rxdvcyc} {
+#         dict set o ${k}0 [expr {[dict get $o $k] & 0xFFFFFFFFFFFF}]
+#         dict set o ${k}1 [expr {([dict get $o $k] >> 48) & 0xFFFFFFFFFFFF}]
+#     }
+#     return $o
+# }
+# proc rd1 {vio p} {
+#     refresh_hw_vio $vio
+#     return [hexint [get_property INPUT_VALUE $p]]
+# }
+# proc snapwait {vio} {
+#     global P
+#     set before [bit [rd1 $vio $P(stat)] 48]
+#     pulse $vio $P(snap)
+#     set t0 [clock milliseconds]
+#     while {1} {
+#         set st [rd1 $vio $P(stat)]
+#         if {[bit $st 48] != $before} { return $st }
+#         if {[clock milliseconds] - $t0 > 4000} { error "snapshot ack timeout" }
+#     }
+# }
+# proc dec_status {st} {
+#     set s {}
+#     lappend s "mmcm_locked=[bit $st 49]"
+#     lappend s "gtpowergood(ch1,ch0)=[bit $st 51][bit $st 50]"
+#     lappend s "tx_reset_done=[bit $st 52]"
+#     lappend s "rx_reset_done=[bit $st 53]"
+#     lappend s "rx_cdr_stable=[bit $st 54]"
+#     lappend s "sfp1_rx_los=[bit $st 55]"
+#     lappend s "sfp2_rx_los=[bit $st 56]"
+#     lappend s "acq(ch0,ch1)=[bit $st 57][bit $st 58]"
+#     lappend s "ref_link(ch0,ch1)=[bit $st 59][bit $st 60]"
+#     lappend s "ref_down_latched(ch0,ch1)=[bit $st 61][bit $st 62]"
+#     lappend s "hdr_ref_valid(ch0,ch1)=[bit $st 63][bit $st 64]"
+#     lappend s "echo(snap,clr,slip,gtrst)=[bit $st 65][bit $st 66][bit $st 67][bit $st 68]"
+#     lappend s "rst_obs=[bit $st 69]"
+#     lappend s "fingerprint=[bit $st 70]"
+#     lappend s "hdr_ref(ch0)=0x[format %02X [expr {($st>>71)&63}]]"
+#     lappend s "hdr_ref(ch1)=0x[format %02X [expr {($st>>77)&63}]]"
+#     lappend s "rxdv(ch0,ch1)=[expr {($st>>85)&3}][expr {($st>>87)&3}]"
+#     return [join $s " "]
+# }
+# proc field {v lo hi} { expr {($v >> $lo) & ((1 << ($hi - $lo + 1)) - 1)} }
+# sec "STAGE B1 -- STATUS BEFORE ANY CLEAR (live readback)"
+
+@@@@@@ P7A >>> STAGE B1 -- STATUS BEFORE ANY CLEAR (live readback)
+# set st [rd1 $vio $P(stat)]
+# puts "STATUS $st"
+STATUS 580439087702174791148503040
+# puts "  [dec_status $st]"
+  mmcm_locked=1 gtpowergood(ch1,ch0)=11 tx_reset_done=1 rx_reset_done=1 rx_cdr_stable=1 sfp1_rx_los=0 sfp2_rx_los=0 acq(ch0,ch1)=11 ref_link(ch0,ch1)=11 ref_down_latched(ch0,ch1)=11 hdr_ref_valid(ch0,ch1)=11 echo(snap,clr,slip,gtrst)=0000 rst_obs=0 fingerprint=1 hdr_ref(ch0)=0x01 hdr_ref(ch1)=0x01 rxdv(ch0,ch1)=33
+# puts "  fingerprint bit [bit $st 70] must be 1 (proves the probe maps to THIS build)"
+  fingerprint bit 1 must be 1 (proves the probe maps to THIS build)
+# if {[bit $st 70] != 1} { puts "P7A-ABORT: build fingerprint bit is 0 -- wrong bitstream/probes"; exit 1 }
+# set sfp1_los [bit $st 55]
+# set sfp2_los [bit $st 56]
+# puts ""
+
+# puts "RX_LOS READBACK:  sfp1_rx_los=$sfp1_los  sfp2_rx_los=$sfp2_los"
+RX_LOS READBACK:  sfp1_rx_los=0  sfp2_rx_los=0
+# puts "  (SFP RX_LOS is an open-collector module OUTPUT, active HIGH on loss of"
+  (SFP RX_LOS is an open-collector module OUTPUT, active HIGH on loss of
+# puts "   signal; XDC sets PULLTYPE PULLUP so an empty cage reads 1.)"
+   signal; XDC sets PULLTYPE PULLUP so an empty cage reads 1.)
+# puts "  => AOC present and emitting on BOTH cages requires 0/0. Got $sfp1_los/$sfp2_los"
+  => AOC present and emitting on BOTH cages requires 0/0. Got 0/0
+# if {$sfp1_los != 0 || $sfp2_los != 0} {
+#     puts "P7A-WARN: at least one cage reports LOSS OF SIGNAL."
+# }
+# puts ""
+
+# puts "TX_DIS: RTL drives both sfp*_tx_dis = 1'b0 unconditionally (p7a_top.v s.9)."
+TX_DIS: RTL drives both sfp*_tx_dis = 1'b0 unconditionally (p7a_top.v s.9).
+# puts "  Board-level consequence of that being wrong is a DARK link: with TX_DIS"
+  Board-level consequence of that being wrong is a DARK link: with TX_DIS
+# puts "  high both modules stop emitting => RX_LOS would be 1/1 and no PRBS lock."
+  high both modules stop emitting => RX_LOS would be 1/1 and no PRBS lock.
+# puts "  So the lock + LOS=0/0 below is the board evidence that TX_DIS really is low."
+  So the lock + LOS=0/0 below is the board evidence that TX_DIS really is low.
+# if {[bit $st 49] != 1} { puts "P7A-WARN: mmcm_locked=0" }
+# if {[bit $st 50] != 1 || [bit $st 51] != 1} { puts "P7A-WARN: gtpowergood != 11" }
+# if {[bit $st 52] != 1 || [bit $st 53] != 1} {
+#     puts "P7A-WARN: tx/rx reset not done ([bit $st 52]/[bit $st 53]) -- will retry after clear"
+# }
+# sec "STAGE B2 -- RESTART MEASUREMENT WINDOW (VIO clear) AND WAIT FOR PRBS31 LOCK"
+
+@@@@@@ P7A >>> STAGE B2 -- RESTART MEASUREMENT WINDOW (VIO clear) AND WAIT FOR PRBS31 LOCK
+# pulse $vio $P(clear)
+# after 100
+# set st [rd1 $vio $P(stat)]
+# puts "after clear: [dec_status $st]"
+after clear: mmcm_locked=1 gtpowergood(ch1,ch0)=11 tx_reset_done=1 rx_reset_done=1 rx_cdr_stable=1 sfp1_rx_los=0 sfp2_rx_los=0 acq(ch0,ch1)=11 ref_link(ch0,ch1)=11 ref_down_latched(ch0,ch1)=00 hdr_ref_valid(ch0,ch1)=11 echo(snap,clr,slip,gtrst)=0000 rst_obs=0 fingerprint=1 hdr_ref(ch0)=0x01 hdr_ref(ch1)=0x01 rxdv(ch0,ch1)=33
+# puts "  (clear resets counters AND acq; acq re-arms after 64 consecutive matched words)"
+  (clear resets counters AND acq; acq re-arms after 64 consecutive matched words)
+# puts "waiting for acq on BOTH channels ..."
+waiting for acq on BOTH channels ...
+# set t0 [clock milliseconds]
+# set acqu 0
+# while {[clock milliseconds] - $t0 < 20000} {
+#     set st [rd1 $vio $P(stat)]
+#     set acqu [expr {[bit $st 57] && [bit $st 58]}]
+#     if {$acqu} break
+#     after 250
+# }
+# puts "acq(both) = $acqu after [expr {[clock milliseconds]-$t0}] ms"
+acq(both) = 1 after 73 ms
+# puts "  [dec_status $st]"
+  mmcm_locked=1 gtpowergood(ch1,ch0)=11 tx_reset_done=1 rx_reset_done=1 rx_cdr_stable=1 sfp1_rx_los=0 sfp2_rx_los=0 acq(ch0,ch1)=11 ref_link(ch0,ch1)=11 ref_down_latched(ch0,ch1)=00 hdr_ref_valid(ch0,ch1)=11 echo(snap,clr,slip,gtrst)=0000 rst_obs=0 fingerprint=1 hdr_ref(ch0)=0x01 hdr_ref(ch1)=0x01 rxdv(ch0,ch1)=33
+# if {!$acqu} {
+#     puts "P7A-STOP: NO PRBS LOCK. Diagnostic readouts, nothing else was attempted:"
+#     puts "  hdr_ref ch0=0x[format %02X [expr {($st>>71)&63}]] ch1=0x[format %02X [expr {($st>>77)&63}]] (0 = no header ever seen)"
+#     puts "  hdr_ref_valid=[bit $st 63][bit $st 64]  ref_link=[bit $st 59][bit $st 60]  ref_down_latched=[bit $st 61][bit $st 62]"
+#     puts "  rx_cdr_stable=[bit $st 54]  tx_reset_done=[bit $st 52]  rx_reset_done=[bit $st 53]"
+#     puts "  rxdv live=[expr {($st>>85)&3}][expr {($st>>87)&3}]  (0 = no rxdatavalid at all)"
+#     puts "  P7A_BOARD_VERDICT = STOP_NO_PRBS_LOCK"
+#     disconnect_hw_server
+#     exit 2
+# }
+# sec "STAGE B3 -- LEG 3: rxheader STABILITY (the criterion is STABILITY, not a value)"
+
+@@@@@@ P7A >>> STAGE B3 -- LEG 3: rxheader STABILITY (the criterion is STABILITY, not a value)
+# set D [rdall $vio]
+# set nbad 0
+# set samples {}
+# for {set i 0} {$i < 5} {incr i} {
+#     set st [snapwait $vio]
+#     set D [rdall $vio]
+#     set hr0 [expr {($st>>71)&63}]
+#     set hr1 [expr {($st>>77)&63}]
+#     set v0 [bit $st 63]
+#     set v1 [bit $st 64]
+#     set hd  [dict get $D hdrs0]
+#     set he  [dict get $D hdre0]
+#     set hd1 [dict get $D hdrs1]
+#     set he1 [dict get $D hdre1]
+#     lappend samples "$hr0/$hr1"
+#     puts "  sample $i: hdr_ref ch0=0x[format %02X $hr0] ch1=0x[format %02X $hr1]  valid=$v0$v1  hdrs_cnt ch0=$hd ch1=$hd1  hdr_err_cnt ch0=$he ch1=$he1"
+#     if {$v0 != 1 || $v1 != 1} { incr nbad }
+#     if {$he != 0 || $he1 != 0} { incr nbad }
+#     after 400
+# }
+  sample 0: hdr_ref ch0=0x01 ch1=0x01  valid=11  hdrs_cnt ch0=114839942 ch1=114839942  hdr_err_cnt ch0=0 ch1=0
+  sample 1: hdr_ref ch0=0x01 ch1=0x01  valid=11  hdrs_cnt ch0=256245945 ch1=256245945  hdr_err_cnt ch0=0 ch1=0
+  sample 2: hdr_ref ch0=0x01 ch1=0x01  valid=11  hdrs_cnt ch0=413597895 ch1=413597895  hdr_err_cnt ch0=0 ch1=0
+  sample 3: hdr_ref ch0=0x01 ch1=0x01  valid=11  hdrs_cnt ch0=633709973 ch1=633709973  hdr_err_cnt ch0=0 ch1=0
+  sample 4: hdr_ref ch0=0x01 ch1=0x01  valid=11  hdrs_cnt ch0=879933909 ch1=879933909  hdr_err_cnt ch0=0 ch1=0
+# set st [rd1 $vio $P(stat)]
+# set hdr_ref0 [expr {($st>>71)&63}]
+# set hdr_ref1 [expr {($st>>77)&63}]
+# set D [rdall $vio]
+# puts ""
+
+# puts "LEG3_ACQ              = [bit $st 57][bit $st 58]"
+LEG3_ACQ              = 11
+# puts "LEG3_HDR_REF          = ch0=0x[format %02X $hdr_ref0] ([format %d $hdr_ref0])   ch1=0x[format %02X $hdr_ref1] ([format %d $hdr_ref1])"
+LEG3_HDR_REF          = ch0=0x01 (1)   ch1=0x01 (1)
+# puts "LEG3_HDR_REF_VALID    = [bit $st 63][bit $st 64]"
+LEG3_HDR_REF_VALID    = 11
+# puts "LEG3_HDRS_CNT         = ch0=[dict get $D hdrs0]  ch1=[dict get $D hdrs1]"
+LEG3_HDRS_CNT         = ch0=879933909  ch1=879933909
+# puts "LEG3_HDR_ERR_CNT      = ch0=[dict get $D hdre0]  ch1=[dict get $D hdre1]   <-- must be 0 (header never deviates)"
+LEG3_HDR_ERR_CNT      = ch0=0  ch1=0   <-- must be 0 (header never deviates)
+# puts "LEG3_SAMPLES          = $samples"
+LEG3_SAMPLES          = 1/1 1/1 1/1 1/1 1/1
+# if {$nbad > 0} { puts "P7A-STOP: leg 3 failed (bad samples=$nbad)"; puts "P7A_BOARD_VERDICT = STOP_LEG3"; disconnect_hw_server; exit 2 }
+# puts "LEG3 = PASS (PRBS31 locked; 6-bit rxheader stable at the same constant while rxheadervalid)"
+LEG3 = PASS (PRBS31 locked; 6-bit rxheader stable at the same constant while rxheadervalid)
+# sec "STAGE C -- NEGATIVE CONTROL A: forced rxgearboxslip must DROP and RE-LOCK"
+
+@@@@@@ P7A >>> STAGE C -- NEGATIVE CONTROL A: forced rxgearboxslip must DROP and RE-LOCK
+# puts "Rationale: rxgearboxslip moves the 64b/66b receiver block boundary. In a RAW"
+Rationale: rxgearboxslip moves the 64b/66b receiver block boundary. In a RAW
+# puts "datapath there is no gearbox to slip, so this action has no effect at all."
+datapath there is no gearbox to slip, so this action has no effect at all.
+# puts "While the link is locked the example checker emits NO slips of its own"
+While the link is locked the example checker emits NO slips of its own
+# puts "(_checking_64b66b_async.v: rxgearboxslip_ctr only advances while !match),"
+(_checking_64b66b_async.v: rxgearboxslip_ctr only advances while !match),
+# puts "so any error burst after this pulse is attributable to the pulse."
+so any error burst after this pulse is attributable to the pulse.
+# puts ""
+
+# pulse $vio $P(clear)
+# after 100
+# set t0 [clock milliseconds]
+# while {[clock milliseconds] - $t0 < 20000} {
+#     set st [rd1 $vio $P(stat)]
+#     if {[bit $st 57] && [bit $st 58]} { break }
+#     after 250
+# }
+# after 2000
+# set st [rd1 $vio $P(stat)]
+# set D  [rdall $vio]
+# set e0c0 [dict get $D err0] 
+# set e0c1 [dict get $D err1]
+# set b0  [dict get $D bits0]
+# set rl_before [list [bit $st 59] [bit $st 60]]
+# set dl_before [list [bit $st 61] [bit $st 62]]
+# set SLIP_ECHO_BEFORE [list [bit $st 67]]
+# puts "BEFORE SLIP: err ch0=$e0c0 ch1=$e0c1  ref_link=[lindex $rl_before 0][lindex $rl_before 1]  ref_down_latched=[lindex $dl_before 0][lindex $dl_before 1]  slip_echo=[lindex $SLIP_ECHO_BEFORE 0]"
+BEFORE SLIP: err ch0=0 ch1=0  ref_link=11  ref_down_latched=00  slip_echo=0
+# puts ">>> pulsing raw_slip (one rising edge -> one gearbox slip on each channel)"
+>>> pulsing raw_slip (one rising edge -> one gearbox slip on each channel)
+# pulse $vio $P(slip)
+# after 2000
+# set st [rd1 $vio $P(stat)]
+# set D  [rdall $vio]
+# set e1c0 [dict get $D err0] 
+# set e1c1 [dict get $D err1]
+# set b1  [dict get $D bits0]
+# set de0 [expr {$e1c0 - $e0c0}] 
+# set de1 [expr {$e1c1 - $e0c1}]
+# set dbits_after [expr {$b1 - $b0}]
+# set rl_after  [list [bit $st 59] [bit $st 60]]
+# set dl_after  [list [bit $st 61] [bit $st 62]]
+# set SLIP_ECHO_AFTER [list [bit $st 67]]
+# puts "AFTER SLIP +2 s: err ch0=$e1c0 ch1=$e1c1  (delta ch0=$de0 ch1=$de1)"
+AFTER SLIP +2 s: err ch0=0 ch1=0  (delta ch0=0 ch1=0)
+# puts "  ref_link=[lindex $rl_after 0][lindex $rl_after 1]  ref_down_latched=[lindex $dl_after 0][lindex $dl_after 1]"
+  ref_link=11  ref_down_latched=11
+# puts "  slip_echo=[lindex $SLIP_ECHO_AFTER 0]   bits advanced since before-slip = $dbits_after"
+  slip_echo=0   bits advanced since before-slip = 0
+# puts "  ref_down_latched BEFORE=[lindex $dl_before 0][lindex $dl_before 1] -> AFTER=[lindex $dl_after 0][lindex $dl_after 1]   (sticky: 1 = the example bucket saw the link go down)"
+  ref_down_latched BEFORE=00 -> AFTER=11   (sticky: 1 = the example bucket saw the link go down)
+# puts "  -> ref_down_latched latched 0->1 : [expr {[lindex $dl_before 0]==0 && [lindex $dl_before 1]==0 && [lindex $dl_after 0]==1 && [lindex $dl_after 1]==1}]"
+  -> ref_down_latched latched 0->1 : 1
+# puts ">>> now measuring a CLEAN interval (re-lock check): 6 s with NO further slip"
+>>> now measuring a CLEAN interval (re-lock check): 6 s with NO further slip
+# set e2c0 [dict get $D err0] 
+# set e2c1 [dict get $D err1]
+# set b2  [dict get $D bits0]
+# after 6000
+# set st [rd1 $vio $P(stat)]
+# set D  [rdall $vio]
+# set e3c0 [dict get $D err0] 
+# set e3c1 [dict get $D err1]
+# set de2 [expr {$e3c0 - $e2c0}] 
+# set de3 [expr {$e3c1 - $e2c1}]
+# set dbits_clean [expr {[dict get $D bits0] - $b2}]
+# set rl_final [list [bit $st 59] [bit $st 60]]
+# puts "CLEAN 6 s AFTER SLIP: err delta ch0=$de2 ch1=$de3   bits advanced=$dbits_clean"
+CLEAN 6 s AFTER SLIP: err delta ch0=0 ch1=0   bits advanced=0
+# puts "  ref_link=[lindex $rl_final 0][lindex $rl_final 1]  acq=[bit $st 57][bit $st 58]"
+  ref_link=11  acq=11
+# puts "  [dec_status $st]"
+  mmcm_locked=1 gtpowergood(ch1,ch0)=11 tx_reset_done=1 rx_reset_done=1 rx_cdr_stable=1 sfp1_rx_los=0 sfp2_rx_los=0 acq(ch0,ch1)=11 ref_link(ch0,ch1)=11 ref_down_latched(ch0,ch1)=11 hdr_ref_valid(ch0,ch1)=11 echo(snap,clr,slip,gtrst)=0000 rst_obs=0 fingerprint=1 hdr_ref(ch0)=0x01 hdr_ref(ch1)=0x01 rxdv(ch0,ch1)=33
+# set negA_burst [expr {($de0 > 0) && ($de1 > 0)}]
+# set negA_drop  [expr {[lindex $dl_before 0]==0 && [lindex $dl_before 1]==0 && [lindex $dl_after 0]==1 && [lindex $dl_after 1]==1}]
+# set negA_relock [expr {($de2 == 0) && ($de3 == 0) && ($dbits_clean > 0) && [lindex $rl_final 0]==1 && [lindex $rl_final 1]==1}]
+# puts ""
+
+# puts "NEGCTRL_A_ERR_BURST   = $negA_burst   (ch0 delta=$de0, ch1 delta=$de1, both must be >0)"
+NEGCTRL_A_ERR_BURST   = 0   (ch0 delta=0, ch1 delta=0, both must be >0)
+# puts "NEGCTRL_A_LINK_DROP   = $negA_drop   (ref_down_latched 0/0 -> 1/1)"
+NEGCTRL_A_LINK_DROP   = 1   (ref_down_latched 0/0 -> 1/1)
+# puts "NEGCTRL_A_RELOCK      = $negA_relock   (next 6 s: 0 further errors, bits still advancing, ref_link back to 1/1)"
+NEGCTRL_A_RELOCK      = 0   (next 6 s: 0 further errors, bits still advancing, ref_link back to 1/1)
+# if {!($negA_burst && $negA_drop && $negA_relock)} {
+#     puts "P7A-STOP: negative control A did not show drop+relock; the gearbox-slip"
+#     puts "          discriminator is not demonstrated on this board. Reporting raw"
+#     puts "          readings above instead of proceeding to BER."
+#     puts "P7A_BOARD_VERDICT = STOP_NEGCTRL_A"
+#     disconnect_hw_server
+#     exit 2
+# }
+P7A-STOP: negative control A did not show drop+relock; the gearbox-slip
+          discriminator is not demonstrated on this board. Reporting raw
+          readings above instead of proceeding to BER.
+P7A_BOARD_VERDICT = STOP_NEGCTRL_A
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 29 17:25:39 2026...

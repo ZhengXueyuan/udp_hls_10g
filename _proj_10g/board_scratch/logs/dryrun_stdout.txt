@@ -1,0 +1,159 @@
+==== DRY RUN: asserting the script runs end to end (no board involved) ====
+
+@@@@@@ P7A >>> STAGE A0 -- PREFLIGHT
+BIT   = D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/impl_1/p7a_top.bit
+SECS  = 3   SHORT = 2   URL = 192.168.0.38:3121
+host  = xyz-intel   vivado = dry-run-stub
+tcl   = 8.6.14   wordSize = 4 (informational only: every large value below is printed by string interpolation, never through format %d/%X, so it is correct on a 32-bit Tcl too -- found via the dry-run harness)
+LTX   = D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/vivado_prj/p7a_prj.runs/impl_1/p7a_top.ltx exists=1
+  p7a_top.bit  size=15431258  mtime=2026-09-29 16:40:23
+  p7a_top.ltx  size=114407  mtime=2026-09-29 16:40:23
+  sha256 of both artifacts + all 11 RTL files: board_scratch/logs/hashes.txt
+  expected bit f88d019f...8651d / ltx 5dd5fa69...5455db (verified on disk before this run)
+
+@@@@@@ P7A >>> STAGE A1 -- CONNECT / SAFETY GATE (IDCODE 04A62093, device count 1)
+device count = 1
+DEVICE fake_dev PART=xcku5p-ffvb676-1-e IDCODE=04A62093
+SAFETY_GATE = PASS -> fake_dev
+PRE-PROGRAM DONE_PIN = 1
+
+@@@@@@ P7A >>> STAGE A2 -- PROGRAM (volatile, JTAG) + DONE
+DONE_PIN = 1
+programming OK, DONE=HIGH
+
+@@@@@@ P7A >>> STAGE A3 -- VIO PROBE RESOLUTION (names + width assertions)
+VIO = fake_vio
+  PROBE name=vio_err_snap width=64
+  PROBE name=vio_bits_snap width=96
+  PROBE name=vio_hdrs_snap width=96
+  PROBE name=vio_hdre_snap width=64
+  PROBE name=vio_rxcyc_snap width=96
+  PROBE name=vio_rxdvcyc_snap width=96
+  PROBE name=vio_status width=96
+  PROBE name=raw_snap width=1
+  PROBE name=raw_clear width=1
+  PROBE name=raw_slip width=1
+  PROBE name=raw_gt_reset width=1
+PROBES RESOLVED -- all 11 present, all widths match the RTL packing
+
+@@@@@@ P7A >>> STAGE B1 -- STATUS BEFORE ANY CLEAR (live readback)
+STATUS 585350341494484630302097408
+  mmcm_locked=1 gtpowergood(ch1,ch0)=11 tx_reset_done=1 rx_reset_done=1 rx_cdr_stable=1 sfp1_rx_los=0 sfp2_rx_los=0 acq(ch0,ch1)=00 ref_link(ch0,ch1)=11 ref_down_latched(ch0,ch1)=00 hdr_ref_valid(ch0,ch1)=11 echo(snap,clr,slip,gtrst)=0000 rst_obs=0 fingerprint=1 hdr_ref(ch0)=0x21 hdr_ref(ch1)=0x21 rxdv(ch0,ch1)=33
+  fingerprint bit 1 must be 1 (proves the probe maps to THIS build)
+
+RX_LOS READBACK:  sfp1_rx_los=0  sfp2_rx_los=0
+  (SFP RX_LOS is an open-collector module OUTPUT, active HIGH on loss of
+   signal; XDC sets PULLTYPE PULLUP so an empty cage reads 1.)
+  => AOC present and emitting on BOTH cages requires 0/0. Got 0/0
+
+TX_DIS: RTL drives both sfp*_tx_dis = 1'b0 unconditionally (p7a_top.v s.9).
+  Board-level consequence of that being wrong is a DARK link: with TX_DIS
+  high both modules stop emitting => RX_LOS would be 1/1 and no PRBS lock.
+  So the lock + LOS=0/0 below is the board evidence that TX_DIS really is low.
+
+@@@@@@ P7A >>> STAGE B2 -- RESTART MEASUREMENT WINDOW (VIO clear) AND WAIT FOR PRBS31 LOCK
+after clear: mmcm_locked=1 gtpowergood(ch1,ch0)=11 tx_reset_done=1 rx_reset_done=1 rx_cdr_stable=1 sfp1_rx_los=0 sfp2_rx_los=0 acq(ch0,ch1)=11 ref_link(ch0,ch1)=11 ref_down_latched(ch0,ch1)=00 hdr_ref_valid(ch0,ch1)=11 echo(snap,clr,slip,gtrst)=0000 rst_obs=0 fingerprint=1 hdr_ref(ch0)=0x21 hdr_ref(ch1)=0x21 rxdv(ch0,ch1)=33
+  (clear resets counters AND acq; acq re-arms after 64 consecutive matched words)
+waiting for acq on BOTH channels ...
+acq(both) = 1 after 0 ms
+  mmcm_locked=1 gtpowergood(ch1,ch0)=11 tx_reset_done=1 rx_reset_done=1 rx_cdr_stable=1 sfp1_rx_los=0 sfp2_rx_los=0 acq(ch0,ch1)=11 ref_link(ch0,ch1)=11 ref_down_latched(ch0,ch1)=00 hdr_ref_valid(ch0,ch1)=11 echo(snap,clr,slip,gtrst)=0000 rst_obs=0 fingerprint=1 hdr_ref(ch0)=0x21 hdr_ref(ch1)=0x21 rxdv(ch0,ch1)=33
+
+@@@@@@ P7A >>> STAGE B3 -- LEG 3: rxheader STABILITY (the criterion is STABILITY, not a value)
+  sample 0: hdr_ref ch0=0x21 ch1=0x21  valid=11  hdrs_cnt ch0=1555635 ch1=1555635  hdr_err_cnt ch0=0 ch1=0
+  sample 1: hdr_ref ch0=0x21 ch1=0x21  valid=11  hdrs_cnt ch0=7619955 ch1=7619955  hdr_err_cnt ch0=0 ch1=0
+  sample 2: hdr_ref ch0=0x21 ch1=0x21  valid=11  hdrs_cnt ch0=13656375 ch1=13656375  hdr_err_cnt ch0=0 ch1=0
+  sample 3: hdr_ref ch0=0x21 ch1=0x21  valid=11  hdrs_cnt ch0=19720995 ch1=19720995  hdr_err_cnt ch0=0 ch1=0
+  sample 4: hdr_ref ch0=0x21 ch1=0x21  valid=11  hdrs_cnt ch0=25782675 ch1=25782675  hdr_err_cnt ch0=0 ch1=0
+
+LEG3_ACQ              = 11
+LEG3_HDR_REF          = ch0=0x21 (33)   ch1=0x21 (33)
+LEG3_HDR_REF_VALID    = 11
+LEG3_HDRS_CNT         = ch0=31846620  ch1=31846620
+LEG3_HDR_ERR_CNT      = ch0=0  ch1=0   <-- must be 0 (header never deviates)
+LEG3_SAMPLES          = 33/33 33/33 33/33 33/33 33/33
+LEG3 = PASS (PRBS31 locked; 6-bit rxheader stable at the same constant while rxheadervalid)
+
+@@@@@@ P7A >>> STAGE C -- NEGATIVE CONTROL A: forced rxgearboxslip must DROP and RE-LOCK
+Rationale: rxgearboxslip moves the 64b/66b receiver block boundary. In a RAW
+datapath there is no gearbox to slip, so this action has no effect at all.
+While the link is locked the example checker emits NO slips of its own
+(_checking_64b66b_async.v: rxgearboxslip_ctr only advances while !match),
+so any error burst after this pulse is attributable to the pulse.
+
+BEFORE SLIP: err ch0=0 ch1=0  ref_link=11  ref_down_latched=00  slip_echo=0
+>>> pulsing raw_slip (one rising edge -> one gearbox slip on each channel)
+AFTER SLIP +2 s: err ch0=20000 ch1=20000  (delta ch0=20000 ch1=20000)
+  ref_link=11  ref_down_latched=11
+  slip_echo=0   bits advanced since before-slip = 20118770000
+  ref_down_latched BEFORE=00 -> AFTER=11   (sticky: 1 = the example bucket saw the link go down)
+  -> ref_down_latched latched 0->1 : 1
+>>> now measuring a CLEAN interval (re-lock check): 6 s with NO further slip
+CLEAN 6 s AFTER SLIP: err delta ch0=0 ch1=0   bits advanced=60115800000
+  ref_link=11  acq=11
+  mmcm_locked=1 gtpowergood(ch1,ch0)=11 tx_reset_done=1 rx_reset_done=1 rx_cdr_stable=1 sfp1_rx_los=0 sfp2_rx_los=0 acq(ch0,ch1)=11 ref_link(ch0,ch1)=11 ref_down_latched(ch0,ch1)=11 hdr_ref_valid(ch0,ch1)=11 echo(snap,clr,slip,gtrst)=0000 rst_obs=0 fingerprint=1 hdr_ref(ch0)=0x21 hdr_ref(ch1)=0x21 rxdv(ch0,ch1)=33
+
+NEGCTRL_A_ERR_BURST   = 1   (ch0 delta=20000, ch1 delta=20000, both must be >0)
+NEGCTRL_A_LINK_DROP   = 1   (ref_down_latched 0/0 -> 1/1)
+NEGCTRL_A_RELOCK      = 1   (next 6 s: 0 further errors, bits still advancing, ref_link back to 1/1)
+NEGCTRL_A = PASS (slip -> errors on BOTH channels + link-down latched, then clean re-lock)
+
+@@@@@@ P7A >>> STAGE D -- SHORT SANITY WINDOW: restart window, wait lock, measure 2 s
+  locked after 0 ms; mmcm_locked=1 gtpowergood(ch1,ch0)=11 tx_reset_done=1 rx_reset_done=1 rx_cdr_stable=1 sfp1_rx_los=0 sfp2_rx_los=0 acq(ch0,ch1)=11 ref_link(ch0,ch1)=11 ref_down_latched(ch0,ch1)=11 hdr_ref_valid(ch0,ch1)=11 echo(snap,clr,slip,gtrst)=0000 rst_obs=0 fingerprint=1 hdr_ref(ch0)=0x21 hdr_ref(ch1)=0x21 rxdv(ch0,ch1)=33
+  START  t=1790671949329822  err(ch0,ch1)=20000,20000 bits(ch0,ch1)=123683860000,123683860000 hdrs(ch0,ch1)=185525790,185525790 hdre(ch0,ch1)=0,0 fr_cyc=1932557959 rxcyc(ch0)=1932560302 rxdvcyc(ch0)=1932560302
+  win 1: dWords=318040781 dErr=0,0 dFr=318040623 ratio=1.000000  (= 1.562501e+08 64-bit words/s on the obs clock)  elapsed=2s
+  END    t=1790671951365366  err(ch0,ch1)=20000,20000 bits(ch0,ch1)=144040100000,144040100000 hdrs(ch0,ch1)=216060150,216060150 hdre(ch0,ch1)=0,0 fr_cyc=2250624363
+
+STAGE D RESULT (2 s)
+  wall = 2.035544 s   dFr = 318066404 (obs cycles)   windows = 1   ratio = 1.000000 .. 1.000000
+  ch0: bits=20356240000 err=0 hdrs=30534360 hdre=0  rate=1.000039e+10 bit/s (bits/wall)  1.562499e+08 words/s (dWords/dFr)  BER=0.000e+00
+  ch1: bits=20356240000 err=0 hdrs=30534360 hdre=0  rate=1.000039e+10 bit/s (bits/wall)  1.562499e+08 words/s (dWords/dFr)  BER=0.000e+00
+
+@@@@@@ P7A >>> STAGE E -- ACCEPTANCE BER WINDOW (3 s)
+
+@@@@@@ P7A >>> STAGE E -- ACCEPTANCE: restart window, wait lock, measure 3 s
+  locked after 0 ms; mmcm_locked=1 gtpowergood(ch1,ch0)=11 tx_reset_done=1 rx_reset_done=1 rx_cdr_stable=1 sfp1_rx_los=0 sfp2_rx_los=0 acq(ch0,ch1)=11 ref_link(ch0,ch1)=11 ref_down_latched(ch0,ch1)=11 hdr_ref_valid(ch0,ch1)=11 echo(snap,clr,slip,gtrst)=0000 rst_obs=0 fingerprint=1 hdr_ref(ch0)=0x21 hdr_ref(ch1)=0x21 rxdv(ch0,ch1)=33
+  START  t=1790671951474840  err(ch0,ch1)=20000,20000 bits(ch0,ch1)=145134810000,145134810000 hdrs(ch0,ch1)=217702215,217702215 hdre(ch0,ch1)=0,0 fr_cyc=2267729205 rxcyc(ch0)=2267731392 rxdvcyc(ch0)=2267731392
+  win 1: dWords=316774531 dErr=0,0 dFr=316774373 ratio=1.000000  (= 1.562501e+08 64-bit words/s on the obs clock)  elapsed=2s
+  END    t=1790671954513892  err(ch0,ch1)=20000,20000 bits(ch0,ch1)=175525330000,175525330000 hdrs(ch0,ch1)=263287995,263287995 hdre(ch0,ch1)=0,0 fr_cyc=2742580608
+
+=================== P7a BOARD ACCEPTANCE READOUT ===================
+ELAPSED WALL     = 3.039052 s   (dFr = 474851403 obs-domain 156.25 MHz cycles = 3.039049 s)
+SUB-WINDOWS      = 1   ratio(dWords/dFr) range = 1.000000 .. 1.000000
+                   -> expected 1.000000 for a 66/64 gearbox, 1.031250 for raw
+
+--- channel 0  = B->A (ch0 RX receives ch1 TX) ---
+BITS_CNT (payload) = 30390520000   (= 474851875 x 64-bit words)
+ERR_WORD_CNT       = 0
+HDRS_CNT           = 45585780   (words with rxheadervalid)
+HDR_ERR_CNT        = 0
+RATE (bits/wall)   = 1.000000e+10 bit/s   target 1.0e10 +-0.1%  dev=0.0000%
+RATE (words/dFr)   = 1.562502e+08 64-bit words/s  (x64 = 1.000001e+10 bit/s; 1.5625e8 words/s is the 66/64 gearbox answer)
+RATIO whole window = 1.000001   (dWords/dFr over the WHOLE run: 1.000000 = 66/64 gearbox, 1.031250 = raw)
+BER upper bound 95%CL = 9.871e-11  (0 errors in 30390520000 bit < 3/B)
+  criteria: bits>0=1  err==0=1  hdre==0=1  rate+-0.1%=1  subwindow-ratio==1.000=1  wholewindow-ratio==1.000=1  (subwindows=1)
+
+--- channel 1  = A->B (ch1 RX receives ch0 TX) ---
+BITS_CNT (payload) = 30390520000   (= 474851875 x 64-bit words)
+ERR_WORD_CNT       = 0
+HDRS_CNT           = 45585780   (words with rxheadervalid)
+HDR_ERR_CNT        = 0
+RATE (bits/wall)   = 1.000000e+10 bit/s   target 1.0e10 +-0.1%  dev=0.0000%
+RATE (words/dFr)   = 1.562502e+08 64-bit words/s  (x64 = 1.000001e+10 bit/s; 1.5625e8 words/s is the 66/64 gearbox answer)
+RATIO whole window = 1.000001   (dWords/dFr over the WHOLE run: 1.000000 = 66/64 gearbox, 1.031250 = raw)
+BER upper bound 95%CL = 9.871e-11  (0 errors in 30390520000 bit < 3/B)
+  criteria: bits>0=1  err==0=1  hdre==0=1  rate+-0.1%=1  subwindow-ratio==1.000=1  wholewindow-ratio==1.000=1  (subwindows=1)
+
+GEARBOX_RATIO_VERDICT = 1.000000 => the fabric interface carries 64 payload bits
+                        per 66 baud => the 64b/66b gearbox is IN THE DATAPATH
+                        (raw would read 1.031250 and ~1.0313e10 bit/s)
+P7A_BOARD_VERDICT = PASS
+P7A_VERDICT_END
+DONE
+
+==== DRY RUN RESULT ====
+catch rc = 0
+DBG fake_status        = 01E430C1FE7F0000A3787FE0
+DBG fake_value         = 01E430C1FE7F0000A3787FE0
+DBG get_property(IV)   = 01E430C1FE7F0000A3787FE0
+DBG probe dict         = NAME vio_status WIDTH 96 _KIND in
+DRYRUN  = PASS (no Tcl fault; hardware behaviour still unproven)

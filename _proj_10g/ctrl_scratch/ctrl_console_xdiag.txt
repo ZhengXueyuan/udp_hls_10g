@@ -1,0 +1,297 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Tue Sep 29 17:15:07 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source {D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\ctrl_scratch\extra_gate_diag.tcl}
+# set here [file normalize [file dirname [info script]]]
+# set ltx  $here/ibert_top_v3_corrected_map.ltx
+# set url 192.168.0.38:3121
+# if {[info exists ::env(CTRL_HWURL)]} { set url $::env(CTRL_HWURL) }
+# proc sec {s} { puts "\n@@@@@@ XDIAG >>> $s" ; flush stdout }
+# proc pget {o n} { if {[catch {set v [get_property $n $o]} e]} { return "<ERR:$e>" } ; return $v }
+# proc bit  {v n} { expr {($v >> $n) & 1} }
+# proc h2d  {s} { set s [string trim $s] ; if {[catch {expr "0x$s"} v]} { return -1 } ; return $v }
+# sec "X0 -- CONNECT (NO PROGRAMMING) + SAFETY GATE"
+
+@@@@@@ XDIAG >>> X0 -- CONNECT (NO PROGRAMMING) + SAFETY GATE
+# open_hw_manager
+# connect_hw_server -url $url
+INFO: [Labtools 27-2285] Connecting to hw_server url TCP:192.168.0.38:3121
+INFO: [Labtools 27-3415] Connecting to cs_server url TCP:localhost:0
+INFO: [Labtools 27-3417] Launching cs_server...
+INFO: [Labtools 27-2221] Launch Output:
+
+
+******** Xilinx cs_server v2025.2.0
+  ****** Build date   : Nov 14 2025-07:16:52
+    **** Build number : 2025.2.1763075812
+      ** Copyright 2017-2022 Xilinx, Inc. All Rights Reserved.
+      ** Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
+
+
+
+# current_hw_target [lindex [get_hw_targets] 0]
+# open_hw_target
+INFO: [Labtoolstcl 44-466] Opening hw_target 192.168.0.38:3121/xilinx_tcf/Digilent/210251391367
+# set dlist [get_hw_devices]
+# puts "device count = [llength $dlist]"
+device count = 1
+# foreach d $dlist { puts "DEVICE $d PART=[pget $d PART] IDCODE=[pget $d IDCODE_HEX]" }
+DEVICE xcku5p_0 PART=xcku5p IDCODE=04A62093
+# set tdev ""
+# foreach d $dlist { if {[pget $d IDCODE_HEX] eq "04A62093"} { set tdev $d } }
+# if {$tdev eq "" || [llength $dlist] != 1} {
+#     puts "XDIAG-ABORT: not the expected single xcku5p target -- doing nothing"
+#     exit 1
+# }
+# puts "SAFETY_GATE = PASS -> $tdev"
+SAFETY_GATE = PASS -> xcku5p_0
+# current_hw_device $tdev
+# catch {set_property PROBES.FILE $ltx $tdev}
+# catch {set_property FULL_PROBES.FILE $ltx $tdev}
+# catch {refresh_hw_device -update_hw_probes true $tdev}
+INFO: [Labtools 27-2302] Device xcku5p (JTAG device index = 0) is programmed with a design that has 1 IBERT core(s).
+INFO: [Labtools 27-2302] Device xcku5p (JTAG device index = 0) is programmed with a design that has 1 VIO core(s).
+# puts "DONE_PIN = [pget $tdev REGISTER.CONFIG_STATUS.BIT\[14\]_DONE_PIN]"
+DONE_PIN = 1
+# puts "IBERT cores = [llength [get_hw_sio_iberts]]   VIO cores = [llength [get_hw_vios]]"
+IBERT cores = 1   VIO cores = 1
+# set v [lindex [get_hw_vios] 0]
+# array set V {}
+# foreach p [get_hw_probes -of_objects $v] { set V([pget $p NAME]) $p }
+# set p1 "" 
+# set p2 "" 
+# set phb ""
+# foreach nm [array names V] {
+#     if {[string match "sfp1_rx_los*" $nm]} { set p1 $V($nm) }
+#     if {[string match "sfp2_rx_los*" $nm]} { set p2 $V($nm) }
+#     if {[string match "hb_cnt*"     $nm]} { set phb $V($nm) }
+# }
+# puts "resolved LOS probes: sfp1(A)='$p1'  sfp2(B)='$p2'  hb='$phb'"
+resolved LOS probes: sfp1(A)='sfp1_rx_los_i_IBUF'  sfp2(B)='sfp2_rx_los_i_IBUF'  hb='hb_cnt'
+# sec "X1 -- LOS stability (5 samples, 2 s apart) + heartbeat positive evidence"
+
+@@@@@@ XDIAG >>> X1 -- LOS stability (5 samples, 2 s apart) + heartbeat positive evidence
+# set prev ""
+# for {set i 1} {$i <= 5} {incr i} {
+#     catch {refresh_hw_vio $v}
+#     set a [get_property INPUT_VALUE $p1]
+#     set b [get_property INPUT_VALUE $p2]
+#     set h [expr {$phb ne "" ? [get_property INPUT_VALUE $phb] : "<none>"}]
+#     set chg "<first>" ; if {$prev ne ""} { set chg [expr {$h ne $prev}] }
+#     set prev $h
+#     puts "  LOS-SAMPLE-$i  sfp1_rx_los=$a  sfp2_rx_los=$b  hb_cnt=$h (changed=$chg)"
+#     after 2000
+# }
+  LOS-SAMPLE-1  sfp1_rx_los=1  sfp2_rx_los=0  hb_cnt=2 (changed=<first>)
+  LOS-SAMPLE-2  sfp1_rx_los=1  sfp2_rx_los=0  hb_cnt=0 (changed=1)
+  LOS-SAMPLE-3  sfp1_rx_los=1  sfp2_rx_los=0  hb_cnt=2 (changed=1)
+  LOS-SAMPLE-4  sfp1_rx_los=1  sfp2_rx_los=0  hb_cnt=0 (changed=1)
+  LOS-SAMPLE-5  sfp1_rx_los=1  sfp2_rx_los=0  hb_cnt=3 (changed=1)
+# set ibs [get_hw_sio_iberts]
+# catch {refresh_hw_sio $ibs}
+# set gts [lsort [get_hw_sio_gts]]
+# proc gtsnap {tag} {
+#     set gts [lsort [get_hw_sio_gts]]
+#     puts "  ----- $tag -----"
+#     foreach g $gts {
+#         puts "    [pget $g DISPLAY_NAME]  LINE_RATE=[pget $g LINE_RATE]  LOOPBACK=[pget $g LOOPBACK]"
+#         puts "        RX_BER=[pget $g RX_BER]  RXCDRLOCK=[pget $g PORT.RXCDRLOCK]  RXCDRLOCKSTICKY=[pget $g LOGIC.RXCDRLOCKSTICKY]  RXPRBSLOCKED=[pget $g PORT.RXPRBSLOCKED]"
+#         puts "        RX_BITS=[pget $g RX_RECEIVED_BIT_COUNT]  ERRBIT=[pget $g LOGIC.ERRBIT_COUNT]  TX_PATTERN=[pget $g TX_PATTERN]  RX_PATTERN=[pget $g RX_PATTERN]"
+#     }
+# }
+# sec "X2 -- BASELINE (external AOC only, no internal loopback): the decisive read"
+
+@@@@@@ XDIAG >>> X2 -- BASELINE (external AOC only, no internal loopback): the decisive read
+# gtsnap "external AOC, LOOPBACK=None"
+  ----- external AOC, LOOPBACK=None -----
+    MGT_X0Y4  LINE_RATE=10.313  LOOPBACK=None
+        RX_BER=0.49996920935787093  RXCDRLOCK=1  RXCDRLOCKSTICKY=0  RXPRBSLOCKED=0
+        RX_BITS=2242182599200  ERRBIT=01050222386E  TX_PATTERN=PRBS 7-bit  RX_PATTERN=PRBS 7-bit
+    MGT_X0Y5  LINE_RATE=10.313  LOOPBACK=None
+        RX_BER=0.49999952991499225  RXCDRLOCK=1  RXCDRLOCKSTICKY=0  RXPRBSLOCKED=0
+        RX_BITS=2242407187200  ERRBIT=01050CE10BD6  TX_PATTERN=PRBS 7-bit  RX_PATTERN=PRBS 7-bit
+    MGT_X0Y6  LINE_RATE=10.313  LOOPBACK=None
+        RX_BER=0.49996769039299915  RXCDRLOCK=1  RXCDRLOCKSTICKY=0  RXPRBSLOCKED=0
+        RX_BITS=2242724029360  ERRBIT=01051210C4FC  TX_PATTERN=PRBS 7-bit  RX_PATTERN=PRBS 7-bit
+    MGT_X0Y7  LINE_RATE=10.304  LOOPBACK=None
+        RX_BER=0.49697776959940082  RXCDRLOCK=1  RXCDRLOCKSTICKY=0  RXPRBSLOCKED=0
+        RX_BITS=2241200788880  ERRBIT=01035542C6C2  TX_PATTERN=PRBS 7-bit  RX_PATTERN=PRBS 7-bit
+# puts ""
+
+# puts "  ^ INTERPRETATION KEY (fixed before reading it):"
+  ^ INTERPRETATION KEY (fixed before reading it):
+# puts "    RXCDRLOCK=1 on a cabled channel  => a real 10.3125 GBd signal IS arriving"
+    RXCDRLOCK=1 on a cabled channel  => a real 10.3125 GBd signal IS arriving
+# puts "                                        at that GT receiver (light present AND usable)."
+                                        at that GT receiver (light present AND usable).
+# puts "    RXCDRLOCK=0 on a cabled channel  => nothing recoverable arrives there, even if"
+    RXCDRLOCK=0 on a cabled channel  => nothing recoverable arrives there, even if
+# puts "                                        its RX_LOS pin reads 0 (=> that LOS=0 is not light)."
+                                        its RX_LOS pin reads 0 (=> that LOS=0 is not light).
+# sec "X3 -- datapath / pattern config of X0Y4 (context: is the image's BER setup intact?)"
+
+@@@@@@ XDIAG >>> X3 -- datapath / pattern config of X0Y4 (context: is the image's BER setup intact?)
+# set g0 [lindex $gts 0]
+# foreach p {TX_PATTERN RX_PATTERN TX_DATA_WIDTH RX_DATA_WIDTH TX_INT_DATAWIDTH RX_INT_DATAWIDTH TXGEARBOX_EN RXGEARBOX_EN TXOUT_DIV RXOUT_DIV TX_PLL RX_PLL} {
+#     puts "    $p = [pget $g0 $p]"
+# }
+    TX_PATTERN = PRBS 7-bit
+    RX_PATTERN = PRBS 7-bit
+    TX_DATA_WIDTH = 80
+    RX_DATA_WIDTH = 80
+    TX_INT_DATAWIDTH = 2
+    RX_INT_DATAWIDTH = 2
+    TXGEARBOX_EN = FALSE
+    RXGEARBOX_EN = FALSE
+    TXOUT_DIV = 1
+    RXOUT_DIV = 1
+    TX_PLL = <ERR:ERROR: [Labtoolstcl 44-154] Property 'TX_PLL' does not exist in hw_sio_gt '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y4'
+>
+    RX_PLL = <ERR:ERROR: [Labtoolstcl 44-154] Property 'RX_PLL' does not exist in hw_sio_gt '192.168.0.38:3121/xilinx_tcf/Digilent/210251391367/0_1_0_0/IBERT/Quad_225/MGT_X0Y4'
+>
+# proc setloop {mode} {
+#     foreach g [lsort [get_hw_sio_gts]] {
+#         set rc [catch {set_property LOOPBACK $mode $g} e]
+#         catch {commit_hw_sio $g}
+#         puts "    set LOOPBACK '$mode' -> [pget $g DISPLAY_NAME] rc=$rc $e"
+#     }
+# }
+# proc measure {tag secs} {
+#     set gts [lsort [get_hw_sio_gts]]
+#     foreach g $gts {
+#         catch {set_property LOGIC.MGT_ERRCNT_RESET_CTRL 1 $g}
+#         catch {set_property LOGIC.RXPRBSERRSTICKYRST 1 $g}
+#     }
+#     after 300
+#     foreach g $gts {
+#         catch {set_property LOGIC.MGT_ERRCNT_RESET_CTRL 0 $g}
+#         catch {set_property LOGIC.RXPRBSERRSTICKYRST 0 $g}
+#     }
+#     after 300
+#     catch {refresh_hw_sio [get_hw_sio_iberts]}
+#     set t0 {}
+#     foreach g $gts { lappend t0 [list [pget $g RX_RECEIVED_BIT_COUNT] [h2d [pget $g LOGIC.ERRBIT_COUNT]]] }
+#     after [expr {$secs*1000}]
+#     catch {refresh_hw_sio [get_hw_sio_iberts]}
+#     puts "  ===== MEASURE $tag (${secs}s window) ====="
+#     set i 0
+#     foreach g $gts {
+#         set b0 [lindex [lindex $t0 $i] 0]
+#         set e0 [lindex [lindex $t0 $i] 1]
+#         set b1 [pget $g RX_RECEIVED_BIT_COUNT]
+#         set e1 [h2d [pget $g LOGIC.ERRBIT_COUNT]]
+#         set db [expr {$b1 - $b0}] ; set de [expr {$e1 - $e0}]
+#         set ber "<n/a>" ; if {$db > 0 && $de >= 0} { set ber [expr {double($de)/double($db)}] }
+#         puts "    [pget $g DISPLAY_NAME]  dBITS=$db  dERR=$de  BER_DELTA=$ber  RX_BER=[pget $g RX_BER]  RXCDRLOCK=[pget $g PORT.RXCDRLOCK]  RXPRBSLOCKED=[pget $g PORT.RXPRBSLOCKED]"
+#         incr i
+#     }
+# }
+# sec "X4 -- POSITIVE CONTROL: NEAR-END PCS loopback on X0Y4/X0Y5 (no optics involved)"
+
+@@@@@@ XDIAG >>> X4 -- POSITIVE CONTROL: NEAR-END PCS loopback on X0Y4/X0Y5 (no optics involved)
+# setloop {Near-End PCS}
+    set LOOPBACK 'Near-End PCS' -> MGT_X0Y4 rc=0 
+    set LOOPBACK 'Near-End PCS' -> MGT_X0Y5 rc=0 
+    set LOOPBACK 'Near-End PCS' -> MGT_X0Y6 rc=0 
+    set LOOPBACK 'Near-End PCS' -> MGT_X0Y7 rc=0 
+# after 6000
+# catch {refresh_hw_sio $ibs}
+# gtsnap "near-end PCS loopback"
+  ----- near-end PCS loopback -----
+    MGT_X0Y4  LINE_RATE=10.314  LOOPBACK=Near-End PCS
+        RX_BER=3.3347223858834475e-09  RXCDRLOCK=1  RXCDRLOCKSTICKY=0  RXPRBSLOCKED=0
+        RX_BITS=72269884000  ERRBIT=0000000000F1  TX_PATTERN=PRBS 7-bit  RX_PATTERN=PRBS 7-bit
+    MGT_X0Y5  LINE_RATE=10.312  LOOPBACK=Near-End PCS
+        RX_BER=3.3014941036166239e-09  RXCDRLOCK=1  RXCDRLOCKSTICKY=0  RXPRBSLOCKED=0
+        RX_BITS=72391466560  ERRBIT=0000000000EF  TX_PATTERN=PRBS 7-bit  RX_PATTERN=PRBS 7-bit
+    MGT_X0Y6  LINE_RATE=10.314  LOOPBACK=Near-End PCS
+        RX_BER=2.7146204952224679e-09  RXCDRLOCK=1  RXCDRLOCKSTICKY=0  RXPRBSLOCKED=0
+        RX_BITS=72569996560  ERRBIT=0000000000C5  TX_PATTERN=PRBS 7-bit  RX_PATTERN=PRBS 7-bit
+    MGT_X0Y7  LINE_RATE=10.313  LOOPBACK=Near-End PCS
+        RX_BER=3.1981809585646828e-09  RXCDRLOCK=1  RXCDRLOCKSTICKY=0  RXPRBSLOCKED=0
+        RX_BITS=72853913840  ERRBIT=0000000000E9  TX_PATTERN=PRBS 7-bit  RX_PATTERN=PRBS 7-bit
+# measure "NEAR-END PCS (internal)" 8
+  ===== MEASURE NEAR-END PCS (internal) (8s window) =====
+    MGT_X0Y4  dBITS=85645421920  dERR=0  BER_DELTA=0.0  RX_BER=1.3971123041495334e-09  RXCDRLOCK=1  RXPRBSLOCKED=0
+    MGT_X0Y5  dBITS=85761503120  dERR=0  BER_DELTA=0.0  RX_BER=1.3832520909599757e-09  RXCDRLOCK=1  RXPRBSLOCKED=0
+    MGT_X0Y6  dBITS=85738384560  dERR=0  BER_DELTA=0.0  RX_BER=1.1389303870669604e-09  RXCDRLOCK=1  RXPRBSLOCKED=0
+    MGT_X0Y7  dBITS=85752099600  dERR=0  BER_DELTA=0.0  RX_BER=1.3455610293681489e-09  RXCDRLOCK=1  RXPRBSLOCKED=0
+# sec "X5 -- POSITIVE CONTROL 2: NEAR-END PMA loopback on X0Y4/X0Y5"
+
+@@@@@@ XDIAG >>> X5 -- POSITIVE CONTROL 2: NEAR-END PMA loopback on X0Y4/X0Y5
+# setloop {Near-End PMA}
+    set LOOPBACK 'Near-End PMA' -> MGT_X0Y4 rc=0 
+    set LOOPBACK 'Near-End PMA' -> MGT_X0Y5 rc=0 
+    set LOOPBACK 'Near-End PMA' -> MGT_X0Y6 rc=0 
+    set LOOPBACK 'Near-End PMA' -> MGT_X0Y7 rc=0 
+# after 6000
+# catch {refresh_hw_sio $ibs}
+# gtsnap "near-end PMA loopback"
+  ----- near-end PMA loopback -----
+    MGT_X0Y4  LINE_RATE=10.313  LOOPBACK=Near-End PMA
+        RX_BER=3.7427892358279847e-09  RXCDRLOCK=1  RXCDRLOCKSTICKY=0  RXPRBSLOCKED=0
+        RX_BITS=64123300800  ERRBIT=0000000000F0  TX_PATTERN=PRBS 7-bit  RX_PATTERN=PRBS 7-bit
+    MGT_X0Y5  LINE_RATE=10.312  LOOPBACK=Near-End PMA
+        RX_BER=3.0944285927182401e-09  RXCDRLOCK=1  RXCDRLOCKSTICKY=0  RXPRBSLOCKED=0
+        RX_BITS=64309126560  ERRBIT=0000000000C7  TX_PATTERN=PRBS 7-bit  RX_PATTERN=PRBS 7-bit
+    MGT_X0Y6  LINE_RATE=10.313  LOOPBACK=Near-End PMA
+        RX_BER=3.5479954888337392e-09  RXCDRLOCK=1  RXCDRLOCKSTICKY=0  RXPRBSLOCKED=0
+        RX_BITS=64543486800  ERRBIT=0000000000E5  TX_PATTERN=PRBS 7-bit  RX_PATTERN=PRBS 7-bit
+    MGT_X0Y7  LINE_RATE=10.314  LOOPBACK=Near-End PMA
+        RX_BER=3.6849156617374207e-09  RXCDRLOCK=1  RXCDRLOCKSTICKY=0  RXPRBSLOCKED=0
+        RX_BITS=64587638320  ERRBIT=0000000000EE  TX_PATTERN=PRBS 7-bit  RX_PATTERN=PRBS 7-bit
+# measure "NEAR-END PMA (internal)" 8
+  ===== MEASURE NEAR-END PMA (internal) (8s window) =====
+    MGT_X0Y4  dBITS=85984964080  dERR=0  BER_DELTA=0.0  RX_BER=1.5064517585285157e-09  RXCDRLOCK=1  RXPRBSLOCKED=0
+    MGT_X0Y5  dBITS=85973058800  dERR=0  BER_DELTA=0.0  RX_BER=1.2487769798297868e-09  RXCDRLOCK=1  RXPRBSLOCKED=0
+    MGT_X0Y6  dBITS=86099746400  dERR=0  BER_DELTA=0.0  RX_BER=1.435454107749884e-09  RXCDRLOCK=1  RXPRBSLOCKED=0
+    MGT_X0Y7  dBITS=86214123040  dERR=0  BER_DELTA=0.0  RX_BER=1.489703784355163e-09  RXCDRLOCK=1  RXPRBSLOCKED=0
+# sec "X6 -- RESTORE LOOPBACK=None on all four GTs and verify"
+
+@@@@@@ XDIAG >>> X6 -- RESTORE LOOPBACK=None on all four GTs and verify
+# setloop None
+    set LOOPBACK 'None' -> MGT_X0Y4 rc=0 
+    set LOOPBACK 'None' -> MGT_X0Y5 rc=0 
+    set LOOPBACK 'None' -> MGT_X0Y6 rc=0 
+    set LOOPBACK 'None' -> MGT_X0Y7 rc=0 
+# after 4000
+# catch {refresh_hw_sio $ibs}
+# gtsnap "restored to None"
+  ----- restored to None -----
+    MGT_X0Y4  LINE_RATE=10.313  LOOPBACK=None
+        RX_BER=0.49995569788986971  RXCDRLOCK=1  RXCDRLOCKSTICKY=0  RXPRBSLOCKED=0
+        RX_BITS=43777440720  ERRBIT=0005188DC5FF  TX_PATTERN=PRBS 7-bit  RX_PATTERN=PRBS 7-bit
+    MGT_X0Y5  LINE_RATE=10.313  LOOPBACK=None
+        RX_BER=0.50000023248334269  RXCDRLOCK=1  RXCDRLOCKSTICKY=0  RXPRBSLOCKED=0
+        RX_BITS=44028960880  ERRBIT=0005202A7834  TX_PATTERN=PRBS 7-bit  RX_PATTERN=PRBS 7-bit
+    MGT_X0Y6  LINE_RATE=10.313  LOOPBACK=None
+        RX_BER=0.4999843893912424  RXCDRLOCK=1  RXCDRLOCKSTICKY=0  RXPRBSLOCKED=0
+        RX_BITS=44196931120  ERRBIT=000525214C03  TX_PATTERN=PRBS 7-bit  RX_PATTERN=PRBS 7-bit
+    MGT_X0Y7  LINE_RATE=10.304  LOOPBACK=None
+        RX_BER=0.49698573905835097  RXCDRLOCK=1  RXCDRLOCKSTICKY=0  RXPRBSLOCKED=0
+        RX_BITS=44425007520  ERRBIT=000523FCA07B  TX_PATTERN=PRBS 7-bit  RX_PATTERN=PRBS 7-bit
+# set bad 0
+# foreach g $gts { if {[pget $g LOOPBACK] ne "None"} { incr bad } }
+# puts "  GTs not back to None: $bad  (must be 0)"
+  GTs not back to None: 0  (must be 0)
+# sec "X7 -- final LOS"
+
+@@@@@@ XDIAG >>> X7 -- final LOS
+# catch {refresh_hw_vio $v}
+# puts "  FINAL los sfp1(A)=[get_property INPUT_VALUE $p1]  sfp2(B)=[get_property INPUT_VALUE $p2]"
+  FINAL los sfp1(A)=1  sfp2(B)=0
+# puts ""
+
+# puts "XDIAG-COMPLETE -- nothing was programmed; LOOPBACK restored."
+XDIAG-COMPLETE -- nothing was programmed; LOOPBACK restored.
+# disconnect_hw_server
+# puts "DONE"
+DONE
+INFO: [Common 17-206] Exiting Vivado at Tue Sep 29 17:16:03 2026...
+BAT_EXIT=0
