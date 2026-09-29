@@ -1,0 +1,27 @@
+=== soak_postcheck 2026-09-29 15:32:43 ===
+IDENT: MAGIC=0x50360001 BUILD_ID=0x00000006 0xB0=0xffffffff
+
+--- (1) W24 dp_free frequency, ns-precision wall clock, two trigger->read ends ---
+  A(W24)=268716692  B(W24)=1844880773  dW=1576164081  dt=10.087973833s
+  => dp clock = 156.2419 MHz  (window 10.088 s, < 27.49 s wrap period)
+
+--- (2) clean quiescent-state check (retry until FROZEN) ---
+  attempt 1: MOVING: W0(2608->2609) W1(342899->343199) W6(2608->2609) W16(353331->353635) W30(2608->2609) W31(332467->332763)  (background frame arrived; retrying)
+  attempt 2: FROZEN (in-flight frames drained, no background traffic)
+  W0=2609 W1=343199 W30=2609 W31=332763 W32=0 W33=0
+  conservation: W30-W0-W32 = 0 (want 0)   W31-(W1-4*W0+W33) = 0 (want 0)
+  raw difference W1-W31 = 10436  (= 4*W0 - W33 = 10436)
+
+--- (3) health words on the LAST snapshot (gen=363) ---
+  W17 = 0
+  W18 = 0
+  W19 = 0
+  W21 = 0
+  W32 = 0
+  W33 = 0
+  W34 = 0
+  W35 = 0
+  W3  = 0
+  W4  = 0
+  W25 = 1
+POSTCHECK_DONE
