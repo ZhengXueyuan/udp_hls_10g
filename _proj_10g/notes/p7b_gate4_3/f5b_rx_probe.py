@@ -118,9 +118,18 @@ def main():
     d11 = dd(a0, a1, "W11")
     d13a = dd(a0, a1, "W13")
     d13b = dd(a1, a2, "W13")
+    d10all = dd(a0, a2, "W10")
+    d11all = dd(a0, a2, "W11")
+    # ⚠️ 2026-09-30 订正 (P7B_W13_AUDIT.md §②-V4): 原文把 J_f5b 的 FAIL 归因成 "校验器是真空门" ——
+    #   这是**对 oracle 能力的错误指控**, 也是唯一一条会推翻"校验器有牙"这个正确结论的假证据。
+    #   真因: 本探针喂的是 **TCP** 载荷, 而本构建的 app 是 **UDP** 版 ⇒ 三块快照 W10=0x1 / W11=0x64
+    #   **全程不变** ⇒ ΔW11 = 0 ⇒ **载荷从没喂进 app** ⇒ "期望 ΔW13 > 0" 这个前提本就不成立。
+    #   校验器**有牙**: 教学期 G9 +1991 / G10 +1995; 逐字节精确性的反证见
+    #   ISSUE_RX_BYTE_CORRUPTION.md:207-210。
     print("J_f5a 正确图案: ΔW11=%d (期望 >=%d) ; ΔW13=%d (期望 0) ⇒ %s"
           % (d11, a.n, d13a, "PASS" if (d11 >= a.n and d13a == 0) else "FAIL"))
-    print("J_f5b 错误图案: ΔW13=%d (期望 >0) ⇒ %s" % (d13b, "PASS" if d13b > 0 else "FAIL(校验器是真空门)"))
+    print("J_f5b 错误图案: ΔW13=%d (期望 >0) ⇒ %s"
+          % (d13b, "PASS" if d13b > 0 else "未测(未喂进 app: ΔW10=%d, ΔW11=%d)" % (d10all, d11all)))
     print("附: ΔW0=%d ΔW3=%d ΔW10=%d ΔW14=%d ΔW15=%d ΔW22=%d ΔW23=%d"
           % (dd(a0, a2, "W0"), dd(a0, a2, "W3"), dd(a0, a2, "W10"), dd(a0, a2, "W14"),
              dd(a0, a2, "W15"), dd(a0, a2, "W22"), dd(a0, a2, "W23")))

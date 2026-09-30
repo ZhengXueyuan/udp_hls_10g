@@ -1,0 +1,137 @@
+#!/bin/bash
+# p7b_snap.sh -- 板侧 61 字快照窗口的取数器 (P7B-BIZ: BID=7 (合体后 8) / SNAP_NW=61)
+#   ⚠️ 旧位流 (RATE 轮, 51 字): `NW=51 UNIMPL_ADDR=0xEC bash p7b_snap.sh ...`
+#
+# 协议 (源码唯一权威: board/wrapper_p4.v 的 `snap_dout_all` 装配 (55 字, 逐项带槽号注释);
+#        读法样板 _proj_pcie/p6e_snap_check.sh):
+#   ⭐ P7B-BIZ 新增 6 字:
+#      W51 app_tx_bytes / W52 app_tx_frames / W53 app_rx_bytes /
+#      W54 app_mismatch / W55 tx_stat_retx / W56 app_udp_pattern.stat_tx_ovf /
+#      W57 tx_retx_hi (回卷重放上界) / W58 tx_retx_active (会话进行中) /
+#      W59/W60 slow_tx_adp / slow_rx_adp 的 stat_fifo_ovf (拒写守卫, 恒 0)
+#   字 Wi 地址 = 0x20 + 4*i       触发 = 写 0x18=1       done = 0x1c 的 bit1      gen = 0x1c>>16
+#   ⚠️ reg_rw 的第 3 个参数 `w` 是**位宽**(word), 不是 write —— 读就是 `reg_rw $D 0x20 w`
+#   ⚠️ 0xffffffff **不是数据**, 是 SLVERR = "这次读没成功"。窗口内出现它 => 整窗作废。
+#   ⚠️ 每次读数必须**自证是新一代** (gen 恰好 +1), 否则读的是上一次锁存的陈旧值
+#      (全局教训 32/33; RATE 轮靠这条抓出过"恰好 2×"的假频率)。
+#
+# 需要 root (/dev/xdma0_user 是 crw------- root): 用 tools/peer_ssh.py --sudo 跑本脚本。
+#
+# 用法:
+#   bash p7b_snap.sh id                      # 身份 + 通道活性 (0x00/0x04/0x14 + gen)
+#   bash p7b_snap.sh full TAG                # 触发一次 + 打全 61 字 (带名字)
+#   bash p7b_snap.sh snap TAG [W1 W2 ...]    # 触发一次 + 只打指定字 (省时)
+#   bash p7b_snap.sh pair WORD SECS TAG      # 两点**各自自证**的差分 (速率用)
+set -u
+T=${P7B_TOOLS:-/home/a/xdma_test/dma_ip_drivers-patched/XDMA/linux-kernel/tools}
+D=/dev/xdma0_user
+# 几何与身份可从环境覆盖 —— **一旦往窗口里加字, 这三个值必须跟着改**
+# (NW 的单一真值源 = board/wrapper_p4.v 的 `SNAP_NW_P6E`; 未实现地址 = 0x20+4*NW)
+#   ⚠️ **NW 上限 = 119** (读侧译码 7 位 ⇒ 字 0..127; 快照从字 8 起; 负对照需留 1 个空字)。
+#      红线随之从"≥ 0x100 回绕" 改成 **"绝不能挑 ≥ 0x200"**
+#      (0x200 在 7 位译码下回绕到 word 0 = MAGIC ⇒ 假 FAIL)。
+NW=${NW:-61}
+UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 61 ⇒ 0x114 (51 ⇒ 0xEC)
+EXPECT_BID=${EXPECT_BID:-0x00000008}
+
+rd(){ $T/reg_rw $D "$1" w 2>/dev/null | tail -1 | sed 's/.*: *//' | grep -oE '^0x[0-9a-fA-F]+'; }
+addr(){ printf '0x%X' $(( 0x20 + 4*$1 )); }
+
+# ⚠️ 非 root 时 /dev/xdma0_user (crw------- root root) 打不开 => 每条读都是**空串**。
+#    空读 != 真 0 (本脚本的 rd 已把非 0x 开头的输出滤掉 => 判据会安全地 FAIL 而不是假通过),
+#    但先把原因说清楚, 免得被误读成"板子死了"。
+if [ "$(id -u)" -ne 0 ]; then
+  echo "PRECHECK_FAIL 非 root: /dev/xdma0_user 打不开 => 所有读都是空串。"
+  echo "  跑法: PEER_PW=... python tools/peer_ssh.py --sudo 'bash /tmp/p7b_biz/p7b_snap.sh $*'"
+  exit 3
+fi
+[ -e "$T/reg_rw" ] || { echo "PRECHECK_FAIL 找不到 reg_rw: $T/reg_rw"; exit 3; }
+
+declare -A NAME=(
+ [0]=rx_stat_frames        [1]=rx_stat_bytes         [2]=wl_last_lastframelen
+ [3]=rx_stat_crc_err       [4]=rx_stat_drop          [5]=gmii_free_FE
+ [6]=srx_stat_commit       [7]=stx_stat_frames      [8]=udpapp_tx_frames
+ [9]=udpapp_tx_bytes      [10]=udpapp_rx_frames    [11]=udpapp_rx_bytes
+ [12]=udpapp_rx_null      [13]=udpapp_mismatch     [14]=tx_stat_frames_TCP
+ [15]=tx_stat_bytes_TCP   [16]=srx_hls_bytes       [17]=hr_cnt_hlsreset
+ [18]=stx_stat_purge      [19]=srx_stat_drop       [20]=mac_tx_frames
+ [21]=tx_stat_abort       [22]=rx_stat_pass_TCP    [23]=rx_stat_nonmatch_TCP
+ [24]=dp_free_DP          [25]=mmcm_locked         [26]=rxcdc_full_cycles
+ [27]=rxcdc_occ_max       [28]=txcdc_occ_max       [29]=txwire_stall_cycles
+ [30]=rxcdc_out_frames    [31]=rxcdc_out_bytes     [32]=rx_stat_drop_partial
+ [33]=rx_stat_orphan_bytes[34]=rx_stat_drop_full   [35]=rx_stat_fifo_ovf
+ [36]=mrx_stat_rx_words   [37]=mrx_stat_rx_pay_bytes[38]=rxcdc_ovf_cnt
+ [39]=pcs_status_bundle   [40]=pcs_evt_bundle      [41]=mtx_stat_flush_words
+ [42]=mtx_stat_flush_done [43]=mtx_stat_tx_words  [44]=mtx_stat_tx_ctrl_char
+ [45]=txcdc_ovf_cnt       [46]=cls_dbg_stat_ovf    [47]=cls_dbg_stat_route_ovf
+ [48]=cls_dbg_stat_stall_in[49]=cls_dbg_occ       [50]=tx_clk_act
+ # ⚠️ W51..W60 = P7B-BIZ 新增的 10 个字 (业务观测面 + 重传会话定性 + 两个拒写守卫)
+ #    ⇒ **NW 必须从 51 改成 61** (Stage 2 前置闸)。
+ #    地址由 NW 派生: UNIMPL_ADDR = 0x20+4*61 = **0x114**。逐字归属见
+ #    `board/wrapper_p4.v` 的装配段 (源码是唯一权威)。
+ [56]=udpapp_tx_ovf        [57]=tx_retx_hi          [58]=tx_retx_active
+ [59]=stx_stat_fifo_ovf    [60]=srx_stat_fifo_ovf
+ [56]=udpapp_tx_ovf_stat_tx_ovf
+)
+
+id_check(){
+  local m b k u
+  m=$(rd 0x00); b=$(rd 0x04); k=$(rd 0x14); u=$(rd "$UNIMPL_ADDR")
+  echo "ID_MAGIC $m   (want 0x50360001)"
+  echo "ID_BID   $b   (want $EXPECT_BID = 本构建的 BUILD_ID)"
+  echo "ID_MARKER $k  (want 0xdeadbeef)"
+  echo "ID_UNIMPL $u  (want 0xffffffff: 未实现地址必须走 SLVERR)"
+  if [ "$m" = "0xffffffff" ]; then
+    echo "ID_FAIL 通道不应答 (0x00 = 0xffffffff)。按序查:"
+    echo "  1) 烧录后是否做过 remove+rescan (配方: _proj_10g/notes/P7B_PCIE_RESCAN_RECOVERY.md §3; **不必重启对端机**)"
+    echo "  2) lspci 里 LnkSta 是否 x4 (x0 => 场景 A, 只有重启能救)"
+    echo "  3) xdma 驱动是否 insmod"
+    return 1
+  fi
+  [ "$m" = "0x50360001" ] && [ "$b" = "$EXPECT_BID" ] || { echo "ID_FAIL 身份不符 (烧了别的位流? 期望 BID=$EXPECT_BID)"; return 1; }
+  return 0
+}
+
+trig(){   # 触发一次并断言 gen 恰好 +1; 结果在 G0/G1
+  local g0 g1 s i
+  g0=$(rd 0x1c); g0=$(( (g0 >> 16) & 0xffff ))
+  $T/reg_rw $D 0x18 w 0x1 >/dev/null 2>&1
+  s=""
+  for i in $(seq 1 400); do s=$(rd 0x1c); [ -z "$s" ] && continue
+     [ $(( s & 2 )) -ne 0 ] && break; sleep 0.002; done
+  if [ -z "$s" ] || [ $(( s & 2 )) -eq 0 ]; then echo "GEN_FAIL done 不置 (该域没时钟 / CDC 卡住)"; return 1; fi
+  g1=$(rd 0x1c); g1=$(( (g1 >> 16) & 0xffff ))
+  if [ $(( (g1 - g0 + 65536) % 65536 )) -ne 1 ]; then
+     echo "GEN_FAIL gen 不是恰好 +1 ($g0 -> $g1) => 有并发写者, 本代读数不可归因"; return 2; fi
+  G0=$g0; G1=$g1; return 0
+}
+G0=0; G1=0
+
+dump_words(){   # dump_words <tag> [字列表...] (空 = 全部)
+  local tag="$1"; shift
+  local list=("$@"); [ ${#list[@]} -eq 0 ] && list=($(seq 0 $((NW-1))))
+  local i v nff=0
+  echo "SNAP_BEGIN $tag gen=$G1"
+  for i in "${list[@]}"; do
+    v=$(rd "$(addr "$i")")
+    [ "$v" = "0xffffffff" ] && nff=$((nff+1))
+    printf 'W%-3s %-6s %-22s %s\n' "$i" "$(addr "$i")" "${NAME[$i]:-?}" "$v"
+  done
+  echo "SNAP_END $tag nff=$nff"
+  [ "$nff" -eq 0 ] || { echo "SNAP_FAIL 窗口内有 $nff 个 0xffffffff (SLVERR 混入, 不是数据) => 整窗作废"; return 1; }
+}
+
+case "${1:-}" in
+  id)   id_check || exit 1; echo "ID_OK $(date +%s.%N)";;
+  full) trig || exit 1; dump_words "${2:-FULL}";;
+  snap) trig || { echo "SNAP_ABORT"; exit 1; }; shift; dump_words "$@" ;;
+  pair) W="$2"; SECS="$3"; TAG="${4:-PAIR}"
+        if ! trig; then echo "PAIR_FAIL 第1点"; exit 1; fi
+        A=$(rd "$(addr "$W")"); T1=$(date +%s.%N); GA=$G1
+        sleep "$SECS"
+        if ! trig; then echo "PAIR_FAIL 第2点"; exit 1; fi
+        B=$(rd "$(addr "$W")"); T2=$(date +%s.%N); GB=$G1
+        if [ -z "$A" ] || [ -z "$B" ]; then echo "PAIR_FAIL 空读 (空读 != 真0)"; exit 1; fi
+        echo "PAIR $TAG W$W ${NAME[$W]:-?} A=$A (gen=$GA) B=$B (gen=$GB) T1=$T1 T2=$T2" ;;
+  *) sed -n '2,25p' "$0"; exit 2;;
+esac

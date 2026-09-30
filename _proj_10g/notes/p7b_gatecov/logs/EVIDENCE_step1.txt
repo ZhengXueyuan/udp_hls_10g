@@ -1,0 +1,57 @@
+# P7B gate-coverage closeout -- step 1 raw evidence
+# generated: 2026-09-30 (repo D:/repo/XCKU5PMini/udp_hls_10g)
+
+## E0. the shipped gates never build the P7B_10G path
+$ git show HEAD:sim/p5e_rate/run_tb_rate.bat | grep -n 'P7B_10G'   # (empty = modality unreachable)
+   -> no cfg selects -d P7B_10G => the rate gate structurally cannot test the 8-byte/beat path
+
+$ git show HEAD:sim/p5e_udp/run_tb_app_udp.bat | grep -n 'P7B_10G'
+   -> same for the p5e_udp gate
+
+$ git grep -n 'P7B_10G' HEAD -- tb/   # (empty = no testbench compiled the macro, at HEAD)
+   -> NO testbench in tb/ referenced P7B_10G before this round
+
+## E1. shipped judge of sim/p5e_rate/run_tb_rate.bat (verbatim, HEAD)
+
+call %XV%\xsim.bat tb_rate_%CFG% -runall -log xsim_%CFG%.log > NUL 2>&1
+findstr /C:"RATE TB DONE" xsim_%CFG%.log > NUL
+if errorlevel 1 (echo RATE TB DID NOT FINISH & type xsim_%CFG%.log & exit /b 1)
+findstr /C:"[pre" xsim_%CFG%.log & findstr /C:"--- tb_app_udp_rate" xsim_%CFG%.log
+findstr /C:"frames on wire" xsim_%CFG%.log
+findstr /C:"mean frame period" xsim_%CFG%.log
+findstr /C:"mean wire len" xsim_%CFG%.log
+findstr /C:"PAYLOAD RATE" xsim_%CFG%.log
+findstr /C:"WIRE RATE" xsim_%CFG%.log
+findstr /C:"app tx_frames" xsim_%CFG%.log
+exit /b 0
+
+   applied to the DEFECT arm log (H2, -d P7B_10G, prefix RTL):
+     findstr /C:"RATE TB DONE"  -> 1 hit(s)
+     findstr /C:"\[pre"  -> 12 hit(s)
+     findstr /C:"mean frame period"  -> 1 hit(s)
+     findstr /C:"mean wire len"  -> 1 hit(s)
+     findstr /C:"PAYLOAD RATE"  -> 1 hit(s)
+     findstr /C:"WIRE RATE"  -> 1 hit(s)
+     findstr /C:"app tx_frames"  -> 1 hit(s)
+   -> every shipped judge key hits => shipped gate = exit /b 0 on the DEFECTIVE RTL
+
+## E1b. the same key numbers the shipped gate PRINTS but does not JUDGE (defect arm H2)
+  mean frame period   = 1575 cycles (12.600 us)
+  mean wire len       = 1517 B
+  app tx_frames=42 bytes=62416 | utx frames=40 bytes=58576 drop=0 | mac frames=40 abort=0
+   -> wire 1517 (healthy = 1525) is on screen and nobody judges it
+
+## E2. p5e_udp gate under -d P7B_10G: defect arm vs fixed arm (byte-identical failure)
+  --- udp_pos_def_p7b
+Memory Collision Error on RAMB36E1 : tb_app_udp.u_split.u_uf.gen_mem[0].u_main.gen_sdp.gen_wide.INT_RAMB_SDP.chk_for_col_msg at simulation time 24572
+P5E UDP APP GATE: FAIL errs=1
+  --- udp_pos_fix_p7b
+Memory Collision Error on RAMB36E1 : tb_app_udp.u_split.u_uf.gen_mem[0].u_main.gen_sdp.gen_wide.INT_RAMB_SDP.chk_for_col_msg at simulation time 24572
+P5E UDP APP GATE: FAIL errs=1
+   -> identical collision site AND identical sim time => the red is NOT this defect
+      (the shipped judge only matches 'P5E UDP APP GATE: OK' => exit 1 for BOTH arms)
+
+## E3. arm md5s
+20137a9b7777ffaafdf8d365350e0db7 *_proj_10g/notes/p7b_gatecov/mut/app_udp_pattern_prefix.v
+58db9d5d3033095e2d092dd4c805b868 *rtl/app_udp_pattern.v
+        (prefix = git show HEAD:rtl/app_udp_pattern.v ; postfix copy = mut/app_udp_pattern_postfix.v)

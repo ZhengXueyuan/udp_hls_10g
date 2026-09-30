@@ -1,0 +1,50 @@
+=== PRE ===
+SNAP_BEGIN U2PRE gen=3
+W0   0x20   rx_stat_frames         0x00000000
+W1   0x24   rx_stat_bytes          0x00000000
+W3   0x2C   rx_stat_crc_err        0x00000000
+W4   0x30   rx_stat_drop           0x00000000
+W19  0x6C   srx_stat_drop          0x00000000
+W20  0x70   mac_tx_frames          0x00000004
+W10  0x48   udpapp_rx_frames       0x00000000
+W11  0x4C   udpapp_rx_bytes        0x00000000
+SNAP_END U2PRE nff=0
+=== UDP burst to :9999 (board does NOT learn this port) ===
+UDP_T 1.000 pkts=236320 pay_MB=331.748 pps=236306 Mbps=2782.744 (limit=0.0)
+UDP_T 2.000 pkts=472640 pay_MB=663.496 pps=236304 Mbps=2782.718 (limit=0.0)
+UDP_SUM pkts=708800 pay_bytes=1043353600 dur_s=3.000 pps=236258 pay_Mbps=2782.177 wire_Mbps=2861.560 off_start=0 off_end=1043353600 call_errors=0
+UDP_DONE
+=== POST ===
+SNAP_BEGIN U2POST gen=4
+W0   0x20   rx_stat_frames         0x000ad0c1
+W1   0x24   rx_stat_bytes          0x4021d2c0
+W3   0x2C   rx_stat_crc_err        0x00000000
+W4   0x30   rx_stat_drop           0x00000000
+W19  0x6C   srx_stat_drop          0x000aaea2
+W20  0x70   mac_tx_frames          0x00000005
+W10  0x48   udpapp_rx_frames       0x00000000
+W11  0x4C   udpapp_rx_bytes        0x00000000
+SNAP_END U2POST nff=0
+=== batch 128 ===
+SNAP_BEGIN U2PRE2 gen=5
+W0   0x20   rx_stat_frames         0x000ad0c1
+W1   0x24   rx_stat_bytes          0x4021d2c0
+W3   0x2C   rx_stat_crc_err        0x00000000
+W4   0x30   rx_stat_drop           0x00000000
+W19  0x6C   srx_stat_drop          0x000aaea2
+W20  0x70   mac_tx_frames          0x00000005
+SNAP_END U2PRE2 nff=0
+UDP_T 1.000 pkts=259712 pay_MB=364.586 pps=259613 Mbps=3057.207 (limit=0.0)
+UDP_T 2.001 pkts=518528 pay_MB=727.914 pps=259154 Mbps=3051.803 (limit=0.0)
+UDP_SUM pkts=776832 pay_bytes=1143496704 dur_s=3.000 pps=258936 pay_Mbps=3049.234 wire_Mbps=3136.237 off_start=0 off_end=1143496704 call_errors=0
+UDP_DONE
+SNAP_BEGIN U2POST2 gen=6
+W0   0x20   rx_stat_frames         0x0016ab41
+W1   0x24   rx_stat_bytes          0x866b75c0
+W3   0x2C   rx_stat_crc_err        0x00000000
+W4   0x30   rx_stat_drop           0x00000000
+W19  0x6C   srx_stat_drop          0x00166705
+W20  0x70   mac_tx_frames          0x00000005
+SNAP_END U2POST2 nff=0
+=== confirm board still NOT transmitting ===
+PAIR STOPF W20 mac_tx_frames A=0x00000005 (gen=7) B=0x00000005 (gen=8) T1=1790766164.466404618 T2=1790766166.479566393

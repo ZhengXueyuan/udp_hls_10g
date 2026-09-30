@@ -76,7 +76,7 @@ if "SNAP_BEGIN" in remote:                                   # ---- 快照块 --
     W = [100, 151800, 1518, 0, 0, freecnt(lat), 100, 4] + [0] * 12 + [0, 0, 0, 0, freecnt(lat), 1, 0, 0, 0, 0, 100, 151400, 0, 0, 0, 0] \
         + [20000000, 151800000, 0, 0x2000100C, vcc, 0, 0, 0, 0, 0, 0, 0, 0, 0, freecnt(lat)]
     out("SNAP_BEGIN"); out("TLATCH %.9f %.9f" % (t0, t1)); out("GEN %d %d" % (g0, g1))
-    out("MAGIC 0x50360001"); out("BID 0x00000007"); out("MARKER 0xdeadbeef")
+    out("MAGIC 0x50360001"); out("BID 0x00000008"); out("MARKER 0xdeadbeef")
     for i in range(51): out("W%d 0x%X" % (i, W[i]))
     out("UNIMPL 0xffffffff"); out("SNAP_END"); sys.exit(0)
 if "ethtool -S" in remote:                                   # ---- NIC 块 ----

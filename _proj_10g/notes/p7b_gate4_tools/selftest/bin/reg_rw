@@ -29,7 +29,21 @@ case "$A" in
   0XC0) V=0x00000099;; 0XC4) V=0;; 0XC8) V=0;; 0XCC) V=0;; 0XD0) V=0;;
   0XD4) V=0;; 0XD8) V=0;; 0XDC) V=0;; 0XE0) V=0;; 0XE4) V=0;;
   0XE8) V=$(awk -v t="$T" 'BEGIN{printf "0x%08x", int(t*312500000)%4294967296}');;
-  0XEC) V=${FAKE_UNIMPL:-0xffffffff};;
+  # ---- P7B-BIZ: W51..W60 (0xEC..0x110) 与新的未实现地址 0x114 --------------
+  #   ⚠️ 窗口 57/59 字时代的旧注释里的 0x100/0x104 已作废 (现役 = 61 字 / 0x114)
+  #   ⚠️ 旧版把 0XEC 当"未实现地址" ⇒ 扩窗后它变成**窗口内的 W51** ⇒ 必须回真值,
+  #      否则 5.0 "窗口内无 0xffffffff" 会假 FAIL (而负对照再也打不中未实现地址)。
+  0XEC) V=1000;;   # W51 app_tx_bytes
+  0XF0) V=10;;     # W52 app_tx_frames
+  0XF4) V=900;;    # W53 app_rx_bytes
+  0XF8) V=0;;      # W54 app_mismatch (必须 0)
+  0XFC) V=0;;      # W55 tx_stat_retx (必须 0)
+  0X100) V=0;;     # W56 app_udp_pattern.stat_tx_ovf (必须 0)
+  0X104) V=0;;                                        # W57 tcp_tx_frame.o_retx_hi
+  0X108) V=0;;                                        # W58 tcp_tx_frame.o_retx_active
+  0X10C) V=0;;                                        # W59 slow_tx_adp.stat_fifo_ovf
+  0X110) V=0;;                                        # W60 slow_rx_adp.stat_fifo_ovf
+  0X114) V=${FAKE_UNIMPL:-0xffffffff};;   # 未实现地址 (61 字; 旧版 0xEC -> 0x104 -> 0x10C -> 0x114)
   *)    V=0xffffffff;;
 esac
 echo "Read 32-bit from address $A : $V"

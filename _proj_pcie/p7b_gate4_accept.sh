@@ -1,9 +1,28 @@
 #!/bin/bash
 #=============================================================================
-# p7b_gate4_accept.sh — **P7b 闸 4 板级验收** (板侧 51 字 + NIC 侧网关判据)
+# p7b_gate4_accept.sh — **P7b 闸 4 板级验收** (板侧 61 字 + NIC 侧网关判据)
 #
 # 为什么新写一个 (而不是只改 p6e_snap_check.sh):
-#   ① 闸 4 的几何是 **51 字** (0x20..0xE8, 未实现 = 0xEC), p6e_snap_check.sh 是 36 字口径
+#   ① 闸 4 的几何是 **61 字** (0x20..0x110, 未实现 = **0x114**) —— P7B-BIZ 从 51 字扩来
+#      (旧的 51 字几何 = 0x20..0xE8 / 未实现 0xEC, 读旧位流时用 SNAP_WORDS=51 覆盖);
+#      p6e_snap_check.sh 是 36 字口径
+#      ⭐ **P7B-BIZ 的 6 个新字** (RTL 真值源 = `board/wrapper_p4.v` 的 `snap_dout_all`,
+#         装配项逐条带槽号注释; 全是 dp 域寄存器输出, 与 W39/W45..W50 同一束):
+#         `W51` = `app_pattern.stat_tx_bytes`   (TCP 演示 app **下行**载荷字节)
+#         `W52` = `app_pattern.stat_tx_frames`  (TCP 下行载荷帧数; 几何账)
+#         `W53` = `app_pattern.stat_rx_bytes`   (TCP 演示 app **上行**载荷字节) → 判据 J13
+#         `W54` = `app_pattern.stat_mismatch`   (**上行载荷逐字节**失配, 增量必须 = 0) → J12
+#         `W55` = `tcp_tx_frame.stat_retx`      (重传/RTO 回卷次数, 增量必须 = 0) → J14 / `F5b`
+#         `W56` = `app_udp_pattern.stat_tx_ovf` (TX 字 FIFO 拒写; 静默丢字类回归的守卫)
+#         `W57` = `tcp_tx_frame.o_retx_hi`     (回卷重放上界; **只在 W58=1 时有效**)
+#         `W58` = `tcp_tx_frame.o_retx_active` (重传会话进行中, 低 1 位)
+#         `W59` = `slow_tx_adp.stat_fifo_ovf`  (u_wf 拒写; 恒 0 = 无静默丢失)
+#         `W60` = `slow_rx_adp.stat_fifo_ovf`  (o_ovf 拒写; 恒 0 = 无静默丢失)
+#         ⚠️ 非 `APP_MODE` 构建里 W51..W54 / W56 **恒 0** (源模块不存在) 而 **W55 仍是真值**
+#            (`tcp_tx_frame` 在任何构建里都例化) —— 读到 0 要先确认构建宏, 别当"没重传"。
+#      ⚠️ **窗口为什么能从 51 一步到 57 (越过旧 56 上限)**: 读侧地址译码 `ar_word` 从 6 位
+#         加宽到 7 位 (araddr[8:2]) ⇒ 未实现地址域扩到 0x104..0x1FC, 窗口上限抬到 119 字;
+#         < 0x100 的既有地址逐位等价 (零回归)。见 `_proj_pcie/rtl/axi_regs.v` 头部注释。
 #      (它已就地修成"字数可覆盖"的版本, 可单独当窗口快检用);
 #   ② 闸 4 的头条判据在 **NIC 侧** (真网卡 802.3 裁决) —— 那部分以前**没有脚本**, 只在文档里;
 #   ③ 负对照必须能"把**合成的假读数**喂给解析函数" ⇒ 本脚本把 **I/O 层**与**解析/判据层**分开,
@@ -22,7 +41,9 @@
 #   G4_SNAP_TEXT=a.txt,b.txt,c.txt,d.txt G4_NIC_TEXT=e.txt,f.txt,g.txt,h.txt \
 #     bash _proj_pcie/p7b_gate4_accept.sh
 #
-#   开关: G4_BIT=<位流路径> · EXPECT_BID=0x... · SNAP_WORDS=51 · G4_IFACE=enp1s0f1np1
+#   开关: G4_BIT=<位流路径> · EXPECT_BID=0x... · SNAP_WORDS=61 · G4_IFACE=enp1s0f1np1
+#         ⚠️ P7B-BIZ 起窗口 = **61 字** (RTL `board/wrapper_p4.v` 的 `SNAP_NW_P6E`);
+#            读 **51 字时代的旧位流**必须显式覆盖: `SNAP_WORDS=51 UNIMPL_ADDR=0xEC`.
 #         G4_TRAFFIC_CMD=<激励命令> · NIC_GOOD_MIN / NIC_MBPS_MIN (阈值)
 #         W5_NOM_MHZ=156.25 (前端域标称; P6b 位流取 125) · TRAFFIC_TIMEOUT=180
 #         G4_LIB_ONLY=1 (只加载函数; 负对照脚本 source 用)
@@ -84,9 +105,12 @@ BOARD_IP=192.168.100.2
 MYIP=192.168.100.100
 DEV=/dev/xdma0_user
 TOOLS=/home/a/xdma_test/dma_ip_drivers-patched/XDMA/linux-kernel/tools
-EXPECT_BID=${EXPECT_BID:-0x00000007}      # P7b = 7 (源码 board/wrapper_p4.v:3701 的 BUILD_ID_V)
-SNAP_WORDS=${SNAP_WORDS:-51}
-UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 51 ⇒ 0xEC
+EXPECT_BID=${EXPECT_BID:-0x00000008}      # P7B-BIZ = 8 (源码 board/wrapper_p4.v:3832 的 BUILD_ID_V)
+SNAP_WORDS=${SNAP_WORDS:-61}
+UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 61 ⇒ 0x114 (51 ⇒ 0xEC)
+# ⚠️ 未实现地址 = 0x20 + 4*SNAP_WORDS 这条公式本轮**重新成立**: 读侧译码已加宽到 7 位
+#    (araddr[8:2]) ⇒ 地址每 **512** 字节才回绕, 而 `0x20+4*61 = 0x114` 真正未实现 ⇒
+#    仍回 0xffffffff。红线随之改成"**绝不能挑 ≥0x200**" (旧红线是 ≥0x100)。
 W32=$((1<<32))
 NIC_GOOD_MIN=${NIC_GOOD_MIN:-100000}      # 增量阈值 (帧): 背景 0.1~0.5 帧/s, 差 6 个数量级
 NIC_MBPS_MIN=${NIC_MBPS_MIN:-800}         # 速率阈值 (Mbps, 线上字节率)
@@ -101,7 +125,7 @@ XCHK_MAX_OFFSET=${XCHK_MAX_OFFSET:-2}
 XCHK_Q=${XCHK_Q:-1}
 NIC_TOL_BASE=${NIC_TOL_BASE:-1.0}     # 容差下界 (%), 量子项更宽时取量子项
 # W5 (前端域自由计数) 的**标称**随构建而变 —— 判据的期望值, 不跟上就是假 FAIL:
-#   · P7B_10G 构建 (默认几何 51 字 / BID=7): 前端域 = PCS 的 CDR **恢复钟**
+#   · P7B_10G 构建 (默认几何 61 字 / BID=7): 前端域 = PCS 的 CDR **恢复钟**
 #     (`board/wrapper_p4.v:658-659` `ifdef P7B_10G assign gmii_clk = rx_clk_out_1`) ⇒ 156.25 MHz
 #     (板级独立两点实测 156.1986 MHz, P7B_GATE4_ACCEPT.md §3.3 — 证否 P6b 的 "W5=125" 假设)
 #   · 1G/P6b 位流 (SNAP_WORDS=36 / BID=6): 前端域 = PHY 回送的 RGMII RX 钟 ⇒ 125
@@ -237,8 +261,10 @@ printf 'GEN %s %s\n' "$g0" "$g1"
 printf 'MAGIC %s\n'  "$(rd 0x00)"
 printf 'BID %s\n'    "$(rd 0x04)"
 printf 'MARKER %s\n' "$(rd 0x14)"
-for i in $(seq 0 50); do printf 'W%s %s\n' "$i" "$(rd $(printf '0x%X' $(( 0x20 + 4*i ))))"; done
-printf 'UNIMPL %s\n' "$(rd 0xEC)"
+# ⚠️ 循环上界与未实现地址**一律派生** (旧版写死 `seq 0 50` + `rd 0xEC` ⇒ 扩窗时必须
+#    两处手改, 漏一处就读到"半代窗口 + 已实现地址当未实现"⇒ 假 FAIL/假 PASS 各一次)。
+for i in $(seq 0 $((SNAP_WORDS-1))); do printf 'W%s %s\n' "$i" "$(rd $(printf '0x%X' $(( 0x20 + 4*i ))))"; done
+printf 'UNIMPL %s\n' "$(rd "$UNIMPL_ADDR")"
 printf 'SNAP_END\n'
 EOS
 

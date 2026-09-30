@@ -22,6 +22,12 @@ REM run_tb_rate.bat -- app UDP TX path line-rate measurement gate (P5f)
 REM chain: app_udp_pattern -> udp_tx_cfg -> udp_tx_frame -> mac_tx_64 (no tx_arb)
 REM usage: run_tb_rate.bat [cfg]      cfg in {g0,g1380,g2760,g5000,g58000} x {p1472,p996,p512}
 REM        examples: run_tb_rate.bat g0p1472 (default) / g0p996 / g58000p1472
+REM   p7b1472 = the SATURATING cfg: adds -d P7B_10G (8-byte/beat TX generator) on top of
+REM   g0p1472 (back-to-back, no TX gap).  8 B/beat into a 1 B/beat mac_tx_64 is a
+REM   structural 8:1 produce/consume mismatch => the TX word FIFO is driven into
+REM   saturation, which is the PRECONDITION of the P7B-W9 silent-word-drop defect.
+REM   The TB now self-judges (frame geometry singleton + saturation coverage); the
+REM   verdict line is "RATE GATE: OK" / "RATE GATE: FAIL errs=<n>".
 REM NOTE: keep this file ASCII-only (GBK console chokes on UTF-8 in REM lines).
 cd /d %~dp0
 set XV=C:\AMDDesignTools\2025.2\Vivado\bin
@@ -32,15 +38,18 @@ set CFG=%1
 if "%CFG%"=="" set CFG=g0p1472
 set DM=
 set DPL=
+set DP7B=
 echo %CFG% | findstr /I /C:"g58000" > NUL && set DM=-d GAP58000
 echo %CFG% | findstr /I /C:"g5000"  > NUL && set DM=-d GAP5000
 echo %CFG% | findstr /I /C:"g2760"  > NUL && set DM=-d GAP2760
 echo %CFG% | findstr /I /C:"g1380"  > NUL && set DM=-d GAP1380
 echo %CFG% | findstr /I /C:"p996"   > NUL && set DPL=-d PL996
 echo %CFG% | findstr /I /C:"p512"   > NUL && set DPL=-d PL512
+REM p7b* = wide (8 B/beat) TX generator => saturating cfgs (see header)
+echo %CFG% | findstr /I /C:"p7b"    > NUL && set DP7B=-d P7B_10G
 
 if exist xsim.dir rmdir /s /q xsim.dir
-call %XV%\xvlog.bat -work xil_defaultlib %DM% %DPL% ^
+call %XV%\xvlog.bat -work xil_defaultlib %DM% %DPL% %DP7B% ^
   %RTL%\fifo_sync.v %RTL%\checksum16.v %RTL%\crc32_8b.v ^
   %RTL%\udp_tx_cfg.v %RTL%\udp_tx_frame.v %RTL%\mac_tx_64.v ^
   %RTL%\app_udp_pattern.v ^
@@ -48,7 +57,7 @@ call %XV%\xvlog.bat -work xil_defaultlib %DM% %DPL% ^
 findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_%CFG%.log > NUL
 if not errorlevel 1 (echo ERROR: implicit wire declaration: & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xvlog_%CFG%.log & exit /b 1)
 
-call %XV%\xelab.bat -debug typical -L unisims_ver %DM% %DPL% xil_defaultlib.tb_app_udp_rate -s tb_rate_%CFG% -log xelab_%CFG%.log > NUL 2>&1 || (type xelab_%CFG%.log & exit /b 1)
+call %XV%\xelab.bat -debug typical -L unisims_ver %DM% %DPL% %DP7B% xil_defaultlib.tb_app_udp_rate -s tb_rate_%CFG% -log xelab_%CFG%.log > NUL 2>&1 || (type xelab_%CFG%.log & exit /b 1)
 findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_%CFG%.log > NUL
 if not errorlevel 1 (echo ERROR: implicit wire declaration in xelab: & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_%CFG%.log & exit /b 1)
 
@@ -62,4 +71,13 @@ findstr /C:"mean wire len" xsim_%CFG%.log
 findstr /C:"PAYLOAD RATE" xsim_%CFG%.log
 findstr /C:"WIRE RATE" xsim_%CFG%.log
 findstr /C:"app tx_frames" xsim_%CFG%.log
+REM ---- P7B-W9 self-judging criteria (this gate used to be print-only) ----
+findstr /C:"P7B-W9" xsim_%CFG%.log
+findstr /C:"C1 contract" xsim_%CFG%.log
+findstr /C:"C2 framer frames" xsim_%CFG%.log
+findstr /C:"C3 wire" xsim_%CFG%.log
+findstr /C:"coverage:" xsim_%CFG%.log
+findstr /C:"RATE GATE: OK" xsim_%CFG%.log > NUL
+if errorlevel 1 (echo ---- RATE GATE FAIL detail [%CFG%]: & findstr /C:"FAIL" xsim_%CFG%.log & exit /b 1)
+findstr /C:"RATE GATE: OK" xsim_%CFG%.log
 exit /b 0

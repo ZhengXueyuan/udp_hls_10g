@@ -1,0 +1,35 @@
+===== P7B-BIZ 最终验证扫 (窗口 61 字) 2026-09-30 19:26:45 =====
+
+--- [1] wrapper xvlog, 4 宏组合 ---
+[OK  ] d0_default rc=0 
+[OK  ] d1_p7b rc=0 
+[OK  ] d2_app rc=0 
+[OK  ] d3_biz_full rc=0 
+
+XVLOG_WRAPPER_PASS 4/4
+
+--- [2] 逐字读回 (tb_biz_win, NW=61) ---
+PASS_ALL  tb_biz_win: 26 项判据全过 (窗口 61 字)
+TB_BIZ_WIN_PASS
+
+--- [3] 逐字读回门的牙 (3 变异体) ---
+[OK  ] real got=PASS want=PASS 
+[OK  ] mut_base6 got=FAIL want=FAIL 
+[OK  ] mut_dec6 got=FAIL want=FAIL 
+[OK  ] mut_lastoff got=FAIL want=FAIL 
+
+NEG_GATE_PASS 4/4
+
+--- [4] 静态装配核对 (4 模式) ---
+none       EXIT=0 PASS=40 FAIL=0 CHECK_WINDOW_PASS 
+drop       EXIT=1 PASS=36 FAIL=4 
+swap       EXIT=1 PASS=39 FAIL=1 
+declpatho  EXIT=1 PASS=36 FAIL=4 
+
+--- [5] 假板子自证 (脚本侧) ---
+  [OK  ] 负对照退出码非 0      OK
+
+########## 自证汇总: OK=14 BAD=0 ##########
+
+--- [6] app_udp_pattern xvlog ---
+rc=0 (0=ok)

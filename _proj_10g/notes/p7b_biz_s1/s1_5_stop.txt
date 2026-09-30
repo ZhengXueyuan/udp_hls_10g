@@ -1,0 +1,57 @@
+=== STOP0: board still blasting (W20 should be moving) ===
+PAIR STOP0 W20 mac_tx_frames A=0x04f3bcdf (gen=18) B=0x0512ecbe (gen=19) T1=1790765961.106416427 T2=1790765963.622782706
+=== carrier before TX_DIS ===
+1
+9
+=== N-a: TX_DIS = 0x2 ===
+device: /dev/xdma0_user, address: 0x8 (0x0+0x8), access write.
+access width: word (32-bits)
+character device /dev/xdma0_user opened.
+Memory 0x0 mapped at address 0x7cca8f7ba000.
+Write 32-bits value 0x00000002 to 0x8 (0x0x7cca8f7ba008)
+=== carrier after TX_DIS (must be 0) ===
+0
+10
+down
+=== restore 0x08 = 0x0 ===
+device: /dev/xdma0_user, address: 0x8 (0x0+0x8), access write.
+access width: word (32-bits)
+character device /dev/xdma0_user opened.
+Memory 0x0 mapped at address 0x719239318000.
+Write 32-bits value 0x00000000 to 0x8 (0x0x719239318008)
+=== carrier after restore (must be 1) ===
+1
+11
+=== peer RX counters right before re-burn ===
+     port_rx_packets: 3185015133
+     rx_eth_crc_err: 4
+     rx-0.rx_packets: 362920052
+     rx-1.rx_packets: 55091
+--- 3s later ---
+     port_rx_packets: 3187696200
+     rx_eth_crc_err: 4
+     rx-0.rx_packets: 365328086
+     rx-1.rx_packets: 55091
+=== RE-BURN ===
+BAR 0x00: Read 32-bit value at address 0x0 (0x763992df8000): 0x50360001
+LnkSta: LnkSta:	Speed 5GT/s (downgraded), Width x4
+
+=== id ===
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x00000007   (want 0x00000007 = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0xffffffff  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_OK 1790766134.420470679
+
+=== J11: pair W20 2.5s STOP1 (must be frozen) ===
+PAIR STOP1 W20 mac_tx_frames A=0x00000000 (gen=1) B=0x00000000 (gen=2) T1=1790766135.228778873 T2=1790766137.742879820
+
+=== peer RX: is the flood stopped? ===
+     port_rx_packets: 3196882996
+     rx_eth_crc_err: 5
+     rx-0.rx_packets: 374467737
+--- 3s later ---
+     port_rx_packets: 3196882996
+     rx_eth_crc_err: 5
+     rx-0.rx_packets: 374467737
+1

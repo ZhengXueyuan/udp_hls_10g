@@ -47,7 +47,7 @@ gen_snap(){  # gen_snap <文件> <第一块|第二块|洪泛A|洪泛B>
   { echo SNAP_BEGIN
     echo "TLATCH $tl"
     echo "GEN $gen"
-    echo "MAGIC 0x50360001"; echo "BID 0x00000007"; echo "MARKER 0xdeadbeef"
+    echo "MAGIC 0x50360001"; echo "BID 0x00000008"; echo "MARKER 0xdeadbeef"
     local -a V=(1000 1518000 1518 0 0 $w5 998 998 0 0 0 0 0 0 0 0 0 0 0 0
                 $w20 0 0 0 $w24 1 0 0 0 0 1000 1514000 0 0 0 0
                 20000000 151800000 0 0x2000100C $vcc 0 0 0 0 0 0 0 0 0 $w50)

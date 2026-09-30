@@ -1,0 +1,23 @@
+===== T0 编译 =====
+===== T1 图案自检向量 (独立手算常量) =====
+  [PASS] ./p7b_tcp_sink --selftest = OK
+  [PASS] ./p7b_tcp_src --selftest = OK
+  [PASS] ./p7b_udp_src --selftest = OK
+===== T2 干净流 (假板 = 满 1MB 图案 + FIN) =====
+  [PASS] T2 干净流 first_mismatch = -1
+  [PASS] T2 sink 退出码 = 0
+  [PASS] T2 收满 2 连接 x 1MB = 2097152
+===== T3 翻 1 个 bit @500000 (判据必须有牙) =====
+  [PASS] T3 首个失配偏移 = 500000
+  [PASS] T3 sink 退出码 (必须非 0) = 1
+  [PASS] T3 失配字节数 = 1 (只翻了一 bit) = 1
+===== T4 短流 (量程判据有牙: 收到 < 声明) =====
+  [PASS] T4 收到的字节数 = 300000
+===== T5 上行 (src -> 假板; 假板侧独立复算) =====
+  [PASS] T5 src send_err = 0
+  [PASS] T5 src 下行逐字节 (假板的干净流) = -1
+  [PASS] T5 **假板侧**独立复算上行 = -1
+  [INFO] 3 s 内上行被假板侧复算到的字节数 = 4587520 (环回, 仅作有流量证据)
+
+SELFTEST_SUMMARY PASS=13 FAIL=0
+SELFTEST_OK
