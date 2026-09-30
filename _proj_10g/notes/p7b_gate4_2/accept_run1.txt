@@ -1,0 +1,102 @@
+
+===== 0. 位流身份 (G1 的位流一半) 与前置 =====
+  [INFO] 位流 = /d/repo/XCKU5PMini/udp_hls_10g/vivado_prj/p7b_ku5p_prj.runs/impl_1/wrapper_p4.bit
+  [INFO] sha256 = 0e1c8088d3907bd52915fa1a1a291ceeb627ed1b5252e421f825c9abdd7fb557
+  [INFO] size   = 15431261 ; mtime = 2026-09-30 12:22:38
+  [INFO] **live 档**: 按判据需要取 **4 块**快照 (旧版恒取 1 块 ⇒ G2/G3/C 组被 SKIP)
+  [PASS] G1         位流身份 (块A) | 期望=MAGIC=0x50360001 BID=0x00000007 MARKER=0xdeadbeef | 实测=MAGIC=0x50360001 BID=0x00000007 MARKER=0xdeadbeef
+  [PASS] B_WIN      块A 窗口 51 字齐全且无 0xffffffff | 期望=0 个 F | 实测=0 个 F (SLVERR 没混进窗口)
+  [PASS] B_UNIMPL   块A 未实现地址 0xEC | 期望=0xffffffff | 实测=0xffffffff
+  (等 5 s 再取第 2 块 —— 频率与增量判据需要两点)
+  [PASS] G1         位流身份 (块B) | 期望=MAGIC=0x50360001 BID=0x00000007 MARKER=0xdeadbeef | 实测=MAGIC=0x50360001 BID=0x00000007 MARKER=0xdeadbeef
+  [PASS] B_WIN      块B 窗口 51 字齐全且无 0xffffffff | 期望=0 个 F | 实测=0 个 F (SLVERR 没混进窗口)
+  [PASS] B_UNIMPL   块B 未实现地址 0xEC | 期望=0xffffffff | 实测=0xffffffff
+  [PASS] G2-W5      前端域 gmii_free = 156.3341 MHz (Δ=948298285 / 6.065845s / ÷1) | 期望=156.25 ±1% | 实测=156.3341 MHz
+  [PASS] G2-W24     数据面域 dp_free = 156.3335 MHz (Δ=948294484 / 6.065845s / ÷1) | 期望=156.25 ±1% | 实测=156.3335 MHz
+  [PASS] G2-W50     TX 域 tx_clk_act = 156.0653 MHz (**÷1 口径命中**) | 期望=156.25 ±1% | 实测=÷1 ⇒ 156.0653 / ÷2 ⇒ 78.0327 (⇒ wrapper_p4.v:3389 的 '÷2' 注释需订正)
+  [PASS] B_CONS-a   W30 == W0 + W32 | 期望=85 | 实测=85
+  [PASS] B_CONS-b   W31 == W1 - 4*W0 + W33 | 期望=13500 | 实测=13500
+  [PASS] B_DIR      链式触发方向性 W0 - W30 >= -1 | 期望=>=-1 | 实测=0
+  [PASS] C1-C5      PCS: gtpowergood/block_lock/rx_status=1 且 hi_ber/local_fault=0 | 期望=全成立 | 实测=W39=0x2000100C
+  [PASS] C6-C7      rx_error/fifo_error/bad_code_valid/framing_err_valid 全 0 | 期望=全 0 | 实测=W39=0x2000100C
+  [FAIL] C8         W40.valid_ctrl_code_cyc 必须非 0 且在涨 | 期望=> 255 | 实测=255 → 255 (钉死 ⇒ 这条例数不是来自核)
+  [PASS] C6-ev      W40 的 framing/bad_code/rx_error 事件计数恒 0 | 期望=0/0 | 实测=0/0
+
+===== NIC 侧: 基线窗 (教学前) —— 含**判别力自检** N_BASE =====
+  [PASS] N_BASE     基线: 速率判据**不成立** ⇒ 该判据有判别力 | 期望=< 100000 帧 | 实测=Δport_rx_good=0 / 5.884565s (背景)
+
+===== 测量窗 (教学 → 打流 → NIC 两点 + 板侧洪泛两点) =====
+  [INFO] 教学 + 图案激励 (远端实收命令见下, 首词已加 true; 免疫 MSYS 路径改写): cd /home/a/xdma_test && ./p6e_udp_pattern --secs 15 --board 192.168.100.2 --port 8081
+192.168.100.2 dev enp1s0f1np1 src 192.168.100.100 uid 0 
+    cache 
+TRAFFIC_BEGIN
+TRAFFIC_CMD <cd /home/a/xdma_test && ./p6e_udp_pattern --secs 15 --board 192.168.100.2 --port 8081>
+=== p6e_udp_pattern (C++, 吞吐口径): 本地 :8081 <-> 板子 192.168.100.2:8081 ===
+    内核 SO_RCVBUF 实收 = 8.0 MB ; 重同步窗口 = 65536 B
+    [teach] 发 1 x 100 B 图案前缀 -> 192.168.100.2:8081 (板子随即全速发)
+  [GAP] 第 2 帧前少 1472 字节 (接收侧掉包) ⇒ 重对齐; 累计 1472 字节
+  [GAP] 第 3 帧前少 1472 字节 (接收侧掉包) ⇒ 重对齐; 累计 2944 字节
+  [GAP] 第 4 帧前少 1472 字节 (接收侧掉包) ⇒ 重对齐; 累计 4416 字节
+  [GAP] 第 5 帧前少 1472 字节 (接收侧掉包) ⇒ 重对齐; 累计 5888 字节
+  [GAP] 第 6 帧前少 1472 字节 (接收侧掉包) ⇒ 重对齐; 累计 7360 字节
+    [  1.0s] 帧=547 字节=805184  ≈    6.4 Mbps  失配=0 掉包=546
+    [  2.0s] 帧=1091 字节=1605952  ≈    6.4 Mbps  失配=0 掉包=1090
+    [  3.0s] 帧=1631 字节=2400832  ≈    6.4 Mbps  失配=0 掉包=1630
+  [FAIL] 第 1662 帧真失配 (窗口内找不到对齐点): 长 1472, 首个不同字节 @0
+    [  6.6s] 帧=1662 字节=2446464  ≈    3.0 Mbps  失配=1 掉包=1660
+  [FAIL] 第 1663 帧真失配 (窗口内找不到对齐点): 长 1472, 首个不同字节 @0
+    [ 10.1s] 帧=1663 字节=2447936  ≈    1.9 Mbps  失配=2 掉包=1660
+  [FAIL] 第 1664 帧真失配 (窗口内找不到对齐点): 长 1472, 首个不同字节 @0
+    [ 13.6s] 帧=1664 字节=2449408  ≈    1.4 Mbps  失配=3 掉包=1660
+    [ 17.2s] 帧=1665 字节=2450880  ≈    1.1 Mbps  失配=4 掉包=1660
+
+  [汇总] 收 1665 帧 / 2450880 字节 / 17.17s ⇒ **1.1 Mbps** (接收侧口径)
+        载荷长度桶(128B): 1408-1535B:1665 
+        (板子 i_paylen=1472 ⇒ 预期只有 1472 那一桶非零)
+  [INFO] 接收侧掉包 1660 次 / 2443520 字节 (占 49.92%) ⇒ 是我这边内核缓冲丢的;
+         与板子 W9(udpapp_tx_bytes) 对账可确认少的是谁丢的
+  [FAIL] 4/1665 帧图案真失配
+TRAFFIC_RC=1
+TRAFFIC_END
+  [FAIL] T_RUN      打流 激励执行了但退出码非 0 | 期望=TRAFFIC_RC=0 | 实测=TRAFFIC_RC=1 (**先怀疑激励侧**: 命令没找到 / 网卡没配好 / 工具自己退出; 读上面 gap/bad 汇总 —— gap=接收侧丢包, bad=真失配. 下面 NIC 的 FAIL 在此澄清之前**不得**当板子缺陷引用)
+  [PASS] N_CRC      测量 Δrx_eth_crc_err == 0 | 期望=0 | 实测=0
+  [PASS] N_BAD      测量 Δport_rx_bad == 0 | 期望=0 | 实测=0
+  [PASS] N_RATE     测量 增量 + 速率阈值 | 期望=Δ>=100000 帧 且 >=800 Mbps | 实测=Δ=423598 帧 / 3.902768s = 1318.08 Mbps
+  [PASS] N_UCAST    测量 Δport_rx_unicast 同步涨 (图案是单播) | 期望=>=0.9Δgood | 实测=Δuni=423598 / Δgood=423598
+  [PASS] N_LEN      测量 长度桶: 1518B 占绝对多数 | 期望=1024_15xx>=0.9Δgood 且 64<=0.1Δgood | 实测=1518桶=423598 64桶=0 Δgood=423598
+  [PASS] N_AVG      测量 Δbytes/Δpackets ≈ 1518.000000 | 期望=[1517.5,1518.5] | 实测=1518.003584
+  [FAIL] N_SELF     测量 自洽: Δgood + Δbad == Δpackets | 期望=相等 | 实测=423598 + 0 != 423597
+  (打流后取板侧洪泛两点: ΔW34 与 ΔW20 对账用)
+  (等 5 s 再取第 3 块 —— 频率与增量判据需要两点)
+  (等 5 s 再取第 4 块 —— 频率与增量判据需要两点)
+  [PASS] B_G6       洪泛窗 ΔW34 (rx_stat_drop_full) == 0 | 期望=0 | 实测=0
+
+===== 汇总 =====
+  PASS|G1|位流身份 (块A)|MAGIC=0x50360001 BID=0x00000007 MARKER=0xdeadbeef
+  PASS|B_WIN|块A 窗口 51 字齐全且无 0xffffffff|0 个 F (SLVERR 没混进窗口)
+  PASS|B_UNIMPL|块A 未实现地址 0xEC|0xffffffff
+  PASS|G1|位流身份 (块B)|MAGIC=0x50360001 BID=0x00000007 MARKER=0xdeadbeef
+  PASS|B_WIN|块B 窗口 51 字齐全且无 0xffffffff|0 个 F (SLVERR 没混进窗口)
+  PASS|B_UNIMPL|块B 未实现地址 0xEC|0xffffffff
+  PASS|G2-W5|前端域 gmii_free = 156.3341 MHz (Δ=948298285 / 6.065845s / ÷1)|156.3341 MHz
+  PASS|G2-W24|数据面域 dp_free = 156.3335 MHz (Δ=948294484 / 6.065845s / ÷1)|156.3335 MHz
+  PASS|G2-W50|TX 域 tx_clk_act = 156.0653 MHz (**÷1 口径命中**)|÷1 ⇒ 156.0653 / ÷2 ⇒ 78.0327 (⇒ wrapper_p4.v:3389 的 '÷2' 注释需订正)
+  PASS|B_CONS-a|W30 == W0 + W32|85
+  PASS|B_CONS-b|W31 == W1 - 4*W0 + W33|13500
+  PASS|B_DIR|链式触发方向性 W0 - W30 >= -1|0
+  PASS|C1-C5|PCS: gtpowergood/block_lock/rx_status=1 且 hi_ber/local_fault=0|W39=0x2000100C
+  PASS|C6-C7|rx_error/fifo_error/bad_code_valid/framing_err_valid 全 0|W39=0x2000100C
+  FAIL|C8|W40.valid_ctrl_code_cyc 必须非 0 且在涨|255 → 255 (钉死 ⇒ 这条例数不是来自核)
+  PASS|C6-ev|W40 的 framing/bad_code/rx_error 事件计数恒 0|0/0
+  PASS|N_BASE|基线: 速率判据**不成立** ⇒ 该判据有判别力|Δport_rx_good=0 / 5.884565s (背景)
+  FAIL|T_RUN|打流 激励执行了但退出码非 0|TRAFFIC_RC=1 (**先怀疑激励侧**: 命令没找到 / 网卡没配好 / 工具自己退出; 读上面 gap/bad 汇总 —— gap=接收侧丢包, bad=真失配. 下面 NIC 的 FAIL 在此澄清之前**不得**当板子缺陷引用)
+  PASS|N_CRC|测量 Δrx_eth_crc_err == 0|0
+  PASS|N_BAD|测量 Δport_rx_bad == 0|0
+  PASS|N_RATE|测量 增量 + 速率阈值|Δ=423598 帧 / 3.902768s = 1318.08 Mbps
+  PASS|N_UCAST|测量 Δport_rx_unicast 同步涨 (图案是单播)|Δuni=423598 / Δgood=423598
+  PASS|N_LEN|测量 长度桶: 1518B 占绝对多数|1518桶=423598 64桶=0 Δgood=423598
+  PASS|N_AVG|测量 Δbytes/Δpackets ≈ 1518.000000|1518.003584
+  FAIL|N_SELF|测量 自洽: Δgood + Δbad == Δpackets|423598 + 0 != 423597
+  PASS|B_G6|洪泛窗 ΔW34 (rx_stat_drop_full) == 0|0
+########## PASS=23 FAIL=3 SKIP=0 (窗口 51 字; 未实现地址 0xEC; EXPECT_BID=0x00000007) ##########
+EXIT=1

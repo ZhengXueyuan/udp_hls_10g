@@ -1,0 +1,18 @@
+=== 1. 板侧最终读数 (PCIe 观测窗口**仍然活着**) ===
+MAGIC=0x50360001 BID=0x00000007 MARKER=0xdeadbeef UNIMPL=0xffffffff gen=33
+W0=0x001e8bfd W3=0x00000000 W8=0x02841765 W10=0x00000001 W13=0x00000000 W14=0x00000638 W20=0x02875962 W34=0x00000000 W39=0x2000100c W40=0x000000ff
+=== 2. 对端机 /tmp 里本轮产物清单 (取回后删) ===
+-rwxr-xr-x 1 a       a          1496 Sep 30 13:48 /tmp/f3_and_na_probe.sh
+-rwxr-xr-x 1 a       a          4789 Sep 30 13:48 /tmp/f5b_rx_probe.py
+-rwxr-xr-x 1 a       a          1312 Sep 30 13:46 /tmp/f5_probe.sh
+-rwxr-xr-x 1 a       a          1392 Sep 30 13:49 /tmp/final_state.sh
+-rw-r--r-- 1 root    root    4590024 Sep 30 13:48 /tmp/g4_f3.pcap
+-rw-r--r-- 1 tcpdump tcpdump  336024 Sep 30 13:44 /tmp/g4_rate.pcap
+-rwxr-xr-x 1 a       a          2380 Sep 30 13:47 /tmp/tcp_dump.py
+-rwxr-xr-x 1 a       a          3789 Sep 30 13:46 /tmp/tcp_echo_probe.py
+=== 3. 网络配置复原 ===
+AFTER_CLEANUP addr: enp1s0f1np1      UP             
+AFTER_CLEANUP route: 192.168.100.2 via 192.168.0.1 dev wlp6s0 src 192.168.0.38 uid 0 
+AFTER_CLEANUP /tmp: ls: cannot access '/tmp/*.pcap': No such file or directory
+hw_server=active ; uptime=up 9 minutes
+FINAL_DONE

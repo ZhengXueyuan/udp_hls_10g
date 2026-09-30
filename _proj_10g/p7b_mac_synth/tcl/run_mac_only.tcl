@@ -19,6 +19,45 @@
 
 set B    "D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac_synth"
 set part "xcku5p-ffvb676-1-e"
+
+# ---------------------------------------------------------------------------
+# ⚠️ MAC 核从哪一份取 —— 2026-09-30 订正 (本 tcl 曾指向**修复前快照**)
+#
+#   `$B/rtl/` = **修复前快照** (`_STALE.md` 有身份说明): 它的 `mac_tx_10g.v` 是
+#   pad/FCS 修前的旧语义, `mac_rx_10g.v` 是 P7B_LANEFIX 修前的。它**只**留给
+#   A/B 对照当输入件 —— 照它量出来的时序**不是现行 MAC 的时序**。
+#   ⇒ 三个 MAC 核 (`crc32_64` / `mac_tx_10g` / `mac_rx_10g`) 一律从 **canonical**
+#      副本 `_proj_10g/p7b_mac/rtl/` 取, 与 `board/build_p7b_ku5p.tcl:28,100` 同源。
+#   `fifo_sync.v` / `mac_{tx,rx}_min_top.v` 是**只此一份**的 OOC 脚手架
+#   (不在 `_STALE.md` 的 stale 名单里) ⇒ 仍从 `$B/rtl/` 取, 那不是"旧件"。
+# ---------------------------------------------------------------------------
+set MACRTL "D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac/rtl"
+
+# 硬闸: MAC 核一旦被指回 stale 快照 / 或内容缺修复标记, 就地 **error 停** ——
+# 否则会**静默**量到旧件的时序 (本 tcl 原样就是这个下场)。
+# 有意的 A/B 对照: 复制本 tcl、删掉这次 guard 调用即可 (不要改这里的路径)。
+proc mac_src_guard {} {
+    foreach spec [list [list "$::MACRTL/crc32_64.v"   ""] \
+                       [list "$::MACRTL/mac_tx_10g.v" "cmask64"] \
+                       [list "$::MACRTL/mac_rx_10g.v" "ra_merge"]] {
+        set n [string map [list "\\" "/"] [file normalize [lindex $spec 0]]]
+        set mark [lindex $spec 1]
+        if {![file exists $n]} { puts "MAC_SRC_MISSING $n" ; error "MAC source missing: $n" }
+        if {[string first "/p7b_mac_synth/rtl/" $n] >= 0} {
+            puts "MAC_SRC_STALE $n"
+            error "MAC core resolved to the PRE-FIX snapshot dir: $n -- see $::B/rtl/_STALE.md; use \$MACRTL"
+        }
+        set fh [open $n r] ; set txt [read $fh] ; close $fh
+        if {$mark ne "" && [string first $mark $txt] < 0} {
+            puts "MAC_SRC_NO_FIX_MARK $n mark=$mark"
+            error "MAC core $n lacks the '$mark' fix marker (pre-fix content?) -- if this is an intended rename/refactor, update the marker in mac_src_guard"
+        }
+        set sha "<unavailable>"
+        catch { set sha [string trim [lindex [split [exec cmd /c certutil -hashfile $n SHA256] "\n"] 1]] }
+        puts "MAC_SRC $n mark=$mark sha256=$sha"
+    }
+}
+
 catch {set_param general.maxThreads 8}
 
 proc sec {s} { puts "\n>>>>>>>>>> $s" }
@@ -208,12 +247,16 @@ proc build_one {name top rtl xdc pdir} {
 }
 
 # ---------------------------------------------------------------------------
-set rtl_common [list "$B/rtl/crc32_64.v" "$B/rtl/fifo_sync.v" \
-                     "$B/rtl/mac_tx_10g.v" "$B/rtl/mac_rx_10g.v"]
+# MAC 核 = canonical ($MACRTL); OOC 脚手架 = $B/rtl (只此一份, 非旧件)。
+# 顺序/文件表本身不变, 只换这三个 MAC 核的来源目录。
+set rtl_common [list "$MACRTL/crc32_64.v" "$B/rtl/fifo_sync.v" \
+                     "$MACRTL/mac_tx_10g.v" "$MACRTL/mac_rx_10g.v"]
 
 sec "ENV"
 puts "VIVADO = [version -short]"
 puts "PART_N = [llength [get_parts $part -quiet]]"
+puts "MACRTL = $MACRTL"
+mac_src_guard
 
 build_one mac_tx_ooc mac_tx_min_top \
           [concat $rtl_common [list "$B/rtl/mac_tx_min_top.v"]] \

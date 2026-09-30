@@ -1,0 +1,27 @@
+ROUTE_BEFORE 192.168.100.2 via 192.168.0.1 dev wlp6s0 src 192.168.0.38 uid 0 
+ROUTE_AFTER 192.168.100.2 dev enp1s0f1np1 src 192.168.100.100 uid 0 
+NIC_PRE 1790743919.047987328
+port_rx_bytes 384503592842 port_rx_packets 1107365139 port_rx_good 86731628 port_rx_bad 1020633511 port_rx_1024_to_15xx 86544459 rx_eth_crc_err 1 
+TCPDUMP_ARMED 1790743921.052157064 pid=8781
+    [  1.0s] 帧=488 字节=718336  ≈    5.7 Mbps  失配=0 掉包=487
+    [  2.0s] 帧=977 字节=1438144  ≈    5.7 Mbps  失配=0 掉包=976
+    [  3.0s] 帧=1467 字节=2159424  ≈    5.8 Mbps  失配=0 掉包=1466
+  [FAIL] 第 1662 帧真失配 (窗口内找不到对齐点): 长 1472, 首个不同字节 @0
+    [  7.1s] 帧=1662 字节=2446464  ≈    2.8 Mbps  失配=1 掉包=1660
+
+  [汇总] 收 1662 帧 / 2446464 字节 / 7.11s ⇒ **2.8 Mbps** (接收侧口径)
+        载荷长度桶(128B): 1408-1535B:1662 
+        (板子 i_paylen=1472 ⇒ 预期只有 1472 那一桶非零)
+  [INFO] 接收侧掉包 1660 次 / 2443520 字节 (占 49.97%) ⇒ 是我这边内核缓冲丢的;
+         与板子 W9(udpapp_tx_bytes) 对账可确认少的是谁丢的
+  [FAIL] 1/1662 帧图案真失配
+TEACH_DONE 1790743928.168604212
+--- tcpdump stderr ---
+tcpdump: listening on enp1s0f1np1, link-type EN10MB (Ethernet), snapshot length 1600 bytes
+3000 packets captured
+3112 packets received by filter
+0 packets dropped by kernel
+NIC_POST 1790743928.170672057
+port_rx_bytes 385516684854 port_rx_packets 1108032524 port_rx_good 87399014 port_rx_bad 1020633511 port_rx_1024_to_15xx 87211844 rx_eth_crc_err 1 
+-rw-r--r-- 1 root root 4588652 Sep 30 12:52 /tmp/g4_content3.pcap
+CONTENT_DONE

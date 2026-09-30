@@ -21,7 +21,7 @@ if not exist "%REPO_ROOT%\sim\p4gates\p4gate.py" goto :pg_sc_done
 REM run_tb_p4_replay.bat -- P4b-7-P6: p4b7_syn.pcapng PC->FPGA 流精确重放 (xsim)
 REM   刺激由 tools/gen_stim_p4b7.py 预生成 (stim_data/dv/er.memh + cfg_tcb.memh),
 REM   本 bat 只负责编译 (RTOLIM_FAST) + xsim 运行。
-REM   %1 = NOPCACK (缺省 +PCACK); %2 = 运行日志名 (默认 xsim_run.log)
+REM   arg1 = NOPCACK (default +PCACK); arg2 = run log name (default xsim_run.log)
 REM   用法 (Git Bash): cmd //c 'D:\...\run_tb_p4_replay.bat NOPCACK xsim_runa.log'
 cd /d %~dp0
 if exist txdrop.memh del /q txdrop.memh
@@ -68,3 +68,8 @@ call %XV%\xvlog.bat -work xil_defaultlib "%XV%\..\data\verilog\src\glbl.v" >> xv
 call %XV%\xelab.bat -debug typical -L unisims_ver xil_defaultlib.tb_p4_chain xil_defaultlib.glbl -s tb_p4_chain -log xelab_run.log > NUL 2>&1 || (type xelab_run.log & exit /b 1)
 findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_run.log >NUL && (echo IMPLICIT-DECL-FAIL-XELAB & findstr /I /C:"Synth 8-11241" /C:"undeclared symbol" /C:"VRFC 10-3091] actual bit length 1 differs from formal bit length" /C:"VRFC 10-2989" /C:"implicitly declared" xelab_run.log & exit /b 1)
 call %XV%\xsim.bat tb_p4_chain -runall %XPA% -log %RUNLOG% > NUL 2>&1 || (type %RUNLOG% & exit /b 1)
+REM verdict (2026-09-30): the xsim exit code alone cannot tell "ran to the end"
+REM from "never started / died early" -- the TB must reach its final DONE line.
+findstr /C:"DONE rx" %RUNLOG% >NUL || (echo [P4_REPLAY FAIL] TB never reached its final DONE line: & type %RUNLOG% & exit /b 1)
+findstr /C:"DONE rx" %RUNLOG%
+exit /b 0

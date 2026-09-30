@@ -1,0 +1,15 @@
+[sudo] password for a: W0_before=0x00000072 W10_before=0x00000000
+[teach] 已 bind 0.0.0.0:8081 (抑制 ICMP unreachable 洪水; 本 socket 只睡不收)
+[teach] 已发 100 B 图案前缀 -> 192.168.100.2:8081 ; 载荷前 8 字节 = 7f0b02e536a14ed6
+[teach] 板子随即全速发 (后续保持 hold=5s 不退, 让 8081 一直有 socket)
+[teach] 退出
+=== W after ===
+W0_after=0x00000072 W10_after=0x00000000 W8_after=0x00000000 W20_after=0x00000017
+=== tcpdump ===
+tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on enp1s0f1np1, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+10:05:19.283454 00:0f:53:2c:68:01 > 00:0a:35:01:fe:c0, ethertype IPv4 (0x0800), length 142: 192.168.100.100.50177 > 192.168.100.2.8081: UDP, length 100
+
+1 packet captured
+1 packet received by filter
+0 packets dropped by kernel

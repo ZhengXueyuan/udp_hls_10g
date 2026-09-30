@@ -26,7 +26,7 @@ call C:\Users\zhxue\anaconda3\python.exe ..\..\tools\gen_stim_p4_rxclass.py . > 
 if errorlevel 1 exit /b 1
 rmdir /s /q xsim.dir 2>nul
 del /q tb_rx_classify.wdb 2>nul
-call "%VIV_BIN%\xvlog.bat" -work xil_defaultlib ..\..\rtl\rx_classify.v ..\..\tb\tb_rx_classify.v
+call "%VIV_BIN%\xvlog.bat" -work xil_defaultlib ..\..\rtl\rx_classify.v ..\..\rtl\fifo_sync.v ..\..\tb\tb_rx_classify.v
 if errorlevel 1 exit /b 1
 call "%VIV_BIN%\xelab.bat" -debug typical -timescale 1ns/1ps -L xil_defaultlib xil_defaultlib.tb_rx_classify -s tb_rx_classify
 if errorlevel 1 exit /b 1

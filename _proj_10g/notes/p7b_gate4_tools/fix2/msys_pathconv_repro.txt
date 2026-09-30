@@ -1,0 +1,14 @@
+### MSYS(POSIX→Windows) 参数改写 实测复现 (2026-09-30, Git Bash / MSYS2, Windows 11)
+# 机制: 传给 **原生 Windows exe** (python.exe) 的参数, 首字符是 / 时被改写
+
+$ /c/Users/zhxue/anaconda3/python.exe -c "import sys;print('ARGV:',sys.argv[1:])" /home/a/xdma_test/p6e_udp_pattern --secs 15
+ARGV: ['C:/Program Files/Git/home/a/xdma_test/p6e_udp_pattern', '--secs', '15']
+
+$ MSYS_NO_PATHCONV=1 /c/Users/zhxue/anaconda3/python.exe -c ... /home/a/xdma_test/p6e_udp_pattern --secs 15
+ARGV: ['/home/a/xdma_test/p6e_udp_pattern', '--secs', '15']
+
+$ MSYS2_ARG_CONV_EXCL='*' /c/Users/zhxue/anaconda3/python.exe -c ... /home/a/xdma_test/p6e_udp_pattern --secs 15
+ARGV: ['/home/a/xdma_test/p6e_udp_pattern', '--secs', '15']
+
+# 本工程的修法 = 远端脚本首词加 'true; ' (bash 空操作) ⇒ 整串不再以 / 开头 ⇒ 改写规则不触发,
+#   于是**任何**激励命令 (含裸绝对路径) 都能原样送达; 见 p7b_gate4_accept.sh:run_traffic()

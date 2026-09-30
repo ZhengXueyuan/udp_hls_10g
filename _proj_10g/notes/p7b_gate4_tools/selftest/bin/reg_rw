@@ -1,0 +1,35 @@
+#!/bin/bash
+# 假 reg_rw: $1=device $2=addr [w [data]]; 打印形态与真 reg_rw 一致
+DEV="$1"; A=$(echo "$2" | tr '[:lower:]' '[:upper:]'); OP="${3:-}"; DAT="${4:-}"
+echo "$A" >> "${FAKE_ADDRLOG:-/dev/null}"
+if [ "$OP" = "w" ] && [ -n "$DAT" ]; then     # 写
+  if [ "$A" = "0X18" ]; then echo $(( $(cat "/d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_gate4_tools/selftest/gen") + 1 )) > "/d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_gate4_tools/selftest/gen"; fi
+  echo "Write 32-bit 0x$DAT to address $A"; exit 0
+fi
+T=$(cat "/d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_gate4_tools/selftest/vclk")
+V=0xffffffff
+case "$A" in
+  0X00) V=0x50360001;;
+  0X04) V=0x00000007;;
+  0X08) V=0x00000000;;
+  0X0C) V=$(awk -v t="$T" 'BEGIN{printf "0x%08x", int(t*250000000)%4294967296}');;
+  0X10) V=0x00000018;;
+  0X14) V=0xdeadbeef;;
+  0X18) V=0x00000000;;
+  0X1C) V=$(awk -v g="$(cat "/d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_gate4_tools/selftest/gen")" 'BEGIN{printf "0x%08x", g*65536+2}');;
+  0X20) V=1000;; 0X24) V=1518000;; 0X28) V=1518;; 0X2C) V=0;; 0X30) V=0;;
+  0X34) V=$(awk -v t="$T" 'BEGIN{printf "0x%08x", int(t*125000000)%4294967296}');;
+  0X38) V=998;; 0X3C) V=998;; 0X40) V=0;; 0X44) V=0;; 0X48) V=0;; 0X4C) V=0;;
+  0X50) V=0;; 0X54) V=0;; 0X58) V=0;; 0X5C) V=0;; 0X60) V=0;; 0X64) V=0;;
+  0X68) V=0;; 0X6C) V=0;; 0X70) V=998;; 0X74) V=0;; 0X78) V=0;; 0X7C) V=0;;
+  0X80) V=$(awk -v t="$T" 'BEGIN{printf "0x%08x", int(t*156250000)%4294967296}');;
+  0X84) V=1;; 0X88) V=0;; 0X8C) V=0;; 0X90) V=0;; 0X94) V=0;; 0X98) V=1000;;
+  0X9C) V=1514000;; 0XA0) V=0;; 0XA4) V=0;; 0XA8) V=0;; 0XAC) V=0;;
+  0XB0) V=20000000;; 0XB4) V=151800000;; 0XB8) V=0;; 0XBC) V=0x2000100c;;
+  0XC0) V=0x00000099;; 0XC4) V=0;; 0XC8) V=0;; 0XCC) V=0;; 0XD0) V=0;;
+  0XD4) V=0;; 0XD8) V=0;; 0XDC) V=0;; 0XE0) V=0;; 0XE4) V=0;;
+  0XE8) V=$(awk -v t="$T" 'BEGIN{printf "0x%08x", int(t*312500000)%4294967296}');;
+  0XEC) V=${FAKE_UNIMPL:-0xffffffff};;
+  *)    V=0xffffffff;;
+esac
+echo "Read 32-bit from address $A : $V"

@@ -1,0 +1,23 @@
+
+===== 0. 位流身份 (G1 的位流一半) 与前置 =====
+  [INFO] 位流 = /d/repo/XCKU5PMini/udp_hls_10g/vivado_prj/p7b_ku5p_prj.runs/impl_1/wrapper_p4.bit
+  [INFO] sha256 = d1ddb3b44ba1dc94fa016b257b9f1b3ba9c49d16404aa881b7865d2dc47487aa
+  [INFO] size   = 15431261 ; mtime = 2026-09-30 09:55:52
+  [PASS] G1         位流身份 (块A) | 期望=MAGIC=0x50360001 BID=0x00000007 MARKER=0xdeadbeef | 实测=MAGIC=0x50360001 BID=0x00000007 MARKER=0xdeadbeef
+  [PASS] B_WIN      块A 窗口 51 字齐全且无 0xffffffff | 期望=0 个 F | 实测=0 个 F (SLVERR 没混进窗口)
+  [PASS] B_UNIMPL   块A 未实现地址 0xEC | 期望=0xffffffff | 实测=0xffffffff
+  [SKIP] 只给了一块快照 ⇒ 频率/守恒/增量判据全部无法判 (需要两点)
+
+===== NIC 侧: 基线窗 (教学前) —— 含**判别力自检** N_BASE =====
+  [PASS] N_BASE     基线: 速率判据**不成立** ⇒ 该判据有判别力 | 期望=< 100000 帧 | 实测=Δport_rx_good=0 / 5.808662s (背景)
+
+===== 测量窗 (教学 → 打流 → NIC 两点 + 板侧洪泛两点) =====
+  [SKIP] N_RATE     测量窗 | 期望=需要打流 | 实测=G4_SKIP_TRAFFIC=1 ⇒ 本段没跑 (按 P7B_GATE4_PLAN.md 步骤 5 打流后重跑)
+
+===== 汇总 =====
+  PASS|G1|位流身份 (块A)|MAGIC=0x50360001 BID=0x00000007 MARKER=0xdeadbeef
+  PASS|B_WIN|块A 窗口 51 字齐全且无 0xffffffff|0 个 F (SLVERR 没混进窗口)
+  PASS|B_UNIMPL|块A 未实现地址 0xEC|0xffffffff
+  PASS|N_BASE|基线: 速率判据**不成立** ⇒ 该判据有判别力|Δport_rx_good=0 / 5.808662s (背景)
+  SKIP|N_RATE|测量窗|G4_SKIP_TRAFFIC=1 ⇒ 本段没跑 (按 P7B_GATE4_PLAN.md 步骤 5 打流后重跑)
+########## PASS=4 FAIL=0 SKIP=1 (窗口 51 字; 未实现地址 0xEC; EXPECT_BID=0x00000007) ##########

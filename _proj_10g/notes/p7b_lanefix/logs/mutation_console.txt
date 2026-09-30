@@ -1,0 +1,123 @@
+=== P7b MAC 单元门 变异测试 ===
+  [OK ] 正例 (干净件副本)                          rc=0  === tb_mac_10g done: 391 checks, 0 fail ===
+  [OK ] M1 TX 字节序镜像变直通                             expect=caught rc=1  nFAIL=46
+         [FAIL] TX: 60����������������������������
+         [FAIL] TX pad:���� 20 ������ =������������� 40������� == 0
+         [FAIL] TX pad(20B)      FCS == CRC(wire bytes incl pad)
+         [FAIL] TX pad(20B)      wire residue == 0xDEBB20E3
+         [FAIL] TX ��������������������������������
+  [OK ] M1b RX 字节序镜像变直通                            expect=caught rc=1  nFAIL=43
+         [FAIL] ������������������ =��������[0] ��� tdata[63:56]����������������
+         [FAIL] ���������� 8������� ���������[7]
+         [FAIL] ������������������ =��������[59]
+         [FAIL] �������������: tcrs == 1
+         [FAIL] ������������������������������������
+  [OK ] M2 CRC 残留魔数换成大端魔数                          expect=caught rc=1  nFAIL=28
+         [FAIL] �������������: tcrs == 1
+         [FAIL] �������������: tcrs == 1
+         [FAIL] �������������: tcrs == 1
+         [FAIL] �������������: tcrs == 1
+         [FAIL] �������������: tcrs == 1
+  [OK ] M3 F4 空间门退回寄存器 full                        expect=caught rc=1  nFAIL=2
+         [FAIL] F4 ���������: stat_fifo_ovf == ������������ FIF�����������)
+         [FAIL] F4 �����������Σpop�����������) == stat_bytes - 4*frames + orphan_bytes
+  [OK ] M4 RX FCS 剥离关闭                             expect=caught rc=1  nFAIL=60
+         [FAIL] ���������������� == ������������-4 == 60
+         [FAIL] ���������������:���������������� == ������������
+         [FAIL] ��������������: ��popc(tkeep) ==����������������
+         [FAIL] ��������������: ������ 1����
+         [FAIL] ���������������:���������������� == ������������
+  [OK ] M5 RX 起始 lane 不锁存 (复现已修缺陷)                 expect=caught rc=1  nFAIL=89
+         [FAIL] ���������������� == ������������-4 == 60
+         [FAIL] ������������������ =��������[0] ��� tdata[63:56]����������������
+         [FAIL] ���������� 8������� ���������[7]
+         [FAIL] ������������������ =��������[59]
+         [FAIL] ���������������:���������������� == ������������
+  [OK ] M6 TX IFG 从 12 降到 4                        expect=caught rc=1  nFAIL=1
+         [FAIL] TX ������: ������/S/ == 12 ��� (IFG 12 ��� /I/ ���������������)
+  [OK ] M7 TX F-2 冲刷被拆掉 (中止后直接回 IDLE)              expect=caught rc=1  nFAIL=4
+         [FAIL] F-2: stat_flush_done == 1
+         [FAIL] F-2: stat_flush_words >= 1
+         [FAIL] F-2 ghost: wire frame count == injected count (B8 #3)
+         [FAIL] F-2 ghost: every wire frame == some injected frame (B8 #2)
+  [OK ] M7b TX 幽灵帧 + 计数器伪装 (D1 试金石)                expect=caught rc=1  nFAIL=2
+         [FAIL] F-2 ghost: wire frame count == injected count (B8 #3)
+         [FAIL] F-2 ghost: every wire frame == some injected frame (B8 #2)
+  [OK ] M8 (等价变异) hi>=8 写成 hi>7 —— 逻辑等价, 期望**漏掉**  expect=not_caught rc=0  nFAIL=0
+  [OK ] M9 (等价变异) /T/ lane 判定改用 >= 4'd8 的等价写法      expect=not_caught rc=0  nFAIL=0
+  [OK ] M10 RX 帧闭合条件拆掉 (FSM 永停在收帧态)                expect=caught rc=1  nFAIL=29
+         [FAIL] ��������������: SOP ������������
+         [FAIL] ��������������: ��popc(tkeep) ==����������������
+         [FAIL] ��������������: SOP ������������
+         [FAIL] ��������������: ��popc(tkeep) ==����������������
+         [FAIL] ��������������: SOP ������������
+  [OK ] M11a DEFECT #1 复现: pad 不进 CRC (整块回退)       expect=caught rc=1  nFAIL=17
+         [FAIL] TX pad(20B)      FCS == CRC(wire bytes incl pad)
+         [FAIL] TX pad(20B)      wire residue == 0xDEBB20E3
+         [FAIL] TX->RX L=1       FCS == CRC(wire bytes incl pad)
+         [FAIL] TX->RX L=1       wire residue == 0xDEBB20E3
+         [FAIL] TX->RX L=1      RX tcrs==1 (own TX frame ACCEPTED by own RX)
+  [OK ] M11b pad 只从末内容字的 CRC 里去掉                   expect=caught rc=1  nFAIL=17
+         [FAIL] TX pad(20B)      FCS == CRC(wire bytes incl pad)
+         [FAIL] TX pad(20B)      wire residue == 0xDEBB20E3
+         [FAIL] TX->RX L=1       FCS == CRC(wire bytes incl pad)
+         [FAIL] TX->RX L=1       wire residue == 0xDEBB20E3
+         [FAIL] TX->RX L=1      RX tcrs==1 (own TX frame ACCEPTED by own RX)
+  [OK ] M11c pad 只从 S_TAIL0 续字的 CRC 里去掉            expect=caught rc=1  nFAIL=14
+         [FAIL] TX pad(20B)      FCS == CRC(wire bytes incl pad)
+         [FAIL] TX pad(20B)      wire residue == 0xDEBB20E3
+         [FAIL] TX->RX L=1       FCS == CRC(wire bytes incl pad)
+         [FAIL] TX->RX L=1       wire residue == 0xDEBB20E3
+         [FAIL] TX->RX L=1      RX tcrs==1 (own TX frame ACCEPTED by own RX)
+  [OK ] M11d (等价变异) 纯 pad 判定 p0_rst!=0 写成 p0_use==8 expect=not_caught rc=0  nFAIL=0
+  [OK ] M12 重对齐关闭 (lane4 回到修前 0xF0 首字)             expect=caught rc=1  nFAIL=30
+         [FAIL] /S/@lane4: ������ 1����
+         [FAIL] /S/@lane4�������� 60 ������ (��������� lane4 ���)
+         [FAIL] /S/@lane4: ������������ 64 == 6�������� + 4 FCS
+         [FAIL] lane4 /T@lane4  delivered 1 frame
+         [FAIL] lane4 /T@lane4  payload byte count
+  [OK ] M13 冲字拆掉 (lane4 末字余字节不再交付)                 expect=caught rc=1  nFAIL=10
+         [FAIL] lane4 /T@lane5  delivered 1 frame
+         [FAIL] lane4 /T@lane5  payload byte count
+         [FAIL] lane4 /T@lane5  wire len == content+FCS
+         [FAIL] lane4 /T@lane6  delivered 1 frame
+         [FAIL] lane4 /T@lane6  payload byte count
+  [OK ] M14 合并字低半字节序颠倒                             expect=caught rc=1  nFAIL=14
+         [FAIL] /S/@lane4: tcrs == ��������� la���������������)
+         [FAIL] /S/@lane4:������� ������������������ =�������������������������������)
+         [FAIL] lane4 /T@lane4  tcrs==1 (FCS stripped at right byte)
+         [FAIL] lane4 /T@lane4  payload byte-exact
+         [FAIL] lane4 /T@lane5  tcrs==1 (FCS stripped at right byte)
+  [!! ] M15 CRC 挂点从 A'(归一化) 退回 raw A               expect=caught rc=0  nFAIL=0
+  [OK ] M16 线上长度退回用 ap_k (重复计数)                    expect=caught rc=1  nFAIL=4
+         [FAIL] lane4 /T@lane5  wire len == content+FCS
+         [FAIL] lane4 /T@lane6  wire len == content+FCS
+         [FAIL] lane4 /T@lane7  wire len == content+FCS
+         [FAIL] lane4 /T@lane0+ wire len == content+FCS
+  [OK ] M17 (等价变异) 半字字节数写成 t_v ? ra_car4 : 4       expect=not_caught rc=0  nFAIL=0
+
+---- 汇总 ----
+  OK  M1 TX 字节序镜像变直通                               expect=caught  got=caught
+  OK  M1b RX 字节序镜像变直通                              expect=caught  got=caught
+  OK  M2 CRC 残留魔数换成大端魔数                            expect=caught  got=caught
+  OK  M3 F4 空间门退回寄存器 full                          expect=caught  got=caught
+  OK  M4 RX FCS 剥离关闭                               expect=caught  got=caught
+  OK  M5 RX 起始 lane 不锁存 (复现已修缺陷)                   expect=caught  got=caught
+  OK  M6 TX IFG 从 12 降到 4                          expect=caught  got=caught
+  OK  M7 TX F-2 冲刷被拆掉 (中止后直接回 IDLE)                expect=caught  got=caught
+  OK  M7b TX 幽灵帧 + 计数器伪装 (D1 试金石)                  expect=caught  got=caught
+  OK  M8 (等价变异) hi>=8 写成 hi>7 —— 逻辑等价, 期望**漏掉**    expect=missed  got=missed
+  OK  M9 (等价变异) /T/ lane 判定改用 >= 4'd8 的等价写法        expect=missed  got=missed
+  OK  M10 RX 帧闭合条件拆掉 (FSM 永停在收帧态)                  expect=caught  got=caught
+  OK  M11a DEFECT #1 复现: pad 不进 CRC (整块回退)         expect=caught  got=caught
+  OK  M11b pad 只从末内容字的 CRC 里去掉                     expect=caught  got=caught
+  OK  M11c pad 只从 S_TAIL0 续字的 CRC 里去掉              expect=caught  got=caught
+  OK  M11d (等价变异) 纯 pad 判定 p0_rst!=0 写成 p0_use==8  expect=missed  got=missed
+  OK  M12 重对齐关闭 (lane4 回到修前 0xF0 首字)               expect=caught  got=caught
+  OK  M13 冲字拆掉 (lane4 末字余字节不再交付)                   expect=caught  got=caught
+  OK  M14 合并字低半字节序颠倒                               expect=caught  got=caught
+  !!  M15 CRC 挂点从 A'(归一化) 退回 raw A                 expect=caught  got=missed
+  OK  M16 线上长度退回用 ap_k (重复计数)                      expect=caught  got=caught
+  OK  M17 (等价变异) 半字字节数写成 t_v ? ra_car4 : 4         expect=missed  got=missed
+
+MUT_VERDICT = FAIL (不等价变异漏掉 1 条)

@@ -1,0 +1,24 @@
+ROUTE_BEFORE 192.168.100.2 via 192.168.0.1 dev wlp6s0 src 192.168.0.38 uid 0 
+ROUTE_AFTER 192.168.100.2 dev enp1s0f1np1 src 192.168.100.100 uid 0 
+NIC_PRE 1790743751.063814627
+port_rx_bytes 379527400546 port_rx_packets 1104087014 port_rx_good 83453503 port_rx_bad 1020633511 port_rx_1024_to_15xx 83266335 rx_eth_crc_err 1 
+TCPDUMP_ARMED 1790743753.067678934 pid=8581
+    [  1.0s] 帧=487 字节=716864  ≈    5.7 Mbps  失配=0 掉包=486
+    [  2.0s] 帧=979 字节=1441088  ≈    5.8 Mbps  失配=0 掉包=978
+    [  3.0s] 帧=1471 字节=2165312  ≈    5.8 Mbps  失配=0 掉包=1470
+  [FAIL] 第 1662 帧真失配 (窗口内找不到对齐点): 长 1472, 首个不同字节 @0
+    [  7.2s] 帧=1662 字节=2446464  ≈    2.7 Mbps  失配=1 掉包=1660
+
+  [汇总] 收 1662 帧 / 2446464 字节 / 7.17s ⇒ **2.7 Mbps** (接收侧口径)
+        载荷长度桶(128B): 1408-1535B:1662 
+        (板子 i_paylen=1472 ⇒ 预期只有 1472 那一桶非零)
+  [INFO] 接收侧掉包 1660 次 / 2443520 字节 (占 49.97%) ⇒ 是我这边内核缓冲丢的;
+         与板子 W9(udpapp_tx_bytes) 对账可确认少的是谁丢的
+  [FAIL] 1/1662 帧图案真失配
+TEACH_DONE 1790743760.239599222
+--- tcpdump stderr ---
+tcpdump: /tmp/g4_content.pcap: Permission denied
+NIC_POST 1790743760.241739373
+port_rx_bytes 380543923238 port_rx_packets 1104756660 port_rx_good 84123149 port_rx_bad 1020633511 port_rx_1024_to_15xx 83935980 rx_eth_crc_err 1 
+-rw-r--r-- 1 tcpdump tcpdump 24 Sep 30 12:49 /tmp/g4_content.pcap
+CONTENT_DONE

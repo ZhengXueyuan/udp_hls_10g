@@ -1,0 +1,21 @@
+NIC_PRE 1790743718.865638014
+port_rx_bytes 379527400354 port_rx_packets 1104087011 port_rx_good 83453500 port_rx_bad 1020633511 port_rx_1024_to_15xx 83266335 rx_eth_crc_err 1 
+TCPDUMP_ARMED 1790743720.869336393 pid=8440
+=== p6e_udp_pattern (C++, 吞吐口径): 本地 :8081 <-> 板子 192.168.100.2:8081 ===
+    内核 SO_RCVBUF 实收 = 8.0 MB ; 重同步窗口 = 65536 B
+    [teach] 发 1 x 100 B 图案前缀 -> 192.168.100.2:8081 (板子随即全速发)
+
+  [汇总] 收 0 帧 / 0 字节 / 5.20s ⇒ **0.0 Mbps** (接收侧口径)
+        载荷长度桶(128B): 
+        (板子 i_paylen=1472 ⇒ 预期只有 1472 那一桶非零)
+  [FAIL] 一个包都没收到 ⇒ peer 没学到 / 板子没发 / 网段不对
+TEACH_DONE 1790743726.070122538
+--- tcpdump stderr ---
+tcpdump: listening on enp1s0f1np1, link-type EN10MB (Ethernet), snapshot length 1600 bytes
+0 packets captured
+0 packets received by filter
+0 packets dropped by kernel
+NIC_POST 1790743743.885965906
+port_rx_bytes 379527400546 port_rx_packets 1104087014 port_rx_good 83453503 port_rx_bad 1020633511 port_rx_1024_to_15xx 83266335 rx_eth_crc_err 1 
+-rw-r--r-- 1 tcpdump tcpdump 24 Sep 30 12:49 /tmp/g4_content.pcap
+CONTENT_DONE

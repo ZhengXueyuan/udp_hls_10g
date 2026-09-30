@@ -132,7 +132,9 @@ sim/p5sim/*
 sim/advrun*/
 sim/p5adv/
 sim/p5ind*/
-sim/p4indm/
+# P4IDM 独立 4 门: 用 `/*` 形式而非 `sim/p4indm/` —— 整目录被排除时 git **不下降**,
+# 任何写在别处的 `!` 都无效(同 sim/retxsim* 的先例)。本轮修复件的放行在**文件末尾**。
+sim/p4indm/*
 sim/p4sim_hlsprobe/
 # P7B: was sim/retxsim*/ -- a DIRECTORY-excluding rule, so no !line could
 #   ever re-include a file inside it (git does not descend into an excluded dir).
@@ -599,3 +601,36 @@ _proj_10g/p7b_mac/sim/_prefix_rtl/
 #      v2 落地前的 v1 备份 —— **与已入库的 `_proj_10g/p7b_rxcls/sim/legacy/rx_classify.v`
 #      是同一份**(md5 `b3452834…`) ⇒ 排除, 避免"同名 RTL 出现两份"(本工程既有口径)。
 _proj_10g/p7b_rxcls/legacy/*.PRE_LANDING_rtl_copy_*
+
+# ============================================================================
+# ⚠️⚠️ 位置敏感: 本节规则**必须留在 .gitignore 的末尾**
+#      gitignore = 最后匹配者胜 —— 把它挪到前面会被既有排除行反过来覆盖
+#      (本轮踩过: 规则写在前半部分时 `git check-ignore -q` 仍返回 0 = 仍被忽略)。
+# ============================================================================
+# P7b 门修复 (2026-09-30) 的放行 —— 取证与逐条依据见
+#   `_proj_10g/notes/P7B_IGNORE_FIX.md`。
+# 背景: 本轮修好的门脚本躺在**被整目录排除**的目录里 ⇒ 修复只存在于工作区,
+#   常规 `git add` 带不走它们 (本工程有过同族事故: "现役入口从未被 git 看见")。
+# ⚠️ 口径: 只放行**门本体** (驱动脚本 + TB 源码); 同目录的产物 (xv_*.log /
+#   xe_*.log / xvlog.pb / xsim.dir/ / wchk/ / *.wdb / dfx_runtime.txt) 照旧排除。
+# ----------------------------------------------------------------------------
+
+# ---- ① sim/p4indm: 本轮新建的委托入口 + 改薄的 shim --------------------------
+#      run_4gates.bat 委托 P4 矩阵 runner (-only pcackoob+vlanchain+vlanburst+
+#      stallgate) 并继承其守卫与退出码; run_4gates.sh 只是它的 git-bash 薄 shim。
+#      ⚠️ 该目录的排除规则见上文, 已改成 `sim/p4indm/*` 形式(否则 git 不下降)。
+!sim/p4indm/run_4gates.bat
+!sim/p4indm/run_4gates.sh
+
+# ---- ② sim/p5c_t3/rev: 本轮修好的 elab 门 -----------------------------------
+#      ⚠️ 父目录 `rev` 被靠上的 `sim/p5c_*/*` **整目录**排除 ⇒ 必须先放行目录本身,
+#      再重新排除其内容, 再逐类放行 (同 p5diag_verify 的先例; 直接写文件级 `!`
+#      会静默无效 —— git 根本不会下降进被排除的目录)。
+!sim/p5c_t3/rev/
+sim/p5c_t3/rev/*
+!sim/p5c_t3/rev/run_wrapper_elab_chk.bat
+#      ⚠️ 下面两个**不是**本轮的修复件, 但同属"现役入口从未被 git 看见"这一族:
+#      `run_all_gates.py` 的 `p5c_rev_g2g3` 条目(现役门)就指向该 .bat, 而新 clone
+#      里取不到它 ⇒ 一并放行(门本体 + 它的 TB 源码, 无产物)。
+!sim/p5c_t3/rev/run_tb_rev_g2g3.bat
+!sim/p5c_t3/rev/tb_rev_g2g3.v
