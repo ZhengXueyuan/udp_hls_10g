@@ -64,6 +64,348 @@ module udp_tx_frame (
     // 那会让 body 里的本参数不可被顶层覆盖)。
     parameter [11:0] PLEN_MAX = 12'd1500;
 
+`ifdef UDP_TX_OVL
+    //=========================================================================
+    // P7B 速率分支: **乒乓双 bank / 收发重叠** (宏 UDP_TX_OVL)
+    //-------------------------------------------------------------------------
+    // 动机 (P7B_RATE_BOTTLENECK.md §1.1): 默认实现的帧周期 = 378 拍 = 收 184 +
+    // 发 194, 两段**结构性互斥** (s_axis_tready 只在 S_RECV 为 1) ⇒ 4.87 Gbps。
+    // 本分支把 RX (收 + 校验和收尾) 与 TX (头/载荷/尾) 拆成**两个独立引擎**,
+    // 载荷 FIFO 拆成两个 256 字 bank 乒乓: RX 把帧 N+1 收进 bank(rx_bank) 的同时,
+    // TX 从 bank(tx_bank) 发帧 N ⇒ 帧周期 = max(RX 187, TX 191) = 191 拍。
+    //
+    // 组成 (逐字照抄默认实现, 只换 bank 上下文与状态名):
+    //   · 头 5 字的字节布局 / 组合算式 / 尾字优先级 / 欠载防御 / 统计口径**一字未改**
+    //   · 长度守卫 (PLEN_MAX) 与冲洗 (RX_FLUSH) 语义未改, 只把"冲洗哪一块"由
+    //     "唯一 FIFO" 改成"当前接收 bank"
+    //   · 校验和用**同一个** checksum16: 收尾 (aen/fin/latch) 从 S_WAIT 搬进
+    //     RX 引擎 ⇒ RX 每帧多占 3 拍, TX 不再占这 3 拍 (这是 191 的来源)
+    //   · o_busy = "有帧在飞" (收 / 收尾 / 冲洗 / 待发 / 发) —— 原窗口的**超集**,
+    //     逐拍比对与消费方影响见 _proj_10g/notes/P7B_RATE_FRAMER.md
+    //   · 无新端口、无新参数; 默认构建 (宏未定义) 走 else 分支, 逐位不变
+    //=========================================================================
+    localparam [1:0] RX_IDLE = 2'd0, RX_FIN = 2'd1, RX_FLUSH = 2'd2;
+    localparam [2:0] T_IDLE  = 3'd0, T_HDR  = 3'd1, T_PAY   = 3'd2,
+                     T_TAIL  = 3'd3, T_DONE = 3'd4;
+
+    // 三个纯函数与默认实现逐字相同 (必须在本分支内重新声明: xvlog/xelab 先声明后用,
+    // 而 else 分支的那一份在本分支里不可见)
+    function [3:0] pop8;
+        input [7:0] v;
+        integer i;
+        reg [3:0] c;
+        begin
+            c = 4'd0;
+            for (i = 0; i < 8; i = i + 1) c = c + {3'b0, v[i]};
+            pop8 = c;
+        end
+    endfunction
+
+    function [63:0] ljust16x;
+        input [15:0] w;
+        input [1:0]  p;
+        begin
+            case (p)
+                2'd1: ljust16x = {w[15:8], 56'b0};
+                2'd2: ljust16x = {w[15:0], 48'b0};
+                default: ljust16x = 64'b0;
+            endcase
+        end
+    endfunction
+
+    function [15:0] ip_csum_calc;
+        input [15:0] tlen;
+        input [15:0] idc;
+        reg [19:0] s;
+        reg [16:0] f1;
+        begin
+            s = {4'b0, 16'h4500} + {4'b0, tlen} + {4'b0, idc} + {4'b0, 16'h0000} +
+                {4'b0, 16'h4011} + {4'b0, 16'h0000} + {4'b0, cfg_src_ip[31:16]} +
+                {4'b0, cfg_src_ip[15:0]} + {4'b0, cfg_dst_ip[31:16]} +
+                {4'b0, cfg_dst_ip[15:0]};
+            f1 = s[15:0] + {12'b0, s[19:16]};
+            ip_csum_calc = ~(f1[15:0] + {15'b0, f1[16]});
+        end
+    endfunction
+
+    reg  [1:0]  rx_state;       // ⚠️ 与 tx_state **必须分开声明**: 两者位宽不同
+    reg  [2:0]  tx_state;       // (T_DONE=3'd4 若塞进 2 位会被截成 T_IDLE=0)
+    reg         rx_bank, tx_bank;
+    reg         recv_first;
+    reg  [1:0]  fin_cnt;
+    reg  [2:0]  thcnt;
+    reg  [11:0] plen;
+    reg         len_bad;
+    reg  [15:0] id_r;
+    reg  [15:0] hold16;
+    reg  [63:0] tail_d;
+    reg  [7:0]  tail_k;
+    // 每 bank 帧上下文 = 乒乓的全部状态 (默认实现里这些是"单 bank"单份)
+    reg  [1:0]  bank_rdy;
+    reg  [11:0] plen_r     [0:1];
+    reg  [15:0] udp_len_r  [0:1];
+    reg  [15:0] total_len_r[0:1];
+    reg  [15:0] ip_csum_r  [0:1];
+    reg  [15:0] udp_csum_r [0:1];
+    reg  [15:0] id_cap     [0:1];
+
+    wire        nxt_bank = ~tx_bank;
+
+    wire        accept = s_axis_tvalid && s_axis_tready;
+    // 写口/读口 (与默认实现同位段一致): [72]=last [71:64]=keep [63:0]=data
+    wire [72:0] fdin   = {s_axis_tlast, s_axis_tkeep, s_axis_tdata};
+    wire        wr, rd_a, rd_b, rd_tx, rd_fl;
+    wire [72:0] fdo_a, fdo_b;
+    wire        em_a, em_b, fu_a, fu_b;
+
+    fifo_sync #(.W(73), .D(256), .AW(8)) u_fifo_a (
+        .clk(clk), .rst_n(rst_n),
+        .wr(wr && !rx_bank), .din(fdin),
+        .rd(rd_a), .dout(fdo_a),
+        .empty(em_a), .full(fu_a)
+    );
+    fifo_sync #(.W(73), .D(256), .AW(8)) u_fifo_b (
+        .clk(clk), .rst_n(rst_n),
+        .wr(wr &&  rx_bank), .din(fdin),
+        .rd(rd_b), .dout(fdo_b),
+        .empty(em_b), .full(fu_b)
+    );
+
+    wire [72:0] fdout_tx      = tx_bank ? fdo_b : fdo_a;
+    wire [72:0] fdout_rx      = rx_bank ? fdo_b : fdo_a;
+    wire        fifo_empty_tx = tx_bank ? em_b : em_a;
+    wire        fifo_empty_rx = rx_bank ? em_b : em_a;
+    wire        fifo_full     = rx_bank ? fu_b : fu_a;   // 接受门用 = 当前接收 bank
+
+    // ---- 帧长 / 帧首 / 守卫判据 (逐字照抄默认实现) ----
+    wire [11:0] plen_n   = (recv_first ? 12'd0 : plen) + {8'b0, pop8(s_axis_tkeep)};
+    wire        len_over = (plen_n > PLEN_MAX);
+    wire [15:0] tl_c     = plen_n + 12'd28;
+    wire [15:0] id_now   = recv_first ? id_r : id_cap[rx_bank];
+    wire [31:0] csum_init_val = {4'b0, cfg_src_ip[31:16]} + {4'b0, cfg_src_ip[15:0]} +
+                                {4'b0, cfg_dst_ip[31:16]} + {4'b0, cfg_dst_ip[15:0]} +
+                                32'h0011;
+    wire        csum_init = (rx_state == RX_IDLE) && accept && recv_first;
+    wire        csum_den  = (rx_state == RX_IDLE) && accept &&
+                            (s_axis_tkeep != 8'h00) && !len_bad;
+    wire        csum_aen  = (rx_state == RX_FIN) && (fin_cnt == 2'd0);
+    wire        csum_fin  = (rx_state == RX_FIN) && (fin_cnt == 2'd1);
+    wire [15:0] csum;
+    wire        csum_valid;
+
+    // 写口: 长度守卫遮挡 + 空 keep 不入 FIFO (同默认实现)
+    assign wr = accept && (s_axis_tkeep != 8'h00) && !len_bad;
+    // 接受门: 收帧相位 + 当前 bank 不满 + **当前 bank 已归还** (bank_rdy=0)。
+    // 最后一项是乒乓的结构性约束: 写进一个仍在被发送的 bank 会污染在飞帧。
+    // (默认实现里这一条由"上一帧发完才回 S_RECV"隐含保证, 这里必须显式。)
+    assign s_axis_tready = (rx_state == RX_IDLE) && !fifo_full && !bank_rdy[rx_bank];
+    // 读口: TX 载荷 (tx_bank) 与中止冲洗 (rx_bank) 互斥 — 两 bank 恒不同 (见头注)
+    wire        pay_load = (tx_state == T_PAY) && (m_axis_tready || !m_axis_tvalid);
+    assign rd_tx = pay_load && (plen_r[tx_bank] != 12'd0) && !fifo_empty_tx;
+    assign rd_fl = (rx_state == RX_FLUSH) && !fifo_empty_rx;
+    assign rd_a  = (rd_tx && !tx_bank) || (rd_fl && !rx_bank);
+    assign rd_b  = (rd_tx &&  tx_bank) || (rd_fl &&  rx_bank);
+
+    // o_busy: 1 = **有帧在飞** (收 / 收尾 / 冲洗 / 待发 / 发), 0 = 完全空闲。
+    // 与默认实现的差别只有一处且方向单一: 默认实现窗口 = [TLAST+1, 末字消费],
+    // 本实现窗口 = [帧首接受拍+1, 末字消费] ⇒ **逐帧是默认窗口的超集** (逐拍证据
+    // 见 P7B_RATE_FRAMER.md §o_busy; 反方向"变短"在任何激励下都不可能)。
+    assign o_busy = (rx_state != RX_IDLE) || !recv_first ||
+                    (tx_state != T_IDLE)  || (bank_rdy != 2'b00);
+
+    checksum16 u_csum (
+        .clk(clk), .rst_n(rst_n),
+        .init(csum_init), .init_val(csum_init_val),
+        .den(csum_den), .din(s_axis_tdata), .dkeep(s_axis_tkeep),
+        // aen 一次补足: 伪头 udp_len + UDP 头 (同默认实现; 用当前接收 bank 的长度)
+        .aen(csum_aen), .add_val({2'b0, udp_len_r[rx_bank]} + {2'b0, udp_len_r[rx_bank]} +
+                                  {2'b0, cfg_src_port} + {2'b0, cfg_dst_port}),
+        .fin(csum_fin),
+        .csum(csum), .csum_valid(csum_valid)
+    );
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            rx_state <= RX_IDLE; tx_state <= T_IDLE;
+            rx_bank <= 1'b0; tx_bank <= 1'b0; recv_first <= 1'b1;
+            fin_cnt <= 2'd0; thcnt <= 3'd0;
+            plen <= 12'd0; len_bad <= 1'b0; id_r <= 16'd0;
+            hold16 <= 16'd0; tail_d <= 64'd0; tail_k <= 8'd0;
+            bank_rdy <= 2'b00;
+            plen_r[0] <= 12'd0; plen_r[1] <= 12'd0;
+            udp_len_r[0] <= 16'd0; udp_len_r[1] <= 16'd0;
+            total_len_r[0] <= 16'd0; total_len_r[1] <= 16'd0;
+            ip_csum_r[0] <= 16'd0; ip_csum_r[1] <= 16'd0;
+            udp_csum_r[0] <= 16'd0; udp_csum_r[1] <= 16'd0;
+            id_cap[0] <= 16'd0; id_cap[1] <= 16'd0;
+            m_axis_tdata <= 0; m_axis_tkeep <= 0; m_axis_tvalid <= 0; m_axis_tlast <= 0;
+            stat_frames <= 0; stat_bytes <= 0; stat_drop_len <= 0;
+        end else begin
+            if (m_axis_tready && m_axis_tvalid) m_axis_tvalid <= 1'b0;
+
+            //=================================================================
+            // RX 引擎: 收帧 + 长度守卫 + 校验和收尾 (原 S_RECV + S_WAIT)
+            //=================================================================
+            case (rx_state)
+            RX_IDLE: begin
+                if (accept) begin
+                    if (recv_first) begin
+                        recv_first <= 1'b0;
+                        id_cap[rx_bank] <= id_r;
+                        id_r <= id_r + 16'd1;
+                        plen <= {8'b0, pop8(s_axis_tkeep)};
+                    end else begin
+                        plen <= plen + {8'b0, pop8(s_axis_tkeep)};
+                    end
+                    // 超限 ⇒ 置 len_bad (下拍起不写 FIFO/不进校验和)
+                    if (len_over) len_bad <= 1'b1;
+                    if (s_axis_tlast) begin
+                        if (len_over || len_bad) begin
+                            // 中止: 不回 RX_FIN (不组头/不发帧/不加 stat_frames/
+                            // 不推进任何线上状态), 原地冲洗本 bank + 计数
+                            recv_first    <= 1'b1;
+                            stat_drop_len <= stat_drop_len + 32'd1;
+                            rx_state      <= RX_FLUSH;
+                        end else begin
+                            plen_r[rx_bank]      <= plen_n;
+                            udp_len_r[rx_bank]   <= plen_n + 12'd8;
+                            total_len_r[rx_bank] <= tl_c;
+                            ip_csum_r[rx_bank]   <= ip_csum_calc(tl_c, id_now);
+                            rx_state <= RX_FIN; fin_cnt <= 2'd0;
+                        end
+                    end
+                end
+            end
+            RX_FIN: begin
+                // 校验和收尾 3 拍 (与默认实现 S_WAIT 的 wait_cnt 0/1/2 逐拍同构)
+                if (fin_cnt == 2'd2) begin
+                    udp_csum_r[rx_bank] <= cfg_csum_en ? (csum_valid ? csum : 16'h0) : 16'h0;
+                    bank_rdy[rx_bank]   <= 1'b1;      // 交棒给 TX 引擎
+                    rx_bank             <= ~rx_bank;
+                    rx_state            <= RX_IDLE;
+                    recv_first          <= 1'b1;
+                end else begin
+                    fin_cnt <= fin_cnt + 2'd1;
+                end
+            end
+            default: begin   // RX_FLUSH: 冲洗本 bank 的残留字 (排空才清守卫)
+                if (fifo_empty_rx) begin
+                    len_bad    <= 1'b0;
+                    rx_state   <= RX_IDLE;
+                    recv_first <= 1'b1;
+                end
+            end
+            endcase
+
+            //=================================================================
+            // TX 引擎: 发帧 N (原 S_HDR + S_PAY + S_TAIL + S_DONE), 与 RX 并行
+            //=================================================================
+            case (tx_state)
+            T_IDLE: begin
+                if (bank_rdy[tx_bank]) begin
+                    tx_state <= T_HDR; thcnt <= 3'd0;
+                end
+            end
+            T_HDR: begin
+                if (!m_axis_tvalid || m_axis_tready) begin
+                    m_axis_tvalid <= 1'b1;
+                    m_axis_tkeep <= 8'hFF;
+                    m_axis_tlast <= 1'b0;
+                    case (thcnt)
+                        // 字节布局铁律 (逐字照抄默认实现):
+                        // w0 = dst[6]+src[0..1]; w1 = src[2..5]+ethertype+45+00;
+                        // w2 = total_len+id+0000+40+11; w3 = ip_csum+src_ip+dst[31:16];
+                        // w4 = dst[15:0]+sport+dport+udp_len
+                        3'd0: m_axis_tdata <= {cfg_dst_mac, cfg_src_mac[47:32]};
+                        3'd1: m_axis_tdata <= {cfg_src_mac[31:0], 16'h0800, 8'h45, 8'h00};
+                        3'd2: m_axis_tdata <= {total_len_r[tx_bank], id_cap[tx_bank],
+                                               16'h0000, 8'h40, 8'h11};
+                        3'd3: m_axis_tdata <= {ip_csum_r[tx_bank], cfg_src_ip,
+                                               cfg_dst_ip[31:16]};
+                        default: m_axis_tdata <= {cfg_dst_ip[15:0], cfg_src_port,
+                                                  cfg_dst_port, udp_len_r[tx_bank]};
+                    endcase
+                    if (thcnt == 3'd4) begin
+                        tx_state <= T_PAY;
+                        hold16   <= udp_csum_r[tx_bank];   // 首载荷拍前导 2 字节
+                    end else begin
+                        thcnt <= thcnt + 3'd1;
+                    end
+                end
+            end
+            T_PAY: begin
+                if (!m_axis_tvalid || m_axis_tready) begin
+                    if (plen_r[tx_bank] == 12'd0) begin
+                        // 零长载荷: {csum, 0} 2 字节
+                        m_axis_tvalid <= 1'b1;
+                        m_axis_tdata  <= {udp_csum_r[tx_bank], 48'h0000};
+                        m_axis_tkeep  <= 8'hC0;
+                        m_axis_tlast  <= 1'b1;
+                        tx_state      <= T_DONE;
+                    end else if (fifo_empty_tx) begin
+                        // 欠载防御 (app 契约违规): 提前结束帧
+                        m_axis_tvalid <= 1'b1;
+                        m_axis_tdata  <= {hold16, 48'h0000};
+                        m_axis_tkeep  <= 8'hC0;
+                        m_axis_tlast  <= 1'b1;
+                        tx_state      <= T_DONE;
+                    end else begin
+                        m_axis_tvalid <= 1'b1;
+                        m_axis_tdata  <= {hold16, fdout_tx[63:16]};
+                        hold16        <= fdout_tx[15:0];
+                        if (fdout_tx[72]) begin
+                            // 末载荷字: n 有效字节 (逐字照抄默认实现)
+                            if (pop8(fdout_tx[71:64]) < 4'd6) begin
+                                m_axis_tkeep <= 8'hFF << (4'd8 -
+                                                (4'd2 + pop8(fdout_tx[71:64])));
+                                m_axis_tlast <= 1'b1;
+                                tx_state     <= T_DONE;
+                            end else if (pop8(fdout_tx[71:64]) == 4'd6) begin
+                                m_axis_tkeep <= 8'hFF;
+                                m_axis_tlast <= 1'b1;
+                                tx_state     <= T_DONE;
+                            end else begin
+                                m_axis_tkeep <= 8'hFF;
+                                m_axis_tlast <= 1'b0;
+                                tail_d       <= ljust16x(fdout_tx[15:0],
+                                                   pop8(fdout_tx[71:64]) - 4'd6);
+                                tail_k       <= 8'hFF << (4'd8 -
+                                          (pop8(fdout_tx[71:64]) - 4'd6));
+                                tx_state     <= T_TAIL;
+                            end
+                        end else begin
+                            m_axis_tkeep <= 8'hFF;
+                            m_axis_tlast <= 1'b0;
+                        end
+                    end
+                end
+            end
+            T_TAIL: begin
+                if (!m_axis_tvalid || m_axis_tready) begin
+                    m_axis_tvalid <= 1'b1;
+                    m_axis_tdata  <= tail_d;
+                    m_axis_tkeep  <= tail_k;
+                    m_axis_tlast  <= 1'b1;
+                    tx_state      <= T_DONE;
+                end
+            end
+            default: begin   // T_DONE: 等末字消费, 立刻接下一 bank (省 1 拍)
+                if (!m_axis_tvalid || m_axis_tready) begin
+                    stat_frames        <= stat_frames + 1;
+                    stat_bytes         <= stat_bytes + plen_r[tx_bank];
+                    bank_rdy[tx_bank]  <= 1'b0;       // 归还本 bank 给 RX 引擎
+                    tx_bank            <= nxt_bank;
+                    if (bank_rdy[nxt_bank]) begin
+                        tx_state <= T_HDR; thcnt <= 3'd0;
+                    end else begin
+                        tx_state <= T_IDLE;
+                    end
+                end
+            end
+            endcase
+        end
+    end
+`else
     localparam [2:0] S_RECV = 3'd0, S_WAIT = 3'd1, S_HDR = 3'd2,
                      S_PAY  = 3'd3, S_TAIL = 3'd4, S_DONE = 3'd5;
 
@@ -331,4 +673,5 @@ module udp_tx_frame (
             endcase
         end
     end
+`endif
 endmodule

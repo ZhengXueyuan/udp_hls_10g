@@ -137,7 +137,13 @@ add_files -fileset constrs_1 ${script_dir}/ku5p_p6b_sysclk.xdc
 add_files -fileset constrs_1 ${script_dir}/ku5p_p7b_cdc.xdc
 set_property used_in_synthesis false [get_files ${script_dir}/ku5p_p7b_cdc.xdc]
 
-set_property verilog_define {APP_MODE=1 DEV_USP=1 PCIE_OBS=1 DP_156MHZ=1 P7B_10G=1} [current_fileset]
+# ⚠️ 这一版是为了**线速测量**而打开 `UDP_TX_OVL`（组帧器乒乓重叠）：
+#   `rtl/udp_tx_frame.v` 的 body 一分为二，`ifdef UDP_TX_OVL` = 乒乓双 bank 版（343 insertion / 0 deletion），
+#   `else` = HEAD 帧器**逐字保留**（默认分支）。关掉这个 define 就回到 HEAD 的帧器行为（帧器 378 拍/帧 → 191 拍/帧）。
+#   同时 `P7B_10G` 内的 8 路并行图案发生器（`rtl/app_udp_pattern.v`）一并生效。
+#   两者叠加 = 本次线速测量构建；既有四个宏（APP_MODE/DEV_USP/PCIE_OBS/DP_156MHZ）与 `P7B_10G` 一字未动。
+set_property verilog_define {APP_MODE=1 DEV_USP=1 PCIE_OBS=1 DP_156MHZ=1 P7B_10G=1 UDP_TX_OVL=1} [current_fileset]
+puts "P7B_VERILOG_DEFINE = [get_property verilog_define [current_fileset]]"
 set_property top $top_module [current_fileset]
 update_compile_order -fileset sources_1
 puts "P7B_TOP = [get_property top [current_fileset]]"
