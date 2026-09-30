@@ -167,7 +167,7 @@ audit_scratch/**/*.backup.log
 
 # ---- ⭐ 放行 4 个被文档点名的**驱动脚本** --------------------------------------
 #      `sim/p4sim/run_matrix_p4dfix.sh` 是 16 门矩阵的**现役 sh 入口**, 被
-#      CLAUDE.md:135 / README.md:287,308 / PORT_NOTES.md:1649,2699 /
+#      CLAUDE.md:135 / README.md 「怎么跑 · 门矩阵」节 (README 2026-09-30 重写前 :287,308) / PORT_NOTES.md:1649,2699 /
 #      P6B_INTEGRATION_REVIEW.md:17 引用, 但从未入库 (git log 为空) ——
 #      被 `.gitignore:40 sim/p4sim/*` 挡住。本仓已跟踪 34 个 *.sh, 且 .gitattributes
 #      专门为 *.sh 写了 `text eol=lf` ⇒ 显然是要跟踪的, 这是**规则漏网不是设计**。
@@ -238,7 +238,7 @@ sim/p4sim/p6logs/*/*
 | P7B_IMPLICIT_GATE_ROLLOUT | `_proj_10g/notes/p7b_rollout/{corpus_scan2.py,ctrl_3091.bat,final_scan.py,fix_p6e_xelab.py,narrow_3091.py}` + `logs/{classify_3091,corpus_scan2,final_scan,fix_docs2_log,lint_after,lint_def_after,narrow_3091_log,p4matrix_clean,p4matrix_rollout,run_lint_p6e_after,run_lint_p7a_after}.txt` | ✗ | **入库** |
 | CLAUDE.md（尾段取证栏） | `_proj_10g/notes/p7b_tail/logs/`（23 txt + 1 log） | ✗ | **入库**（1 个 `.log` 需放行/`-f`） |
 | P7B_IMPLICIT_GATE_ROLLOUT | `_proj_10g/tcl/lint/xelab.txt` | ✗ | **入库** |
-| **CLAUDE.md:135 / README.md:287,308 / PORT_NOTES.md:1649,2699 / P6B_INTEGRATION_REVIEW.md:17** | ⭐ `sim/p4sim/run_matrix_p4dfix.sh` | ✗ **且从未提交过** | **入库**（改规则放行，见 §A.2 末段）。**这是全套引用里最要紧的一条：它是驱动脚本，不是证据** |
+| **CLAUDE.md:135 / README.md 「怎么跑 · 门矩阵」节（2026-09-30 重写前 :287,308） / PORT_NOTES.md:1649,2699 / P6B_INTEGRATION_REVIEW.md:17** | ⭐ `sim/p4sim/run_matrix_p4dfix.sh` | ✗ **且从未提交过** | **入库**（改规则放行，见 §A.2 末段）。**这是全套引用里最要紧的一条：它是驱动脚本，不是证据** |
 | PORT_NOTES.md | `sim/p4sim/p6logs/indep/run_matrix.sh`、`p6logs/indep4c/run_matrix4c.sh` | ✗ | **入库**（同上） |
 
 #### B.2.2 报告/读数（未跟踪 · 未被忽略）

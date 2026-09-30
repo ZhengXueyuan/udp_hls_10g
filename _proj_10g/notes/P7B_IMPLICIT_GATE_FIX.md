@@ -81,7 +81,7 @@
 | `P6B_INTEGRATION_REVIEW.md:273` | `四种组合全部编过…（都没报 undeclared / implicit / 位宽）` | 📝 加订正注：该项**只能证"没有表达式形式的未声明"，不能证"没有隐式网"** |
 | `P7A_COMMIT_PLAN.md:249` | `run_lint_p7a.bat: elaboration 级 lint(implicit net / 位宽 / ERROR 三类硬失败)` | ✏️ 改写 |
 | `P6E_OBS.md:211` | `…10-3091 与 implicitly 计数都是 0 ⇒ 这类错只有"例化真 DUT + 逐字读回"抓得到` | 📝 加订正注 |
-| `README.md:369` | `run_tb_p5e_t2_wrapper.bat（T2 真 wrapper 全链，含 implicit 检查）` | ✏️ 改写为实测签名 |
+| `README.md`「怎么跑 · 门矩阵」的 P5e-T2 行（README 2026-09-30 重写**前**为 `:369`） | `run_tb_p5e_t2_wrapper.bat（T2 真 wrapper 全链，含 implicit 检查）` | ✏️ 改写为实测签名 |
 | `P7B_GATE1.md:285 / :574` | A14 判据表 `implicitly declared 命中 0` | 📝 在 §7 未核实表登记（见下） |
 | `ISSUE_RX_BYTE_CORRUPTION.md:1122/1387/…`（6 处） | `构建日志 implicitly declared 0 命中` 一类**历史读数** | 📝 未改（见 §5.3 的"未改清单"与理由） |
 
@@ -530,7 +530,7 @@ sim/vlansim/run_tb_vlan_strip.bat          sim/vlansim/run_tb_vlan_strip_xk.bat
 | `P6B_INTEGRATION_REVIEW.md` | 62 / 273 | 📝 加订正注（**不改历史数字**） |
 | `P7A_COMMIT_PLAN.md` | 249 | ✏️ 改写 |
 | `P6E_OBS.md` | 211 | 📝 加订正注 |
-| `README.md` | 369 | ✏️ 改写 |
+| `README.md` | 「怎么跑 · 门矩阵」的 P5e-T2 行（重写前 `:369`） | ✏️ 改写 |
 
 **未改（有意，逐条给理由）**
 

@@ -414,7 +414,7 @@ xsim_uart.log  : L6 突发后空线 79243 拍 / ALL_OK / $finish ... tb_uart_dbg
 | `P6B_INTEGRATION_REVIEW.md` | 368 | 操作建议改写（**历史数字 62 / 267-270 / 273 未动**） | "照抄 `findstr implicit`" -> 指向 `implicit_gate.bat`，并说明必须跑在 xelab/synth 日志上 |
 | `P7A_COMMIT_PLAN.md` | 249 / 250 | 键串改写 + 订正段 | 并记录本门**已加 xelab 面**及其配方 / 代价 / exit 97 前提 |
 | `P6E_OBS.md` | 231 | 操作建议改写（**历史读数 102 / 211 未动**） | `findstr 10-3091` -> 收窄键 + 必须跑 xelab 日志 |
-| `README.md` | 369 | 键串改写 | 门的清单里 T2 检查项 -> 收窄键 |
+| `README.md` | 「怎么跑 · 门矩阵」的 P5e-T2 行（重写前 `:369`） | 键串改写 | 门的清单里 T2 检查项 -> 收窄键 |
 
 **完整性核对**：8 份 `.md` 的**统一 CRLF 不变量**逐份复核通过：
 `CLAUDE.md 294/294 · PORT_NOTES 4528/4528 · P7B_SPEC 1002/1002 · P6B_SPEC 1434/1434 · P6B_INTEGRATION_REVIEW 473/473 · P7A_COMMIT_PLAN 468/468 · P6E_OBS 366/366 · README 472/472`

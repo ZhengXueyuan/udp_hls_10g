@@ -37,7 +37,7 @@ mac 层会数丢帧**。它把这条列为 "P6 复审" 项。
 |---|---|
 | **git** | `git log -1 -- rtl/rx_classify.v` = `122b0c0` **2026-09-12** (P4b-7-P6 那一轮); 之后的 P6a / P6b / P6b-F4 / P7a(/P7B) 全部提交**没有碰过这个文件**。工作树对该文件 clean ⇒ 注释写的"记入 P6 清单"**只是记账, 没施工**。 |
 | **代码本身** | 文件内**没有任何** `fifo_sync` / `frame_fifo` / `fifo_async` / `udp_split_fifo` 例化 (全文件 179 行, 逐个读毕) ⇒ 仍是寄存器组 skid。 |
-| **三处文档一致** | `PORT_NOTES.md:3613` (P6 交接"要做的事 C 块"= **`rx_classify` 的 skid 改真 FIFO**, "1G 时代'停 6 拍'无所谓, **10G 是致命**")、`README.md:414` (同)、`PORT_NOTES.md:3662` (把它列在 **P6b** 阶段) —— P6b 已验收完但该项仍在"要做"栏; `_proj_10g/notes/P7B_DATAPATH_CONTRACT.md:483` (E8) 也已自记 **【未核实】**。 |
+| **三处文档一致** | `PORT_NOTES.md:3613` (P6 交接"要做的事 C 块"= **`rx_classify` 的 skid 改真 FIFO**, "1G 时代'停 6 拍'无所谓, **10G 是致命**")、`README.md` 的 P6 交接记录一段（2026-09-30 重写后已移到 `PORT_NOTES.md` 的「README 重写时移出的历史内容（2026-09-30）」节；重写前为 `README.md:414`）(同)、`PORT_NOTES.md:3662` (把它列在 **P6b** 阶段) —— P6b 已验收完但该项仍在"要做"栏; `_proj_10g/notes/P7B_DATAPATH_CONTRACT.md:483` (E8) 也已自记 **【未核实】**。 |
 
 ⇒ **结论: 未落地 (0%)**。注意 `PORT_NOTES.md:3679` 那条更正 ("旧记 3 字 skid 已过时, 代码是 6 字")
 说的是**深度**记录的修正, **不是**"已改 FIFO"。
@@ -164,7 +164,7 @@ FILL 与 DRAIN 是**同一个 FSM 的先后状态, 不重叠** ⇒ 每帧占用 
 
 | # | 未核实项 | 为什么重要 | 怎么核 |
 |---|---|---|---|
-| U1 | 未来 10G 前端 (`mac_rx_64` 的替代者) 是否保留 `stat_drop_full/stat_drop/stat_fifo_ovf` 这套 census | 决定 10G 丢帧是**计数**还是**静默** | 读 P7B PHY shim 设计; 现行 `mac_*` 在 10G 必须整体替换 (`README.md:410-412` 已定性) |
+| U1 | 未来 10G 前端 (`mac_rx_64` 的替代者) 是否保留 `stat_drop_full/stat_drop/stat_fifo_ovf` 这套 census | 决定 10G 丢帧是**计数**还是**静默** | 读 P7B PHY shim 设计; 现行 `mac_*` 在 10G 必须整体替换 (README 的「归档」节 P6 交接记录行 + `PORT_NOTES.md` 的「README 重写时移出的历史内容（2026-09-30）」节；重写前为 `README.md:410-412`) |
 | U2 | 10G 前端的弹性预算 (deep FIFO? 是否可被顶?) | §4.3 第 4 步的"多久开始丢" | 同上 |
 | U3 | 真实流量里小帧洪泛的占比 (57% 上限的权重) | 量化丢帧率 | 板级/对端统计帧长分布 |
 | U4 | "真 FIFO 改造"具体形制 (深度/是否帧级流水) 与它自身的新判据 | 修法正确性 | 走独立的实现+审查+门流程 |
