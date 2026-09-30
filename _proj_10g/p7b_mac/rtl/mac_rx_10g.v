@@ -31,12 +31,27 @@
 //  · 帧内出现控制字符 (窗内 c=1) / 保留控制码 / /E/ ⇒ 该帧 terr=1
 //
 // ===========================================================================
+// §重对齐 (P7B_LANEFIX —— lane4 起帧必须归一化成 lane0 帧的**字几何**)
+// ===========================================================================
+//  冻结合同 (CLAUDE.md「MAC 字流接口规范」) 是: **SOP 字总是满对齐 (tkeep[7]=1)**。
+//  /S/ 落 lane4 时前导组跨字 ⇒ 帧首数据字只剩 4 字节 (lane4..7); 若照原样交出
+//  (tkeep=0xF0), 下游 `udp_rx` 第 0 拍就按 `tkeep != 8'hFF` 判 nonmatch ⇒ 整帧被错
+//  路由到 HLS (`rx_classify` 的 TCP 分类同理)。板级签名 = 单发恒败 / 成批部分认领
+//  (帧起始 lane 随 IFG 相位漂移) —— 见 notes/P7B_UDP_DIAG2.md。
+//  修法 = §A-3「4 字节重对齐」: 首字 4 字节先扣住, 与下一字前 4 字节拼成满字 SOP;
+//  此后每拍"上一字高半 + 本字低半"滚动交付 ⇒ 字节流与 lane0 帧逐字节同序,
+//  **下游一行不用改** (字节序合同 tdata[63:56]=帧首字节 不动)。代价 +1 拍/帧。
+//
+// ===========================================================================
 // §流水结构 (为什么是真流水的 8 字节/拍, 而不是"把 1G 的字节机加宽")
 // ===========================================================================
 //  级 A (组合)  : 逐 lane 解码 → 窗口 [lo,hi) → 左对齐载荷 + tkeep + k + 首/末标志
 //                 ⭐ **CRC 就挂在级 A** (en/d 与输入字同拍) ⇒ 级 B 那一拍同时拿得到
 //                 "含本字(B)的残差"(crc 寄存器) 与"含下一字(A)的残差"(crc_nxt 组合),
 //                 FCS 跨字剥离因此**零气泡** (不需要为末字多等一拍)。
+//  级 A-3 (寄存器): **仅 lane4 起帧** 的 4 字节重对齐 (半字滚动 + 冲字); lane0 帧
+//                 下 ap_* ≡ a_* (逐位透传) ⇒ 该级对 lane0 帧不产生任何行为差异。
+//                 CRC 挂在 A' (= 归一化后的级 A 字) 上 ⇒ 字节流语义不变。
 //  级 B (寄存器) : 持有"上一步进的字" (本拍要发射的字), 同时级 A 提供"下一字"信息
 //  级 C (寄存器) : push 决策落笔 (F4: push_ok = !full_next)
 //  ⇒ 吞吐 = 1 字/拍 (只有"整字都是 FCS"这类边界天然少推一个字; 那不是气泡, 是没字节可推)。
@@ -169,7 +184,13 @@ module mac_rx_10g (
     reg        term_pend;    // 欠一个 TERM 收尾字 (F4)
     reg        drop_frm;     // 本帧已决定丢弃 (空间不足); 此后不再推任何字
 
-    // ---- 级 A 视角: 本字是否携带本帧数据 ----
+    // 帧内又见 /S/ = 上一帧是**未闭合碎片** (F-2): 它的在飞字一律丢弃。
+    // (原声明在 §F4 段; 上移到此处, 供 §A-3 重对齐判定使用。语义不变)
+    wire       frag_now = s_v && in_active;
+
+    // ---- 级 A(raw) 视角: 本(输入)字是否携带本帧数据 ----
+    //   ⚠️ raw 视角只描述**输入字**, 供 SM / 错误检测 / 重对齐使用;
+    //      真正送进级 B 的是 §A-3 归一化后的 ap_* (lane0 帧两者逐位相同)。
     wire       a_v     = in_active;
     wire       a_first = in_active && in_first;
     wire [2:0] lo      = in_first ? first_lo : 3'd0;
@@ -180,7 +201,6 @@ module mac_rx_10g (
     wire       win_ctrl = |(lc & win_mask);             // 窗内出现任何控制字符 = 帧错
     wire       win_bad  = |(lane_is_bad & win_mask);
     wire       a_last   = a_v && t_v;
-    wire [3:0] a_k_l    = a_k;
 
     // 左对齐: 窗内第一个字节 (lane lo) 放到 tdata[63:56] (合同序)
     function [63:0] align8;
@@ -198,6 +218,47 @@ module mac_rx_10g (
     wire [63:0] a_data = align8(ld, lo);
     wire [7:0]  a_keep = (a_k >= 4'd8) ? 8'hFF : (8'hFF << (4'd8 - a_k));
 
+    // ===============================================================
+    // 级 A-3: /S/ 在 lane4 的帧 —— 4 字节重对齐 (P7B_LANEFIX; 见文件头 §重对齐)
+    // ===============================================================
+    // 病根: /S/ 在 lane4 时前导组跨字 ⇒ 帧首数据字只有 4 字节 (lane4..7)。原样交付
+    //       (tkeep=0xF0) 时, 下游按"帧首字必满"的冻结合同判 nonmatch ⇒ 整帧错路由。
+    // 修法: 把那 4 字节**扣住** (ra_d), 与下一字的前 4 字节合并成一个**满字 SOP**;
+    //       此后逐字滚动 (上一字高半 + 本字低半) ⇒ 整帧字流与 lane0 帧同形。
+    //       末字 /T/ 落 hi>4 时, 余下的 hi-4 字节由下一拍的**冲字** F 交付 ⇒ 字节不丢。
+    // 代价: 每帧 +1 拍 (扣住那一拍无字产出), 4 字节 + 4 位寄存器; **零气泡** (其余每拍 1 字)
+    // 边界: ① lane0 帧 / 非 m4 帧: ap_* ≡ a_*(逐位相同) ② 帧内又见 /S/ (碎片): 半字随帧丢
+    //       ③ 首字即 /T/ (0 字节帧) / 末字整字都是 FCS: 由冲字 + 既有 drop_b 语义覆盖
+    reg        ra_m4;      // 本帧 /S/ 在 lane4 (在 /S/ 那拍锁存, 与 first_lo 同寿)
+    reg        ra_v;       // 有一个待用半字
+    reg        ra_flush;   // 半字要**单独冲出** (帧在扣住/合并那一拍就结束了)
+    reg        ra_fst;     // 半字是帧首 ⇒ 产出的字是 SOP 字
+    reg [31:0] ra_d;       // 半字字节 (合同序: [31:24] = 流中最早字节 = lane4)
+    reg [2:0]  ra_k;       // 半字内有效字节数 (0..4)
+
+    wire        ra_hold  = a_first && (first_lo == 3'd4) && !frag_now;  // 扣住那一拍
+    wire        ra_merge = ra_v && !ra_flush;                  // 本拍产出合并字 M
+    wire        ra_out   = ra_v && ra_flush;                    // 本拍产出冲字 F
+    wire [3:0]  ra_lo4   = (hi < 4'd4) ? hi : 4'd4;             // 本字低半进 M 的字节数
+    wire [3:0]  ra_car4  = (hi > 4'd4) ? (hi - 4'd4) : 4'd0;    // 本字高半进新半字的字节数
+    wire [31:0] ra_hi    = {ld[39:32], ld[47:40], ld[55:48], ld[63:56]};  // lane4..7 (合同序)
+
+    wire [63:0] ap_data  = ra_m4 ? (ra_out   ? {ra_d, 32'd0}
+                                  : ra_merge ? {ra_d, ld[7:0], ld[15:8], ld[23:16], ld[31:24]}
+                                  : 64'd0)
+                                : a_data;
+    wire [3:0]  ap_k     = ra_m4 ? (ra_out   ? {1'b0, ra_k}
+                                  : ra_merge ? (4'd4 + ra_lo4)
+                                  : 4'd0)
+                                : a_k;
+    wire [7:0]  ap_keep  = (ap_k >= 4'd8) ? 8'hFF : (8'hFF << (4'd8 - ap_k));
+    wire        ap_v     = ra_m4 ? ra_v   : a_v;
+    wire        ap_first = ra_m4 ? (ra_v && ra_fst) : a_first;
+    wire        ap_last  = ra_m4 ? (ra_out   ? 1'b1
+                                  : ra_merge ? (t_v && (hi <= 4'd4))
+                                  : 1'b0)
+                                : a_last;
+
     // ---------------------------------------------------------------
     // 级 B: 持有"上一个字" (= 本拍要发射的字)
     // ---------------------------------------------------------------
@@ -207,43 +268,54 @@ module mac_rx_10g (
     reg        b_first, b_last, b_v;
 
     // ---------------------------------------------------------------
-    // FCS 剥离 / 发射判定 (对 B, 用 A 的信息)
+    // FCS 剥离 / 发射判定 (对 B, 用 A' 的信息)
     // ---------------------------------------------------------------
     // 末字 k>4 ⇒ FCS 全在自己字内, 自己剥 4 字节;
     // 末字 k<=4 ⇒ 自己那 k 字节全是 FCS (整字不可交付), 前一字要剥 (4-k) 字节。
+    // (a_k_l = 归一化后的 A' 字字节数; 冲字 F 天然 <=4 字节 ⇒ 落到"整字 FCS"那一支)
+    wire [3:0] a_k_l = ap_k;
     wire [3:0] drop_b = b_last ? ((b_k > 4) ? 4'd4 : b_k)
-                               : (a_last ? ((a_k_l >= 4) ? 4'd0 : (4'd4 - a_k_l))
-                                         : 4'd0);
+                               : (ap_last ? ((a_k_l >= 4) ? 4'd0 : (4'd4 - a_k_l))
+                                          : 4'd0);
     wire [3:0] emit_n = (b_k > drop_b) ? (b_k - drop_b) : 4'd0;
     wire       b_emit_v = b_v && (emit_n != 4'd0);
     wire [7:0] b_keep_out = (emit_n >= 4'd8) ? 8'hFF : (8'hFF << (4'd8 - emit_n));
     // tlast 落位: 帧最后一个"真的推出字节"的字
     //   ① B 自己是末字且还推得出 ⇒ tlast 在 B
-    //   ② B 不是末字、下一字 A 是末字、而 A 整字都是 FCS (推不出) ⇒ tlast 落回 B
-    wire       b_emit_last = b_emit_v && (b_last || (a_last && (a_k_l <= 4)));
+    //   ② B 不是末字、下一字 A' 是末字、而 A' 整字都是 FCS (推不出) ⇒ tlast 落回 B
+    wire       b_emit_last = b_emit_v && (b_last || (ap_last && (a_k_l <= 4)));
 
     // ---------------------------------------------------------------
-    // CRC: 8 字节/拍, 与**级 A 输入字**同拍 (⇒ 级 B 发射那一拍两条残差都拿得到)
+    // CRC: 8 字节/拍, 与**归一化后的级 A 字 (A')** 同拍
+    //   (⇒ 级 B 发射那一拍两条残差都拿得到)
     //   crc     寄存器 = 含 B (= 上一步进的字) 的残差
-    //   crc_nxt 组合   = 含 A (= 本级输入字) 的残差
+    //   crc_nxt 组合   = 含 A' (= 本级输入字) 的残差
     //   ⚠️ 送 CRC 的 keep 必须是**未剥 FCS 的原始 keep** (FCS 4 字节也是 CRC 的输入)
+    //   ⚠️ lane4 帧: CRC 挂在**归一化后**的字上 (重对齐只是重新分字, 字节流不变) ⇒
+    //      残差仍等于"整帧内容 (含 FCS) 的残差"
     // ---------------------------------------------------------------
     wire [31:0] crc, crc_nxt;
     crc32_64 u_crc (
         .clk(clk), .rst_n(rst_n),
         .init(s_v),                 // /S/ 那一拍复位 ⇒ 第一数据字起初值 0xFFFFFFFF
-        .en(a_v),                   // 帧数据字才参与
-        .d(a_data), .keep(a_keep),
+        .en(ap_v),                  // 帧数据字才参与
+        .d(ap_data), .keep(ap_keep),
         .crc(crc), .crc_nxt(crc_nxt)
     );
     wire res_ok = b_last ? (crc == ETH_CRC_RESIDUE) : (crc_nxt == ETH_CRC_RESIDUE);
 
-    // 帧级错误: 本帧至今 (f_see_*) + 末字若是 A 还要算上 A 本拍的错误
-    wire a_err_new = a_v && (e_any | bad_any | win_ctrl | win_bad);
-    wire b_err_out = f_see_e | f_see_bad | f_see_ctrl | (a_last ? a_err_new : 1'b0);
+    // 帧级错误: 本帧至今 (f_see_*) + 末字若是 A' 还要算上 A' 本拍的错误
+    //   冲字 F 的字节在**产生它的那一拍**就已按 raw 窗检过 (f_see_* 已含) ⇒ 这里记 0,
+    //   否则会把 /T/ 之后那半拍的控制字符算到本帧头上
+    wire a_err_new = ap_v && (ra_out ? 1'b0 : (e_any | bad_any | win_ctrl | win_bad));
+    wire b_err_out = f_see_e | f_see_bad | f_see_ctrl | (ap_last ? a_err_new : 1'b0);
 
     // 帧总长 (线上, 含 FCS): 推 tlast 那一拍必须已经含末字
-    wire [15:0] len_now = b_last ? f_len : (f_len + {12'd0, a_k_l});
+    //   ⚠️ 加的是 **raw a_k** (f_len 尚未计入的那一段), 不是 ap_k —— 对 lane4 帧,
+    //      A' 字里有一半字节是**上一拍已计入**的 (半字 carry 或冲字), 用 ap_k 会重复计数
+    //      (实测: 内容 61..64 的 lane4 帧线上长度各多算 1..4 字节)。a_v=0 (冲字那一拍)
+    //      ⇒ 本拍 raw 无新字节 ⇒ 加 0。
+    wire [15:0] len_now = b_last ? f_len : (f_len + {12'd0, (a_v ? a_k : 4'd0)});
 
     // ---------------------------------------------------------------
     // F4 三门 + push
@@ -255,9 +327,9 @@ module mac_rx_10g (
     wire        push_ok       = !fifo_full_next;
     wire        push_frame_ok = push_ok && !term_pend;
     wire        term_fire     = term_pend && push_ok;
-    // ⭐ 帧内又见 /S/ = 上一帧是**未闭合碎片**: 它的在飞字 (B 与本拍的字) 一律丢弃,
-    //    绝不推入 (否则会留下"无 TLAST 的裸 SOP")。已推过的字由下面的 TERM 收尾。
-    wire        frag_now      = s_v && in_active;
+    // ⭐ 帧内又见 /S/ = 上一帧是**未闭合碎片** (frag_now, 声明见 §A-2 之后):
+    //    它的在飞字 (B 与本拍的字) 一律丢弃, 绝不推入 (否则会留下"无 TLAST 的裸 SOP")。
+    //    已推过的字由下面的 TERM 收尾。
     wire        want_push     = b_emit_v && !drop_frm && !frag_now;
     wire        frame_push_ok = want_push && push_frame_ok;
     wire        zero_len_frm  = b_v && b_first && (emit_n == 4'd0) && !f_first_done;
@@ -267,6 +339,8 @@ module mac_rx_10g (
             in_active <= 1'b0; in_first <= 1'b0; first_lo <= 3'd0; f_tlane <= 4'd0; f_len <= 16'd0;
             f_see_e <= 1'b0; f_see_bad <= 1'b0; f_see_ctrl <= 1'b0;
             f_first_done <= 1'b0; f_pushed <= 16'd0; term_pend <= 1'b0; drop_frm <= 1'b0;
+            ra_m4 <= 1'b0; ra_v <= 1'b0; ra_flush <= 1'b0; ra_fst <= 1'b0;
+            ra_d <= 32'd0; ra_k <= 3'd0;
             b_data <= 64'd0; b_keep <= 8'd0; b_k <= 4'd0;
             b_first <= 1'b0; b_last <= 1'b0; b_v <= 1'b0;
             push <= 1'b0; push_last <= 1'b0; push_sop <= 1'b0;
@@ -343,13 +417,35 @@ module mac_rx_10g (
             // drop_frm 在末字处理完那一拍撤除 (帧边界)
             if (b_v && b_last) drop_frm <= 1'b0;
 
-            // ---- 级 B 寄存器 ----
-            b_data  <= a_data;
-            b_keep  <= a_keep;
-            b_k     <= a_k;
-            b_first <= a_first;
-            b_last  <= a_last;
-            b_v     <= a_v && !frag_now;      // frag: 本拍的字属于被放弃的帧
+            // ---- 级 B 寄存器 (取归一化后的 A') ----
+            b_data  <= ap_data;
+            b_keep  <= ap_keep;
+            b_k     <= ap_k;
+            b_first <= ap_first;
+            b_last  <= ap_last;
+            b_v     <= ap_v && !frag_now;     // frag: 本拍的字属于被放弃的帧
+
+            // ---- 级 A-3 重对齐半字 (脉冲型: 每拍显式落笔, 不靠残值) ----
+            //   优先级: 碎片丢弃 > 冲字用尽 > 扣住新半字 > 合并后滚动半字
+            ra_fst   <= 1'b0;
+            ra_flush <= 1'b0;
+            if (frag_now) begin
+                ra_v <= 1'b0;                 // 碎片: 半字随帧一起丢
+            end else if (ra_out) begin
+                ra_v <= 1'b0;                 // 冲字用尽即空
+            end else if (ra_hold) begin
+                ra_v   <= 1'b1;
+                ra_d   <= ra_hi;
+                ra_k   <= a_k[2:0];
+                ra_fst <= 1'b1;               // 合并出来的字就是 SOP 字
+                ra_flush <= t_v;              // 首字即 /T/ ⇒ 下一拍单独冲出 (含 0 字节)
+            end else if (ra_merge) begin
+                // 帧未完 ⇒ 高半 4 字节照常滚动; 帧在本字结束 ⇒ 只有 hi>4 才有余字要冲
+                ra_v     <= (!t_v) || (hi > 4'd4);
+                ra_d     <= ra_hi;
+                ra_k     <= ra_car4[2:0];
+                ra_flush <= (t_v && (hi > 4'd4));
+            end
 
             // ---- 输入侧状态机 (级 A) ----
             if (s_v) begin
@@ -365,6 +461,7 @@ module mac_rx_10g (
                 end
                 if (|s_other) stat_rx_bad_words <= stat_rx_bad_words + 32'd1; // 非法位置的 /S/
                 in_active <= 1'b1; in_first <= 1'b1; first_lo <= s_lo;
+                ra_m4 <= s_hit4;                 // 重对齐模式与本帧同寿 (见 §A-3)
                 f_len <= 16'd0; f_see_e <= 1'b0; f_see_bad <= 1'b0; f_see_ctrl <= 1'b0;
                 f_first_done <= 1'b0; f_pushed <= 16'd0; drop_frm <= 1'b0;
             end else if (in_active) begin

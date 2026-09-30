@@ -22,6 +22,10 @@ set "MACD=%ROOT%\_proj_10g\p7b_mac\rtl"
 if not "%P7B_MUT%"=="" set "WRAP=%P7B_MUT%\wrapper_p4.v"
 if not "%P7B_MUT%"=="" set "MACD=%P7B_MUT%"
 if not exist "%WRAP%" (echo [PATHGUARD FAIL] no wrapper_p4.v & exit /b 1)
+if not exist "%MACD%\mac_rx_10g.v" (echo [PATHGUARD FAIL] no mac_rx_10g.v in %MACD% & exit /b 1)
+REM 归属证据: 每个日志必须自带"用的是哪套 RTL" (P7B_CHAIN_COVERAGE 2026-09-30).
+echo [RTL] WRAP=%WRAP%
+echo [RTL] MACD=%MACD%
 echo %WRAP%                                          >> files.f
 echo %ROOT%\board\util_gmii_to_rgmii_us.v                     >> files.f
 echo %ROOT%\board\uart_dbg.v                                  >> files.f

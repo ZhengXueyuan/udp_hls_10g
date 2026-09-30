@@ -102,6 +102,13 @@ module mac_tx_10g (
     reg        cw_last;
     reg [3:0]  cw_len;
     reg [15:0] plen;          // 已发内容字节数 (不含本拍 cw)
+    // ⭐ padrem = max(0, ETH_MIN_CLEN - plen) —— plen 的**寄存器副本** (与 plen 同拍更新)。
+    //   它存在的唯一理由是**时序**: lw_ts 原来要经过 plen+cw_len (进位链) → 60-lw_L
+    //   (进位链) → lw_ph (比较+选择) → cw_len+lw_ph 才出来, 而 lw_ts 又直接喂 crc_keep
+    //   ⇒ 整条 plen → CRC → 尾字拼装 → PCS 的组合链在 156.25MHz 上不收敛
+    //   (P7b 全设计 −0.173 / 39 失败端点; 见 notes/P7B_MAC_TIMING_FIX.md)。
+    //   有它以后 lw_ts 只依赖两个**寄存器** (cw_len / padrem), 等价性证明见 lw_ts 处。
+    reg [5:0]  padrem;        // 距 60B 最小帧还差的字节数 (钳 0)
 
     // ⭐ 弹出请求必须是**组合**的: fifo_sync 的 dout 恒等于"本拍的头字"
     //   (dout(T+1)=mem[rptr(T+1)]), 而 rd 在 T 拍为 1 时头字才在 T 沿被消费
@@ -225,7 +232,21 @@ module mac_tx_10g (
     wire [5:0]  lw_room = 6'd8 - {2'd0, cw_len};
     wire [4:0]  lw_ph   = (lw_pad > lw_room) ? lw_room[4:0] : lw_pad[4:0];   // 本字 pad 数
     wire [5:0]  lw_pr   = lw_pad - {1'b0, lw_ph};                           // 剩余 pad
-    wire [4:0]  lw_ts   = {1'b0, cw_len} + lw_ph;                           // 尾起始 lane
+    // ---- 尾起始 lane (本字内容 + 本字 pad 的字节数) -------------------------
+    // ⭐ 2026-09-30 **等价化简** (P7b 时序修复; 见 notes/P7B_MAC_TIMING_FIX.md):
+    //   原式 lw_ts = cw_len + lw_ph, 其中 lw_ph = min(max(0,60-plen-cw_len), 8-cw_len)
+    //   ⇒ cw_len + min(60-plen-cw_len, 8-cw_len)   [当 plen+cw_len < 60]
+    //     = min(60-plen, 8)
+    //   ⇒ 合并两种情形 (plen+cw_len >= 60 时原式 = cw_len, 而 max(cw_len,60-plen) = cw_len):
+    //        lw_ts = min(max(cw_len, padrem), 8),  padrem = max(0, 60-plen)
+    //   且因 padrem ∈ [0,60]、cw_len ∈ [0,8]:
+    //        * padrem > 8 ⇒ 结果恒 8        (max >= padrem > 8, 再 min 8)
+    //        * padrem <= 8 ⇒ 结果 = max(cw_len, padrem) <= 8
+    //   **逐位等价, 无任何行为改变** —— 只是把"两个进位链 + 比较器"换成"两个寄存器 + 比较器"。
+    //   ⚠️ crc_keep / crc_d / crc_en 三行**一字未动** (变异 M11a/M11b/M11c 的锚点在那里,
+    //      改动会同时废掉那三条判据的锚点; 且它们语义上本来就正确)。
+    wire [4:0]  lw_ts   = (padrem > 6'd8) ? 5'd8
+                        : (({1'b0, cw_len} > padrem[4:0]) ? {1'b0, cw_len} : padrem[4:0]);
     wire [31:0] lw_fcs  = crc_nxt ^ 32'hFFFFFFFF;   // 终值取反 (小端上线)
 
     // ---- S_TAIL0 (纯 pad 续字) 的组合量 ----
@@ -298,6 +319,7 @@ module mac_tx_10g (
         if (!rst_n) begin
             state <= S_IDLE;
             cw_data <= 64'd0; cw_keep <= 8'd0; cw_last <= 1'b0; cw_len <= 4'd0; plen <= 16'd0;
+            padrem <= ETH_MIN_CLEN[5:0];
             m_fcs <= 32'd0; m_pad_left <= 6'd0; m_dhere <= 4'd0; m_tptr <= 4'd0;
             m_idle <= 5'd0; m_clen <= 16'd0; flush_cnt <= 4'd0; flush_tl <= 1'b0;
             stat_frames <= 0; stat_abort <= 0; stat_flush_words <= 0; stat_flush_done <= 0;
@@ -320,6 +342,7 @@ module mac_tx_10g (
                         cw_last <= fdout[0];
                         cw_len  <= popc8(fdout[8:1]);
                         plen    <= 16'd0;
+                        padrem  <= ETH_MIN_CLEN[5:0];   // plen=0 ⇒ 60-plen = 60
                         state   <= S_DATA;
                     end else begin
                         state <= S_IDLE;          // 保险 (S_IDLE 已查非空)
@@ -358,6 +381,10 @@ module mac_tx_10g (
                         cw_last <= fdout[0];
                         cw_len  <= popc8(fdout[8:1]);
                         plen    <= plen + {12'd0, cw_len};
+                        // 下一拍的 padrem = max(0, 60 - (plen+cw_len)) —— 正是本拍的 lw_pad
+                        // (lw_pad 由本拍 plen/cw_len 组合算出, 与 plen 的新值同拍锁存 ⇒
+                        //  两个寄存器永远描述同一个 plen, 无相位差)
+                        padrem  <= lw_pad;
                     end else begin
                         // 断供 ⇒ 中止 (runt): 下一拍补一个 /T/ 把帧结掉
                         state <= S_ABORT;

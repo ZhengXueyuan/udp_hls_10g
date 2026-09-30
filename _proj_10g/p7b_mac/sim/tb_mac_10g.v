@@ -202,6 +202,7 @@ module tb_mac_10g;
     integer     rx_fterr [0:255];
     integer     rx_fterm [0:255];
     integer     rx_fsop [0:255];
+    integer     rx_soptk [0:255];   // SOP 字的 tkeep (P7B_LANEFIX: 合同第 2 条的**直接**判据)
     integer     rx_fwcnt [0:255];
     integer     rx_gn = 0, rx_wcnt = 0, jj;
     reg         rx_saw_user;
@@ -212,6 +213,7 @@ module tb_mac_10g;
             if (rx_tuser === 1'b1) begin
                 rx_gn   = 0;
                 rx_sop_ok = (rx_wcnt === 0) ? 1 : 0;   // 帧首字必须是本帧第 0 个字
+                rx_soptk[rx_frn] = rx_tkeep;           // ⭐ 该字的 keep (合同第 2 条判据)
                 rx_saw_user = 1'b1;
                 rx_fs[rx_frn] = rx_gn_global;
             end
@@ -717,6 +719,16 @@ module tb_mac_10g;
         //             + 官方监视器同查 lane0/lane4 (pcs64_pkt_gen_mon.v:1366 / :1379 —— 同构两处)
         //   ⚠️ 2026-09-29 (GATEFIX D6): 原引 :1374 是 `start_flag = 0;`; 正确落位见上
         //      (行号漂移/笔误已订正, 约定本身不变)
+        //   ⭐ 2026-09-30 (P7B_LANEFIX): **本组原有 4 条判据查不到合同第 2 条**
+        //      「帧首字总是满对齐 (tkeep[7]=1)」—— rx_sop_ok 只查 tuser 落在本帧第 0 个字,
+        //      另三条查 字节数 / tcrs / terr, 三者 lane4 下**全部成立**
+        //      ⇒ 缺陷从本组逃逸 (证据: P7B_EVIDENCE_AUDIT.md §B.3.2)。
+        //      故本组补 4 类判据:
+        //        ① `rx_soptk[0] === 8'hFF` —— SOP 字 keep, 合同的**直接**判据
+        //        ② 交付内容逐字节 == 注入内容 (查字节序/对齐, 不只查长度)
+        //        ③ `dbg_rx_last_len` == 内容+FCS (守恒律, 不因起始 lane 变)
+        //        ④ /T/ 落位扫描 (内容 60..64 ⇒ /T/ 落 lane4/5/6/7 与跨字; lane5..7 走
+        //           lane4 重对齐新增的**冲字**支路)
         // =============================================================
         $display("-- 组 4: /S/ 在 lane4");
         reset_all; rx_clr;
@@ -727,6 +739,95 @@ module tb_mac_10g;
         chk(rx_fl[0] === 60,   "/S/@lane4: 交付 60 字节 (数据从 lane4 起)");
         chk(rx_fcrs[0] === 1,  "/S/@lane4: tcrs == 1 (起始 lane 判定正确)");
         chk(rx_fterr[0] === 0, "/S/@lane4: terr == 0 (前导尾未被算进帧)");
+        chk(rx_fsop[0] === 1,      "/S/@lane4: tuser 落帧首字 (原判据 rx_sop_ok)");
+        chk(rx_soptk[0] === 8'hFF, "/S/@lane4: *SOP 字满对齐 tkeep == 8'hFF (合同第 2 条)");
+        ecnt = 0;
+        for (i = 0; i < 60; i = i + 1) if (rx_got[rx_fs[0]+i] !== cbuf[i]) ecnt = ecnt + 1;
+        chk(ecnt === 0,             "/S/@lane4: 交付 60 字节逐字节 == 内容 (字内字节序不变)");
+        chk(rx_dbg_last_len === 64, "/S/@lane4: 线上长度 64 == 60 内容 + 4 FCS");
+
+        // ---- /T/ 落位扫描 (lane4 起帧): 内容 60..64 ⇒ /T/ 落 lane4/5/6/7 与跨字 ----
+        for (k = 0; k < 5; k = k + 1) begin
+            case (k)
+                0: begin clen_w = 60; tagbuf = "lane4 /T@lane4  "; end
+                1: begin clen_w = 61; tagbuf = "lane4 /T@lane5  "; end
+                2: begin clen_w = 62; tagbuf = "lane4 /T@lane6  "; end
+                3: begin clen_w = 63; tagbuf = "lane4 /T@lane7  "; end
+                default: begin clen_w = 64; tagbuf = "lane4 /T@lane0+ "; end
+            endcase
+            reset_all; rx_clr;
+            gn = 0; build_rx_frame(clen_w, 0, -1, 1, 16);
+            pack_words(0, 40, 0, gn);
+            drv_run(40);
+            chk(rx_frn === 1,        {tagbuf, "delivered 1 frame"});
+            chk(rx_fl[0] === clen_w, {tagbuf, "payload byte count"});
+            chk(rx_fcrs[0] === 1,    {tagbuf, "tcrs==1 (FCS stripped at right byte)"});
+            chk(rx_fterr[0] === 0,   {tagbuf, "terr==0"});
+            chk(rx_fsop[0] === 1 && rx_soptk[0] === 8'hFF,
+                                     {tagbuf, "SOP full-aligned (tkeep==FF)"});
+            chk(rx_dbg_last_len === clen_w + 4, {tagbuf, "wire len == content+FCS"});
+            ecnt = 0;
+            for (i = 0; i < clen_w; i = i + 1)
+                if (rx_got[rx_fs[0]+i] !== cbuf[i]) ecnt = ecnt + 1;
+            chk(ecnt === 0,          {tagbuf, "payload byte-exact"});
+        end
+
+
+        // ---- lane4 的错误路径 (P7B_LANEFIX: 重对齐后 CRC/terr 仍须走对) ----
+        reset_all; rx_clr;
+        rx_fcrs[0] = 0; rx_soptk[0] = 0; rx_fterm[0] = 0;
+        gn = 0; build_rx_frame(60, 1, -1, 1, 16);     // badfcs=1
+        pack_words(0, 32, 0, gn);
+        drv_run(32);
+        chk(rx_frn === 1,           "lane4 坏FCS: 仍交付 1 帧 (帧边界由 /T/ 定)");
+        chk(rx_fcrs[0] === 0,       "lane4 坏FCS: tcrs == 0");
+        chk(rx_stat_crc_err === 1,  "lane4 坏FCS: stat_crc_err == 1");
+        chk(rx_soptk[0] === 8'hFF,  "lane4 坏FCS: SOP 仍满对齐");
+        reset_all; rx_clr;
+        rx_fterr[0] = 0; rx_soptk[0] = 0;
+        gn = 0; build_rx_frame(60, 0, 20, 1, 16);     // 帧内第 20 字节换成 /E/
+        pack_words(0, 32, 0, gn);
+        drv_run(32);
+        chk(rx_frn === 1,           "lane4 帧内/E/: 仍交付 1 帧");
+        chk(rx_fterr[0] === 1,      "lane4 帧内/E/: terr == 1");
+        chk(rx_soptk[0] === 8'hFF,  "lane4 帧内/E/: SOP 仍满对齐");
+
+        // ---- lane4 退化帧: 内容 0 字节 (线上只有 4 字节 FCS) ⇒ 整帧丢, 不产字 ----
+        //   覆盖重对齐的 `ra_flush` 首字分支 (ra_k=4 全是 FCS ⇒ 交付 0 字节)
+        reset_all; rx_clr;
+        gn = 0; build_rx_frame(0, 0, -1, 1, 16);
+        pack_words(0, 16, 0, gn);
+        drv_run(24);
+        chk(rx_frn === 0,          "lane4 0 字节帧: 不交付 (零净荷帧丢弃)");
+        chk(rx_stat_drop >= 1,     "lane4 0 字节帧: 计入 stat_drop (不静默)");
+
+        // ---- lane4 碎片 (帧内又见 /S/, F-2): 半字必须**随帧丢**, 不得漏进下一帧 ----
+        //   ⭐ 这是重对齐最危险的失效模态 (残留半字 = 下一帧静默 +4 字节污染)
+        reset_all; rx_clr;
+        gn = 0;
+        for (i = 0; i < 4; i = i + 1) begin gb[gn] = 8'h07; gc[gn] = 1; gn = gn + 1; end
+        gb[gn]=8'hFB; gc[gn]=1; gn=gn+1;
+        for (i = 0; i < 6; i = i + 1) begin gb[gn]=8'h55; gc[gn]=0; gn=gn+1; end
+        gb[gn]=8'hD5; gc[gn]=0; gn=gn+1;
+        for (i = 0; i < 8; i = i + 1) begin gb[gn]=8'h11; gc[gn]=0; gn=gn+1; end
+        gA = gn;                                   // 碎片 = 20 B (lane4 起) **无 /T/**
+        build_rx_frame(60, 0, -1, 1, 16);          // 其后一帧 = 规范 lane4 帧
+        pack_words(0, 32, 0, gA);
+        pack_words(3, 32, gA, gn - gA);
+        drv_run(48);
+        chk(rx_stat_frag >= 1,     "lane4 碎片: 计为未闭合帧 (stat_rx_frag >= 1)");
+        chk(rx_frn >= 1,           "lane4 碎片后: 仍能正常收帧");
+        begin : l4frag_last
+            integer li;
+            li = rx_frn - 1;
+            chk(rx_fl[li] === 60,       "lane4 碎片后: 最后交付帧 == 60 字节");
+            chk(rx_fcrs[li] === 1,      "lane4 碎片后: FCS 正确 (半字没漏进这一帧)");
+            chk(rx_soptk[li] === 8'hFF, "lane4 碎片后: SOP 满对齐");
+            ecnt = 0;
+            for (i = 0; i < 60; i = i + 1)
+                if (rx_got[rx_fs[li]+i] !== cbuf[i]) ecnt = ecnt + 1;
+            chk(ecnt === 0,             "lane4 碎片后: 内容逐字节 == 注入");
+        end
 
         // =============================================================
         // 组 5: 坏 FCS ⇒ tcrs=0 ; /E/ ⇒ terr=1 ; 保留控制码 ⇒ terr=1 (都有负对照)
@@ -778,7 +879,11 @@ module tb_mac_10g;
         chk(rx_fl[0] === 60,    "背靠背: 帧1 = 60 字节");
         chk(rx_fl[1] === 61,    "背靠背: 帧2 = 61 字节");
         chk(rx_fcrs[0] === 1 && rx_fcrs[1] === 1, "背靠背: 两帧 FCS 都正确");
-        chk(rx_fsop[0] === 1 && rx_fsop[1] === 1, "背靠背: 两帧 SOP 都正确");
+        // ⭐ P7B_LANEFIX: 原判据名写"SOP 都正确"但只查了 rx_fsop (**位置**, 不看掩码)。
+        //    补上满掩码条件 —— 这才是"正确"的直接判据 (同族盲点的第二处, 见 P7B_LANEFIX.md)
+        chk(rx_fsop[0] === 1 && rx_fsop[1] === 1 &&
+            rx_soptk[0] === 8'hFF && rx_soptk[1] === 8'hFF,
+            "背靠背: 两帧 SOP 都正确 (位置 + 满掩码)");
         chk(rx_stat_frames === 2, "背靠背: stat_frames == 2");
         // /Q/ (无帧时)
         reset_all; rx_clr;

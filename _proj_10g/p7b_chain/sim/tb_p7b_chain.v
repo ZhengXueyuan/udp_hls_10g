@@ -45,6 +45,17 @@
 //   6d/6e/6f TX 线上前导与内容的 lane 顺序                | 合同 tdata[63:56] + 注入字节
 //   7 W36..W50 = 被 force 的生产者常量                    | force 在生产者节点
 //   7b 0xEC 读 0 且 SLVERR (无回绕)                        | axi_regs 读侧译码; 51 字地图边界
+//   2f..2i 逐字节 == 注入 (60/1514/63/65B)              | 注入字节数组 (旧判据只查 Σpopc)
+//   2j 逐字节比较器自检 (期望错位 1 字节 ⇒ 必判不一致)   | 反例内建: 证明 2f..2i 非哑判据
+//   G1.0..G1.7 lane4 起点 (内容 60..67 = /T/ 落 lane4..3) 逐字节 | 802.3 合法起点 + 注入数组
+//   G1z lane4 八档: 8 帧 / 508 字节 / 无幽灵            | derived: sum(60..67)
+//   G1c lane4 八档把 /T/ 落位扫遍 lane0..7 (激励面自检) | MAC dbg_rx_last_tlane 实测
+//   G2a/b/c 两个规范 lane4 帧背靠背 (跨帧半字交接)      | 合同: 帧边界清半字
+//   G3a..G3d lane4 + F4 背压 (丢弃 / TERM / 恢复逐字节) | LANEFIX §3.4-4 = 残余风险 R3
+//   G4 SOP-1 每个 SOP 字满对齐 (tkeep==8'hFF)             | 合同 mac_rx_10g.v:12 —— 此前一条都没有
+//   G4 SOP-2 Σ(SOP) == Σ(TLAST)                            | 合同 §5: 绝不留裸尾巴字
+//   G4 TERM-1 TERM 字出现过 (非真空分母)                 | 合同 mac_rx_10g.v:16
+//   G4 TERM-2 TERM 六元组逐项 (tdata/tkeep/tlast/tuser/tcrs/terr) | 合同 :16 —— 旧判据只 3/6
 // ---------------------------------------------------------------------------
 // ===========================================================================
 module tb_p7b_chain;
@@ -181,6 +192,35 @@ module tb_p7b_chain;
 
     // 组一帧: /S/ 0xFB + 55x6 + D5 + [内容 n 字节] + [FCS 或 4 个 0]
     //   er_at: >=0 时在该内容下标后插一个 /E/ 控制字符
+    //   frame_lane: 注入起点 lane (0 = 现状; **4** = /S/ 落 lane4, 802.3 另一个合法起点)
+    //     —— xq_pack_words 只从字边界起 ⇒ 旧门**结构性只走 lane0** (P7B_LANEFIX §3.4-1)。
+    //     build_frame 读一次即清 0 ⇒ 既有调用点一行不改 (默认仍是 lane0)。
+    integer frame_lane = 0;
+    task xq_pack_words_sh;            // 与 xq_pack_words 同构 + 可指定起始 lane
+        input integer n;
+        input integer sh;
+        integer i, k;
+        reg [63:0] d;
+        reg [7:0]  c;
+        begin
+            if (sh != 4) xq_pack_words(n);
+            else begin
+                d = 64'h0707070707070707; c = 8'hFF;         // 前 4 lane = idle
+                for (k = 4; k < 8; k = k + 1)
+                    if ((k - 4) < n) begin d[k*8 +: 8] = wb[k-4]; c[k] = wc[k-4]; end
+                xq_d[xq_wr] = d; xq_c[xq_wr] = c; xq_wr = xq_wr + 1;
+                i = 4;
+                while (i < n) begin
+                    d = 64'd0; c = 8'd0;
+                    for (k = 0; k < 8; k = k + 1)
+                        if (i + k < n) begin d[k*8 +: 8] = wb[i+k]; c[k] = wc[i+k];    end
+                        else           begin d[k*8 +: 8] = 8'h07;   c[k] = 1'b1;       end
+                    xq_d[xq_wr] = d; xq_c[xq_wr] = c; xq_wr = xq_wr + 1;
+                    i = i + 8;
+                end
+            end
+        end
+    endtask
     reg [31:0] fcs_calc;
     task build_frame;
         input integer n;
@@ -216,7 +256,8 @@ module tb_p7b_chain;
             //   DIAG 显示 dbg_rx_state=1 卡在收帧, rx_stat_frames=0)。
             //   置于最后一个有效字节之后的那个 lane。
             wb[m] = 8'hFD; wc[m] = 1; m = m + 1;
-            xq_pack_words(m);
+            xq_pack_words_sh(m, frame_lane);
+            frame_lane = 0;               // 一次性: 既有调用点仍默认 lane0
         end
     endtask
 
@@ -236,6 +277,75 @@ module tb_p7b_chain;
     integer    got_f_terr [0:127];
     integer    bi;
 
+    // ============== P7B_CHAIN_COVERAGE: RX 字几何 / TERM 六元组 ==============
+    // 起因 (notes/P7B_LANEFIX.md §5.1 判据族扫描 第 6 条): 本门 RX 侧旧判据**全是字节流级**
+    //   (Σpopc / 内容 / tcrs / terr) ⇒ **字几何 (keep 形状) 缺陷结构性隐身**: /S/ 落 lane4
+    //   的帧 (SOP 字只有 4 字节 + 整帧偏 4 字节) 在旧判据下与 lane0 帧不可分。
+    // 本段**只增加**观察量与判据, 既有 80 条一字不动。
+    //   字几何类 (SOP-1/2) 的反例 = 换回修复前 mac_rx_10g (P7B_MUT) ⇒ 必须变红 (已实测)。
+    integer  rx_sop_n      = 0;      // 交付流里 tuser==1 的字数
+    integer  rx_sop_bad_n  = 0;      // 其中 tkeep != 8'hFF 的字数 (违合同)
+    integer  rx_tlast_n    = 0;      // 全部 tlast 字数 (含 TERM)
+    integer  rx_term_n     = 0;      // TERM 字数 (tlast && tkeep==0)
+    integer  rx_term_bad_n = 0;      // TERM 六元组不成立的字数
+    reg      rx_term_dv    = 0;
+    reg [63:0] rx_term_d = 0;
+    reg [7:0]  rx_term_k = 0;
+    reg        rx_term_l = 0, rx_term_u = 0, rx_term_c = 0, rx_term_e = 0;
+    reg [7:0]  sopk_cur  = 8'hFF;    // 本帧首字的 tkeep (逐帧登记)
+    // 逐帧期望队列: 只对**登记过**的帧逐字节比对 (未登记 => -1, 不参与任何判据)
+    localparam EXQ = 64;
+    integer  exp_n [0:EXQ-1];
+    integer  exp_b [0:EXQ-1];
+    integer  exp_wr = 0, exp_rd = 0;
+    integer  got_f_bx   [0:255];     // 1=逐字节一致 0=不一致 -1=未登记 -2=长度不符
+    integer  got_f_sopk [0:255];     // 该帧首字的 tkeep 实测值 (诊断用)
+    integer  bx_badq = -1, bx_len = 0;   // 最近一次逐字节比对: 首个失配下标 / 长度
+    reg [7:0] bx_obs = 0, bx_exp = 0;    // 失配处的实测值 / 期望值
+    integer  got_f_bxq [0:255];          // 逐帧留档 (诊断用)
+    integer  got_f_bxo [0:255];
+    integer  got_f_bxe [0:255];
+
+    task exp_reset; begin exp_wr = 0; exp_rd = 0; end endtask
+
+    task exp_add;
+        input integer n;
+        input integer base;
+        begin
+            if (exp_wr < EXQ) begin exp_n[exp_wr] = n; exp_b[exp_wr] = base; exp_wr = exp_wr + 1; end
+        end
+    endtask
+
+    // 交付字节 (got_buf, 存储序 = 每个 8 字节组内与帧字节流**相反**) vs PAT[base..base+n-1]
+    //   ⚠️ 组内反转的基准是**该组的有效 lane 数 r**, 不是 8: 末(残)字只有 r 个有效 lane
+    //      (tkeep 高位有效 ⇒ 先被写入的是 lane 8-r) ⇒ 用 `8w+7-idx` 只对满字成立。
+    function rx_bytes_match;
+        input integer n;
+        input integer base;
+        integer q2, wl, r, gbi;
+        reg ok;
+        begin
+            ok = 1'b1; bx_badq = -1; bx_len = got_len;
+            if (got_len !== n) ok = 1'b0;
+            else for (q2 = 0; q2 < n; q2 = q2 + 1) begin
+                wl  = q2 / 8;
+                r   = ((n - wl*8) > 8) ? 8 : (n - wl*8);
+                gbi = wl*8 + (r - 1 - (q2 % 8));
+                // ⚠️ 期望下标**不能**先 mod 256: PAT[0..7] 是 8 个两两不同的特殊字节,
+                //    而 PAT[i≥8] = i%256 ⇒ (base+gbi)%256 落进 0..7 时会与特殊字节撞车
+                //    (实测 1514B 帧在 q=256 处假失配 obs=07 exp=EF)。PAT 有 2048 项,
+                //    所有用例 n ≤ 1514、base ≤ 1 ⇒ 直接按下标取即可。
+                if (got_buf[q2] !== PAT[(base + gbi) % 2048]) begin
+                    ok = 1'b0;
+                    if (bx_badq < 0) begin
+                        bx_badq = q2; bx_obs = got_buf[q2]; bx_exp = PAT[(base + gbi) % 2048];
+                    end
+                end
+            end
+            rx_bytes_match = ok;
+        end
+    endfunction
+
     always @(posedge u_dut.dp_clk) begin
         if (u_dut.rx_tvalid && u_dut.rx_tready) begin
             if (!got_started) begin
@@ -249,6 +359,28 @@ module tb_p7b_chain;
                     got_len = got_len + 1;
                 end
             got_first_words <= got_first_words + 32'd1;
+            // ---- P7B_CHAIN_COVERAGE: 字几何 / TERM 观察 (只增不改) ----
+            if (u_dut.rx_tuser === 1'b1) begin
+                rx_sop_n = rx_sop_n + 1;
+                if (u_dut.rx_tkeep !== 8'hFF) rx_sop_bad_n = rx_sop_bad_n + 1;
+                sopk_cur = u_dut.rx_tkeep;          // 阻塞: 与 TLAST 同拍 (单字帧) 也正确
+            end
+            if (u_dut.rx_tlast === 1'b1) begin
+                rx_tlast_n = rx_tlast_n + 1;
+                if (u_dut.rx_tkeep === 8'h00) begin
+                    rx_term_n = rx_term_n + 1;
+                    if (!((u_dut.rx_tdata === 64'd0)  && (u_dut.rx_tkeep === 8'h00) &&
+                          (u_dut.rx_tlast === 1'b1)  && (u_dut.rx_tuser === 1'b0) &&
+                          (u_dut.rx_tcrs  === 1'b0)  && (u_dut.rx_terr  === 1'b1)))
+                        rx_term_bad_n = rx_term_bad_n + 1;
+                    if (!rx_term_dv) begin
+                        rx_term_dv = 1'b1;
+                        rx_term_d = u_dut.rx_tdata; rx_term_k = u_dut.rx_tkeep;
+                        rx_term_l = u_dut.rx_tlast; rx_term_u = u_dut.rx_tuser;
+                        rx_term_c = u_dut.rx_tcrs;  rx_term_e = u_dut.rx_terr;
+                    end
+                end
+            end
             if (u_dut.rx_tlast) begin
                 got_frames <= got_frames + 1;
                 got_last_len = got_len;
@@ -256,6 +388,18 @@ module tb_p7b_chain;
                     got_f_len[got_f_cnt]  = got_len;
                     got_f_crs[got_f_cnt]  = u_dut.rx_tcrs;   // F2X11
                     got_f_terr[got_f_cnt] = u_dut.rx_terr;   // F2X11
+                    // ---- P7B_CHAIN_COVERAGE: 逐帧首字掩码 + 逐字节比对结果 ----
+                    got_f_sopk[got_f_cnt] = sopk_cur;
+                    if (u_dut.rx_tkeep === 8'h00)
+                        got_f_bx[got_f_cnt] = -1;            // TERM 字: 无内容可比
+                    else if (exp_rd < exp_wr) begin
+                        got_f_bx[got_f_cnt] = rx_bytes_match(exp_n[exp_rd], exp_b[exp_rd]) ? 1 : 0;
+                        got_f_bxq[got_f_cnt] = bx_badq;
+                        got_f_bxo[got_f_cnt] = bx_obs;
+                        got_f_bxe[got_f_cnt] = bx_exp;
+                        exp_rd = exp_rd + 1;
+                    end else
+                        got_f_bx[got_f_cnt] = -1;
                     got_f_cnt = got_f_cnt + 1;
                 end
                 got_len = 0;
@@ -912,6 +1056,12 @@ module tb_p7b_chain;
     // ======================= 主流程 ========================================
     integer  i, j, k, m, n, nob_n, xa_f;
     reg [31:0] v, c0, c1;
+    reg [255:0] gname;              // P7B_CHAIN_COVERAGE: 带序号的判据名
+    integer  gg0, gg1;
+    integer  tl_obs [0:7];          // lane4 sweep 每帧 /T/ 落位 (从注入的 XGMII 字里扫)
+    integer  tl_dut [0:7];          // 同上, DUT 自报值 (诊断; 见 [DEFECT-REG #2])
+    integer  tlane_msk = 0;
+    integer  xq_before, kk2;
     reg [63:0] txw [0:511];
     integer    txwn;
     reg        allgood;
@@ -963,11 +1113,17 @@ module tb_p7b_chain;
         diag("after-group1");
 
         // -------- 第 2 组: 帧几何 ------------------------------------------
+        // ⭐ P7B_CHAIN_COVERAGE 缺口 3: 旧判据在这组只查**字节计数** (Σpopc) ⇒ "内容被改
+        //    一个字节 / pad 段错" 在这里完全隐身。现补**逐字节**判据 (首/中/末全覆盖)。
+        //    反例 = 故意错位 1 字节登记期望 (2j 自检) ⇒ 同一比较器必须报不一致 (已实测)。
+        exp_reset;
         got_bytes = 0; got_frames = 0; got_len = 0; got_f_cnt = 0;
         build_frame(60, 1'b0, -1);
+        exp_add(60, 0);
         repeat (250) @(posedge u_dut.dp_clk);
         m = got_bytes;
         build_frame(1514, 1'b0, -1);
+        exp_add(1514, 0);
         repeat (700) @(posedge u_dut.dp_clk);
         n = got_bytes - m;
         chk("2a min frame -> 60 bytes", m === 32'd60,
@@ -977,15 +1133,60 @@ module tb_p7b_chain;
         chk("2c Sum popc conservation",
             (got_bytes === (32'd60 + 32'd1514)) === 1'b1,
             "contract: bytes==injected");
+        begin : g2diag
+            integer dq;
+            $display("  [2 DIAG] cnt=%0d exp(wr=%0d rd=%0d n0=%0d b0=%0d) | f0 len=%0d bx=%0d sopk=%02h badq=%0d obs=%02h exp=%02h | f1 len=%0d bx=%0d",
+                     got_f_cnt, exp_wr, exp_rd, exp_n[0], exp_b[0],
+                     got_f_len[0], got_f_bx[0], got_f_sopk[0],
+                     got_f_bxq[0], got_f_bxo[0], got_f_bxe[0],
+                     got_f_len[1], got_f_bx[1]);
+            $display("  [2 DIAG] got_buf[0..15] = %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h",
+                     got_buf[0],got_buf[1],got_buf[2],got_buf[3],got_buf[4],got_buf[5],
+                     got_buf[6],got_buf[7],got_buf[8],got_buf[9],got_buf[10],got_buf[11],
+                     got_buf[12],got_buf[13],got_buf[14],got_buf[15]);
+            $display("  [2 DIAG] PAT[0..15]     = %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h",
+                     PAT[0],PAT[1],PAT[2],PAT[3],PAT[4],PAT[5],PAT[6],PAT[7],
+                     PAT[8],PAT[9],PAT[10],PAT[11],PAT[12],PAT[13],PAT[14],PAT[15]);
+            $display("  [2 DIAG] f1 bn=%0d badq=%0d obs=%02h exp=%02h | exp1 n=%0d b=%0d",
+                     bx_len, got_f_bxq[1], got_f_bxo[1], got_f_bxe[1], exp_n[1], exp_b[1]);
+            $display("  [2 DIAG] f1 head got_buf[0..7]=%02h %02h %02h %02h %02h %02h %02h %02h | tail got_buf[1506..1513]=%02h %02h %02h %02h %02h %02h %02h %02h",
+                     got_buf[0],got_buf[1],got_buf[2],got_buf[3],got_buf[4],got_buf[5],got_buf[6],got_buf[7],
+                     got_buf[1506],got_buf[1507],got_buf[1508],got_buf[1509],got_buf[1510],got_buf[1511],got_buf[1512],got_buf[1513]);
+            for (dq = 0; dq < 1514 && dq < 32; dq = dq + 8)
+                $display("      f1 got[%03d] %02h %02h %02h %02h %02h %02h %02h %02h", dq,
+                    got_buf[dq],got_buf[dq+1],got_buf[dq+2],got_buf[dq+3],
+                    got_buf[dq+4],got_buf[dq+5],got_buf[dq+6],got_buf[dq+7]);
+        end
+        chk("2f 60B frame byte-exact (first/mid/last)",
+            (got_f_cnt === 2) && (got_f_bx[0] === 1) && (got_f_sopk[0] === 8'hFF),
+            "injected byte array vs delivered buffer");
+        chk("2g 1514B frame byte-exact (first/mid/last)",
+            (got_f_cnt === 2) && (got_f_bx[1] === 1),
+            "injected byte array vs delivered buffer");
         got_bytes = 0; got_frames = 0; got_len = 0; got_f_cnt = 0;
         build_frame(63, 1'b0, -1);
+        exp_add(63, 0);
         repeat (250) @(posedge u_dut.dp_clk);
         build_frame(65, 1'b0, -1);
+        exp_add(65, 0);
         repeat (350) @(posedge u_dut.dp_clk);
         chk("2d 63+65 -> 128 bytes",
             got_bytes === 32'd128, "derived: 63+65");
         chk("2e frames==2 no merge", got_frames === 32'd2,
             "contract: 1 TLAST/frame");
+        chk("2h 63B frame byte-exact", (got_f_cnt === 2) && (got_f_bx[0] === 1),
+            "injected byte array vs delivered buffer");
+        chk("2i 65B frame byte-exact", (got_f_cnt === 2) && (got_f_bx[1] === 1),
+            "injected byte array vs delivered buffer");
+        // ---- 2j: 比较器自检 (反例内建): 同一帧内容, 期望**故意错位 1 字节** ⇒
+        //      got_f_bx 必须 != 1。没有这条, 2f..2i 的"逐字节"可能是恒真的哑判据。
+        got_bytes = 0; got_frames = 0; got_len = 0; got_f_cnt = 0;
+        build_frame(60, 1'b0, -1);
+        exp_add(60, 1);                    // 期望 = PAT[1..60] (真交付是 PAT[0..59])
+        repeat (350) @(posedge u_dut.dp_clk);
+        chk("2j byte-comparator self-test (1-byte off => mismatch)",
+            (got_f_cnt === 1) && (got_f_bx[0] === 0),
+            "negative control: comparator has teeth");
 
         // -------- 第 3 组: FCS / /E/ ---------------------------------------
         c0 = u_dut.rx_stat_crc_err;
@@ -1605,6 +1806,128 @@ module tb_p7b_chain;
                 end
             end
         end
+
+        // =============================================================
+        // 第 9 组 (P7B_CHAIN_COVERAGE): **lane4 注入** + RX 字几何 + TERM 六元组
+        //   缺口 1: 旧门每帧都从字边界起 (xq_pack_words) ⇒ **只走 lane0**, lane4 分支
+        //     从未被激励 —— 而 lane4 是 802.3 的另一个合法起点 (官方监视器只认这两个)。
+        //     字几何缺陷 (SOP 字只有 4 字节 + 整帧偏 4 字节) 在旧判据下结构性隐身。
+        //   缺口 2: TERM 六元组旧判据只查 3/6 (tkeep/tcrs/terr) ⇒ 本组把
+        //     {tdata,tkeep,tlast,tuser,tcrs,terr} 六项**逐项**判 (TERM-2)。
+        //   反例实测: P7B_MUT=<修复前 mac_rx_10g> ⇒ 本组 + SOP-1/SOP-2 变红 (日志见
+        //     notes/p7b_chain_cov/logs/)。
+        // =============================================================
+        $display("==== G: lane4 injection + RX word geometry + TERM tuple ====");
+
+        // ---- G1: lane4 起点, 内容 60..67 ⇒ /T/ 落 lane 4,5,6,7,0,1,2,3 **八档全覆盖**
+        //      (60..64 含冲字支路 / tlast 回落; 65..67 正是 LANEFIX §3.4-5 点名的
+        //       "/T/ 落 lane1/2/3 的 lane4 帧" 缺口)
+        exp_reset;
+        got_bytes = 0; got_frames = 0; got_len = 0; got_f_cnt = 0; got_started = 0;
+        for (i = 0; i < 8; i = i + 1) begin
+            xq_before = xq_wr;
+            frame_lane = 4;
+            build_frame(60 + i, 1'b0, -1);
+            exp_add(60 + i, 0);
+            // ⭐ /T/ 落位 = 从**本帧刚打包进队列的那些 XGMII 字**里扫 (c==1 && d==FD)。
+            //   ⚠️ 不用 `u_dut.u_mac_rx.dbg_rx_last_tlane`: 实测它在 "tlast 回落到前一字"
+            //      的三种情形 (lane4 帧 /T/@lane5/6/7) 恒报 8 = "本字无 /T/" (那是错的,
+            //      见 [DEFECT-REG #2] 的读数)。⇒ 覆盖面判据只挂在**激励面**上。
+            tl_obs[i] = -1;
+            for (k = xq_before; k < xq_wr; k = k + 1)
+                for (kk2 = 0; kk2 < 8; kk2 = kk2 + 1)
+                    if (xq_c[k][kk2] === 1'b1 && xq_d[k][kk2*8 +: 8] === 8'hFD) tl_obs[i] = kk2;
+            repeat (600) @(posedge u_dut.dp_clk);
+            tl_dut[i] = u_dut.u_mac_rx.dbg_rx_last_tlane;   // DUT 自报 (仅诊断)
+        end
+        $display("  [G DIAG] lane4 sweep: got_f_cnt=%0d got_bytes=%0d (expect 8 frames / 508 bytes)",
+                 got_f_cnt, got_bytes);
+        for (i = 0; i < 8 && i < 128; i = i + 1)
+            $display("  [G DIAG]   frame %0d: len=%0d bx=%0d sopk=%02h | /T/ lane stim=%0d dut=%0d (expect len=%0d bx=1 sopk=ff)",
+                     i, got_f_len[i], got_f_bx[i], got_f_sopk[i], tl_obs[i], tl_dut[i], 60 + i);
+        // [DEFECT-REG #2] (2026-09-30, 本门新判据扫出来的): `mac_rx_10g.dbg_rx_last_tlane`
+        //   = `b_last ? f_tlane : t_lane_lo` —— 当 tlast **回落到前一字** (末字整字都是 FCS,
+        //   即 /T/ 落 lane5/6/7) 时, 该拍 t_lane_lo 指的是**当前输入字**(无 /T/) ⇒ 恒报 8。
+        //   实测: lane4 帧内容 61/62/63 (/T/ 真值 lane5/6/7) 报 dut=8, 其余五档正确。
+        //   影响 = **零** (该网在 wrapper 里只有 `.dbg_rx_last_tlane(mrx_dbg_last_tlane)`,
+        //   而 `mrx_dbg_last_tlane` 全仓无消费者 ⇒ 悬空网, 不进快照/不出板) —— 登记为
+        //   "仪表会撒谎"类: 谁将来接它做板级判读, 必须先修这里 (取 f_tlane)。
+        $display("  [DEFECT-REG #2] dbg_rx_last_tlane reports 8 on TLAST-fallback words (no consumer; dangling net)");
+        for (i = 0; i < 8; i = i + 1) begin
+            $sformat(gname, "G1.%0d lane4 content %0d byte-exact", i, 60 + i);
+            chk(gname, (got_f_cnt === 8) && (got_f_bx[i] === 1),
+                "injected byte array vs delivered buffer (lane4 rebase)");
+        end
+        chk("G1z lane4 sweep: 8 frames / 508 bytes / no ghost",
+            (got_f_cnt === 8) && (got_bytes === 32'd508),
+            "derived: sum(60..67) = 508");
+        // G1c = **激励面覆盖性自检** (不是 DUT 判据): 8 档长度是否真的把 /T/ 落位扫遍
+        //   lane0..7 —— 否则 "覆盖了 /T/@lane1/3" 只是推导, 不是实测。
+        tlane_msk = 0;
+        for (i = 0; i < 8; i = i + 1)
+            if (tl_obs[i] >= 0 && tl_obs[i] < 8) tlane_msk = tlane_msk | (32'd1 << tl_obs[i]);
+        chk("G1c lane4 sweep covers /T/ lanes 0..7",
+            tlane_msk === 8'hFF, "stimulus coverage (injected XGMII words), content 60..67");
+
+        // ---- G2: 两个**规范 lane4 帧背靠背** (跨帧半字交接: LANEFIX §3.4-3)
+        exp_reset;
+        got_bytes = 0; got_frames = 0; got_len = 0; got_f_cnt = 0;
+        frame_lane = 4; build_frame(61, 1'b0, -1); exp_add(61, 0);
+        frame_lane = 4; build_frame(62, 1'b0, -1); exp_add(62, 0);
+        repeat (800) @(posedge u_dut.dp_clk);
+        $display("  [G DIAG] lane4 b2b: got_f_cnt=%0d got_bytes=%0d bx=%0d/%0d",
+                 got_f_cnt, got_bytes, got_f_bx[0], got_f_bx[1]);
+        chk("G2a lane4 back-to-back: exactly 2 frames",
+            got_f_cnt === 2, "derived: 2 injected lane4 frames");
+        chk("G2b lane4 back-to-back: both byte-exact",
+            (got_f_cnt === 2) && (got_f_bx[0] === 1) && (got_f_bx[1] === 1),
+            "contract: cross-frame half-word handoff");
+        chk("G2c lane4 back-to-back: 61+62 bytes",
+            got_bytes === 32'd123, "derived: 61+62");
+
+        // ---- G3: lane4 + F4 背压 (丢弃 / TERM / 恢复; LANEFIX §3.4-4 = 残余风险 R3)
+        exp_reset;
+        got_bytes = 0; got_frames = 0; got_len = 0; got_f_cnt = 0;
+        gg0 = rx_term_n;  gg1 = rx_sop_bad_n;
+        c0 = u_dut.rx_stat_drop_full + u_dut.rx_stat_drop_partial;
+        force u_dut.rx_tready = 1'b0;
+        for (j = 0; j < 40; j = j + 1) begin frame_lane = 4; build_frame(1514, 1'b0, -1); end
+        repeat (6000) @(posedge u_dut.dp_clk);
+        c1 = u_dut.rx_stat_drop_full + u_dut.rx_stat_drop_partial;
+        release u_dut.rx_tready;
+        repeat (6000) @(posedge u_dut.dp_clk);
+        $display("  [G DIAG] lane4 F4: drop %0d->%0d, term %0d->%0d, sop_bad %0d->%0d",
+                 c0, c1, gg0, rx_term_n, gg1, rx_sop_bad_n);
+        chk("G3a lane4+F4: drops recorded",
+            (c1 > c0) === 1'b1, "40 x 1514B lane4 against a 16-word FIFO, tready=0");
+        chk("G3b lane4+F4: TERM closing word emitted",
+            (rx_term_n > gg0) === 1'b1, "contract: aborted frame leaves no bare tail");
+        chk("G3c lane4+F4: no new mis-aligned SOP word",
+            (rx_sop_bad_n === gg1) === 1'b1, "every delivered SOP word stays full");
+        // 恢复: 再注入一个 lane4 帧, 必须逐字节正确
+        exp_reset;
+        got_bytes = 0; got_frames = 0; got_len = 0; got_f_cnt = 0;
+        frame_lane = 4; build_frame(63, 1'b0, -1); exp_add(63, 0);
+        repeat (900) @(posedge u_dut.dp_clk);
+        chk("G3d lane4+F4 recovery byte-exact",
+            (got_f_cnt === 1) && (got_f_bx[0] === 1) && (got_f_sopk[0] === 8'hFF),
+            "derived: 63B lane4 frame after the F4 window");
+
+        // ---- G4: 跨全 run 的字几何 / TERM 判据 (分母 > 0 ⇒ 非真空) ----
+        $display("  [G DIAG] SOP n=%0d bad=%0d | TLAST n=%0d | TERM n=%0d bad=%0d | tuple: d=%016h k=%02h l=%b u=%b c=%b e=%b",
+                 rx_sop_n, rx_sop_bad_n, rx_tlast_n, rx_term_n, rx_term_bad_n,
+                 rx_term_d, rx_term_k, rx_term_l, rx_term_u, rx_term_c, rx_term_e);
+        chk("G4 SOP-1 every RX SOP word full-aligned",
+            (rx_sop_n > 0) && (rx_sop_bad_n === 0),
+            "contract mac_rx_10g.v:12 (tkeep[7]=1) - never checked before");
+        chk("G4 SOP-2 SUM(SOP) == SUM(TLAST)",
+            (rx_sop_n > 0) && (rx_sop_n === rx_tlast_n),
+            "contract: every SOP word is closed by exactly one tlast (no bare tail)");
+        chk("G4 TERM-1 TERM word present (nonvacuous)",
+            rx_term_n >= 1, "contract mac_rx_10g.v:16");
+        chk("G4 TERM-2 TERM six-tuple verbatim",
+            (rx_term_n >= 1) && (rx_term_bad_n === 0),
+            "contract mac_rx_10g.v:16 {tdata=0,tkeep=0,tlast=1,tuser=0,tcrs=0,terr=1}");
 
         release u_dut.txsrc_tdata;  release u_dut.txsrc_tkeep;
         release u_dut.txsrc_tvalid; release u_dut.txsrc_tlast;
