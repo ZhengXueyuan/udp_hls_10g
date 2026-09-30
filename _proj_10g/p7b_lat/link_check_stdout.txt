@@ -1,0 +1,66 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Wed Sep 30 02:29:27 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source {D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\p7b_lat\scripts\probe_link_check.tcl}
+# set here [file normalize [file dirname [info script]]]
+# set root [file normalize [file join $here .. .. ..]]
+# set bit  [file join $root vivado_prj p7b_ku5p_prj.runs impl_1 wrapper_p4.bit]
+# set ltx  [file join $root vivado_prj p7b_ku5p_prj.runs impl_1 wrapper_p4.ltx]
+# if {[info exists ::env(LAT_BIT)]} { set bit $::env(LAT_BIT) }
+# set url 192.168.0.38:3121
+# if {[info exists ::env(LAT_HWURL)]} { set url $::env(LAT_HWURL) }
+# proc sec {s} { puts "\n@@@@@@ LNK >>> $s" ; flush stdout }
+# puts "LNK_BIT = $bit exists=[file exists $bit]"
+LNK_BIT = D:/repo/XCKU5PMini/udp_hls_10g/vivado_prj/p7b_ku5p_prj.runs/impl_1/wrapper_p4.bit exists=1
+# sec "CONNECT"
+
+@@@@@@ LNK >>> CONNECT
+# open_hw_manager
+# connect_hw_server -url $url
+INFO: [Labtools 27-2285] Connecting to hw_server url TCP:192.168.0.38:3121
+INFO: [Labtools 27-3415] Connecting to cs_server url TCP:localhost:0
+INFO: [Labtools 27-3417] Launching cs_server...
+INFO: [Labtools 27-2221] Launch Output:
+
+
+******** Xilinx cs_server v2025.2.0
+  ****** Build date   : Nov 14 2025-07:16:52
+    **** Build number : 2025.2.1763075812
+      ** Copyright 2017-2022 Xilinx, Inc. All Rights Reserved.
+      ** Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
+
+
+
+# current_hw_target [lindex [get_hw_targets] 0]
+# open_hw_target
+INFO: [Labtoolstcl 44-466] Opening hw_target 192.168.0.38:3121/xilinx_tcf/Digilent/210251391367
+# set dlist [get_hw_devices]
+# puts "LNK_DEVC = [llength $dlist]"
+LNK_DEVC = 1
+# set tdev ""
+# foreach d $dlist { if {[get_property IDCODE_HEX $d] eq "04A62093"} { set tdev $d } }
+# if {$tdev eq "" || [llength $dlist] != 1} { puts "LNK_SAFETY_ABORT" ; exit 1 }
+# sec "PROGRAM"
+
+@@@@@@ LNK >>> PROGRAM
+# current_hw_device $tdev
+# set_property PROGRAM.FILE $bit $tdev
+# if {[file exists $ltx]} {
+#     set_property PROBES.FILE $ltx $tdev
+#     set_property FULL_PROBES.FILE $ltx $tdev
+# }
+# if {[catch {program_hw_devices $tdev} em]} { puts "LNK_PROGRAM_FAIL: $em" ; exit 1 }
+INFO: [Labtools 27-3164] End of startup status: HIGH
+program_hw_devices: Time (s): cpu = 00:00:09 ; elapsed = 00:00:09 . Memory (MB): peak = 541.684 ; gain = 0.000
+# puts "LNK_DONE = [get_property REGISTER.CONFIG_STATUS.BIT\[14\]_DONE_PIN $tdev]"
+LNK_DONE = 1
+# puts "LNK OK"
+LNK OK
+# exit
+INFO: [Common 17-206] Exiting Vivado at Wed Sep 30 02:29:43 2026...

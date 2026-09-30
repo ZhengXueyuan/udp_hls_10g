@@ -562,3 +562,32 @@ _proj_10g/xxv_probe/logs/*.jou
 #      `*.backup.log` 一并放行了 —— 与既有 `sim/**/*.backup.log` 同性质, 补挡。
 #      ⚠️ 位置敏感: 必须排在那条 `!` 行**之后**, 否则会被它覆盖(2026-09-29 实测踩过)。
 audit_scratch/**/*.backup.log
+
+# ============================================================================
+# P7b 第二轮 (2026-09-30): 链级门 / 延迟测量 / MAC 判据修复
+# 口径同前: 排生成工程与仿真工作区, 留 TB / 脚本 / 被文档引用的读数。
+# ============================================================================
+
+# ---- 链级门 (65 MB → ~2 MB) ------------------------------------------------
+#      `sim/` 与 `_f2_scratch_tb/` 各 31 MB, 是 xsim 工作区 (但 `sim/` 里的
+#      `tb_p7b_chain.v` / `run_tb_p7b_chain.bat` 是**门本体, 要留**)。
+#      `_mut_rtl/` 与三个 `_f2_scratch*/` 是**变异/脚手架的 RTL 副本**
+#      (与 rtl/ 同源的拷贝) ⇒ 整目录排除(改它们会破坏变异实验的前提)。
+_proj_10g/p7b_chain/_mut_rtl/
+_proj_10g/p7b_chain/_f2_scratch/
+_proj_10g/p7b_chain/_f2_scratch_eq/
+_proj_10g/p7b_chain/_f2_scratch_pad/
+_proj_10g/p7b_chain/_f2_scratch_tb/
+_proj_10g/p7b_chain/sim/xsim.dir/
+_proj_10g/p7b_chain/sim/*.log
+_proj_10g/p7b_chain/sim/*.jou
+_proj_10g/p7b_chain/sim/*.pb
+_proj_10g/p7b_chain/sim/*.wdb
+_proj_10g/p7b_chain/sim/dfx_runtime.txt
+
+# ---- 延迟测量 (37 MB → ~2 MB) ----------------------------------------------
+#      `drp_probe/` 35 MB 是 GT DRP 探针的 Vivado 生成工程 ⇒ 排; 驱动 tcl 在 scripts/。
+_proj_10g/p7b_lat/drp_probe/
+_proj_10g/p7b_lat/scripts/__pycache__/
+_proj_10g/p7b_lat/scripts/dfx_runtime.txt
+_proj_10g/p7b_lat/sim/xsim.dir/

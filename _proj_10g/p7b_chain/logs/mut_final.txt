@@ -1,0 +1,17 @@
+M1_rx_mirror_off       verdict=FAIL       rc=1 fails= 5 expected-caught=2/2
+        fail: 1b RX first byte==content[0]
+        fail: 1c RX 1st byte!=lane7 byte
+        fail: 3a good FCS crc_err same
+        fail: 3c bad FCS crc_err +1
+        fail: 5e recovery byte-exact
+M2_tx_mirror_off       verdict=FAIL       rc=1 fails= 2 expected-caught=2/2
+        fail: 6e TX content lane order
+        fail: 6f TX w2 lane order
+M4_snap_slot_shift     verdict=FAIL       rc=1 fails= 2 expected-caught=2/2
+        fail: 7 W39[2] block_lock
+        fail: 7 W39[4] hi_ber
+MUT_SUMMARY
+  M1_rx_mirror_off       FAIL rc=1 fails=5 caught=2/2
+  M2_tx_mirror_off       FAIL rc=1 fails=2 caught=2/2
+  M4_snap_slot_shift     FAIL rc=1 fails=2 caught=2/2
+MUT_VERDICT = PASS (all non-equivalent mutations caught, by the expected criteria)

@@ -3,8 +3,8 @@
 # SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
 # IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
 # SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
-# Start of session at: Tue Sep 29 22:09:38 2026
-# Process ID         : 21276
+# Start of session at: Wed Sep 30 02:29:00 2026
+# Process ID         : 25428
 # Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac/sim
 # Command line       : xsim.exe -log xsim_m10g.log -mode tcl -source {xsim.dir/tb_mac_10g/xsim_script.tcl}
 # Log file           : D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac/sim/xsim_m10g.log
@@ -19,7 +19,7 @@
 # Host memory        : 68053 MB
 # Swap memory        : 4294 MB
 # Total Virtual      : 72348 MB
-# Available Virtual  : 42249 MB
+# Available Virtual  : 47426 MB
 #-----------------------------------------------------------
 source xsim.dir/tb_mac_10g/xsim_script.tcl
 # xsim {tb_mac_10g} -autoloadwcfg -runall
@@ -214,7 +214,9 @@ run -all
   [ ok ] TX padÿÿÿ‰ÿÿÿ° /S/
   [ ok ] TX pad: ÿÿÿäÿÿÿ•ÿÿÿ®ÿÿÿèÿÿÿ•° == 20 + 40 pad + 4 FCS
   [ ok ] TX pad:ÿÿÿ 20 ÿÿÿèÿ‚ =ÿÿÿ†ÿÿÿ¹ÿÿÿŽ 40ÿÿÿ—ÿÿ‚ == 0
-  [ ok ] TX pad: FCSÿÿÿÿÿÿèÿÿÿ­ÿÿÿ®
+     [FCSW] TX pad(20B)      clen=60 oracle=11 41 ab 91 | wire=11 41 ab 91
+  [ ok ] TX pad(20B)      FCS == CRC(wire bytes incl pad)
+  [ ok ] TX pad(20B)      wire residue == 0xDEBB20E3
   -- 8.3 å†…å®¹ 61 B / çº¿ä¸Š 65 B â‡’ /T/ åº”åœ¨ lane 1
   [ ok ] ÿÿÿéÿÿÿ•ÿÿÿÿÿÿ‰ÿÿÿ° /S/
   [ ok ] TX ÿÿÿæÿÿÿ‹ÿÿÿæÿÿÿÿÿÿ—ÿÿÿæÿ° =ÿÿÿ†ÿÿÿ¹ + 4
@@ -297,8 +299,107 @@ run -all
   [ ok ] ÿÿÿ¯ÿÿž:ÿÿÿ¤ÿÿ˜ 200 ÿÿÿèÿ‚ =ÿÿÿŽÿÿÿ‹ÿÿÿåÿÿÿ•ÿÿÿ¦
   [ ok ] ÿÿÿ¯ÿÿž: FCSÿÿÿ£ÿÿ® (TX/ÿÿÿçÿ„ CRC+Fÿÿÿçÿÿÿ®ÿÿÿªÿÿ½)
   [ ok ] ÿÿÿçÿÿÿ›ž: 2ÿÿÿåÿÿÿŠÿÿÿÿÿÿèÿÿÿ¸ÿÿÿ´
-=== tb_mac_10g done: 252 checks, 0 fail ===
+-- ç»„ 11: TX->RX è‡ªæ´½ (own TX frame must be ACCEPTED by own RX)
+  -- 11.0 å†…å®¹ 1 B â‡’ çº¿ä¸Šå†…å®¹ 60 B (pad 59 B)
+  [ ok ] TX->RX L=1      TX found /S/
+  [ ok ] TX->RX L=1      wire bytes == content+pad+FCS
+  [ ok ] TX->RX L=1      no data lane after /T/
+  [ ok ] TX->RX L=1      IFG >= 12 /I/
+  [ ok ] TX->RX L=1      payload then zero pad, byte-exact
+     [FCSW] TX->RX L=1       clen=60 oracle=97 10 34 bc | wire=97 10 34 bc
+  [ ok ] TX->RX L=1       FCS == CRC(wire bytes incl pad)
+  [ ok ] TX->RX L=1       wire residue == 0xDEBB20E3
+  [ ok ] TX->RX L=1      RX delivered exactly 1 frame
+  [ ok ] TX->RX L=1      RX tcrs==1 (own TX frame ACCEPTED by own RX)
+  [ ok ] TX->RX L=1      RX payload == content+pad bytes
+  [ ok ] TX->RX L=1      RX terr==0
+  [ ok ] TX->RX L=1      RX payload byte-exact (content + zero pad)
+  -- 11.1 å†…å®¹ 18 B â‡’ çº¿ä¸Šå†…å®¹ 60 B (pad 42 B)
+  [ ok ] TX->RX L=18     TX found /S/
+  [ ok ] TX->RX L=18     wire bytes == content+pad+FCS
+  [ ok ] TX->RX L=18     no data lane after /T/
+  [ ok ] TX->RX L=18     IFG >= 12 /I/
+  [ ok ] TX->RX L=18     payload then zero pad, byte-exact
+     [FCSW] TX->RX L=18      clen=60 oracle=f5 c8 e7 a4 | wire=f5 c8 e7 a4
+  [ ok ] TX->RX L=18      FCS == CRC(wire bytes incl pad)
+  [ ok ] TX->RX L=18      wire residue == 0xDEBB20E3
+  [ ok ] TX->RX L=18     RX delivered exactly 1 frame
+  [ ok ] TX->RX L=18     RX tcrs==1 (own TX frame ACCEPTED by own RX)
+  [ ok ] TX->RX L=18     RX payload == content+pad bytes
+  [ ok ] TX->RX L=18     RX terr==0
+  [ ok ] TX->RX L=18     RX payload byte-exact (content + zero pad)
+  -- 11.2 å†…å®¹ 42 B â‡’ çº¿ä¸Šå†…å®¹ 60 B (pad 18 B)
+  [ ok ] TX->RX L=42     TX found /S/
+  [ ok ] TX->RX L=42     wire bytes == content+pad+FCS
+  [ ok ] TX->RX L=42     no data lane after /T/
+  [ ok ] TX->RX L=42     IFG >= 12 /I/
+  [ ok ] TX->RX L=42     payload then zero pad, byte-exact
+     [FCSW] TX->RX L=42      clen=60 oracle=7a 08 fa af | wire=7a 08 fa af
+  [ ok ] TX->RX L=42      FCS == CRC(wire bytes incl pad)
+  [ ok ] TX->RX L=42      wire residue == 0xDEBB20E3
+  [ ok ] TX->RX L=42     RX delivered exactly 1 frame
+  [ ok ] TX->RX L=42     RX tcrs==1 (own TX frame ACCEPTED by own RX)
+  [ ok ] TX->RX L=42     RX payload == content+pad bytes
+  [ ok ] TX->RX L=42     RX terr==0
+  [ ok ] TX->RX L=42     RX payload byte-exact (content + zero pad)
+  -- 11.3 å†…å®¹ 54 B â‡’ çº¿ä¸Šå†…å®¹ 60 B (pad 6 B)
+  [ ok ] TX->RX L=54     TX found /S/
+  [ ok ] TX->RX L=54     wire bytes == content+pad+FCS
+  [ ok ] TX->RX L=54     no data lane after /T/
+  [ ok ] TX->RX L=54     IFG >= 12 /I/
+  [ ok ] TX->RX L=54     payload then zero pad, byte-exact
+     [FCSW] TX->RX L=54      clen=60 oracle=68 2c 18 51 | wire=68 2c 18 51
+  [ ok ] TX->RX L=54      FCS == CRC(wire bytes incl pad)
+  [ ok ] TX->RX L=54      wire residue == 0xDEBB20E3
+  [ ok ] TX->RX L=54     RX delivered exactly 1 frame
+  [ ok ] TX->RX L=54     RX tcrs==1 (own TX frame ACCEPTED by own RX)
+  [ ok ] TX->RX L=54     RX payload == content+pad bytes
+  [ ok ] TX->RX L=54     RX terr==0
+  [ ok ] TX->RX L=54     RX payload byte-exact (content + zero pad)
+  -- 11.4 å†…å®¹ 57 B â‡’ çº¿ä¸Šå†…å®¹ 60 B (pad 3 B)
+  [ ok ] TX->RX L=57     TX found /S/
+  [ ok ] TX->RX L=57     wire bytes == content+pad+FCS
+  [ ok ] TX->RX L=57     no data lane after /T/
+  [ ok ] TX->RX L=57     IFG >= 12 /I/
+  [ ok ] TX->RX L=57     payload then zero pad, byte-exact
+     [FCSW] TX->RX L=57      clen=60 oracle=8c 05 06 2e | wire=8c 05 06 2e
+  [ ok ] TX->RX L=57      FCS == CRC(wire bytes incl pad)
+  [ ok ] TX->RX L=57      wire residue == 0xDEBB20E3
+  [ ok ] TX->RX L=57     RX delivered exactly 1 frame
+  [ ok ] TX->RX L=57     RX tcrs==1 (own TX frame ACCEPTED by own RX)
+  [ ok ] TX->RX L=57     RX payload == content+pad bytes
+  [ ok ] TX->RX L=57     RX terr==0
+  [ ok ] TX->RX L=57     RX payload byte-exact (content + zero pad)
+  -- 11.5 å†…å®¹ 60 B â‡’ çº¿ä¸Šå†…å®¹ 60 B (pad 0 B)
+  [ ok ] TX->RX L=60     TX found /S/
+  [ ok ] TX->RX L=60     wire bytes == content+pad+FCS
+  [ ok ] TX->RX L=60     no data lane after /T/
+  [ ok ] TX->RX L=60     IFG >= 12 /I/
+  [ ok ] TX->RX L=60     payload then zero pad, byte-exact
+     [FCSW] TX->RX L=60      clen=60 oracle=8e 6c 61 3b | wire=8e 6c 61 3b
+  [ ok ] TX->RX L=60      FCS == CRC(wire bytes incl pad)
+  [ ok ] TX->RX L=60      wire residue == 0xDEBB20E3
+  [ ok ] TX->RX L=60     RX delivered exactly 1 frame
+  [ ok ] TX->RX L=60     RX tcrs==1 (own TX frame ACCEPTED by own RX)
+  [ ok ] TX->RX L=60     RX payload == content+pad bytes
+  [ ok ] TX->RX L=60     RX terr==0
+  [ ok ] TX->RX L=60     RX payload byte-exact (content + zero pad)
+  -- 11.6 å†…å®¹ 200 B â‡’ çº¿ä¸Šå†…å®¹ 200 B (pad 0 B)
+  [ ok ] TX->RX L=200    TX found /S/
+  [ ok ] TX->RX L=200    wire bytes == content+pad+FCS
+  [ ok ] TX->RX L=200    no data lane after /T/
+  [ ok ] TX->RX L=200    IFG >= 12 /I/
+  [ ok ] TX->RX L=200    payload then zero pad, byte-exact
+     [FCSW] TX->RX L=200     clen=200 oracle=d7 aa 72 8e | wire=d7 aa 72 8e
+  [ ok ] TX->RX L=200     FCS == CRC(wire bytes incl pad)
+  [ ok ] TX->RX L=200     wire residue == 0xDEBB20E3
+  [ ok ] TX->RX L=200    RX delivered exactly 1 frame
+  [ ok ] TX->RX L=200    RX tcrs==1 (own TX frame ACCEPTED by own RX)
+  [ ok ] TX->RX L=200    RX payload == content+pad bytes
+  [ ok ] TX->RX L=200    RX terr==0
+  [ ok ] TX->RX L=200    RX payload byte-exact (content + zero pad)
+=== tb_mac_10g done: 337 checks, 0 fail ===
 VERDICT = PASS
-$finish called at time : 24791400 ps : File "D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac/sim/tb_mac_10g.v" Line 1107
+$finish called at time : 31837800 ps : File "D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac/sim/tb_mac_10g.v" Line 1219
 exit
-INFO: [Common 17-206] Exiting xsim at Tue Sep 29 22:09:40 2026...
+INFO: [Common 17-206] Exiting xsim at Wed Sep 30 02:29:01 2026...

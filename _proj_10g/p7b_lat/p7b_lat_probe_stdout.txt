@@ -1,0 +1,844 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Wed Sep 30 03:32:08 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source {D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\p7b_lat\scripts\probe_lat.tcl}
+# set here [file normalize [file dirname [info script]]]
+# set root [file normalize [file join $here .. .. ..]]
+# set bit  [file join $root vivado_prj p7b_lat_prj.runs impl_1 wrapper_p4.bit]
+# set ltx  [file join $root vivado_prj p7b_lat_prj.runs impl_1 wrapper_p4.ltx]
+# set url  192.168.0.38:3121
+# set stim 1
+# set drpscan 0
+# set peer  a@192.168.0.38
+# set iface enp1s0f1np1
+# if {[info exists ::env(LAT_BIT)]}      { set bit  $::env(LAT_BIT) }
+# if {[info exists ::env(LAT_HWURL)]}    { set url  $::env(LAT_HWURL) }
+# if {[info exists ::env(LAT_STIM)]}     { set stim $::env(LAT_STIM) }
+# if {[info exists ::env(LAT_DRPSCAN)]}  { set drpscan $::env(LAT_DRPSCAN) }
+# if {[info exists ::env(LAT_PEER)]}     { set peer $::env(LAT_PEER) }
+# if {[info exists ::env(LAT_IFACE)]}    { set iface $::env(LAT_IFACE) }
+# proc sec {s} { puts "\n@@@@@@ LAT >>> $s" ; flush stdout }
+# proc pget {o n} { if {[catch {set v [get_property $n $o]} e]} { return "<ERR:$e>" }; return $v }
+# proc padhex {s n} {
+#     set s [string trim $s]
+#     if {[string match "0x*" $s]} { set s [string range $s 2 end] }
+#     while {[string length $s] < $n} { set s "0$s" }
+#     return $s
+# }
+# sec "PREFLIGHT"
+
+@@@@@@ LAT >>> PREFLIGHT
+# puts "LAT_BIT   = $bit"
+LAT_BIT   = D:/repo/XCKU5PMini/udp_hls_10g/vivado_prj/p7b_lat_prj.runs/impl_1/wrapper_p4.bit
+# puts "LAT_LTX   = $ltx"
+LAT_LTX   = D:/repo/XCKU5PMini/udp_hls_10g/vivado_prj/p7b_lat_prj.runs/impl_1/wrapper_p4.ltx
+# puts "LAT_URL   = $url"
+LAT_URL   = 192.168.0.38:3121
+# puts "LAT_STIM  = $stim"
+LAT_STIM  = 1
+# puts "LAT_PEER  = $peer"
+LAT_PEER  = a@192.168.0.38
+# puts "LAT_IFACE = $iface"
+LAT_IFACE = enp1s0f1np1
+# if {![file exists $bit]} { puts "LAT-ABORT: bitstream not found"; exit 1 }
+# if {![file exists $ltx]} { puts "LAT-ABORT: .ltx not found -- VIO probes cannot be enumerated"; exit 1 }
+# puts "BIT_MTIME  = [file mtime $bit]"
+BIT_MTIME  = 1790709676
+# puts "LTX_MTIME  = [file mtime $ltx]"
+LTX_MTIME  = 1790709676
+# sec "CONNECT / SAFETY GATE"
+
+@@@@@@ LAT >>> CONNECT / SAFETY GATE
+# open_hw_manager
+# connect_hw_server -url $url
+INFO: [Labtools 27-2285] Connecting to hw_server url TCP:192.168.0.38:3121
+INFO: [Labtools 27-3415] Connecting to cs_server url TCP:localhost:0
+INFO: [Labtools 27-3417] Launching cs_server...
+INFO: [Labtools 27-2221] Launch Output:
+
+
+******** Xilinx cs_server v2025.2.0
+  ****** Build date   : Nov 14 2025-07:16:52
+    **** Build number : 2025.2.1763075812
+      ** Copyright 2017-2022 Xilinx, Inc. All Rights Reserved.
+      ** Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
+
+
+
+# current_hw_target [lindex [get_hw_targets] 0]
+# open_hw_target
+INFO: [Labtoolstcl 44-466] Opening hw_target 192.168.0.38:3121/xilinx_tcf/Digilent/210251391367
+# set dlist [get_hw_devices]
+# puts "DEVICE_COUNT = [llength $dlist]"
+DEVICE_COUNT = 1
+# foreach d $dlist { puts "DEVICE $d PART=[pget $d PART] IDCODE=[pget $d IDCODE_HEX]" }
+DEVICE xcku5p_0 PART=xcku5p IDCODE=04A62093
+# set tdev ""
+# foreach d $dlist { if {[pget $d IDCODE_HEX] eq "04A62093"} { set tdev $d } }
+# if {$tdev eq "" || [llength $dlist] != 1} {
+#     puts "LAT-SAFETY_ABORT: target='$tdev' count=[llength $dlist] -- NOT PROGRAMMING"
+#     exit 1
+# }
+# puts "SAFETY_GATE = PASS -> $tdev"
+SAFETY_GATE = PASS -> xcku5p_0
+# sec "PROGRAM (JTAG volatile; NEVER QSPI)"
+
+@@@@@@ LAT >>> PROGRAM (JTAG volatile; NEVER QSPI)
+# current_hw_device $tdev
+# set_property PROGRAM.FILE $bit $tdev
+# set_property PROBES.FILE $ltx $tdev
+# set_property FULL_PROBES.FILE $ltx $tdev
+# if {[catch {program_hw_devices $tdev} em]} { puts "LAT-ABORT PROGRAM FAILED: $em"; exit 1 }
+INFO: [Labtools 27-3164] End of startup status: HIGH
+program_hw_devices: Time (s): cpu = 00:00:09 ; elapsed = 00:00:09 . Memory (MB): peak = 542.383 ; gain = 0.000
+# puts "DONE_PIN = [pget $tdev REGISTER.CONFIG_STATUS.BIT\[14\]_DONE_PIN]"
+DONE_PIN = 1
+# refresh_hw_device $tdev
+INFO: [Labtools 27-2302] Device xcku5p (JTAG device index = 0) is programmed with a design that has 1 VIO core(s).
+INFO: [Labtools 27-1889] Uploading output probe values for VIO core [hw_vio_1]
+# sec "PEER LINK RESTORE (precondition for the stimulus)"
+
+@@@@@@ LAT >>> PEER LINK RESTORE (precondition for the stimulus)
+# set peer_ok 0
+# for {set i 0} {$i < 40} {incr i} {
+#     set rc [catch {exec ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
+#                    $peer "ip -br addr show $iface | grep -c 'fe80::'" } out]
+#     set n 0
+#     if {$rc == 0} { catch { set n [string trim $out] } }
+#     if {$n eq "1"} { set peer_ok 1 ; puts "LAT_PEER_ADDR_OK after [expr {$i * 500}] ms" ; break }
+#     after 500
+# }
+LAT_PEER_ADDR_OK after 0 ms
+# if {!$peer_ok} {
+#     puts "LAT_PEER_ADDR_FAIL -- 对�?? $iface 仍无 IPv6 link-local 地址; 激励发不出�?"
+#     puts "  (不中�?: 先跑无激励的负�?�照�?, 但基线的 len 读数会是 0)"
+# }
+# catch { puts "LAT_PEER_TX0 [exec ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=5 $peer "ethtool -S $iface | grep -E 'port_tx_packets'"]" }
+LAT_PEER_TX0      port_tx_packets: 3843
+# sec "VIO DISCOVERY"
+
+@@@@@@ LAT >>> VIO DISCOVERY
+# set vio [lindex [get_hw_vios -of_objects $tdev] 0]
+# if {$vio eq ""} { puts "LAT-ABORT: no VIO in this design"; exit 1 }
+# puts "VIO = $vio"
+VIO = hw_vio_1
+# set allp [get_hw_probes -of_objects $vio]
+# foreach p $allp { puts "  PROBE NAME=[pget $p NAME] WIDTH=[pget $p WIDTH]" }
+  PROBE NAME=u_lat/<const0> WIDTH=1
+  PROBE NAME=u_lat/<const0>_1 WIDTH=1
+  PROBE NAME=u_lat/<const0>_10 WIDTH=1
+  PROBE NAME=u_lat/<const0>_11 WIDTH=1
+  PROBE NAME=u_lat/<const0>_12 WIDTH=1
+  PROBE NAME=u_lat/<const0>_13 WIDTH=1
+  PROBE NAME=u_lat/<const0>_14 WIDTH=1
+  PROBE NAME=u_lat/<const0>_15 WIDTH=1
+  PROBE NAME=u_lat/<const0>_16 WIDTH=1
+  PROBE NAME=u_lat/<const0>_17 WIDTH=1
+  PROBE NAME=u_lat/<const0>_18 WIDTH=1
+  PROBE NAME=u_lat/<const0>_19 WIDTH=1
+  PROBE NAME=u_lat/<const0>_2 WIDTH=1
+  PROBE NAME=u_lat/<const0>_20 WIDTH=1
+  PROBE NAME=u_lat/<const0>_21 WIDTH=1
+  PROBE NAME=u_lat/<const0>_22 WIDTH=1
+  PROBE NAME=u_lat/<const0>_23 WIDTH=1
+  PROBE NAME=u_lat/<const0>_24 WIDTH=1
+  PROBE NAME=u_lat/<const0>_25 WIDTH=1
+  PROBE NAME=u_lat/<const0>_26 WIDTH=1
+  PROBE NAME=u_lat/<const0>_27 WIDTH=1
+  PROBE NAME=u_lat/<const0>_28 WIDTH=1
+  PROBE NAME=u_lat/<const0>_29 WIDTH=1
+  PROBE NAME=u_lat/<const0>_3 WIDTH=1
+  PROBE NAME=u_lat/<const0>_30 WIDTH=1
+  PROBE NAME=u_lat/<const0>_31 WIDTH=1
+  PROBE NAME=u_lat/<const0>_32 WIDTH=1
+  PROBE NAME=u_lat/<const0>_33 WIDTH=1
+  PROBE NAME=u_lat/<const0>_34 WIDTH=1
+  PROBE NAME=u_lat/<const0>_35 WIDTH=1
+  PROBE NAME=u_lat/<const0>_36 WIDTH=1
+  PROBE NAME=u_lat/<const0>_37 WIDTH=1
+  PROBE NAME=u_lat/<const0>_38 WIDTH=1
+  PROBE NAME=u_lat/<const0>_39 WIDTH=1
+  PROBE NAME=u_lat/<const0>_4 WIDTH=1
+  PROBE NAME=u_lat/<const0>_40 WIDTH=1
+  PROBE NAME=u_lat/<const0>_41 WIDTH=1
+  PROBE NAME=u_lat/<const0>_42 WIDTH=1
+  PROBE NAME=u_lat/<const0>_43 WIDTH=1
+  PROBE NAME=u_lat/<const0>_44 WIDTH=1
+  PROBE NAME=u_lat/<const0>_45 WIDTH=1
+  PROBE NAME=u_lat/<const0>_46 WIDTH=1
+  PROBE NAME=u_lat/<const0>_47 WIDTH=1
+  PROBE NAME=u_lat/<const0>_5 WIDTH=1
+  PROBE NAME=u_lat/<const0>_6 WIDTH=1
+  PROBE NAME=u_lat/<const0>_7 WIDTH=1
+  PROBE NAME=u_lat/<const0>_8 WIDTH=1
+  PROBE NAME=u_lat/<const0>_9 WIDTH=1
+  PROBE NAME=u_lat/dp_c_r WIDTH=32
+  PROBE NAME=u_lat/dp_vs_r_reg_n_53_ WIDTH=32
+  PROBE NAME=u_lat/drp_req_go_1 WIDTH=2
+  PROBE NAME=u_lat/fe_rst_n WIDTH=1
+  PROBE NAME=u_lat/lat_clr_1 WIDTH=1
+  PROBE NAME=u_lat/lat_pi1 WIDTH=128
+  PROBE NAME=u_lat/lat_pi2 WIDTH=3
+  PROBE NAME=u_lat/lat_pi2_1 WIDTH=115
+  PROBE NAME=u_lat/lat_pi3 WIDTH=32
+  PROBE NAME=u_lat/lat_pi3_1 WIDTH=74
+  PROBE NAME=u_lat/lat_pi3_2 WIDTH=10
+  PROBE NAME=u_lat/lat_pi4 WIDTH=64
+  PROBE NAME=u_lat/lat_pi4_1 WIDTH=32
+  PROBE NAME=u_lat/lat_pi4_2 WIDTH=2
+  PROBE NAME=u_lat/lat_pi5 WIDTH=128
+  PROBE NAME=u_lat/ro_fe_a WIDTH=32
+  PROBE NAME=u_lat/ro_fe_b WIDTH=32
+  PROBE NAME=u_lat/drp_req_addr WIDTH=16
+  PROBE NAME=u_lat/drp_req_go WIDTH=2
+  PROBE NAME=u_lat/lat_clr WIDTH=1
+  PROBE NAME=u_lat/mut_n WIDTH=8
+  PROBE NAME=u_lat/mut_sel WIDTH=4
+  PROBE NAME=u_lat/snap_req WIDTH=1
+# proc findprobe {vio names} {
+#     set all [get_hw_probes -of_objects $vio]
+#     foreach n $names { foreach p $all { if {$p eq $n} { return $p } } }
+#     foreach n $names { foreach p $all { if {[string match $n $p]} { return $p } } }
+#     return ""
+# }
+# proc wof {p} { set w 1 ; catch {set w [get_property WIDTH $p]} ; return $w }
+# proc findoutprobe {vio names} {
+#     set all [get_hw_probes -of_objects $vio]
+#     set cand {}
+#     foreach n $names { foreach p $all { if {$p eq $n} { lappend cand $p } } }
+#     foreach n $names { foreach p $all { if {[string match $n $p]} { lappend cand $p } } }
+#     foreach p $cand {
+#         if {![catch {get_property OUTPUT_VALUE $p}]} { return $p }
+#     }
+#     return ""
+# }
+# source [file join $here pinmap.tcl]
+## set PINMAP {
+##   {probe_in0 0 31 {u_lat/ro_fe_a}}
+##   {probe_in0 32 63 {u_lat/ro_fe_b}}
+##   {probe_in0 64 95 {u_lat/dp_vs_r_reg_n_53_[31]}}
+##   {probe_in0 96 127 {u_lat/dp_c_r}}
+##   {probe_in1 0 127 {u_lat/lat_pi1}}
+##   {probe_in2 0 114 {u_lat/lat_pi2_1}}
+##   {probe_in2 115 115 {u_lat/lat_clr_1}}
+##   {probe_in2 116 116 {u_lat/fe_rst_n}}
+##   {probe_in2 117 119 {u_lat/lat_pi2}}
+##   {probe_in2 120 120 {}}
+##   {probe_in2 121 121 {}}
+##   {probe_in2 122 122 {}}
+##   {probe_in2 123 123 {}}
+##   {probe_in2 124 124 {}}
+##   {probe_in2 125 125 {}}
+##   {probe_in2 126 126 {}}
+##   {probe_in2 127 127 {}}
+##   {probe_in3 0 73 {u_lat/lat_pi3_1}}
+##   {probe_in3 74 74 {}}
+##   {probe_in3 75 75 {}}
+##   {probe_in3 76 76 {}}
+##   {probe_in3 77 77 {}}
+##   {probe_in3 78 78 {}}
+##   {probe_in3 79 79 {}}
+##   {probe_in3 80 89 {u_lat/lat_pi3_2}}
+##   {probe_in3 90 90 {}}
+##   {probe_in3 91 91 {}}
+##   {probe_in3 92 92 {}}
+##   {probe_in3 93 93 {}}
+##   {probe_in3 94 94 {}}
+##   {probe_in3 95 95 {}}
+##   {probe_in3 96 127 {u_lat/lat_pi3}}
+##   {probe_in4 0 31 {u_lat/lat_pi4_1}}
+##   {probe_in4 32 33 {u_lat/drp_req_go_1}}
+##   {probe_in4 34 35 {u_lat/lat_pi4_2}}
+##   {probe_in4 36 36 {}}
+##   {probe_in4 37 37 {}}
+##   {probe_in4 38 38 {}}
+##   {probe_in4 39 39 {}}
+##   {probe_in4 40 40 {}}
+##   {probe_in4 41 41 {}}
+##   {probe_in4 42 42 {}}
+##   {probe_in4 43 43 {}}
+##   {probe_in4 44 44 {}}
+##   {probe_in4 45 45 {}}
+##   {probe_in4 46 46 {}}
+##   {probe_in4 47 47 {}}
+##   {probe_in4 48 48 {}}
+##   {probe_in4 49 49 {}}
+##   {probe_in4 50 50 {}}
+##   {probe_in4 51 51 {}}
+##   {probe_in4 52 52 {}}
+##   {probe_in4 53 53 {}}
+##   {probe_in4 54 54 {}}
+##   {probe_in4 55 55 {}}
+##   {probe_in4 56 56 {}}
+##   {probe_in4 57 57 {}}
+##   {probe_in4 58 58 {}}
+##   {probe_in4 59 59 {}}
+##   {probe_in4 60 60 {}}
+##   {probe_in4 61 61 {}}
+##   {probe_in4 62 62 {}}
+##   {probe_in4 63 63 {}}
+##   {probe_in4 64 127 {u_lat/lat_pi4}}
+##   {probe_in5 0 127 {u_lat/lat_pi5}}
+##   {probe_out0 0 0 {u_lat/snap_req}}
+##   {probe_out1 0 0 {u_lat/lat_clr}}
+##   {probe_out2 0 3 {u_lat/mut_sel}}
+##   {probe_out3 0 7 {u_lat/mut_n}}
+##   {probe_out4 0 15 {u_lat/drp_req_addr}}
+##   {probe_out5 0 1 {u_lat/drp_req_go}}
+## }
+# array set PP {}
+# foreach e $PINMAP {
+#     set port [lindex $e 0]
+#     set l    [lindex $e 1]
+#     set r    [lindex $e 2]
+#     set nm   [lindex $e 3]
+#     set p ""
+#     if {$nm ne ""} {
+#         # ⚠️ `.ltx` 里存的是**总线元素�?** (�? `u_lat/dp_vs_r_reg_n_53_[31]`), �?
+#         #    `get_hw_probes` 给回的整条总线�?**没有 `[n]` 后缀**
+#         #    (实测: `u_lat/dp_vs_r_reg_n_53_`) �? 必须两个都试�?
+#         set nm2 [regsub {\[[0-9]+\]$} $nm ""]
+#         set base [lindex [split $nm /] end]
+#         set base2 [regsub {\[[0-9]+\]$} $base ""]
+#         set p [findprobe $vio [list $nm $nm2 $base $base2]]
+#         if {$p eq ""} { puts "LAT-ABORT: pin net '$nm' (or '$nm2') not found among hw probes"; exit 1 }
+#         if {[wof $p] != [expr {$r - $l + 1}]} {
+#             puts "LAT-ABORT: pin '$nm' width=[wof $p] expected [expr {$r - $l + 1}]"; exit 1
+#         }
+#     }
+#     lappend PP($port) [list $l $r $p]
+# }
+# foreach port {probe_in0 probe_in1 probe_in2 probe_in3 probe_in4 probe_in5} {
+#     if {![info exists PP($port)]} { puts "LAT-ABORT: $port missing from pinmap"; exit 1 }
+#     set tot 0
+#     foreach it $PP($port) { incr tot [expr {[lindex $it 1] - [lindex $it 0] + 1}] }
+#     if {$tot != 128} { puts "LAT-ABORT: $port pinmap covers $tot bits, expected 128"; exit 1 }
+#     puts "PINMAP $port pieces=[llength $PP($port)] bits=$tot"
+# }
+PINMAP probe_in0 pieces=4 bits=128
+PINMAP probe_in1 pieces=1 bits=128
+PINMAP probe_in2 pieces=12 bits=128
+PINMAP probe_in3 pieces=15 bits=128
+PINMAP probe_in4 pieces=32 bits=128
+PINMAP probe_in5 pieces=1 bits=128
+# set PI {probe_in0 probe_in1 probe_in2 probe_in3 probe_in4 probe_in5}
+# set PO_NAME {snap_req lat_clr mut_sel mut_n drp_req_addr drp_req_go}
+# set PO_W    {1        1       4       8     16           2}
+# set PO {}
+# for {set i 0} {$i < 6} {incr i} {
+#     set want [lindex $PO_W $i]
+#     set p [findoutprobe $vio [list "u_lat/[lindex $PO_NAME $i]" [lindex $PO_NAME $i] "*[lindex $PO_NAME $i]*" "raw_po$i" "probe_out$i"]]
+#     if {$p eq "" || [wof $p] != $want} {
+#         # 回捞: 圡�**输出**向探针里找唯一一�?该位宽的
+#         set cand ""
+#         set n 0
+#         foreach q [get_hw_probes -of_objects $vio] {
+#             if {[string match "*probe_out*" $q] || [string match "*raw_po*" $q]} {
+#                 if {[wof $q] == $want} { lappend cand $q ; incr n }
+#             }
+#         }
+#         if {$n == 1} { set p [lindex $cand 0] }
+#     }
+#     if {$p eq ""} { puts "LAT-ABORT: output probe '[lindex $PO_NAME $i]' not found"; exit 1 }
+#     if {[wof $p] != $want} {
+#         puts "LAT-ABORT: output probe '[lindex $PO_NAME $i]' resolved to '$p' width=[wof $p] expected $want"
+#         exit 1
+#     }
+#     lappend PO $p
+# }
+# set P_SNAP [lindex $PO 0] 
+# set P_CLR  [lindex $PO 1]
+# set P_MUTS [lindex $PO 2] 
+# set P_MUTN [lindex $PO 3]
+# set P_DADDR [lindex $PO 4] 
+# set P_DGO [lindex $PO 5]
+# foreach {nm p} [list snap_req $P_SNAP lat_clr $P_CLR mut_sel $P_MUTS mut_n $P_MUTN drp_addr $P_DADDR drp_go $P_DGO] {
+#     puts "MAP $nm -> [pget $p NAME]"
+# }
+MAP snap_req -> u_lat/snap_req
+MAP lat_clr -> u_lat/lat_clr
+MAP mut_sel -> u_lat/mut_sel
+MAP mut_n -> u_lat/mut_n
+MAP drp_addr -> u_lat/drp_req_addr
+MAP drp_go -> u_lat/drp_req_go
+# puts "PROBES RESOLVED"
+PROBES RESOLVED
+# proc vset {vio p val} {
+#     set w [wof $p]
+#     set n [expr {int(ceil($w / 4.0))}]
+#     set mask [expr {(1 << $w) - 1}]
+#     set s [format "%0${n}X" [expr {$val & $mask}]]
+#     set_property OUTPUT_VALUE $s $p
+#     commit_hw_vio $vio
+# }
+# proc vsetstr {vio p hexstr} {
+#     # 直接写十�?进制字�?�串 (宽度必须已经对好) —�? 避开所有整数转�?
+#     set_property OUTPUT_VALUE $hexstr $p
+#     commit_hw_vio $vio
+# }
+# proc vread {vio p w} {
+#     refresh_hw_vio $vio
+#     set s [get_property INPUT_VALUE $p]
+#     return [padhex $s [expr {$w / 4}]]
+# }
+# proc viget {vio p} {
+#     refresh_hw_vio $vio
+#     return [get_property INPUT_VALUE $p]
+# }
+# proc pulse {vio p} { vset $vio $p 1 ; vset $vio $p 0 }
+# set g_drpgo 0
+# proc toggle_drp_go {vio p} {
+#     global g_drpgo
+#     set g_drpgo [expr {$g_drpgo ? 0 : 3}]
+#     vset $vio $p $g_drpgo
+# }
+# proc hex2bits {h n} {
+#     set out ""
+#     foreach ch [split [string toupper $h] ""] {
+#         switch -- $ch {
+#             0 { append out 0000 } 1 { append out 0001 } 2 { append out 0010 } 3 { append out 0011 }
+#             4 { append out 0100 } 5 { append out 0101 } 6 { append out 0110 } 7 { append out 0111 }
+#             8 { append out 1000 } 9 { append out 1001 } A { append out 1010 } B { append out 1011 }
+#             C { append out 1100 } D { append out 1101 } E { append out 1110 } F { append out 1111 }
+#             default { append out 0000 }
+#         }
+#     }
+#     if {[string length $out] < $n} { set out "[string repeat 0 [expr {$n - [string length $out]}]]$out" }
+#     return [string range $out end-[expr {$n - 1}] end]
+# }
+# proc bits2hex {bits} {
+#     set h ""
+#     for {set k 0} {$k < 128} {incr k 4} {
+#         set nib [string range $bits $k [expr {$k + 3}]]
+#         set v 0
+#         catch { set v [scan $nib %b] }
+#         append h [string index "0123456789ABCDEF" $v]
+#     }
+#     return $h
+# }
+# proc assemble {vio port} {
+#     global PP
+#     set bits [string repeat 0 128]      ;# bits[0] = 探针�?**最高位** (bit127)
+#     foreach it $PP($port) {
+#         lassign $it l r p
+#         if {$p eq ""} { continue }      ;# 常量�? = 0
+#         set w [expr {$r - $l + 1}]
+#         set v [padhex [get_property INPUT_VALUE $p] [expr {int(ceil($w / 4.0))}]]
+#         set vb [hex2bits $v $w]
+#         for {set i 0} {$i < $w} {incr i} {
+#             set b [string index $vb end-$i]
+#             if {$b ne "0"} {
+#                 set idx [expr {127 - ($l + $i)}]
+#                 set bits [string replace $bits $idx $idx $b]
+#             }
+#         }
+#     }
+#     return [bits2hex $bits]
+# }
+# proc readall {vio} {
+#     refresh_hw_vio $vio                 ;# 一�? refresh 覆盖全部输入探针
+#     set out {}
+#     foreach port {probe_in0 probe_in1 probe_in2 probe_in3 probe_in4 probe_in5} {
+#         lappend out [assemble $vio $port]
+#     }
+#     return $out
+# }
+# proc ackbit {pi2hex} {
+#     set fl [string range $pi2hex 0 3]
+#     set low [string index $fl 3]
+#     set v 0
+#     catch { set v [scan $low %x] }
+#     return [expr {$v & 1}]
+# }
+# set g_nsnap 0
+# proc tgllevel {vio p} {
+#     global g_tglv
+#     if {![info exists g_tglv($p)]} { set g_tglv($p) 0 }
+#     set g_tglv($p) [expr {$g_tglv($p) ? 0 : 1}]
+#     vset $vio $p $g_tglv($p)
+#     return $g_tglv($p)
+# }
+# proc snapshot {vio p_snap} {
+#     global g_nsnap
+#     set before [ackbit [lindex [readall $vio] 2]]
+#     set lvl [tgllevel $vio $p_snap]         ;# 一次跳�? = 一次快煡�
+#     set t0 [clock milliseconds]
+#     set ok 0
+#     while {1} {
+#         set h [lindex [readall $vio] 2]
+#         if {[ackbit $h] != $before} { set ok 1 ; break }
+#         if {[clock milliseconds] - $t0 > 2000} { break }
+#     }
+#     incr g_nsnap
+#     return $ok
+# }
+# proc dump_all {vio label} {
+#     set i 0
+#     foreach h [readall $vio] {
+#         puts "LAT_HEX $label pi$i $h"
+#         incr i
+#     }
+# }
+# proc stim_ping6 {peer iface len} {
+#     # �?�? = 网卡�?己所属的全节点组�? (无需 ND / 无需对�??有任�? IPv4 地址)
+#     # 以太网帧�?(�? FCS) = 14(Eth) + 40(IPv6) + 8(ICMPv6) + N + 4
+#     #   => N = len - 66   (100 -> 34 / 158 -> 92 / 1514 -> 1448)
+#     set n [expr {$len - 66}]
+#     if {$n < 0} { return "BADLEN" }
+#     set cmd [list ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=8 $peer "ping6 -c 1 -W 2 -i 1 -s $n ff02::1%$iface"]
+#     set rc [catch {exec {*}$cmd} out]
+#     puts "LAT_STIM len=$len n=$n ssh_rc=$rc out=<[string map {"\n" " | "} $out]>"
+#     return $rc
+# }
+# proc run_case {vio p_snap p_clr p_muts p_mutn label len msel mn do_stim peer iface} {
+#     vset $vio $p_muts $msel
+#     vset $vio $p_mutn $mn
+#     tgllevel $vio $p_clr                    ;# 一次跳�? = 一次清�? (同样不�?�发两个�?)
+#     after 80
+#     if {$do_stim} { stim_ping6 $peer $iface $len }
+#     after 500
+#     set ok [snapshot $vio $p_snap]
+#     puts "LAT_CASE $label len=$len mut_sel=$msel mut_n=$mn ack=[expr {$ok ? 1 : 0}]"
+#     dump_all $vio $label
+#     # �?二�?�快煡� (同一帡�, �?�?重�?�一�?) —�? 用来刡�"这一代�?�数�?不是稳的"
+#     set ok2 [snapshot $vio $p_snap]
+#     puts "LAT_CASE2 $label ack=[expr {$ok2 ? 1 : 0}]"
+#     dump_all $vio "R_$label"
+# }
+# sec "MEASURE"
+
+@@@@@@ LAT >>> MEASURE
+# set cases {}
+# lappend cases [list nostim158    158  0 0 0]
+# lappend cases [list base100      100  0 0 1]
+# lappend cases [list base158      158  0 0 1]
+# lappend cases [list base1514    1514  0 0 1]
+# lappend cases [list rep100a      100  0 0 1]
+# lappend cases [list rep158a      158  0 0 1]
+# lappend cases [list rep1514a    1514  0 0 1]
+# lappend cases [list rep100b      100  0 0 1]
+# lappend cases [list rep158b      158  0 0 1]
+# lappend cases [list rep1514b    1514  0 0 1]
+# lappend cases [list mut_b_n10    158  1 10 1]
+# lappend cases [list mut_c_n10    158  3 10 1]
+# lappend cases [list mut_a_n10    158  5 10 1]
+# lappend cases [list mut_d_n10    158  4 10 1]
+# lappend cases [list mut_b_n30    158  1 30 1]
+# lappend cases [list mut_b_n0     158  1  0 1]
+# lappend cases [list postmut158   158  0  0 1]
+# foreach c $cases {
+#     if {!$stim} { set cs 0 } else { set cs [lindex $c 4] }
+#     run_case $vio $P_SNAP $P_CLR $P_MUTS $P_MUTN [lindex $c 0] [lindex $c 1] [lindex $c 2] [lindex $c 3] $cs $peer $iface
+#     # 清掉变异, 免得影响下一�?
+#     vset $vio $P_MUTS 0
+#     vset $vio $P_MUTN 0
+# }
+LAT_CASE nostim158 len=158 mut_sel=0 mut_n=0 ack=1
+LAT_HEX nostim158 pi0 12F801D812F801D512DE1A2212DE1A1E
+LAT_HEX nostim158 pi1 000000001BD0F1071A1FD2E800000000
+LAT_HEX nostim158 pi2 009B00720000B7060001000000010001
+LAT_HEX nostim158 pi3 00000000000000000001000000000000
+LAT_HEX nostim158 pi4 12F801ED12F801DF0000000000000000
+LAT_HEX nostim158 pi5 DE16DE1612F8010712DE195500010001
+LAT_CASE2 nostim158 ack=1
+LAT_HEX R_nostim158 pi0 1DDCE5B01DDCE5AD1C6243041C624300
+LAT_HEX R_nostim158 pi1 000000001FC632071D743DA000000000
+LAT_HEX R_nostim158 pi2 009A014D0000AC470003000000020002
+LAT_HEX R_nostim158 pi3 00000000000000000003000000000000
+LAT_HEX R_nostim158 pi4 1DDCE5C41DDCE5B70000000000000000
+LAT_HEX R_nostim158 pi5 623D623D1C7C28071C62426500030003
+LAT_STIM len=100 n=34 ssh_rc=0 out=<PING ff02::1%enp1s0f1np1 (ff02::1%enp1s0f1np1) 34 data bytes | 42 bytes from fe80::3dc:7cad:d0b1:8db0%enp1s0f1np1: icmp_seq=1 ttl=64 time=0.021 ms |  | --- ff02::1%enp1s0f1np1 ping statistics --- | 1 packets transmitted, 1 received, 0% packet loss, time 0ms | rtt min/avg/max/mdev = 0.021/0.021/0.021/0.000 ms>
+LAT_CASE base100 len=100 mut_sel=0 mut_n=0 ack=1
+LAT_HEX base100 pi0 331314CB331314C832F9340432F93400
+LAT_HEX base100 pi1 000000003563FD0733B33D6C00000000
+LAT_HEX base100 pi2 0053004200004A120002000000020002
+LAT_HEX base100 pi3 00000000000000000002000000000000
+LAT_HEX base100 pi4 331314D9331314D20000000000000000
+LAT_HEX base100 pi5 F929F9293313140732F9334400020002
+LAT_CASE2 base100 ack=1
+LAT_HEX R_base100 pi0 331314CB331314C832F9340432F93400
+LAT_HEX R_base100 pi1 0000000038E07507372A062B00000000
+LAT_HEX R_base100 pi2 005200420000C68A0002000000020002
+LAT_HEX R_base100 pi3 00000000000000000002000000000000
+LAT_HEX R_base100 pi4 331314D9331314D20000000000000000
+LAT_HEX R_base100 pi5 F929F9293313140732F9334400020002
+LAT_STIM len=158 n=92 ssh_rc=0 out=<PING ff02::1%enp1s0f1np1 (ff02::1%enp1s0f1np1) 92 data bytes | 100 bytes from fe80::3dc:7cad:d0b1:8db0%enp1s0f1np1: icmp_seq=1 ttl=64 time=0.021 ms |  | --- ff02::1%enp1s0f1np1 ping statistics --- | 1 packets transmitted, 1 received, 0% packet loss, time 0ms | rtt min/avg/max/mdev = 0.021/0.021/0.021/0.000 ms>
+LAT_CASE base158 len=158 mut_sel=0 mut_n=0 ack=1
+LAT_HEX base158 pi0 472A624C472A6249471085D5471085D1
+LAT_HEX base158 pi1 000000004CA092084B06D86D00000000
+LAT_HEX base158 pi2 009B014D000086A70003000000030003
+LAT_HEX base158 pi3 00000000000000000003000000000000
+LAT_HEX base158 pi4 472A627C472A62530000000000000000
+LAT_HEX base158 pi5 10771077472A62074710859400030003
+LAT_CASE2 base158 ack=1
+LAT_HEX R_base158 pi0 472A624C472A6249471085D5471085D1
+LAT_HEX R_base158 pi1 000000004FCDDE074E2AB41900000000
+LAT_HEX R_base158 pi2 009A014D0000B3F30003000000030003
+LAT_HEX R_base158 pi3 00000000000000000003000000000000
+LAT_HEX R_base158 pi4 472A627C472A62530000000000000000
+LAT_HEX R_base158 pi5 10771077472A62074710859400030003
+LAT_STIM len=1514 n=1448 ssh_rc=0 out=<PING ff02::1%enp1s0f1np1 (ff02::1%enp1s0f1np1) 1448 data bytes | 1456 bytes from fe80::3dc:7cad:d0b1:8db0%enp1s0f1np1: icmp_seq=1 ttl=64 time=0.021 ms |  | --- ff02::1%enp1s0f1np1 ping statistics --- | 1 packets transmitted, 1 received, 0% packet loss, time 0ms | rtt min/avg/max/mdev = 0.021/0.021/0.021/0.000 ms>
+LAT_CASE base1514 len=1514 mut_sel=0 mut_n=0 ack=1
+LAT_HEX base1514 pi0 59A1424659A14243598769C2598769BE
+LAT_HEX base1514 pi1 000000006191FD07605F9EFE00000000
+LAT_HEX base1514 pi2 005305EA000078120001000000010001
+LAT_HEX base1514 pi3 00000000000000000001000000000000
+LAT_HEX base1514 pi4 59A1430959A1424D0000000000000000
+LAT_HEX base1514 pi5 8757875759A142075987698700010001
+LAT_CASE2 base1514 ack=1
+LAT_HEX R_base1514 pi0 59A1424659A14243598769C2598769BE
+LAT_HEX R_base1514 pi1 0000000064DB3707636DA6A500000000
+LAT_HEX R_base1514 pi2 005205EA0000C14C0001000000010001
+LAT_HEX R_base1514 pi3 00000000000000000001000000000000
+LAT_HEX R_base1514 pi4 59A1430959A1424D0000000000000000
+LAT_HEX R_base1514 pi5 8757875759A142075987698700010001
+LAT_STIM len=100 n=34 ssh_rc=0 out=<PING ff02::1%enp1s0f1np1 (ff02::1%enp1s0f1np1) 34 data bytes | 42 bytes from fe80::3dc:7cad:d0b1:8db0%enp1s0f1np1: icmp_seq=1 ttl=64 time=0.022 ms |  | --- ff02::1%enp1s0f1np1 ping statistics --- | 1 packets transmitted, 1 received, 0% packet loss, time 0ms | rtt min/avg/max/mdev = 0.022/0.022/0.022/0.000 ms>
+LAT_CASE rep100a len=100 mut_sel=0 mut_n=0 ack=1
+LAT_HEX rep100a pi0 6EE858CB6EE858C86ECE84D36ECE84CF
+LAT_HEX rep100a pi1 0000000077B84807763485A700000000
+LAT_HEX rep100a pi2 009B006400009E5D0001000000010001
+LAT_HEX rep100a pi3 00000000000000000001000000000000
+LAT_HEX rep100a pi4 6EE858DE6EE858D20000000000000000
+LAT_HEX rep100a pi5 CE6DCE6D6EE858076ECE841300010001
+LAT_CASE2 rep100a ack=1
+LAT_HEX R_rep100a pi0 78D364F478D364F178B9931978B99315
+LAT_HEX R_rep100a pi1 000000007AE305077987B75D00000000
+LAT_HEX R_rep100a pi2 005A00420000C91A0002000000020002
+LAT_HEX R_rep100a pi3 00000000000000000002000000000000
+LAT_HEX R_rep100a pi4 78D3650278D364FB0000000000000000
+LAT_HEX R_rep100a pi5 B979B97978D3640878B9923100020002
+LAT_STIM len=158 n=92 ssh_rc=0 out=<PING ff02::1%enp1s0f1np1 (ff02::1%enp1s0f1np1) 92 data bytes | 100 bytes from fe80::3dc:7cad:d0b1:8db0%enp1s0f1np1: icmp_seq=1 ttl=64 time=0.021 ms |  | --- ff02::1%enp1s0f1np1 ping statistics --- | 1 packets transmitted, 1 received, 0% packet loss, time 0ms | rtt min/avg/max/mdev = 0.021/0.021/0.021/0.000 ms>
+LAT_CASE rep158a len=158 mut_sel=0 mut_n=0 ack=1
+LAT_HEX rep158a pi0 847DA32A847DA3278463D3CD8463D3C9
+LAT_HEX rep158a pi1 000000008C4D23078A3BA5ED00000000
+LAT_HEX rep158a pi2 0053009E000033380001000000010001
+LAT_HEX rep158a pi3 00000000000000000001000000000000
+LAT_HEX rep158a pi4 847DA344847DA3310000000000000000
+LAT_HEX rep158a pi5 63B863B8847DA3078463D3AE00010001
+LAT_CASE2 rep158a ack=1
+LAT_HEX R_rep158a pi0 8DA895E48DA895E18D8EC87B8D8EC877
+LAT_HEX R_rep158a pi1 000000008F21D6078DCC55B000000000
+LAT_HEX R_rep158a pi2 0052006F000007EB0002000000020002
+LAT_HEX R_rep158a pi3 00000000000000000002000000000000
+LAT_HEX R_rep158a pi4 8DA895F88DA895EB0000000000000000
+LAT_HEX R_rep158a pi5 8EAA8EAA8DA895078D8EC7A200020002
+LAT_STIM len=1514 n=1448 ssh_rc=0 out=<PING ff02::1%enp1s0f1np1 (ff02::1%enp1s0f1np1) 1448 data bytes | 1456 bytes from fe80::3dc:7cad:d0b1:8db0%enp1s0f1np1: icmp_seq=1 ttl=64 time=0.022 ms |  | --- ff02::1%enp1s0f1np1 ping statistics --- | 1 packets transmitted, 1 received, 0% packet loss, time 0ms | rtt min/avg/max/mdev = 0.022/0.022/0.022/0.000 ms>
+LAT_CASE rep1514a len=1514 mut_sel=0 mut_n=0 ack=1
+LAT_HEX rep1514a pi0 9A30C4C19A30C4BE9A16FA059A16FA01
+LAT_HEX rep1514a pi1 00000000A1832807A04C44A300000000
+LAT_HEX rep1514a pi2 005B05EA0000693D0002000000020002
+LAT_HEX rep1514a pi3 00000000000000000002000000000000
+LAT_HEX rep1514a pi4 9A30C5849A30C4C80000000000000000
+LAT_HEX rep1514a pi5 16D916D99A30C4079A16F94F00020002
+LAT_CASE2 rep1514a ack=1
+LAT_HEX R_rep1514a pi0 9A30C4C19A30C4BE9A16FA059A16FA01
+LAT_HEX R_rep1514a pi1 00000000A4111707A3076A3800000000
+LAT_HEX R_rep1514a pi2 005A05EA0000F72C0002000000020002
+LAT_HEX R_rep1514a pi3 00000000000000000002000000000000
+LAT_HEX R_rep1514a pi4 9A30C5849A30C4C80000000000000000
+LAT_HEX R_rep1514a pi5 16D916D99A30C4079A16F94F00020002
+LAT_STIM len=100 n=34 ssh_rc=0 out=<PING ff02::1%enp1s0f1np1 (ff02::1%enp1s0f1np1) 34 data bytes | 42 bytes from fe80::3dc:7cad:d0b1:8db0%enp1s0f1np1: icmp_seq=1 ttl=64 time=0.021 ms |  | --- ff02::1%enp1s0f1np1 ping statistics --- | 1 packets transmitted, 1 received, 0% packet loss, time 0ms | rtt min/avg/max/mdev = 0.021/0.021/0.021/0.000 ms>
+LAT_CASE rep100b len=100 mut_sel=0 mut_n=0 ack=1
+LAT_HEX rep100b pi0 ADB3E01CADB3E019AD9A198BAD9A1987
+LAT_HEX rep100b pi1 00000000B5131F07B3D3D3CF00000000
+LAT_HEX rep100b pi2 005300640000F9340001000000010001
+LAT_HEX rep100b pi3 00000000000000000001000000000000
+LAT_HEX rep100b pi4 ADB3E02EADB3E0230000000000000000
+LAT_HEX rep100b pi5 99F599F5ADB3E007AD9A197A00010001
+LAT_CASE2 rep100b ack=1
+LAT_HEX R_rep100b pi0 ADB3E01CADB3E019AD9A198BAD9A1987
+LAT_HEX R_rep100b pi1 00000000B8290407B6F8C07B00000000
+LAT_HEX R_rep100b pi2 0052006400000F190001000000010001
+LAT_HEX R_rep100b pi3 00000000000000000001000000000000
+LAT_HEX R_rep100b pi4 ADB3E02EADB3E0230000000000000000
+LAT_HEX R_rep100b pi5 99F599F5ADB3E007AD9A197A00010001
+LAT_STIM len=158 n=92 ssh_rc=0 out=<PING ff02::1%enp1s0f1np1 (ff02::1%enp1s0f1np1) 92 data bytes | 100 bytes from fe80::3dc:7cad:d0b1:8db0%enp1s0f1np1: icmp_seq=1 ttl=64 time=0.021 ms |  | --- ff02::1%enp1s0f1np1 ping statistics --- | 1 packets transmitted, 1 received, 0% packet loss, time 0ms | rtt min/avg/max/mdev = 0.021/0.021/0.021/0.000 ms>
+LAT_CASE rep158b len=158 mut_sel=0 mut_n=0 ack=1
+LAT_HEX rep158b pi0 C22CE61DC22CE61AC21323EDC21323E9
+LAT_HEX rep158b pi1 00000000CA4B1D07C877A13900000000
+LAT_HEX rep158b pi2 009B009E000031320001000000010001
+LAT_HEX rep158b pi3 00000000000000000001000000000000
+LAT_HEX rep158b pi4 C22CE637C22CE6240000000000000000
+LAT_HEX rep158b pi5 12FB12FBC22CE607C21323DB00010001
+LAT_CASE2 rep158b ack=1
+LAT_HEX R_rep158b pi0 C22CE61DC22CE61AC21323EDC21323E9
+LAT_HEX R_rep158b pi1 00000000CD175B07CBDC91F300000000
+LAT_HEX R_rep158b pi2 009A009E0000FD700001000000010001
+LAT_HEX R_rep158b pi3 00000000000000000001000000000000
+LAT_HEX R_rep158b pi4 C22CE637C22CE6240000000000000000
+LAT_HEX R_rep158b pi5 12FB12FBC22CE607C21323DB00010001
+LAT_STIM len=1514 n=1448 ssh_rc=0 out=<PING ff02::1%enp1s0f1np1 (ff02::1%enp1s0f1np1) 1448 data bytes | 1456 bytes from fe80::3dc:7cad:d0b1:8db0%enp1s0f1np1: icmp_seq=1 ttl=64 time=0.022 ms |  | --- ff02::1%enp1s0f1np1 ping statistics --- | 1 packets transmitted, 1 received, 0% packet loss, time 0ms | rtt min/avg/max/mdev = 0.022/0.022/0.022/0.000 ms>
+LAT_CASE rep1514b len=1514 mut_sel=0 mut_n=0 ack=1
+LAT_HEX rep1514b pi0 D79A725CD79A7259D780B4C3D780B4BF
+LAT_HEX rep1514b pi1 00000000DF52CE07DDFB09D500000000
+LAT_HEX rep1514b pi2 009305EA000038E30001000000010001
+LAT_HEX rep1514b pi3 00000000000000000001000000000000
+LAT_HEX rep1514b pi4 D79A7320D79A72630000000000000000
+LAT_HEX rep1514b pi5 80878087D79A7207D780B47200010001
+LAT_CASE2 rep1514b ack=1
+LAT_HEX R_rep1514b pi0 D79A725CD79A7259D780B4C3D780B4BF
+LAT_HEX R_rep1514b pi1 00000000E22F4407E0C6706F00000000
+LAT_HEX R_rep1514b pi2 009205EA000015590001000000010001
+LAT_HEX R_rep1514b pi3 00000000000000000001000000000000
+LAT_HEX R_rep1514b pi4 D79A7320D79A72630000000000000000
+LAT_HEX R_rep1514b pi5 80878087D79A7207D780B47200010001
+LAT_STIM len=158 n=92 ssh_rc=0 out=<PING ff02::1%enp1s0f1np1 (ff02::1%enp1s0f1np1) 92 data bytes | 100 bytes from fe80::3dc:7cad:d0b1:8db0%enp1s0f1np1: icmp_seq=1 ttl=64 time=0.022 ms |  | --- ff02::1%enp1s0f1np1 ping statistics --- | 1 packets transmitted, 1 received, 0% packet loss, time 0ms | rtt min/avg/max/mdev = 0.022/0.022/0.022/0.000 ms>
+LAT_CASE mut_b_n10 len=158 mut_sel=1 mut_n=10 ack=1
+LAT_HEX mut_b_n10 pi0 EC174740EC17473DEBFD8E16EBFD8E08
+LAT_HEX mut_b_n10 pi1 00000000F428F407F21EE02800000000
+LAT_HEX mut_b_n10 pi2 00BB009E00000F090001000000010001
+LAT_HEX mut_b_n10 pi3 00000000000000000001000000000000
+LAT_HEX mut_b_n10 pi4 EC17475AEC1747470000000000000000
+LAT_HEX mut_b_n10 pi5 FD5CFD5CEC174707EBFD8DD700010001
+LAT_CASE2 mut_b_n10 ack=1
+LAT_HEX R_mut_b_n10 pi0 EC174740EC17473DEBFD8E16EBFD8E08
+LAT_HEX R_mut_b_n10 pi1 00000000F79B2907F5FFD9FD00000000
+LAT_HEX R_mut_b_n10 pi2 00BA009E0000813E0001000000010001
+LAT_HEX R_mut_b_n10 pi3 00000000000000000001000000000000
+LAT_HEX R_mut_b_n10 pi4 EC17475AEC1747470000000000000000
+LAT_HEX R_mut_b_n10 pi5 FD5CFD5CEC174707EBFD8DD700010001
+LAT_STIM len=158 n=92 ssh_rc=0 out=<PING ff02::1%enp1s0f1np1 (ff02::1%enp1s0f1np1) 92 data bytes | 100 bytes from fe80::3dc:7cad:d0b1:8db0%enp1s0f1np1: icmp_seq=1 ttl=64 time=0.021 ms |  | --- ff02::1%enp1s0f1np1 ping statistics --- | 1 packets transmitted, 1 received, 0% packet loss, time 0ms | rtt min/avg/max/mdev = 0.021/0.021/0.021/0.000 ms>
+LAT_CASE mut_c_n10 len=158 mut_sel=3 mut_n=10 ack=1
+LAT_HEX mut_c_n10 pi0 02A7EE3202A7EE25028E39CD028E39C9
+LAT_HEX mut_c_n10 pi1 0000000009ADDB07082973E500000000
+LAT_HEX mut_c_n10 pi2 0073009E000093F00002000000020002
+LAT_HEX mut_c_n10 pi3 00000000000000000002000000000000
+LAT_HEX mut_c_n10 pi4 02A7EE4202A7EE2F0000000000000000
+LAT_HEX mut_c_n10 pi5 8E038E0302A7EE07028E39B000020002
+LAT_CASE2 mut_c_n10 ack=1
+LAT_HEX R_mut_c_n10 pi0 02A7EE3202A7EE25028E39CD028E39C9
+LAT_HEX R_mut_c_n10 pi1 000000000C4ED6070AD5877800000000
+LAT_HEX R_mut_c_n10 pi2 0072009E000034EB0002000000020002
+LAT_HEX R_mut_c_n10 pi3 00000000000000000002000000000000
+LAT_HEX R_mut_c_n10 pi4 02A7EE4202A7EE2F0000000000000000
+LAT_HEX R_mut_c_n10 pi5 8E038E0302A7EE07028E39B000020002
+LAT_STIM len=158 n=92 ssh_rc=0 out=<PING ff02::1%enp1s0f1np1 (ff02::1%enp1s0f1np1) 92 data bytes | 100 bytes from fe80::3dc:7cad:d0b1:8db0%enp1s0f1np1: icmp_seq=1 ttl=64 time=0.021 ms |  | --- ff02::1%enp1s0f1np1 ping statistics --- | 1 packets transmitted, 1 received, 0% packet loss, time 0ms | rtt min/avg/max/mdev = 0.021/0.021/0.021/0.000 ms>
+LAT_CASE mut_a_n10 len=158 mut_sel=5 mut_n=10 ack=1
+LAT_HEX mut_a_n10 pi0 162B45B3162B45B01611958B16119591
+LAT_HEX mut_a_n10 pi1 000000001D90B7081C2D073400000000
+LAT_HEX mut_a_n10 pi2 003B009E000076CC0001000000010001
+LAT_HEX mut_a_n10 pi3 00000000000000000001000000000000
+LAT_HEX mut_a_n10 pi4 162B45CD162B45BA0000000000000000
+LAT_HEX mut_a_n10 pi5 115A115A162B4508161194E400010001
+LAT_CASE2 mut_a_n10 ack=1
+LAT_HEX R_mut_a_n10 pi0 162B45B3162B45B01611958B16119591
+LAT_HEX R_mut_a_n10 pi1 0000000021A1E0071FC7ECFB00000000
+LAT_HEX R_mut_a_n10 pi2 003A009E000087F50001000000010001
+LAT_HEX R_mut_a_n10 pi3 00000000000000000001000000000000
+LAT_HEX R_mut_a_n10 pi4 162B45CD162B45BA0000000000000000
+LAT_HEX R_mut_a_n10 pi5 115A115A162B4508161194E400010001
+LAT_STIM len=158 n=92 ssh_rc=0 out=<PING ff02::1%enp1s0f1np1 (ff02::1%enp1s0f1np1) 92 data bytes | 100 bytes from fe80::3dc:7cad:d0b1:8db0%enp1s0f1np1: icmp_seq=1 ttl=64 time=0.021 ms |  | --- ff02::1%enp1s0f1np1 ping statistics --- | 1 packets transmitted, 1 received, 0% packet loss, time 0ms | rtt min/avg/max/mdev = 0.021/0.021/0.021/0.000 ms>
+LAT_CASE mut_d_n10 len=158 mut_sel=4 mut_n=10 ack=1
+LAT_HEX mut_d_n10 pi0 306179E3306179E03047CF633047CF5F
+LAT_HEX mut_d_n10 pi1 0000000034E5D90733251E2900000000
+LAT_HEX mut_d_n10 pi2 00B3014D0000CBEE0002000000030002
+LAT_HEX mut_d_n10 pi3 00000000000000000002000000000000
+LAT_HEX mut_d_n10 pi4 30617A13306179EA0000000000000000
+LAT_HEX mut_d_n10 pi5 478E478E306179073047CE8B00020002
+LAT_CASE2 mut_d_n10 ack=1
+LAT_HEX R_mut_d_n10 pi0 306179E3306179E03047CF633047CF5F
+LAT_HEX R_mut_d_n10 pi1 0000000038C3F007373FAD0C00000000
+LAT_HEX R_mut_d_n10 pi2 00B2014D0000AA050002000000030002
+LAT_HEX R_mut_d_n10 pi3 00000000000000000002000000000000
+LAT_HEX R_mut_d_n10 pi4 30617A13306179EA0000000000000000
+LAT_HEX R_mut_d_n10 pi5 478E478E306179073047CE8B00020002
+LAT_STIM len=158 n=92 ssh_rc=0 out=<PING ff02::1%enp1s0f1np1 (ff02::1%enp1s0f1np1) 92 data bytes | 100 bytes from fe80::3dc:7cad:d0b1:8db0%enp1s0f1np1: icmp_seq=1 ttl=64 time=0.023 ms |  | --- ff02::1%enp1s0f1np1 ping statistics --- | 1 packets transmitted, 1 received, 0% packet loss, time 0ms | rtt min/avg/max/mdev = 0.023/0.023/0.023/0.000 ms>
+LAT_CASE mut_b_n30 len=158 mut_sel=1 mut_n=30 ack=1
+LAT_HEX mut_b_n30 pi0 422294BE422294BB4208EE324208EE10
+LAT_HEX mut_b_n30 pi1 0000000049EDB80748151DB100000000
+LAT_HEX mut_b_n30 pi2 00BB009E0000D3CD0001000000010001
+LAT_HEX mut_b_n30 pi3 00000000000000000001000000000000
+LAT_HEX mut_b_n30 pi4 422294D8422294C50000000000000000
+LAT_HEX mut_b_n30 pi5 08A908A9422294074208ED6100010001
+LAT_CASE2 mut_b_n30 ack=1
+LAT_HEX R_mut_b_n30 pi0 422294BE422294BB4208EE324208EE10
+LAT_HEX R_mut_b_n30 pi1 000000004CFFBC074B94917200000000
+LAT_HEX R_mut_b_n30 pi2 00BA009E0000E5D10001000000010001
+LAT_HEX R_mut_b_n30 pi3 00000000000000000001000000000000
+LAT_HEX R_mut_b_n30 pi4 422294D8422294C50000000000000000
+LAT_HEX R_mut_b_n30 pi5 08A908A9422294074208ED6100010001
+LAT_STIM len=158 n=92 ssh_rc=0 out=<PING ff02::1%enp1s0f1np1 (ff02::1%enp1s0f1np1) 92 data bytes | 100 bytes from fe80::3dc:7cad:d0b1:8db0%enp1s0f1np1: icmp_seq=1 ttl=64 time=0.021 ms |  | --- ff02::1%enp1s0f1np1 ping statistics --- | 1 packets transmitted, 1 received, 0% packet loss, time 0ms | rtt min/avg/max/mdev = 0.021/0.021/0.021/0.000 ms>
+LAT_CASE mut_b_n0 len=158 mut_sel=1 mut_n=0 ack=1
+LAT_HEX mut_b_n0 pi0 58BCACC458BCACC158A30AFF58A30AFB
+LAT_HEX mut_b_n0 pi1 00000000606D7F075EBBC49900000000
+LAT_HEX mut_b_n0 pi2 00B3009E000053940001000000030003
+LAT_HEX mut_b_n0 pi3 00000000000000000001000000000000
+LAT_HEX mut_b_n0 pi4 58BCACDE58BCACCB0000000000000000
+LAT_HEX mut_b_n0 pi5 A2C1A2C158BCAC0758A30A4600010001
+LAT_CASE2 mut_b_n0 ack=1
+LAT_HEX R_mut_b_n0 pi0 58BCACC458BCACC158A30AFF58A30AFB
+LAT_HEX R_mut_b_n0 pi1 0000000062D2C507619F713900000000
+LAT_HEX R_mut_b_n0 pi2 00B2009E0000B8DA0001000000030003
+LAT_HEX R_mut_b_n0 pi3 00000000000000000001000000000000
+LAT_HEX R_mut_b_n0 pi4 58BCACDE58BCACCB0000000000000000
+LAT_HEX R_mut_b_n0 pi5 A2C1A2C158BCAC0758A30A4600010001
+LAT_STIM len=158 n=92 ssh_rc=0 out=<PING ff02::1%enp1s0f1np1 (ff02::1%enp1s0f1np1) 92 data bytes | 100 bytes from fe80::3dc:7cad:d0b1:8db0%enp1s0f1np1: icmp_seq=1 ttl=64 time=0.021 ms |  | --- ff02::1%enp1s0f1np1 ping statistics --- | 1 packets transmitted, 1 received, 0% packet loss, time 0ms | rtt min/avg/max/mdev = 0.021/0.021/0.021/0.000 ms>
+LAT_CASE postmut158 len=158 mut_sel=0 mut_n=0 ack=1
+LAT_HEX postmut158 pi0 6BD3AEB66BD3AEB36BBA11156BBA1111
+LAT_HEX postmut158 pi1 0000000073C1BC07721DBFCD00000000
+LAT_HEX postmut158 pi2 009B009E0000A7D10001000000010001
+LAT_HEX postmut158 pi3 00000000000000000001000000000000
+LAT_HEX postmut158 pi4 6BD3AED06BD3AEBD0000000000000000
+LAT_HEX postmut158 pi5 B9C3B9C36BD3AE076BBA106A00010001
+LAT_CASE2 postmut158 ack=1
+LAT_HEX R_postmut158 pi0 6BD3AEB66BD3AEB36BBA11156BBA1111
+LAT_HEX R_postmut158 pi1 00000000766C9807752BED7800000000
+LAT_HEX R_postmut158 pi2 009A009E000052AD0001000000010001
+LAT_HEX R_postmut158 pi3 00000000000000000001000000000000
+LAT_HEX R_postmut158 pi4 6BD3AED06BD3AEBD0000000000000000
+LAT_HEX R_postmut158 pi5 B9C3B9C36BD3AE076BBA106A00010001
+# if {$drpscan} {
+#     sec "DRP SCAN"
+#     # ⚠️ 跨域�?�? (�? rtl/p7b_lat_drp.v �?): **先写地址, �? >= 5ms, 再翻 go**
+#     # 先点名�?�一�? (�?任务书点名的 0x269), 再全�? 0x000..0x3FF 建图�?
+#     # ⚠️ 顺序: DRP 在所有延迟例**之后** —�? �? DRP 仲�?�出岔子影响了链�?,
+#     #    延迟读数已经落�?��?
+#     set addrs {}
+#     foreach a {0x000 0x001 0x011 0x018 0x01E 0x021 0x03E 0x057 0x0C6 \
+#                0x200 0x201 0x210 0x236 0x268 0x269 0x269 0x269 0x26A 0x2E9 0x2EA 0x2F0 0x3FF} {
+#         lappend addrs [expr {$a}]
+#     }
+#     puts "LAT_DRP_NAMED_N = [llength $addrs]"
+#     set prev0 ""
+#     set prev1 ""
+#     foreach a $addrs {
+#         set hex [format "%04X" $a]
+#         vsetstr $vio $P_DADDR $hex      # 先写地址...
+#         after 20                        # ...�? >> 1ms (跨域准静态纪�?)...
+#         toggle_drp_go $vio $P_DGO       # ...再翻 go (边沿 = 一次事�?)
+#         after 40
+#         refresh_hw_vio $vio             # 一�? refresh 读走 pi3/pi4
+#         set h3 [lindex [readall $vio] 3]
+#         set h4 [lindex [readall $vio] 4]
+#         puts "LAT_DRP addr=$hex pi3=$h3 pi4=$h4"
+#     }
+#     # 全扫 (10 位地址空间 = 1024 �?地址 x 2 通道); 每条 ~60ms => ~1 分钟量级
+#     for {set a 0} {$a < 1024} {incr a} {
+#         set hex [format "%04X" $a]
+#         vsetstr $vio $P_DADDR $hex
+#         after 12
+#         toggle_drp_go $vio $P_DGO
+#         after 25
+#         refresh_hw_vio $vio
+#         set h3 [lindex [readall $vio] 3]
+#         set h4 [lindex [readall $vio] 4]
+#         puts "LAT_DRP addr=$hex pi3=$h3 pi4=$h4"
+#     }
+#     # 一次原子快煡�, �? DRP �? evt/回�?�地址固定下来
+#     set ok [snapshot $vio $P_SNAP]
+#     puts "LAT_DRP_SNAP ack=[expr {$ok ? 1 : 0}]"
+#     dump_all $vio drpsnap
+# }
+# sec "DONE"
+
+@@@@@@ LAT >>> DONE
+# puts "LAT_NSNAP = $g_nsnap"
+LAT_NSNAP = 34
+# exit
+INFO: [Common 17-206] Exiting Vivado at Wed Sep 30 03:33:04 2026...

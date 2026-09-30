@@ -1,0 +1,242 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Wed Sep 30 02:18:58 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source {D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\p7b_lat\scripts\probe_drp_ports.tcl}
+# set part_name  xcku5p-ffvb676-1-e
+# set gquad      Quad_X0Y1
+# set here       [file dirname [file normalize [info script]]]
+# set root       [file normalize [file join $here .. .. ..]]
+# set probe_dir  [file join $root _proj_10g p7b_lat drp_probe]
+# proc sec {s} { puts "\nDRPP >>>>>>>>>> $s" }
+# catch {set_param general.maxThreads 8}
+# sec "DRPP_ENV"
+
+DRPP >>>>>>>>>> DRPP_ENV
+# puts "DRPP_VIVADO = [version -short]"
+DRPP_VIVADO = 2025.2
+# puts "DRPP_ROOT   = $root"
+DRPP_ROOT   = D:/repo/XCKU5PMini/udp_hls_10g
+# file mkdir $probe_dir
+# create_project -force drp_probe $probe_dir -part $part_name
+create_project: Time (s): cpu = 00:00:34 ; elapsed = 00:00:05 . Memory (MB): peak = 552.426 ; gain = 241.527
+# set_property target_language Verilog [current_project]
+# sec "DRPP_IP_CREATE"
+
+DRPP >>>>>>>>>> DRPP_IP_CREATE
+# create_ip -name xxv_ethernet -vendor xilinx.com -library ip -version 5.0 -module_name pcs64
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository 'C:/AMDDesignTools/2025.2/Vivado/data/ip'.
+# set ip [get_ips pcs64]
+# set DESIRED [list \
+#     CONFIG.LINE_RATE                  {10} \
+#     CONFIG.CLOCKING                   {Asynchronous} \
+#     CONFIG.BASE_R_KR                  {BASE-R} \
+#     CONFIG.GT_REF_CLK_FREQ            {156.25} \
+#     CONFIG.GT_TYPE                    {GTY} \
+#     CONFIG.INCLUDE_SHARED_LOGIC       {1} \
+#     CONFIG.GT_GROUP_SELECT            $gquad \
+#     CONFIG.NUM_OF_CORES               {2} \
+#     CONFIG.LANE1_GT_LOC               {X0Y4} \
+#     CONFIG.LANE2_GT_LOC               {X0Y5} \
+#     CONFIG.CORE                       {Ethernet PCS/PMA 64-bit} \
+#     CONFIG.ADD_GT_CNTRL_STS_PORTS     {1} ]
+# set conv -1
+# for {set rnd 1} {$rnd <= 8} {incr rnd} {
+#     foreach {k v} $DESIRED { catch {set_property $k $v $ip} e }
+#     set bad 0
+#     foreach {k v} $DESIRED {
+#         set gv "<err>"; catch {set gv [get_property $k $ip]}
+#         if {[string trim $gv] ne [string trim $v]} {
+#             incr bad ; puts "DRPP_RB_MISMATCH $k want=<$v> got=<$gv>"
+#         }
+#     }
+#     puts "DRPP_ROUND #$rnd MISMATCH_N = $bad"
+#     if {$bad == 0} { set conv $rnd ; break }
+# }
+DRPP_RB_MISMATCH CONFIG.LINE_RATE want=<10> got=<25>
+DRPP_RB_MISMATCH CONFIG.BASE_R_KR want=<BASE-R> got=<BASE-KR>
+DRPP_RB_MISMATCH CONFIG.GT_REF_CLK_FREQ want=<156.25> got=<161.1328125>
+DRPP_RB_MISMATCH CONFIG.NUM_OF_CORES want=<2> got=<1>
+DRPP_RB_MISMATCH CONFIG.LANE2_GT_LOC want=<X0Y5> got=<NA>
+DRPP_ROUND #1 MISMATCH_N = 5
+DRPP_ROUND #2 MISMATCH_N = 0
+# puts "DRPP_CONVERGED_AT_ROUND = $conv"
+DRPP_CONVERGED_AT_ROUND = 2
+# if {$conv < 0} { puts "DRPP_VERDICT = IP_NOT_CONVERGED" ; exit 1 }
+INFO: [IP_Flow 19-1686] Generating 'Instantiation Template' target for IP 'pcs64'...
+INFO: [IP_Flow 19-1686] Generating 'Synthesis' target for IP 'pcs64'...
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_tsn_802d1cm@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_tsn_802d1cm@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_tsn_802d1cm@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_tsn_802d1cm@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+INFO: [IP_Flow 19-1686] Generating 'Simulation' target for IP 'pcs64'...
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_tsn_802d1cm@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_basekr@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+WARNING: [IP_Flow 19-650] IP license key 'xxv_eth_mac_pcs@2025.05' is enabled with a Design_Linking license.
+INFO: [Common 17-14] Message 'IP_Flow 19-650' appears 100 times and further instances of the messages will be disabled. Use the Tcl command set_msg_config to change the current settings.
+INFO: [IP_Flow 19-1686] Generating 'Implementation' target for IP 'pcs64'...
+INFO: [IP_Flow 19-1686] Generating 'Change Log' target for IP 'pcs64'...
+generate_target: Time (s): cpu = 00:00:07 ; elapsed = 00:00:09 . Memory (MB): peak = 728.875 ; gain = 18.992
+# set genrc [catch {generate_target all $ip} egen]
+# puts "DRPP_GENERATE_RC = $genrc"
+DRPP_GENERATE_RC = 0
+# if {$genrc != 0} { puts "DRPP_GENERATE_ERR = $egen" ; puts "DRPP_VERDICT = GENERATE_FAIL" ; exit 1 }
+# puts "DRPP_IS_LOCKED_POSTGEN = [get_property IS_LOCKED $ip]"
+DRPP_IS_LOCKED_POSTGEN = 0
+# sec "DRPP_VEO"
+
+DRPP >>>>>>>>>> DRPP_VEO
+# set veo [file join $probe_dir drp_probe.gen sources_1 ip pcs64 pcs64.veo]
+# puts "DRPP_VEO_PATH = $veo"
+DRPP_VEO_PATH = D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_lat/drp_probe/drp_probe.gen/sources_1/ip/pcs64/pcs64.veo
+# puts "DRPP_VEO_EXISTS = [file exists $veo]"
+DRPP_VEO_EXISTS = 1
+# if {[file exists $veo]} {
+#     set fh [open $veo r]
+#     set n 0
+#     while {[gets $fh line] >= 0} {
+#         incr n
+#         if {[string match -nocase "*drp*" $line]} { puts "DRPP_VEO_DRP $n : $line" }
+#     }
+#     close $fh
+#     puts "DRPP_VEO_LINES = $n"
+# }
+DRPP_VEO_DRP 152 :   .gt_drpclk_0(gt_drpclk_0),                                                  // input wire gt_drpclk_0
+DRPP_VEO_DRP 153 :   .gt_drpclk_1(gt_drpclk_1),                                                  // input wire gt_drpclk_1
+DRPP_VEO_DRP 154 :   .gt_drprst_0(gt_drprst_0),                                                  // input wire gt_drprst_0
+DRPP_VEO_DRP 155 :   .gt_drprst_1(gt_drprst_1),                                                  // input wire gt_drprst_1
+DRPP_VEO_DRP 156 :   .gt_drpdo_0(gt_drpdo_0),                                                    // output wire [15 : 0] gt_drpdo_0
+DRPP_VEO_DRP 157 :   .gt_drpdo_1(gt_drpdo_1),                                                    // output wire [15 : 0] gt_drpdo_1
+DRPP_VEO_DRP 158 :   .gt_drprdy_0(gt_drprdy_0),                                                  // output wire gt_drprdy_0
+DRPP_VEO_DRP 159 :   .gt_drprdy_1(gt_drprdy_1),                                                  // output wire gt_drprdy_1
+DRPP_VEO_DRP 160 :   .gt_drpen_0(gt_drpen_0),                                                    // input wire gt_drpen_0
+DRPP_VEO_DRP 161 :   .gt_drpen_1(gt_drpen_1),                                                    // input wire gt_drpen_1
+DRPP_VEO_DRP 162 :   .gt_drpwe_0(gt_drpwe_0),                                                    // input wire gt_drpwe_0
+DRPP_VEO_DRP 163 :   .gt_drpwe_1(gt_drpwe_1),                                                    // input wire gt_drpwe_1
+DRPP_VEO_DRP 164 :   .gt_drpaddr_0(gt_drpaddr_0),                                                // input wire [9 : 0] gt_drpaddr_0
+DRPP_VEO_DRP 165 :   .gt_drpaddr_1(gt_drpaddr_1),                                                // input wire [9 : 0] gt_drpaddr_1
+DRPP_VEO_DRP 166 :   .gt_drpdi_0(gt_drpdi_0),                                                    // input wire [15 : 0] gt_drpdi_0
+DRPP_VEO_DRP 167 :   .gt_drpdi_1(gt_drpdi_1),                                                    // input wire [15 : 0] gt_drpdi_1
+DRPP_VEO_LINES = 254
+# set vfile [file join $probe_dir drp_probe.gen sources_1 ip pcs64 pcs64.v]
+# puts "DRPP_VFILE_EXISTS = [file exists $vfile]"
+DRPP_VFILE_EXISTS = 1
+# if {[file exists $vfile]} {
+#     set fh [open $vfile r]
+#     set inside 0 ; set n 0
+#     while {[gets $fh line] >= 0} {
+#         incr n
+#         if {[string match "*module pcs64*" $line]} { set inside 1 ; puts "DRPP_MOD $n : $line" ; continue }
+#         if {$inside && [string match ");*" [string trim $line]]} { set inside 0 ; puts "DRPP_ENDMOD $n" }
+#         if {$inside && ([string match "*input*" [string trim $line]] || [string match "*output*" [string trim $line]])} {
+#             puts "DRPP_PORT $n : [string trim $line]"
+#         }
+#     }
+#     close $fh
+# }
+DRPP_MOD 68 : module pcs64 (
+DRPP_ENDMOD 328
+# puts "DRPP DONE"
+DRPP DONE
+# exit
+INFO: [Common 17-206] Exiting Vivado at Wed Sep 30 02:20:27 2026...

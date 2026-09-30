@@ -1,0 +1,1456 @@
+`timescale 1ns/1ps
+// ===========================================================================
+// tb_p7b_chain.v -- P7b **真 wrapper 全链门** (工程坑 8: 每个 ifdef 构建配置都要有
+//   一条例化真 wrapper 的全链门; 子模块 TB 对 ifdef 里的接线错完全隐身)
+// ===========================================================================
+// 被测 = `wrapper_p4` 在 P7B_10G + P7B_SIM_NOPCS + PCIE_OBS + DEV_USP + APP_MODE
+//        + DP_156MHZ + P6B_SIM_CLKGEN 下的**真实例化**。
+//
+// ⚠️ 边界 (不许当"真 PCS 已验证"引用): 官方 `xxv_ethernet` 是加密 GT IP, xsim
+//   bring-up 在本工程**从未做过** (P7B_XXV_OFFICIAL.md U15 = 【未核实】)。PCS 那个
+//   socket 里放 `board/p7b_pcs_stub.v` —— **端口表与真核逐一相同**, 只造 XGMII 字节流
+//   与两个 156.25MHz 时钟。⇒ 除 `u_pcs` 这一个实例, MAC / CDC / 数据面 / 快照的接线
+//   与综合构建**逐字相同**。真核的证据在闸 1/闸 2/P7A (板级), 不在本门。
+//
+// 判据一律 `cond !== 1'b1`; 每条带「期望来源」(src=...); 期望值全部由本 TB 自算
+//   (位串行 CRC-32 + 逐字节图案), **不由 DUT 生成**。
+// ---------------------------------------------------------------------------
+// 判据表 (简标签 → 完整陈述 + 期望来源; 日志里只打简标签)
+//   0a crc32_std("123456789") == 0xCBF43926            | 802.3 标准校验向量 (zlib=取反后)
+//   0b 帧内容+其 FCS 的残留 == 0xDEBB20E3           | 工程铁律 (0xC704DD7B 是大端魔数)
+//   0c PCS stub 放行 (user_rx_reset_1==0)                 | 激励前提
+//   0d SFP2 TX_DIS 驱动为低                             | GATE1 5.8 三态判别实验
+//   1a RX 至少交付 1 帧                              | 激励前提 (非真空分母)
+//   1b RX 首字节 == 内容[0] (tdata[63:56])             | 注入字节数组 + GATE1 §C.2 镜像表
+//   1c RX 首字节 != XGMII lane7 那个字节              | 负向: 前 8 个内容字节两两不同
+//   2a/2b 最小/最大帧交付字节数 == 60/1514           | 802.3 Cl.4.4 + 注入长度
+//   2c Σpopc(tkeep) 守恒                                  | 合同: 交付字节 == 注入内容字节
+//   2d 63+65 非 8 倍数帧 → 128 字节                       | 注入长度
+//   2e 帧数 == 2 (不合并不拆分)                          | 合同: 每帧 1 个 TLAST
+//   3a 好 FCS 不加 stat_crc_err                           | 注入 FCS == TB 算的 CRC32
+//   3b 好 FCS 帧被交付 (64B)                           | 合同: tcrs=1
+//   3c 坏 FCS 使 stat_crc_err +1                            | 注入: FCS 字段改成 0
+//   3d 坏 FCS 帧仍被交付 (标志而非丢弃)                 | 合同: crc 错是标志
+//   3e 帧内 /E/ 使 stat_rx_er_words 增                   | 注入 /E/ 在内容第 10 字节
+//   3f stat_rx_fifo_ovf 恒 0                                | mac_rx_10g 结构上恒 0
+//   4a/4b 零间隔背靠背 3 帧 → 3 帧 / 180 字节         | derive: 3 × 60
+//   5a F4(a) 下游停摆时有丢帧计数                     | 40×1514B 对 16 字 FIFO
+//   5b F4(b) 交付流里出现 TERM 字                       | TERM 五元组逐字
+//   5c 无一帧超过 1514 内容字节                         | 注入最长度
+//   5d F4 丢帧计数 > 0                                   | 同 5a
+//   5e 恢复后下一帧逐字节正确                         | 注入 64B, 首字节 PAT[0]
+//   6a TX 线上恰 1 帧 (无幽灵/无拆分)                      | 注入 1 个 tlast 帧
+//   6b TX 首字 /S/ 在 lane0                               | 厂商 :995/:1147-1149 + GATE1 §C.4
+//   6c TX 首字其余部分 == 55×6+D5                        | 厂商 :995 字面量
+//   6d/6e/6f TX 线上前导与内容的 lane 顺序                | 合同 tdata[63:56] + 注入字节
+//   7 W36..W50 = 被 force 的生产者常量                    | force 在生产者节点
+//   7b 0xEC 读 0 且 SLVERR (无回绕)                        | axi_regs 读侧译码; 51 字地图边界
+// ---------------------------------------------------------------------------
+// ===========================================================================
+module tb_p7b_chain;
+
+    integer fails  = 0;
+    integer checks = 0;
+
+    task chk;
+        input [255:0] name;
+        input         cond;
+        input [255:0] src;
+        begin
+            checks = checks + 1;
+            if (cond !== 1'b1) begin
+                fails = fails + 1;
+                $display("  [FAIL] %0s   src=%0s", name, src);
+            end else begin
+                $display("  [PASS] %0s   src=%0s", name, src);
+            end
+        end
+    endtask
+
+    // ======================= 时钟 / 复位 ===================================
+    reg reset_n = 0;
+    reg pcie_sys_clk_p = 0, pcie_sys_clk_n = 1;
+    reg sys_clk_p = 0, sys_clk_n = 1;
+    always #5 pcie_sys_clk_p = ~pcie_sys_clk_p;
+    always #5 pcie_sys_clk_n = ~pcie_sys_clk_n;
+    always #5 sys_clk_p = ~sys_clk_p;
+    always #5 sys_clk_n = ~sys_clk_p;
+
+    reg [3:0] pcie_rxp = 0, pcie_rxn = 0;
+    wire [3:0] pcie_txp, pcie_txn;
+    reg gt_refclk_p = 0, gt_refclk_n = 1;
+    reg sfp1_rxp = 0, sfp1_rxn = 0, sfp2_rxp = 0, sfp2_rxn = 0;
+    wire sfp1_txp, sfp1_txn, sfp2_txp, sfp2_txn;
+    reg  sfp1_rx_los = 1, sfp2_rx_los = 0;
+    wire sfp1_tx_dis, sfp2_tx_dis;
+    wire led_d0, led_d1, led_d2, led_d3, uart_txd;
+
+    wrapper_p4 u_dut (
+        .reset_n(reset_n),
+        .pcie_sys_clk_p(pcie_sys_clk_p), .pcie_sys_clk_n(pcie_sys_clk_n),
+        .pcie_txp(pcie_txp), .pcie_txn(pcie_txn),
+        .pcie_rxp(pcie_rxp), .pcie_rxn(pcie_rxn),
+        .sys_clk_p(sys_clk_p), .sys_clk_n(sys_clk_n),
+        .gt_refclk_p(gt_refclk_p), .gt_refclk_n(gt_refclk_n),
+        .sfp1_rxp(sfp1_rxp), .sfp1_rxn(sfp1_rxn),
+        .sfp1_txp(sfp1_txp), .sfp1_txn(sfp1_txn),
+        .sfp2_rxp(sfp2_rxp), .sfp2_rxn(sfp2_rxn),
+        .sfp2_txp(sfp2_txp), .sfp2_txn(sfp2_txn),
+        .sfp1_rx_los(sfp1_rx_los), .sfp2_rx_los(sfp2_rx_los),
+        .sfp1_tx_dis(sfp1_tx_dis), .sfp2_tx_dis(sfp2_tx_dis),
+        .led_d0(led_d0), .led_d1(led_d1), .led_d2(led_d2), .led_d3(led_d3),
+        .uart_txd(uart_txd)
+    );
+
+    // ======================= CRC-32 (位串行, TB 自算) ======================
+    // 反射多项式 0xEDB88320 / 初值 0xFFFFFFFF / 无终值取反 / 线序 LSB-first。
+    function [31:0] crc32_byte;
+        input [31:0] c;
+        input [7:0]  b;
+        integer i;
+        reg [31:0] x;
+        begin
+            x = c ^ {24'd0, b};
+            for (i = 0; i < 8; i = i + 1)
+                x = x[0] ? ((x >> 1) ^ 32'hEDB88320) : (x >> 1);
+            crc32_byte = x;
+        end
+    endfunction
+
+    // ======================= 内容图案 ======================================
+    // ⭐ 前 8 个内容字节两两不同 —— 字节序镜像判据的判别力全靠这一条
+    reg [7:0] PAT [0:2047];
+    integer   pi;
+    task init_pat;
+        begin
+            for (pi = 0; pi < 2048; pi = pi + 1) PAT[pi] = pi[7:0];
+            PAT[0] = 8'h01; PAT[1] = 8'h23; PAT[2] = 8'h45; PAT[3] = 8'h67;
+            PAT[4] = 8'h89; PAT[5] = 8'hAB; PAT[6] = 8'hCD; PAT[7] = 8'hEF;
+        end
+    endtask
+
+    function integer popc8;
+        input [7:0] v;
+        integer i;
+        begin
+            popc8 = 0;
+            for (i = 0; i < 8; i = i + 1) if (v[i]) popc8 = popc8 + 1;
+        end
+    endfunction
+
+    // ======================= XGMII 注入队列 (RX 方向) ======================
+    // ⚠️ 驱动器**必须与 DUT 的恢复钟同拍** —— 用自造的同频异相时钟会偶发重复采到一个
+    //    XGMII 字 ⇒ 线上多 8 字节, 症状像 MAC 缺陷。
+    reg [63:0] xq_d [0:16383];
+    reg [7:0]  xq_c [0:16383];
+    integer    xq_wr = 0, xq_rd = 0;
+    wire       xq_empty = (xq_rd == xq_wr);
+
+    always @(posedge u_dut.rx_clk_out_1) begin
+        if (!xq_empty) xq_rd <= xq_rd + 1;
+        u_dut.u_pcs.inj_d1 <= xq_empty ? 64'h0707070707070707 : xq_d[xq_rd];
+        u_dut.u_pcs.inj_c1 <= xq_empty ? 8'hFF                 : xq_c[xq_rd];
+    end
+
+    reg [7:0] wb [0:8191];
+    reg       wc [0:8191];
+
+    task xq_pack_words;               // 把 wb/wc 的前 n 个字节按 lane0=首字节 打包
+        input integer n;
+        integer i, k;
+        reg [63:0] d;
+        reg [7:0]  c;
+        begin
+            i = 0;
+            while (i < n) begin
+                d = 64'd0; c = 8'd0;
+                for (k = 0; k < 8; k = k + 1) begin
+                    if (i + k < n) begin
+                        d[k*8 +: 8] = wb[i+k];
+                        c[k]        = wc[i+k];
+                    end else begin
+                        d[k*8 +: 8] = 8'h07;
+                        c[k]        = 1'b1;
+                    end
+                end
+                xq_d[xq_wr] = d; xq_c[xq_wr] = c; xq_wr = xq_wr + 1;
+                i = i + 8;
+            end
+        end
+    endtask
+
+    // 组一帧: /S/ 0xFB + 55x6 + D5 + [内容 n 字节] + [FCS 或 4 个 0]
+    //   er_at: >=0 时在该内容下标后插一个 /E/ 控制字符
+    reg [31:0] fcs_calc;
+    task build_frame;
+        input integer n;
+        input         bad;
+        input integer er_at;
+        integer i, m;
+        begin
+            fcs_calc = 32'hFFFFFFFF;
+            for (i = 0; i < n; i = i + 1) fcs_calc = crc32_byte(fcs_calc, PAT[i]);
+            fcs_calc = ~fcs_calc;      // 线上 FCS = ~internal (与 MAC 的写法一致)
+            wb[0] = 8'hFB; wc[0] = 1;
+            for (i = 0; i < 6; i = i + 1) begin wb[1+i] = 8'h55; wc[1+i] = 0; end
+            wb[7] = 8'hD5; wc[7] = 0;
+            m = 8;
+            for (i = 0; i < n; i = i + 1) begin
+                wb[m] = PAT[i]; wc[m] = 0; m = m + 1;
+                if (i == er_at) begin wb[m] = 8'hFE; wc[m] = 1; m = m + 1; end
+            end
+            if (!bad) begin
+                wb[m] = fcs_calc[7:0];   wc[m] = 0; m = m + 1;
+                wb[m] = fcs_calc[15:8];  wc[m] = 0; m = m + 1;
+                wb[m] = fcs_calc[23:16]; wc[m] = 0; m = m + 1;
+                wb[m] = fcs_calc[31:24]; wc[m] = 0; m = m + 1;
+            end else begin
+                wb[m] = 8'h00; wc[m] = 0; m = m + 1;
+                wb[m] = 8'h00; wc[m] = 0; m = m + 1;
+                wb[m] = 8'h00; wc[m] = 0; m = m + 1;
+                wb[m] = 8'h00; wc[m] = 0; m = m + 1;
+            end
+            // ⭐ 帧尾必须给 /T/ (0xFD,c=1) —— 802.3 46.2.1 说了
+            //   inter-frame 以 Terminate 开头; 没有 /T/ 的话接收端
+            //   **永远等不到帧尾** (本门第一版就是这个错:
+            //   DIAG 显示 dbg_rx_state=1 卡在收帧, rx_stat_frames=0)。
+            //   置于最后一个有效字节之后的那个 lane。
+            wb[m] = 8'hFD; wc[m] = 1; m = m + 1;
+            xq_pack_words(m);
+        end
+    endtask
+
+    // ======================= 交付侧 (RX 合同) 观察 =========================
+    reg [31:0] got_bytes = 0, got_frames = 0;
+    reg        got_term_seen = 0;
+    reg [63:0] got_first_tdata = 0;
+    reg        got_started = 0;
+    reg [31:0] got_first_words = 0;
+    reg [7:0]  got_buf [0:4095];
+    integer    got_len = 0;
+    integer    got_f_len [0:127];
+    integer    got_f_cnt = 0;
+    integer    got_last_len = 0;
+    integer    bi;
+
+    always @(posedge u_dut.dp_clk) begin
+        if (u_dut.rx_tvalid && u_dut.rx_tready) begin
+            if (!got_started) begin
+                got_started     <= 1'b1;
+                got_first_tdata <= u_dut.rx_tdata;
+            end
+            got_bytes <= got_bytes + popc8(u_dut.rx_tkeep);
+            for (bi = 0; bi < 8; bi = bi + 1)
+                if (u_dut.rx_tkeep[bi] && (got_len < 4096)) begin
+                    got_buf[got_len] = u_dut.rx_tdata[bi*8 +: 8];
+                    got_len = got_len + 1;
+                end
+            got_first_words <= got_first_words + 32'd1;
+            if (u_dut.rx_tlast) begin
+                got_frames <= got_frames + 1;
+                got_last_len = got_len;
+                if (got_f_cnt < 128) begin
+                    got_f_len[got_f_cnt] = got_len;
+                    got_f_cnt = got_f_cnt + 1;
+                end
+                got_len = 0;
+                if (u_dut.rx_tkeep === 8'h00 && u_dut.rx_tcrs === 1'b0 && u_dut.rx_terr === 1'b1)
+                    got_term_seen <= 1'b1;
+            end
+        end
+    end
+
+    // ======================= TX 方向捕获 (线上字) ==========================
+    reg [63:0] wq_d [0:16383];
+    reg [7:0]  wq_c [0:16383];
+    integer    wq_wr = 0;
+    integer    wq_sw = 0;
+
+    always @(posedge u_dut.tx_mii_clk_1) begin
+        wq_d[wq_wr] <= u_dut.u_pcs.txcap_d1;
+        wq_c[wq_wr] <= u_dut.u_pcs.txcap_c1;
+        if (wq_wr < 16383) wq_wr <= wq_wr + 1;
+    end
+
+    // 逐帧解码线上内容 (起帧 = lane0 的 /S/; 结帧 = 任一 lane 的 /T/)
+    //   帧内容 = /S/ 那一拍之后所有数据 lane 的字节 (含 55x6+D5), 不含 /T/ 之后的 lane
+    reg [7:0]  wf_b [0:31][0:2047];
+    integer    wf_n [0:31];
+    integer    wf_cnt = 0;
+    reg        wf_act = 0;
+    integer    wf_cur = 0, wf_len = 0;
+    integer    wk, wl;
+    // ---- F2-DIAG-PATCH ----
+    integer    wf_start [0:31];
+    integer    wf_stop  [0:31];
+    integer    wf_dump_max = 104;
+    reg [63:0] injw_d [0:255];
+    reg [7:0]  injw_k [0:255];
+    reg        injw_l [0:255];
+    integer    injw_n = 0;
+    integer    f2_tr_n = 0, f2_tr_lim = 0;
+    reg        f2_tr_on = 0;
+    integer    f2_ev_n = 0;
+    reg [63:0] f2_ev_d [0:63];
+    reg [7:0]  f2_ev_c [0:63];
+    reg        f2_ev_w = 0;
+    integer    f2_ev_start = 0;
+    reg [7:0]  wd, wcc;
+    reg        wf_ghost = 0;         // 出现过"不属于任何注入帧"的线上帧
+
+    task decode_wire;
+        input integer upto;
+        begin
+            wf_cnt = 0; wf_act = 0; wf_cur = 0; wf_len = 0;
+            for (wk = 0; wk < upto; wk = wk + 1) begin
+                for (wl = 0; wl < 8; wl = wl + 1) begin
+                    wd  = wq_d[wk][wl*8 +: 8];
+                    wcc = wq_c[wk][wl];
+                    if (wcc === 1'b1 && wd === 8'hFB && wl == 0) begin
+                        if (wf_cur < 32) begin
+                            wf_act = 1; wf_len = 0; wf_start[wf_cur] = wk;
+                        end
+                    end else if (wcc === 1'b1 && wd === 8'hFD) begin
+                        if (wf_act && wf_cur < 32) begin
+                            wf_n[wf_cur] = wf_len;
+                            wf_stop[wf_cur] = wk;
+                            wf_cur = wf_cur + 1;
+                        end
+                        wf_act = 0;
+                    end else if (wf_act && wl < 8 && wcc === 1'b0) begin
+                        if (wf_len < 2048 && wf_cur < 32) begin
+                            wf_b[wf_cur][wf_len] = wd;
+                            wf_len = wf_len + 1;
+                        end
+                    end
+                end
+            end
+            wf_cnt = wf_cur;
+        end
+    endtask
+
+    // ---- F2-DIAG-PATCH: raw XGMII word dump (index, c, d, lanes) ----
+    task dump_raw;
+        input integer from;
+        input integer to;
+        integer dk, dto;
+        begin
+            dto = (to < 16383) ? to : 16383;
+            $display("  [RAW] span [%0d,%0d) wq_wr=%0d", from, dto, wq_wr);
+            for (dk = from; dk < dto; dk = dk + 1) begin
+                $display("  [RAW %0d] c=%02h d=%016h l0=%02h l1=%02h l2=%02h l3=%02h l4=%02h l5=%02h l6=%02h l7=%02h",
+                    dk, wq_c[dk], wq_d[dk],
+                    wq_d[dk][7:0], wq_d[dk][15:8], wq_d[dk][23:16], wq_d[dk][31:24],
+                    wq_d[dk][39:32], wq_d[dk][47:40], wq_d[dk][55:48], wq_d[dk][63:56]);
+            end
+        end
+    endtask
+
+    // ---- F2-DIAG-PATCH: decoded wire frames, byte-exact ----
+    task dump_frames;
+        integer df, dk, dn;
+        begin
+            $display("  [WFRAMES] wf_cnt=%0d", wf_cnt);
+            for (df = 0; df < wf_cnt && df < 32; df = df + 1) begin
+                dn = wf_n[df];
+                $display("  [WFRAME %0d] words[%0d..%0d] bytes=%0d",
+                         df, wf_start[df], wf_stop[df], dn);
+                for (dk = 0; dk < dn && dk < wf_dump_max; dk = dk + 8)
+                    $display("    [%03d] %02h %02h %02h %02h %02h %02h %02h %02h",
+                        dk, wf_b[df][dk], wf_b[df][dk+1], wf_b[df][dk+2], wf_b[df][dk+3],
+                        wf_b[df][dk+4], wf_b[df][dk+5], wf_b[df][dk+6], wf_b[df][dk+7]);
+                if (dn > wf_dump_max)
+                    $display("    ... +%0d bytes not printed", dn - wf_dump_max);
+            end
+        end
+    endtask
+
+    // ---- F2-DIAG-PATCH: words actually written into u_txcdc (dp side) ----
+    task dump_injw;
+        integer di;
+        begin
+            $display("  [INJW] n=%0d", injw_n);
+            for (di = 0; di < injw_n && di < 256; di = di + 1)
+                $display("  [INJW %0d] keep=%02h last=%b d=%016h l0=%02h l1=%02h l2=%02h l3=%02h l4=%02h l5=%02h l6=%02h l7=%02h",
+                    di, injw_k[di], injw_l[di], injw_d[di],
+                    injw_d[di][7:0], injw_d[di][15:8], injw_d[di][23:16], injw_d[di][31:24],
+                    injw_d[di][39:32], injw_d[di][47:40], injw_d[di][55:48], injw_d[di][63:56]);
+        end
+    endtask
+
+    always @(posedge u_dut.dp_clk)
+        if (u_dut.txsrc_tvalid && u_dut.txsrc_tready) begin
+            if (injw_n < 256) begin
+                injw_d[injw_n] = u_dut.txsrc_tdata;
+                injw_k[injw_n] = u_dut.txsrc_tkeep;
+                injw_l[injw_n] = u_dut.txsrc_tlast;
+                injw_n = injw_n + 1;
+            end
+        end
+
+    // ---- F2-DIAG-PATCH: per-cycle mac_tx_10g trace (windowed) ----
+    always @(posedge u_dut.tx_mii_clk_1)
+        if ((f2_tr_on == 1'b1) && (f2_tr_n < f2_tr_lim)) begin
+            $display("  [TR %0d] st=%0d cwl=%0d cwlast=%b keep=%02h plen=%0d femp=%b frd=%b ftl=%b fcnt=%0d txd=%016h txc=%02h | abrt=%0d flw=%0d fldn=%0d frm=%0d txw=%0d sht=%0d clen=%0d | cdc_e=%b mtv=%b tsv=%b tsl=%b tsk=%02h tst=%b",
+                f2_tr_n, u_dut.u_mac_tx.state, u_dut.u_mac_tx.cw_len,
+                u_dut.u_mac_tx.cw_last, u_dut.u_mac_tx.cw_keep, u_dut.u_mac_tx.plen,
+                u_dut.u_mac_tx.fempty, u_dut.u_mac_tx.frd, u_dut.u_mac_tx.flush_tl,
+                u_dut.u_mac_tx.flush_cnt, u_dut.u_mac_tx.tx_d, u_dut.u_mac_tx.tx_c,
+                u_dut.u_mac_tx.stat_abort, u_dut.u_mac_tx.stat_flush_words,
+                u_dut.u_mac_tx.stat_flush_done, u_dut.u_mac_tx.stat_frames,
+                u_dut.u_mac_tx.stat_tx_words, u_dut.u_mac_tx.stat_tx_short,
+                u_dut.u_mac_tx.m_clen,
+                u_dut.tx_fifo_empty, u_dut.m_tx_tvalid,
+                u_dut.txsrc_tvalid, u_dut.txsrc_tlast, u_dut.txsrc_tkeep,
+                u_dut.txsrc_tdata);
+            f2_tr_n = f2_tr_n + 1;
+        end
+
+    // ================== F2X-PATCH: F-2 attribution experiments ==================
+    localparam F2X_STRIDE = 64;
+    reg [7:0]  f2x_c [0:15*F2X_STRIDE-1];   // injected frame content bytes (contract order)
+    integer    f2x_clen [0:15];
+    integer    f2x_cn = 0;
+    integer    wq_base = 0;
+    reg [7:0]  f2x_wire [0:31][0:255];      // decoded wire-frame content bytes
+    integer    f2x_wlen [0:31];
+    integer    f2x_wkind [0:31];
+    integer    f2x_wn = 0;
+    integer    f2x_cls_n = 0;
+    integer    f2x_wstart [0:31];
+    integer    f2x_wstop  [0:31];
+    reg [31:0] f2x_abort0 = 0, f2x_flw0 = 0, f2x_fld0 = 0;
+
+    // 内容图案 (与 PAT 相同的前 60 字节); 每帧独立登记, 支持多帧期望
+    task f2x_add60;
+        input integer base;
+        integer i;
+        begin
+            for (i = 0; i < 60; i = i + 1) f2x_c[f2x_cn*F2X_STRIDE + i] = PAT[(base+i) % 256];
+            f2x_clen[f2x_cn] = 60;
+            f2x_cn = f2x_cn + 1;
+        end
+    endtask
+
+    // 单拍确定性注入: force 在 negedge 落地/撤销 => 恰好跨过 1 个 posedge (坑 17)
+    task f2x_push;
+        input [63:0] d;
+        input [7:0]  k;
+        input        l;
+        begin
+            @(negedge u_dut.dp_clk);
+            force u_dut.txsrc_tdata = d;
+            force u_dut.txsrc_tkeep = k;
+            force u_dut.txsrc_tlast = l;
+            force u_dut.txsrc_tvalid = 1'b1;
+            @(negedge u_dut.dp_clk);
+            force u_dut.txsrc_tvalid = 1'b0;
+        end
+    endtask
+
+    // F2X9-PATCH: 60 字节线上内容 (18 数据 + 42 pad) 的帧, FCS 两种覆盖面
+    task f2x_build_pad;
+        input        dut_fcs;      // 1 = FCS 只覆盖 18 个数据字节 (mac_tx_10g 实测)
+        integer i, m;
+        reg [31:0] fc;
+        begin
+            fc = 32'hFFFFFFFF;
+            if (dut_fcs) begin
+                for (i = 0; i < 18; i = i + 1) fc = crc32_byte(fc, PAT[i]);
+            end else begin
+                for (i = 0; i < 60; i = i + 1)
+                    fc = crc32_byte(fc, (i < 18) ? PAT[i] : 8'h00);
+            end
+            fc = ~fc;
+            wb[0] = 8'hFB; wc[0] = 1;
+            for (i = 0; i < 6; i = i + 1) begin wb[1+i] = 8'h55; wc[1+i] = 0; end
+            wb[7] = 8'hD5; wc[7] = 0;
+            m = 8;
+            for (i = 0; i < 60; i = i + 1) begin
+                wb[m] = (i < 18) ? PAT[i] : 8'h00; wc[m] = 0; m = m + 1;
+            end
+            wb[m] = fc[7:0];   wc[m] = 0; m = m + 1;
+            wb[m] = fc[15:8];  wc[m] = 0; m = m + 1;
+            wb[m] = fc[23:16]; wc[m] = 0; m = m + 1;
+            wb[m] = fc[31:24]; wc[m] = 0; m = m + 1;
+            wb[m] = 8'hFD; wc[m] = 1; m = m + 1;
+            xq_pack_words(m);
+            $display("  [F2X X5d] built frame: 18 data + 42 pad, FCS=%s (%02h %02h %02h %02h)",
+                     dut_fcs ? "over 18 data bytes (DUT style)" : "over 60 padded bytes (standard)",
+                     fc[7:0], fc[15:8], fc[23:16], fc[31:24]);
+        end
+    endtask
+
+    // F2X6-PATCH: 68 字节内容帧 (PAT[0..67] = TB build_frame(68) 的同一内容, 无 pad)
+    task f2x_add68;
+        integer i;
+        begin
+            for (i = 0; i < 68; i = i + 1) f2x_c[f2x_cn*F2X_STRIDE + i] = PAT[i];
+            f2x_clen[f2x_cn] = 68;
+            f2x_cn = f2x_cn + 1;
+        end
+    endtask
+
+    task f2x_stream68;
+        input integer f;
+        integer i;
+        reg [63:0] d;
+        begin
+            for (i = 0; i < 8; i = i + 1) begin
+                @(negedge u_dut.dp_clk);
+                d = {f2x_c[f*F2X_STRIDE+i*8+0], f2x_c[f*F2X_STRIDE+i*8+1],
+                     f2x_c[f*F2X_STRIDE+i*8+2], f2x_c[f*F2X_STRIDE+i*8+3],
+                     f2x_c[f*F2X_STRIDE+i*8+4], f2x_c[f*F2X_STRIDE+i*8+5],
+                     f2x_c[f*F2X_STRIDE+i*8+6], f2x_c[f*F2X_STRIDE+i*8+7]};
+                force u_dut.txsrc_tdata = d;
+                force u_dut.txsrc_tkeep = 8'hFF;
+                force u_dut.txsrc_tlast = 1'b0;
+                force u_dut.txsrc_tvalid = 1'b1;
+            end
+            @(negedge u_dut.dp_clk);
+            d = {f2x_c[f*F2X_STRIDE+64], f2x_c[f*F2X_STRIDE+65],
+                 f2x_c[f*F2X_STRIDE+66], f2x_c[f*F2X_STRIDE+67], 32'd0};
+            force u_dut.txsrc_tdata = d;
+            force u_dut.txsrc_tkeep = 8'hF0;
+            force u_dut.txsrc_tlast = 1'b1;
+            force u_dut.txsrc_tvalid = 1'b1;
+            @(negedge u_dut.dp_clk);
+            force u_dut.txsrc_tvalid = 1'b0;
+        end
+    endtask
+
+    // F2X5-PATCH: 20 字节内容帧 (2 满字 + 1 个 tkeep=F0 尾字) —— 会被 MAC 补 pad 到 60
+    task f2x_add20;
+        input integer base;
+        integer i;
+        begin
+            for (i = 0; i < 20; i = i + 1) f2x_c[f2x_cn*F2X_STRIDE + i] = PAT[(base+i) % 256];
+            f2x_clen[f2x_cn] = 20;
+            f2x_cn = f2x_cn + 1;
+        end
+    endtask
+
+    task f2x_stream20;
+        input integer f;
+        integer i;
+        reg [63:0] d;
+        begin
+            for (i = 0; i < 2; i = i + 1) begin
+                @(negedge u_dut.dp_clk);
+                d = {f2x_c[f*F2X_STRIDE+i*8+0], f2x_c[f*F2X_STRIDE+i*8+1],
+                     f2x_c[f*F2X_STRIDE+i*8+2], f2x_c[f*F2X_STRIDE+i*8+3],
+                     f2x_c[f*F2X_STRIDE+i*8+4], f2x_c[f*F2X_STRIDE+i*8+5],
+                     f2x_c[f*F2X_STRIDE+i*8+6], f2x_c[f*F2X_STRIDE+i*8+7]};
+                force u_dut.txsrc_tdata = d;
+                force u_dut.txsrc_tkeep = 8'hFF;
+                force u_dut.txsrc_tlast = 1'b0;
+                force u_dut.txsrc_tvalid = 1'b1;
+            end
+            @(negedge u_dut.dp_clk);
+            d = {f2x_c[f*F2X_STRIDE+16], f2x_c[f*F2X_STRIDE+17],
+                 f2x_c[f*F2X_STRIDE+18], f2x_c[f*F2X_STRIDE+19], 32'd0};
+            force u_dut.txsrc_tdata = d;
+            force u_dut.txsrc_tkeep = 8'hF0;
+            force u_dut.txsrc_tlast = 1'b1;
+            force u_dut.txsrc_tvalid = 1'b1;
+            @(negedge u_dut.dp_clk);
+            force u_dut.txsrc_tvalid = 1'b0;
+        end
+    endtask
+
+    // 把捕获窗口 [from,to) 的线上字回放进 RX 注入队列 (TB 侧环回)
+    task f2x_loop;
+        input integer from;
+        input integer to;
+        integer li;
+        begin
+            for (li = from; li < to; li = li + 1) begin
+                xq_d[xq_wr] = wq_d[li];
+                xq_c[xq_wr] = wq_c[li];
+                xq_wr = xq_wr + 1;
+            end
+            $display("  [F2X loop] replayed %0d wire words into the RX injector (xq_wr=%0d)",
+                     to - from, xq_wr);
+        end
+    endtask
+
+    // F2X3-PATCH: 连续注入 (1 字/拍, = 真实 DP 侧合同) —— 全部 force 落在 negedge,
+    //   于是每个 posedge 采到的都是稳定字 => 恰好 1 写/拍, 无 50% 占空比气泡
+    task f2x_stream;
+        input integer f;
+        integer i;
+        reg [63:0] d;
+        begin
+            for (i = 0; i < 8; i = i + 1) begin
+                @(negedge u_dut.dp_clk);
+                if (i < 7) begin
+                    d = {f2x_c[f*F2X_STRIDE+i*8+0], f2x_c[f*F2X_STRIDE+i*8+1],
+                         f2x_c[f*F2X_STRIDE+i*8+2], f2x_c[f*F2X_STRIDE+i*8+3],
+                         f2x_c[f*F2X_STRIDE+i*8+4], f2x_c[f*F2X_STRIDE+i*8+5],
+                         f2x_c[f*F2X_STRIDE+i*8+6], f2x_c[f*F2X_STRIDE+i*8+7]};
+                    force u_dut.txsrc_tdata = d;
+                    force u_dut.txsrc_tkeep = 8'hFF;
+                    force u_dut.txsrc_tlast = 1'b0;
+                end else begin
+                    d = {f2x_c[f*F2X_STRIDE+56], f2x_c[f*F2X_STRIDE+57],
+                         f2x_c[f*F2X_STRIDE+58], f2x_c[f*F2X_STRIDE+59], 32'd0};
+                    force u_dut.txsrc_tdata = d;
+                    force u_dut.txsrc_tkeep = 8'hF0;
+                    force u_dut.txsrc_tlast = 1'b1;
+                end
+                force u_dut.txsrc_tvalid = 1'b1;
+            end
+            @(negedge u_dut.dp_clk);
+            force u_dut.txsrc_tvalid = 1'b0;
+        end
+    endtask
+
+    // F2X2-PATCH: 带间隔的注入 (测 CDC 可见性/速率效应)
+    task f2x_push_g;
+        input [63:0] d;
+        input [7:0]  k;
+        input        l;
+        input integer gap;
+        integer gi;
+        begin
+            @(negedge u_dut.dp_clk);
+            force u_dut.txsrc_tdata = d;
+            force u_dut.txsrc_tkeep = k;
+            force u_dut.txsrc_tlast = l;
+            force u_dut.txsrc_tvalid = 1'b1;
+            @(negedge u_dut.dp_clk);
+            force u_dut.txsrc_tvalid = 1'b0;
+            for (gi = 0; gi < gap; gi = gi + 1) @(negedge u_dut.dp_clk);
+        end
+    endtask
+
+    task f2x_push_frame_g;
+        input integer f;
+        input integer gap;
+        integer i;
+        reg [63:0] d;
+        begin
+            for (i = 0; i < 7; i = i + 1) begin
+                d = {f2x_c[f*F2X_STRIDE+i*8+0], f2x_c[f*F2X_STRIDE+i*8+1],
+                     f2x_c[f*F2X_STRIDE+i*8+2], f2x_c[f*F2X_STRIDE+i*8+3],
+                     f2x_c[f*F2X_STRIDE+i*8+4], f2x_c[f*F2X_STRIDE+i*8+5],
+                     f2x_c[f*F2X_STRIDE+i*8+6], f2x_c[f*F2X_STRIDE+i*8+7]};
+                f2x_push_g(d, 8'hFF, 1'b0, gap);
+            end
+            d = {f2x_c[f*F2X_STRIDE+56], f2x_c[f*F2X_STRIDE+57],
+                 f2x_c[f*F2X_STRIDE+58], f2x_c[f*F2X_STRIDE+59], 32'd0};
+            f2x_push_g(d, 8'hF0, 1'b1, gap);
+        end
+    endtask
+
+    // 把登记的第 f 帧按 7 满字 + 1 个 tkeep=F0 尾字推入 (总 60 内容字节, 无 pad)
+    task f2x_push_frame;
+        input integer f;
+        integer i;
+        reg [63:0] d;
+        begin
+            for (i = 0; i < 7; i = i + 1) begin
+                d = {f2x_c[f*F2X_STRIDE+i*8+0], f2x_c[f*F2X_STRIDE+i*8+1],
+                     f2x_c[f*F2X_STRIDE+i*8+2], f2x_c[f*F2X_STRIDE+i*8+3],
+                     f2x_c[f*F2X_STRIDE+i*8+4], f2x_c[f*F2X_STRIDE+i*8+5],
+                     f2x_c[f*F2X_STRIDE+i*8+6], f2x_c[f*F2X_STRIDE+i*8+7]};
+                f2x_push(d, 8'hFF, 1'b0);
+            end
+            d = {f2x_c[f*F2X_STRIDE+56], f2x_c[f*F2X_STRIDE+57],
+                 f2x_c[f*F2X_STRIDE+58], f2x_c[f*F2X_STRIDE+59], 32'd0};
+            f2x_push(d, 8'hF0, 1'b1);
+        end
+    endtask
+
+    // 推入第 f 帧的头 nw 个字 (不结束该帧)
+    task f2x_push_head;
+        input integer f;
+        input integer nw;
+        integer i;
+        reg [63:0] d;
+        begin
+            for (i = 0; i < nw; i = i + 1) begin
+                d = {f2x_c[f*F2X_STRIDE+i*8+0], f2x_c[f*F2X_STRIDE+i*8+1],
+                     f2x_c[f*F2X_STRIDE+i*8+2], f2x_c[f*F2X_STRIDE+i*8+3],
+                     f2x_c[f*F2X_STRIDE+i*8+4], f2x_c[f*F2X_STRIDE+i*8+5],
+                     f2x_c[f*F2X_STRIDE+i*8+6], f2x_c[f*F2X_STRIDE+i*8+7]};
+                f2x_push(d, 8'hFF, 1'b0);
+            end
+        end
+    endtask
+
+    // 推入第 f 帧的第 w0..w1 个字, 最后一个字带 TLAST (残字段)
+    task f2x_push_tail;
+        input integer f;
+        input integer w0;
+        input integer w1;
+        integer i;
+        reg [63:0] d;
+        begin
+            for (i = w0; i <= w1; i = i + 1) begin
+                d = {f2x_c[f*F2X_STRIDE+i*8+0], f2x_c[f*F2X_STRIDE+i*8+1],
+                     f2x_c[f*F2X_STRIDE+i*8+2], f2x_c[f*F2X_STRIDE+i*8+3],
+                     f2x_c[f*F2X_STRIDE+i*8+4], f2x_c[f*F2X_STRIDE+i*8+5],
+                     f2x_c[f*F2X_STRIDE+i*8+6], f2x_c[f*F2X_STRIDE+i*8+7]};
+                if (i == w1) f2x_push(d, 8'hF0, 1'b1);   // 末字: 60B 内容 = 4 有效字节
+                else         f2x_push(d, 8'hFF, 1'b0);
+            end
+        end
+    endtask
+
+    // 在 [wq_base, wq_wr) 上解码线上帧并逐帧分类 (kind 0=幽灵/1=残缺前缀/2=完整)
+    task f2x_scan;
+        integer q, l2, dn, f, k2;
+        reg [7:0] byt;
+        reg       in_f, done;
+        integer   st;
+        begin
+            f2x_wn = 0; in_f = 1'b0; st = 0;
+            for (q = wq_base; q < wq_wr; q = q + 1) begin
+                for (l2 = 0; l2 < 8; l2 = l2 + 1) begin
+                    byt = wq_d[q][l2*8 +: 8];
+                    if (in_f !== 1'b1) begin
+                        if (wq_c[q][l2] === 1'b1 && byt === 8'hFB && l2 == 0) begin
+                            if (f2x_wn < 32) begin
+                                in_f = 1'b1; st = 0; f2x_wstart[f2x_wn] = q;
+                            end
+                        end
+                    end else if (wq_c[q][l2] === 1'b1) begin
+                        if (byt === 8'hFD) begin
+                            if (f2x_wn < 32) begin
+                                f2x_wlen[f2x_wn] = (st < 256) ? st : 256;
+                                f2x_wstop[f2x_wn] = q;
+                                f2x_wn = f2x_wn + 1;
+                            end
+                            in_f = 1'b0;
+                        end
+                    end else begin
+                        if (st < 256 && f2x_wn < 32) begin
+                            f2x_wire[f2x_wn][st] = byt;
+                            st = st + 1;
+                        end
+                    end
+                end
+            end
+            // ---- 逐帧分类 (线上帧的前 7 字节 = 前导 55x6+D5, 内容从下标 7 起) ----
+            for (f = 0; f < f2x_wn && f < 32; f = f + 1) begin
+                f2x_wkind[f] = 0;
+                for (k2 = 0; k2 < f2x_cn; k2 = k2 + 1) begin
+                    dn = f2x_clen[k2];
+                    if (f2x_wlen[f] == dn + 7 + 4) begin       // 完整帧 (内容 + FCS)
+                        done = 1'b1;
+                        for (q = 0; q < dn; q = q + 1)
+                            if (f2x_wire[f][7+q] !== f2x_c[k2*F2X_STRIDE + q]) done = 1'b0;
+                        if (done === 1'b1 && f2x_wkind[f] < 2) f2x_wkind[f] = 2;
+                    end
+                    if ((f2x_wlen[f] >= 7) && ((f2x_wlen[f] - 7) <= dn)) begin  // 残缺前缀
+                        done = 1'b1;
+                        for (q = 0; q < (f2x_wlen[f] - 7); q = q + 1)
+                            if (f2x_wire[f][7+q] !== f2x_c[k2*F2X_STRIDE + q]) done = 1'b0;
+                        if (done === 1'b1 && f2x_wkind[f] == 0) f2x_wkind[f] = 1;
+                    end
+                end
+            end
+        end
+    endtask
+
+    task f2x_show;
+        input [255:0] tag;
+        integer f, q;
+        begin
+            $display("  [F2X %0s] wire frames=%0d (window [%0d,%0d) inj=%0d)",
+                     tag, f2x_wn, wq_base, wq_wr, f2x_cn);
+            $display("  [F2X %0s] injw_n=%0d (dp-side writes) | d_abort=%0d d_flush_words=%0d d_flush_done=%0d d_frames=%0d d_tx_short=%0d | cdc_occ_w=%0d cdc_e=%b m_tx_tvalid=%b",
+                     tag, injw_n,
+                     u_dut.u_mac_tx.stat_abort - f2x_abort0,
+                     u_dut.u_mac_tx.stat_flush_words - f2x_flw0,
+                     u_dut.u_mac_tx.stat_flush_done - f2x_fld0,
+                     u_dut.u_mac_tx.stat_frames,
+                     u_dut.u_mac_tx.stat_tx_short,
+                     u_dut.txcdc_occ_w, u_dut.tx_fifo_empty, u_dut.m_tx_tvalid);
+            dump_injw;
+            for (f = 0; f < f2x_wn && f < 32; f = f + 1) begin
+                $display("  [F2X %0s] frame %0d len=%0d kind=%0d (0=ghost 1=runt 2=complete)",
+                         tag, f, f2x_wlen[f], f2x_wkind[f]);
+                for (q = 0; q < f2x_wlen[f] && q < 80; q = q + 8)
+                    $display("      [%03d] %02h %02h %02h %02h %02h %02h %02h %02h", q,
+                        f2x_wire[f][q], f2x_wire[f][q+1], f2x_wire[f][q+2], f2x_wire[f][q+3],
+                        f2x_wire[f][q+4], f2x_wire[f][q+5], f2x_wire[f][q+6], f2x_wire[f][q+7]);
+            end
+        end
+    endtask
+
+    task f2x_begin;
+        begin
+            repeat (120) @(posedge u_dut.tx_mii_clk_1);   // 排空
+            f2x_cn = 0;
+            injw_n = 0;
+            f2_tr_on = 1'b0;
+            wq_base = wq_wr;
+            f2x_abort0 = u_dut.u_mac_tx.stat_abort;
+            f2x_flw0   = u_dut.u_mac_tx.stat_flush_words;
+            f2x_fld0   = u_dut.u_mac_tx.stat_flush_done;
+        end
+    endtask
+
+    task f2x_settle;
+        begin
+            repeat (250) @(posedge u_dut.tx_mii_clk_1);
+        end
+    endtask
+
+    // 等到 stat_abort 递增 (= DUT 已经确认中止, 残字尚未注入) —— 消除激励竞争
+    task f2x_wait_abort;
+        integer n;
+        begin
+            n = 0;
+            while ((u_dut.u_mac_tx.stat_abort === f2x_abort0) && (n < 2000)) begin
+                n = n + 1;
+                @(posedge u_dut.tx_mii_clk_1);
+            end
+            $display("  [F2X] abort observed after %0d tx cycles (abort %0d -> %0d)", n,
+                     f2x_abort0, u_dut.u_mac_tx.stat_abort);
+        end
+    endtask
+
+    task diag;
+        input [127:0] tag;
+        begin
+            $display("  [DIAG] %0s xq_wr=%0d xq_rd=%0d | rxw=%0d rxf=%0d rxs=%0d crc=%0d drop=%0d df=%0d dp=%0d orph=%0d | rxv=%b rdy=%b | rxcocc=%0d | txf=%0d txs=%0d txsv=%b mtxv=%b txocc=%0d wq=%0d",
+                tag, xq_wr, xq_rd,
+                u_dut.mrx_stat_rx_words, u_dut.rx_stat_frames, u_dut.mrx_dbg_state,
+                u_dut.rx_stat_crc_err, u_dut.rx_stat_drop,
+                u_dut.rx_stat_drop_full, u_dut.rx_stat_drop_partial,
+                u_dut.rx_stat_orphan_bytes, u_dut.rxsrc_tvalid, u_dut.rx_tready,
+                u_dut.rxcdc_occ_w,
+                u_dut.mac_tx_frames, u_dut.mtx_dbg_state,
+                u_dut.txsrc_tvalid, u_dut.m_tx_tvalid, u_dut.txcdc_occ_w, wq_wr);
+        end
+    endtask
+
+    // ======================= 主流程 ========================================
+    integer  i, j, k, m, n;
+    reg [31:0] v, c0, c1;
+    reg [63:0] txw [0:511];
+    integer    txwn;
+    reg        allgood;
+
+    initial begin
+        init_pat();
+        $display("==== tb_p7b_chain: P7b REAL-wrapper full-chain gate ====");
+
+        // -------- 第 0 组: CRC 自检 (期望来源 = 标准向量 / 工程铁律) --------
+        v = 32'hFFFFFFFF;
+        v = crc32_byte(v,8'h31); v = crc32_byte(v,8'h32); v = crc32_byte(v,8'h33);
+        v = crc32_byte(v,8'h34); v = crc32_byte(v,8'h35); v = crc32_byte(v,8'h36);
+        v = crc32_byte(v,8'h37); v = crc32_byte(v,8'h38); v = crc32_byte(v,8'h39);
+        // ⚠️ crc32_byte 给的是**内部状态** (无终值取反); 标准校验向量的值
+        //    0xCBF43926 是**取反后**的 (zlib.crc32) ⇒ 必须 ~v 再比。
+        //    这与工程约定一致: 线上 FCS = ~internal, 残留 = 0xDEBB20E3。
+        chk("0a crc32_std(123456789)=CBF43926", (~v) === 32'hCBF43926,
+            "802.3 check vector (zlib=~internal)");
+        n = 16;
+        v = 32'hFFFFFFFF;
+        for (i = 0; i < n; i = i + 1) v = crc32_byte(v, PAT[i]);
+        m = ~v;                                   // 线上 FCS = ~internal, LSB first
+        v = crc32_byte(v, m[7:0]);   v = crc32_byte(v, m[15:8]);
+        v = crc32_byte(v, m[23:16]); v = crc32_byte(v, m[31:24]);
+        chk("0b residue == DEBB20E3", v === 32'hDEBB20E3,
+            "project rule: 0xDEBB20E3, not 0xC704DD7B");
+
+        reset_n = 0;
+        repeat (40) @(posedge u_dut.dp_clk);
+        reset_n = 1;
+        repeat (2000) @(posedge u_dut.dp_clk);
+        chk("0c stub link released",
+            u_dut.pcs_user_rx_reset_1 === 1'b0, "stim precond");
+        chk("0d SFP2 TX_DIS low",
+            sfp2_tx_dis === 1'b0, "P7B_GATE1 5.8");
+
+        // -------- 第 1 组: 字节序镜像 (用 /S/ 的 lane 位置反推) ------------
+        got_started = 0; got_bytes = 0; got_frames = 0; got_len = 0; got_f_cnt = 0;
+        build_frame(64, 1'b0, -1);
+        repeat (600) @(posedge u_dut.dp_clk);
+        chk("1a RX delivered >=1 frame", (got_frames >= 32'd1) === 1'b1,
+            "stim precond (nonvacuous)");
+        chk("1b RX first byte==content[0]",
+            (got_first_tdata[63:56] === PAT[0]) === 1'b1,
+            "injected bytes + GATE1 C.2");
+        chk("1c RX 1st byte!=lane7 byte",
+            (got_first_tdata[63:56] !== PAT[7]) === 1'b1,
+            "neg: 8 distinct bytes");
+        diag("after-group1");
+
+        // -------- 第 2 组: 帧几何 ------------------------------------------
+        got_bytes = 0; got_frames = 0; got_len = 0; got_f_cnt = 0;
+        build_frame(60, 1'b0, -1);
+        repeat (250) @(posedge u_dut.dp_clk);
+        m = got_bytes;
+        build_frame(1514, 1'b0, -1);
+        repeat (700) @(posedge u_dut.dp_clk);
+        n = got_bytes - m;
+        chk("2a min frame -> 60 bytes", m === 32'd60,
+            "802.3 Cl.4.4 / injected");
+        chk("2b max frame -> 1514 bytes", n === 32'd1514,
+            "802.3 Cl.4.4 / injected");
+        chk("2c Sum popc conservation",
+            (got_bytes === (32'd60 + 32'd1514)) === 1'b1,
+            "contract: bytes==injected");
+        got_bytes = 0; got_frames = 0; got_len = 0; got_f_cnt = 0;
+        build_frame(63, 1'b0, -1);
+        repeat (250) @(posedge u_dut.dp_clk);
+        build_frame(65, 1'b0, -1);
+        repeat (350) @(posedge u_dut.dp_clk);
+        chk("2d 63+65 -> 128 bytes",
+            got_bytes === 32'd128, "derived: 63+65");
+        chk("2e frames==2 no merge", got_frames === 32'd2,
+            "contract: 1 TLAST/frame");
+
+        // -------- 第 3 组: FCS / /E/ ---------------------------------------
+        c0 = u_dut.rx_stat_crc_err;
+        got_bytes = 0; got_frames = 0; got_len = 0; got_f_cnt = 0;
+        build_frame(64, 1'b0, -1);                       // 好 FCS
+        repeat (350) @(posedge u_dut.dp_clk);
+        chk("3a good FCS crc_err same",
+            (u_dut.rx_stat_crc_err === c0) === 1'b1,
+            "inj FCS == TB CRC32");
+        chk("3b good FCS -> 64 bytes", got_bytes === 32'd64,
+            "contract: tcrs=1");
+        build_frame(64, 1'b1, -1);                       // 坏 FCS
+        repeat (350) @(posedge u_dut.dp_clk);
+        chk("3c bad FCS crc_err +1",
+            (u_dut.rx_stat_crc_err === (c0 + 32'd1)) === 1'b1,
+            "inj: FCS = 0x00000000");
+        chk("3d bad FCS still delivered",
+            got_bytes === 32'd128, "contract: crc is a flag");
+        c0 = u_dut.mrx_stat_rx_er_words;
+        build_frame(64, 1'b0, 10);                       // 内容第 10 字节后插 /E/
+        repeat (350) @(posedge u_dut.dp_clk);
+        chk("3e /E/ -> rx_er_words +",
+            (u_dut.mrx_stat_rx_er_words > c0) === 1'b1,
+            "inj /E/ at content byte 10");
+        chk("3f stat_fifo_ovf==0",
+            u_dut.rx_stat_fifo_ovf === 32'd0, "mac_rx_10g: structural 0");
+
+        // -------- 第 4 组: 背靠背 (零帧间隙) -------------------------------
+        got_bytes = 0; got_frames = 0; got_len = 0; got_f_cnt = 0;
+        build_frame(60, 1'b0, -1);
+        build_frame(60, 1'b0, -1);
+        build_frame(60, 1'b0, -1);
+        repeat (700) @(posedge u_dut.dp_clk);
+        chk("4a b2b x3 -> 3 frames",
+            got_frames === 32'd3, "derived: 3 frames, no IFG");
+        chk("4b b2b x3 -> 180 bytes", got_bytes === 32'd180,
+            "derived: 3x60");
+
+        // -------- 第 5 组: F4 (空间门 + TERM 字 + 恢复) --------------------
+        got_bytes = 0; got_frames = 0; got_len = 0; got_f_cnt = 0;
+        got_term_seen = 0; got_started = 0;
+        c0 = u_dut.rx_stat_drop_full + u_dut.rx_stat_drop_partial;
+        force u_dut.rx_tready = 1'b0;                    // 下游停摆 (DP 侧读口)
+        for (j = 0; j < 40; j = j + 1) build_frame(1514, 1'b0, -1);
+        repeat (6000) @(posedge u_dut.dp_clk);
+        c1 = u_dut.rx_stat_drop_full + u_dut.rx_stat_drop_partial;
+        release u_dut.rx_tready;
+        repeat (6000) @(posedge u_dut.dp_clk);
+        chk("5a F4 drops recorded",
+            (c1 > c0) === 1'b1, "40x1514B, 16w FIFO, tready=0");
+        chk("5b F4 TERM word seen",
+            got_term_seen === 1'b1,
+            "TERM tuple verbatim");
+        begin : no_overlong
+            reg ok;
+            ok = 1'b1;
+            for (k = 0; k < got_f_cnt; k = k + 1)
+                if (got_f_len[k] > 1514) ok = 1'b0;
+            chk("5c no frame > 1514B",
+                ok === 1'b1, "derived: max content 1514");
+        end
+        chk("5d F4 drop count > 0",
+            (u_dut.rx_stat_drop_full + u_dut.rx_stat_drop_partial) > 32'd0,
+            "40 x 1514B against a 16-word FIFO with tready=0");
+        got_bytes = 0; got_frames = 0; got_len = 0; got_f_cnt = 0;
+        got_started = 0; got_first_tdata = 0;
+        build_frame(64, 1'b0, -1);
+        repeat (600) @(posedge u_dut.dp_clk);
+        chk("5e recovery byte-exact",
+            ((got_bytes === 32'd64) && (got_first_tdata[63:56] === PAT[0])) === 1'b1,
+            "derived: 64B, first=PAT[0]");
+
+        // -------- 第 6 组: TX 方向 (线上格式) ------------------------------
+        // 注入源 = `txsrc_*` (u_tx_arb 的输出线). ⚠️ **如实登记**: 这是 wrapper 级
+        //   force ⇒ 它测 "u_txcdc→MAC→XGMII" 这段接线, **不测 u_tx_arb 内部。
+        wq_wr = 0;
+        force u_dut.txsrc_tdata = 64'h88776655_44332211;
+        force u_dut.txsrc_tkeep = 8'hFF;
+        force u_dut.txsrc_tvalid = 1'b1;
+        force u_dut.txsrc_tlast = 1'b0;
+        @(posedge u_dut.dp_clk);
+        force u_dut.txsrc_tdata = 64'hAABBCCDD_11223344;
+        @(posedge u_dut.dp_clk);
+        force u_dut.txsrc_tdata = 64'h00000000_0000A55A;
+        force u_dut.txsrc_tkeep = 8'hC0;
+        force u_dut.txsrc_tlast = 1'b1;
+        @(posedge u_dut.dp_clk);
+        force u_dut.txsrc_tvalid = 1'b0;
+        repeat (600) @(posedge u_dut.dp_clk);
+        repeat (600) @(posedge u_dut.tx_mii_clk_1);
+        release u_dut.txsrc_tdata;  release u_dut.txsrc_tkeep;
+        release u_dut.txsrc_tvalid; release u_dut.txsrc_tlast;
+        $display("  [F2W] group6 decode $time=%0t wq_wr=%0d injw_n=%0d", $time, wq_wr, injw_n);
+        begin : g6inj
+            integer gi;
+            $display("  [INJW6] n=%0d", injw_n);
+            for (gi = 0; gi < injw_n && gi < 256; gi = gi + 1)
+                $display("  [INJW6 %0d] keep=%02h last=%b d=%016h", gi, injw_k[gi], injw_l[gi], injw_d[gi]);
+        end
+        injw_n = 0;
+        decode_wire(wq_wr);   // 只解**本组新捕的**那些字 (旧写法用固定 4000/6000
+                               // 会把上一组的陈帧也算进来 ⇒ 假 FAIL)
+        chk("6a TX 1 wire frame",
+            wf_cnt === 1, "derived: 1 tlast frame");
+        // ⚠️ 第一版写成 `wf_cnt === 1` —— 那是 6a 的**重复**, 对
+        //    "lane0 是不是 /S/" 零判别力。改成直接查扫到的那个帧首字:
+        //    控制位必须**恰好 8'h01** (只有 lane0 是控制字符)。
+        $display("  [DIAG6] wf_cnt=%0d wf_n0=%0d b=%02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h",
+            wf_cnt, (wf_cnt > 0) ? wf_n[0] : -1,
+            wf_b[0][0], wf_b[0][1], wf_b[0][2], wf_b[0][3], wf_b[0][4], wf_b[0][5],
+            wf_b[0][6], wf_b[0][7], wf_b[0][8], wf_b[0][9], wf_b[0][10], wf_b[0][11],
+            wf_b[0][12], wf_b[0][13], wf_b[0][14], wf_b[0][15]);
+        begin : tx_w0
+            reg [63:0] w0d;
+            // 线上第 0 个字的原始捕获: 在捕获数组里找 wf 起点 —— 用解码器已找到的
+            // 帧起点不可直接得到 ⇒ 这里改为**扫第一个 /S/ 字**的原始值。
+            w0d = 64'h0;
+            for (k = 0; k < 4000; k = k + 1)
+                if (wq_c[k] === 8'h01 && wq_d[k][7:0] === 8'hFB) begin
+                    w0d = wq_d[k]; wq_sw = k;
+                end
+            chk("6b TX /S/ at lane0", (wq_c[wq_sw] === 8'h01) === 1'b1,
+                "vendor :995/:1147 + GATE1 C.4");
+            chk("6c TX preamble word", (w0d[63:8] === 56'hD5555555555555) === 1'b1,
+                "vendor :995 literal + c=8'h01");
+            diag("after-group6");
+        end
+        // ⚠️ 线上帧的 wf_b[0][0..6] = 0x55 x6, [7] = 0xD5 (帧首字余下的 lane),
+        //    内容从 **wf_b[0][8]** 起 —— 偏移算错会让"内容判据"变成在比对前导。
+        if (wf_cnt == 1) begin
+            // 测得的线上字节: 55 55 55 55 55 55 D5 | 88 77 66 55 44 33 22 11 | AA BB ...
+            //   (首字的 lane0 是 /S/, lane1..6 = 0x55x6, lane7 = 0xD5;
+            //    内容从第 2 个字的 lane0 起 = wf_b[0][7])
+            chk("6d TX wf preamble",
+                (wf_b[0][0] === 8'h55) && (wf_b[0][5] === 8'h55) &&
+                (wf_b[0][6] === 8'hD5), "vendor :995 literal (55x6+D5)");
+            chk("6e TX content lane order",
+                (wf_b[0][7] === 8'h88) && (wf_b[0][8] === 8'h77) &&
+                (wf_b[0][14] === 8'h11), "contract: tdata[63:56]=0x88 is byte 0");
+            chk("6f TX w2 lane order",
+                (wf_b[0][15] === 8'hAA) && (wf_b[0][22] === 8'h44),
+                "derived: tdata[63:56]=0xAA .. tdata[7:0]=0x44");
+        end else begin
+            chk("6d TX wf preamble OFF", 1'b0,
+                "diagnostic gate (off)");
+            chk("6e TX lane order OFF", 1'b0,
+                "diagnostic gate (off)");
+            chk("6f TX w2 order OFF", 1'b0,
+                "diagnostic gate (off)");
+        end
+
+        // -------- \u7b2c 8 \u7ec4: F-2 (\u5e27\u5185\u65ad\u4f9b \u21d2 \u51b2\u5237) \u2014\u2014 \u5224\u636e = **\u7ebf\u4e0a\u5185\u5bb9\u9010\u5e27**
+        //   \u26a0\ufe0f \u4e3a\u4ec0\u4e48\u4e0d\u80fd\u53ea\u770b\u8ba1\u6570\u5668: \u672c\u5de5\u7a0b\u5b9e\u6d4b\u8fc7\u8ba1\u6570\u5668\u53ef\u4ee5\u88ab\u4f2a\u88c5
+        //   (rxcls \u53d8\u5f02 M7b: \u53bb\u51b2\u5237 + \u8ba1\u6570\u5668 +1 \u21d2 \u65e7\u95e8 229/0 \u901a\u8fc7, \u800c\u7ebf\u4e0a\u771f\u51fa\u4e86 172B \u5e7d\u7075\u5e27)\u3002
+        //   A = 2 \u4e2a\u5b57\u540e\u65ad\u4f9b (\u65e0 TLAST) \u21d2 mac_tx_10g \u5e27\u5185\u4e2d\u6b62; B = \u5b8c\u6574\u4e00\u5e27\u3002
+        // ---- F2-DIAG-PATCH ----
+        $display("  [F2W] group8 start $time=%0t wq_wr_before_reset=%0d", $time, wq_wr);
+        injw_n = 0;
+        f2_tr_on = 1'b1; f2_tr_n = 0; f2_tr_lim = 40;
+        wq_wr = 0;
+        $display("  [F2W] wq_wr_set=%0d", wq_wr);
+        repeat (3) @(posedge u_dut.tx_mii_clk_1);
+        $display("  [F2W] wq_wr_after3txedges=%0d  (~3 = reset honoured; ~1200 = stale group6 window)",
+                 wq_wr);
+        force u_dut.txsrc_tdata = 64'h88776655_44332211;
+        force u_dut.txsrc_tkeep = 8'hFF;
+        force u_dut.txsrc_tvalid = 1'b1;
+        force u_dut.txsrc_tlast = 1'b0;
+        @(posedge u_dut.dp_clk);
+        force u_dut.txsrc_tdata = 64'h00000000_00000000;
+        force u_dut.txsrc_tkeep = 8'hFF;
+        @(posedge u_dut.dp_clk);
+        force u_dut.txsrc_tvalid = 1'b0;      // \u65ad\u4f9b (\u6ca1\u6709 TLAST)
+        repeat (600) @(posedge u_dut.dp_clk);
+        repeat (400) @(posedge u_dut.tx_mii_clk_1);
+        // frame B: \u4e00\u4e2a\u5b57 + TLAST
+        $display("  [F2W] before frame B $time=%0t wq_wr=%0d injw_n=%0d", $time, wq_wr, injw_n);
+        f2_tr_n = 0; f2_tr_lim = 70;
+        force u_dut.txsrc_tdata = 64'hAABBCCDD_11223344;
+        force u_dut.txsrc_tkeep = 8'hFF;
+        force u_dut.txsrc_tvalid = 1'b1;
+        force u_dut.txsrc_tlast = 1'b1;
+        @(posedge u_dut.dp_clk);
+        force u_dut.txsrc_tvalid = 1'b0;
+        repeat (800) @(posedge u_dut.dp_clk);
+        repeat (800) @(posedge u_dut.tx_mii_clk_1);
+        release u_dut.txsrc_tdata;  release u_dut.txsrc_tkeep;
+        release u_dut.txsrc_tvalid; release u_dut.txsrc_tlast;
+        f2_tr_on = 1'b0;
+        $display("  [F2W] decode $time=%0t wq_wr=%0d injw_n=%0d", $time, wq_wr, injw_n);
+        dump_injw;
+        decode_wire(wq_wr);
+        dump_frames;
+        $display("  [F2W] window head (first 10 captured words):");
+        dump_raw(0, 10);
+        if (wf_cnt > 0) begin
+            $display("  [F2W] raw words of the decoded span:");
+            dump_raw(wf_start[0], wf_stop[wf_cnt-1] + 2);
+        end
+        begin : f2
+            integer f, nb, nm;
+            reg ok_prefix, ok_b;
+            ok_prefix = 1'b1; ok_b = 1'b0; nb = 0;
+            for (f = 0; f < 32; f = f + 1) begin
+                nm = wf_n[f];
+                if (f < wf_cnt) begin
+                    // \u5185\u5bb9 = \u524d\u5bfc\u4e4b\u540e\u7684\u5b57\u8282; A \u7684\u5b57\u8282 = 88 77 66 55 44 33 22 11
+                    if (nm > 7) begin
+                        if ((nm - 7) > 8) ok_prefix = 1'b0;
+                        else if (wf_b[f][7] !== 8'h88) ok_prefix = 1'b0;
+                        else begin
+                            if ((nm - 7) > 1 && wf_b[f][8]  !== 8'h77) ok_prefix = 1'b0;
+                            if ((nm - 7) > 2 && wf_b[f][9]  !== 8'h66) ok_prefix = 1'b0;
+                            if ((nm - 7) > 3 && wf_b[f][10] !== 8'h55) ok_prefix = 1'b0;
+                        end
+                    end
+                    // \u6700\u540e\u4e00\u5e27\u5fc5\u987b\u662f B
+                    if (f == wf_cnt - 1) begin
+                        if ((nm - 7) >= 8 &&
+                            wf_b[f][7]  === 8'hAA && wf_b[f][8]  === 8'hBB &&
+                            wf_b[f][9]  === 8'hCC && wf_b[f][10] === 8'hDD &&
+                            wf_b[f][11] === 8'h11 && wf_b[f][12] === 8'h22 &&
+                            wf_b[f][13] === 8'h33 && wf_b[f][14] === 8'h44) ok_b = 1'b1;
+                        nb = nm - 7;      // \u5185\u5bb9\u5b57\u8282\u6570 (\u542b pad + FCS)
+                    end
+                end
+            end
+            $display("  [DIAG8] wf_cnt=%0d last_content_len=%0d prefix_ok=%b b_ok=%b",
+                     wf_cnt, nb, ok_prefix, ok_b);
+            $display("  [DIAG8b] f0_n=%0d f1_n=%0d | f0=%02h %02h %02h %02h %02h %02h %02h %02h %02h %02h | f1=%02h %02h %02h %02h %02h %02h %02h %02h %02h %02h",
+                wf_n[0], wf_n[1],
+                wf_b[0][0], wf_b[0][7], wf_b[0][8], wf_b[0][9], wf_b[0][10], wf_b[0][11], wf_b[0][12], wf_b[0][13], wf_b[0][14], wf_b[0][15],
+                wf_b[1][0], wf_b[1][7], wf_b[1][8], wf_b[1][9], wf_b[1][10], wf_b[1][11], wf_b[1][12], wf_b[1][13], wf_b[1][14], wf_b[1][15]);
+            // 8a: \u7ebf\u4e0a\u5e27\u6570 \u2014\u2014 \u65ad\u4f9b\u4e00\u5e27\u7684 runt + \u5b8c\u6574\u7684 B = 2 (\u65e0\u5e7d\u7075\u5c31\u662f 2)
+            // F2X10-PATCH: 归因完成 (2026-09-30) -- see notes/P7B_F2_CHAIN_ATTRIB.md
+            //   (1) 本组解码窗口 [0, wq_wr) 是**陈旧的**: 开头的 `wq_wr = 0` 被捕获 always
+            //       块同拍 NBA 覆盖 (实测 wq_wr: 1202 -> 1205, 而 group6 那次生效) =>
+            //       窗口里含**上一组 (group 6) 的帧** (它在 wf_start[0]=7)。
+            //   (2) 本组期望 (runt + 完整 B) 与自己的激励矛盾: A 没有 TLAST => 按 F-2 合同
+            //       (rtl/mac_tx_10g.v:24-31 情形3) 冲刷必然吞掉 B 整帧。
+            //   => 合同正确的判据见 F2X X4 (同一激励) 与 X3 (A 带 TLAST 的场景)。
+            $display("  [OPEN] 8a F-2 wire frames == 2 = %b   (SUPERSEDED by F2X X4; see notes/P7B_F2_CHAIN_ATTRIB.md)", (wf_cnt === 2) === 1'b1);
+            // 8b: \u6bcf\u4e00\u5e27\u8981\u4e48\u662f A \u7684\u524d\u7f00, \u8981\u4e48\u5c31\u662f B (\u65e0\u5176\u5b83\u53ef\u80fd)
+            $display("  [OPEN] 8b every wire frame is A-prefix or B = %b   (SUPERSEDED by F2X X4; see notes/P7B_F2_CHAIN_ATTRIB.md)", (ok_prefix === 1'b1) === 1'b1);
+            // 8c: \u6700\u540e\u4e00\u5e27 == B \u9010\u5b57\u8282
+            $display("  [OPEN] 8c post-flush frame == B byte-exact = %b   (SUPERSEDED by F2X X4; see notes/P7B_F2_CHAIN_ATTRIB.md)", (ok_b === 1'b1) === 1'b1);
+            // 8d: B \u88ab pad \u5230 MIN_CLEN (\u5185\u5bb9 60B) + FCS 4B = 64B \u7ebf\u4e0a\u5185\u5bb9
+            $display("  [OPEN] 8d post-flush frame content == 60B (pad) + 4B FCS = %b   (SUPERSEDED by F2X X4; see notes/P7B_F2_CHAIN_ATTRIB.md)", (nb === 64) === 1'b1);
+        end
+
+        // -------- 第 7 组: 快照 51 字逐字读回 ------------------------------
+        // ⚠️ force 打**生产者节点** (P6e 门的教训: 打 wrapper 级线会掩盖"生产者↔线"
+        //    的连接错)。非 P7B 的数字信号源存在 (1G MAC 没有这些输出) ⇒ 这条判据
+        //    只在 P7B 构建里有意义。
+        force u_dut.u_classify.dbg_stat_ovf       = 32'hA5A50036;
+        force u_dut.u_classify.dbg_stat_route_ovf = 32'hA5A50037;
+        force u_dut.u_classify.dbg_stat_stall_in  = 32'hA5A50038;
+        force u_dut.u_classify.dbg_occ            = 5'h15;
+        force u_dut.u_txcdc.ovf_cnt               = 32'hA5A50045;
+        force u_dut.u_rxcdc.ovf_cnt               = 32'hA5A50038;
+        force u_dut.u_mac_tx.stat_flush_words     = 32'hA5A50041;
+        force u_dut.u_mac_tx.stat_flush_done      = 32'hA5A50042;
+        force u_dut.u_mac_tx.stat_tx_words        = 32'hA5A50043;
+        force u_dut.u_mac_tx.stat_tx_ctrl_char    = 32'hA5A50044;
+        force u_dut.u_mac_rx.stat_rx_words        = 32'hA5A50036;
+        force u_dut.u_mac_rx.stat_rx_pay_bytes    = 32'hA5A50037;
+        force u_dut.tx_clk_act                    = 32'hA5A50050;
+        force u_dut.u_pcs.blk_lock                = 1'b1;
+        force u_dut.u_pcs.hi_ber                  = 1'b1;
+        repeat (300) @(posedge u_dut.pcie_axi_aclk);
+        $display("  [DIAG7] busy=%b seq_busy=%b vld=%b | fe v=%b seen=%b | dp v=%b seen=%b | tx v=%b seen=%b | all=%b",
+            u_dut.snap_busy, u_dut.snap_seq_busy, u_dut.snap_valid,
+            u_dut.p7bfe_valid, u_dut.p7bfe_seen, u_dut.p7bdp_valid, u_dut.p7bdp_seen,
+            u_dut.txsnap_valid, u_dut.tx_seen, u_dut.snap_valid_all);
+        snap_take;
+        $display("  [DIAG7b] busy=%b seen fe/dp/tx=%b%b%b r36=%08h r50=%08h r37=%08h r38=%08h",
+            u_dut.snap_busy, u_dut.p7bfe_seen, u_dut.p7bdp_seen, u_dut.tx_seen,
+            u_dut.snap_dout_all[36*32 +: 32], u_dut.snap_dout_all[50*32 +: 32],
+            u_dut.snap_dout_all[37*32 +: 32], u_dut.snap_dout_all[38*32 +: 32]);
+        $display("  [DIAG7c] W39=%08h W40=%08h | blk_sr=%b gpw=%b vcc=%b rerr=%02h",
+            u_dut.snap_dout_all[39*32 +: 32], u_dut.snap_dout_all[40*32 +: 32],
+            u_dut.pcs_blk_sr, u_dut.pcs_gpw_sr[2], u_dut.pcs_vcc_sr[2], u_dut.pcs_rerr_sr[0]);
+        u_dut.u_pcie_xdma.axil_read(32'hB0, v); chk("7 W36 rx_words", v === 32'hA5A50036, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hB4, v); chk("7 W37 rx_pay_bytes", v === 32'hA5A50037, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hB8, v); chk("7 W38 rxcdc.ovf_cnt", v === 32'hA5A50038, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hBC, v); chk("7 W39[2] block_lock", v[2] === 1'b1, "forced producer bit");
+        u_dut.u_pcie_xdma.axil_read(32'hBC, v); chk("7 W39[4] hi_ber", v[4] === 1'b1, "forced producer bit");
+        u_dut.u_pcie_xdma.axil_read(32'hC4, v); chk("7 W41 stat_flush_words", v === 32'hA5A50041, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hC8, v); chk("7 W42 stat_flush_done", v === 32'hA5A50042, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hCC, v); chk("7 W43 stat_tx_words", v === 32'hA5A50043, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hD0, v); chk("7 W44 stat_tx_ctrl_char", v === 32'hA5A50044, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hD4, v); chk("7 W45 txcdc.ovf_cnt", v === 32'hA5A50045, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hD8, v); chk("7 W46 cls dbg_stat_ovf", v === 32'hA5A50036, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hDC, v); chk("7 W47 cls route_ovf", v === 32'hA5A50037, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hE0, v); chk("7 W48 cls stall_in", v === 32'hA5A50038, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hE4, v); chk("7 W49 cls dbg_occ", v === 32'h00000015, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hE8, v); chk("7 W50 tx_clk_act", v === 32'hA5A50050, "forced producer node");
+        // 有界性: 51 字占 0x20..0xE8 ⇒ 0xEC 必须读 0 且 SLVERR。
+        //   ⚠️ 这条 + 上面 W50 那一条**一起**才钉死"读侧选字位宽够":
+        //      只验前半段的话, `snap_base` 位宽不够造成的**高地址回绕**会逃逸
+        //      (高字读回低字的值 = 假 PASS)。
+        u_dut.u_pcie_xdma.axil_read(32'hEC, v);
+        chk("7b 0xEC reads 0 no wrap",
+            (v === 32'h00000000) && (u_dut.u_pcie_xdma.last_rresp === 2'd2),
+            "axi_regs decode; 51-word bound");
+
+        // =============================================================
+        // F2X-PATCH: F-2 归因实验 (窗口 = 快照基准, 判据 = 线上逐帧内容)
+        //   判据的判别力来源: 逐帧"内容必须等于某个注入帧 (完整或残缺前缀)", 任何
+        //   "不是任何注入帧"的线上帧 = 幽灵帧 = FAIL。全部注入帧内容 = 60 字节
+        //   (= MIN_CLEN, 无 pad), FCS 由 TB 位串行 crc32 独立算 (Python 侧复核)。
+        // =============================================================
+        $display("==== F2X: F-2 chain attribution experiments ====");
+
+        // 释放组 7 的**生产者 force** (stat_flush_words/done, stat_tx_words/ctrl,
+        //   txcdc.ovf, u_pcs.blk_lock/hi_ber, tx_clk_act...) —— 否则 F2X 的计数器
+        //   判据读的是常量 (实测: flw=2779054145=0xA5A50041 = 组 7 的 force 值)
+        release u_dut.u_classify.dbg_stat_ovf;   release u_dut.u_classify.dbg_stat_route_ovf;
+        release u_dut.u_classify.dbg_stat_stall_in; release u_dut.u_classify.dbg_occ;
+        release u_dut.u_txcdc.ovf_cnt;  release u_dut.u_rxcdc.ovf_cnt;
+        release u_dut.u_mac_tx.stat_flush_words; release u_dut.u_mac_tx.stat_flush_done;
+        release u_dut.u_mac_tx.stat_tx_words;    release u_dut.u_mac_tx.stat_tx_ctrl_char;
+        release u_dut.u_mac_rx.stat_rx_words;    release u_dut.u_mac_rx.stat_rx_pay_bytes;
+        release u_dut.tx_clk_act;  release u_dut.u_pcs.blk_lock;  release u_dut.u_pcs.hi_ber;
+
+        // -------- X1a: 单帧, 连续注入 (1 字/拍, = DP 侧合同) --------
+        $display("  ---- X1a: one frame, continuous injection (1 word/cycle) ----");
+        f2x_begin;
+        f2x_add60(1);                       // 帧 0 = PAT[1..60]
+        f2_tr_on = 1'b1; f2_tr_n = 0; f2_tr_lim = 70;
+        f2x_stream(0);
+        f2x_settle;
+        f2_tr_on = 1'b0;
+        f2x_scan;
+        f2x_show("X1a");
+        chk("X1a one frame on the wire", f2x_wn === 1, "derived: 1 injected tlast frame");
+        chk("X1a frame is complete (60B content + FCS)",
+            (f2x_wn == 1) && (f2x_wkind[0] === 2), "derived: content byte-exact + FCS len");
+        chk("X1a no ghost", (f2x_wn <= 0) || (f2x_wkind[0] !== 0), "derived: classification");
+
+        // -------- X1b: 同一帧, 但以 50% 占空比注入 (1 字 / 2 拍) --------
+        //   => 故意制造"帧内气泡" (F-2 语义下 = 断供): 期望线上只剩残帧 + 冲刷
+        $display("  ---- X1b: same frame at 50%% duty (1 word / 2 cycles = deliberate bubble) ----");
+        f2x_begin;
+        f2x_add60(1);
+        f2_tr_on = 1'b1; f2_tr_n = 0; f2_tr_lim = 70;
+        f2x_push_frame(0);
+        f2x_settle;
+        f2_tr_on = 1'b0;
+        f2x_scan;
+        f2x_show("X1b");
+        // F2X4-PATCH: 50% 占空比 = 故意帧内气泡 => 期望"残帧 + 冲刷" (F-2 语义), 不是完整帧
+        chk("X1b bubble -> exactly 1 wire frame", f2x_wn === 1,
+            "contract: mid-frame starvation aborts the frame (F-2)");
+        chk("X1b that frame is a runt (prefix of the injected frame)",
+            (f2x_wn == 1) && (f2x_wkind[0] === 1), "derived: prefix compare");
+        chk("X1b flush counters advanced (rest of the frame flushed)",
+            (u_dut.u_mac_tx.stat_flush_done === (f2x_fld0 + 32'd1)) &&
+            (u_dut.u_mac_tx.stat_flush_words > f2x_flw0),
+            "design bookkeeping (NOT the primary criterion)");
+        chk("X1b no ghost", (f2x_wn >= 1) && (f2x_wkind[0] !== 0), "derived: classification");
+
+        // -------- X2: 两帧背靠背 --------
+        f2x_begin;
+        f2x_add60(1);
+        f2x_add60(100);                     // 帧 1 = PAT[100..159] (与帧 0 逐字节不同)
+        f2x_stream(0);
+        f2x_stream(1);
+        f2x_settle;
+        f2x_scan;
+        f2x_show("X2");
+        chk("X2 two frames back-to-back", f2x_wn === 2, "derived: 2 injected tlast frames");
+        chk("X2 both frames complete/byte-exact",
+            (f2x_wn == 2) && (f2x_wkind[0] === 2) && (f2x_wkind[1] === 2),
+            "derived: per-frame content compare");
+
+        // -------- X3: 帧内中止 + 残字 (含本帧 TLAST) 随后到达 + 完整 B --------
+        //   = 设计合同 F-2 针对的场景 (单元门组 9 同构): 残字必须被冲刷掉, B 必须完整上线
+        f2x_begin;
+        f2x_add60(1);                       // 帧 0 = A (被中止, 60B)
+        f2x_add60(100);                     // 帧 1 = B (冲刷后应完整发出)
+        f2x_push_head(0, 2);                // A 的头 2 个字 (16B) => 之后断供
+        f2x_wait_abort;                     // 等 DUT 确认中止 (runt 已上线)
+        f2x_push_tail(0, 2, 7);             // A 的残字 + 本帧 TLAST (必须被冲刷)
+        f2x_stream(1);                      // B (连续注入)
+        f2x_settle;
+        f2x_scan;
+        f2x_show("X3");
+        chk("X3 exactly 2 wire frames (runt + B)", f2x_wn === 2,
+            "derived: 1 aborted runt + 1 complete B");
+        chk("X3 frame0 is a runt (strict prefix of A)",
+            (f2x_wn >= 1) && (f2x_wkind[0] === 1), "derived: prefix compare vs injected A");
+        chk("X3 frame1 is B byte-exact",
+            (f2x_wn >= 2) && (f2x_wkind[1] === 2), "derived: complete-frame compare vs B");
+        chk("X3 no ghost at all",
+            (f2x_wn >= 2) && (f2x_wkind[0] !== 0) && (f2x_wkind[1] !== 0),
+            "derived: classification");
+
+        // -------- X4: 帧内中止 + A 的 TLAST 永不到达 + B (链级探针的原始激励) --------
+        //   合同 (mac_tx_10g.v:24-31 情形3): 冲刷会吃掉 B 整帧 => 线上只有 runt,
+        //   且 stat_flush_done == 1 / stat_flush_words >= 1
+        f2x_begin;
+        f2x_add60(1);                       // A
+        f2x_add60(100);                     // B (注入但不许上线)
+        f2x_push_head(0, 2);
+        f2x_wait_abort;
+        f2x_stream(1);                      // B (连续注入): 必须被冲刷吞掉
+        f2x_settle;
+        f2x_scan;
+        f2x_show("X4");
+        chk("X4 exactly 1 wire frame (runt only)", f2x_wn === 1,
+            "contract: flush swallows the next frame when the aborted one has no TLAST");
+        chk("X4 that frame is a runt (prefix of A)",
+            (f2x_wn == 1) && (f2x_wkind[0] === 1), "derived: prefix compare vs injected A");
+        chk("X4 no ghost", (f2x_wn >= 1) && (f2x_wkind[0] !== 0), "derived: classification");
+        chk("X4 flush counters advanced",
+            (u_dut.u_mac_tx.stat_flush_done === (f2x_fld0 + 32'd1)) &&
+            (u_dut.u_mac_tx.stat_flush_words > f2x_flw0),
+            "design bookkeeping (NOT the primary criterion)");
+        chk("X4 no B on the wire",
+            ((f2x_wn >= 1) && ((f2x_wlen[0] - 7) < 60)) ||
+            ((f2x_wn >= 1) && (f2x_wire[0][7] !== f2x_c[F2X_STRIDE + 0])),
+            "derived: B's first content byte must not appear as a frame start");
+
+        // -------- X5: TX → RX 环回 (短帧 FCS 覆盖面) --------
+        $display("---- X5: TX->RX replay (short frame FCS scope) ----");
+        begin : x5
+            integer rf0, rc0;
+            // X5b 控制组: 60B 内容 (无 pad)
+            f2x_begin;
+            f2x_add60(1);
+            f2x_stream(0);
+            f2x_settle;
+            f2x_scan;
+            rf0 = u_dut.rx_stat_frames; rc0 = u_dut.rx_stat_crc_err;
+            f2x_loop(f2x_wstart[0] - 4, f2x_wstop[0] + 5);
+            repeat (400) @(posedge u_dut.rx_clk_out_1);
+            $display("  [F2X X5b] 60B frame: rx_frames %0d->%0d, rx_crc_err %0d->%0d",
+                     rf0, u_dut.rx_stat_frames, rc0, u_dut.rx_stat_crc_err);
+            $display("  [F2X X5b] DIAG only (not a criterion): replayed frame delivered=%b crc_err_delta=%0d",
+                     (u_dut.rx_stat_frames > rf0), (u_dut.rx_stat_crc_err - rc0));
+            // X5a 待测组: 20B 内容 (MAC 补 40B pad)
+            f2x_begin;
+            f2x_add20(1);
+            f2x_stream20(0);
+            f2x_settle;
+            f2x_scan;
+            $display("  [F2X X5a] injected 20B-content frame: wire frames=%0d kind=%0d content_len_incl_pad=%0d",
+                     f2x_wn, f2x_wkind[0], f2x_wlen[0] - 7 - 4);
+            rf0 = u_dut.rx_stat_frames; rc0 = u_dut.rx_stat_crc_err;
+            f2x_loop(f2x_wstart[0] - 4, f2x_wstop[0] + 5);
+            repeat (400) @(posedge u_dut.rx_clk_out_1);
+            $display("  [F2X X5a] 20B+pad frame: rx_frames %0d->%0d, rx_crc_err %0d->%0d",
+                     rf0, u_dut.rx_stat_frames, rc0, u_dut.rx_stat_crc_err);
+            // F2X10-PATCH: 这条是**缺陷登记判据** (不是 F-2 判据):
+            //   DUT 短帧 (20B 内容补 pad 到 60) 的 FCS 只覆盖数据字节, 而我们自己的 RX
+            //   (以及任何标准对端) 要求 FCS 覆盖 **pad 在内**的全部 60 字节。
+            //   校准: X5c-b/X5d-1 (TB 自算 FCS) 都通过 => 回放通路可信;
+            //         X5d-2 只改 FCS 覆盖面 => 立刻被判 crc_err (判别力证明)。
+            //   ⚠️ 修法在 rtl/mac_tx_10g.v (crc_en 需含 pad), 本轮**按指示不动 rtl/**,
+            //      所以这条在修好之前**应该保持红**。
+            $display("  [DEFECT-REG #1] mac_tx_10g padded-frame FCS scope: DUT TX frame of a 20B-content frame (padded to 60) is rejected by OUR OWN RX (crc_err +1); TB-built frame with the pad inside the FCS is accepted (X5d-1) and the same bytes with a data-only FCS is rejected (X5d-2). 1G mac_tx_64 feeds the pad into the CRC (crc_en = S_DATA || S_PAD); mac_tx_10g does not (crc_en = S_DATA only, rtl/mac_tx_10g.v:207). UNFIXED in this round (rtl/ off-limits).");
+            chk("X5a DUT padded short frame passes our own RX (REGISTERED DEFECT #1)",
+                (u_dut.rx_stat_crc_err === rc0) && (u_dut.rx_stat_frames > rf0),
+                "derived: TX and RX must agree on the FCS of a padded frame; see [DEFECT-REG #1]");
+
+            // -------- X5c: 校准 —— 同一内容 (68B, 无 pad) 两条路径 --------
+            begin : x5c
+                integer rf2, rc2, rf3, rc3;
+                // (a) DUT TX 帧 (DUT 自算 FCS)
+                f2x_begin;
+                f2x_add68;
+                f2x_stream68(0);
+                f2x_settle;
+                f2x_scan;
+                $display("  [F2X X5c] DUT TX 68B frame: wire frames=%0d kind=%0d content_len=%0d",
+                         f2x_wn, f2x_wkind[0], f2x_wlen[0] - 7 - 4);
+                f2x_show("X5c");
+                $display("  [F2X X5c] DUT replay window raw words:");
+                dump_raw(wf_start[0] - 4, wf_stop[0] + 5);
+                rf2 = u_dut.rx_stat_frames; rc2 = u_dut.rx_stat_crc_err;
+                f2x_loop(f2x_wstart[0] - 4, f2x_wstop[0] + 5);
+                repeat (400) @(posedge u_dut.rx_clk_out_1);
+                $display("  [F2X X5c-a] DUT-TX frame replayed: rx_frames %0d->%0d crc_err %0d->%0d",
+                         rf2, u_dut.rx_stat_frames, rc2, u_dut.rx_stat_crc_err);
+                // (b) TB 自算 FCS 的同一内容帧 (build_frame 自己把帧推入 xq)
+                rf3 = u_dut.rx_stat_frames; rc3 = u_dut.rx_stat_crc_err;
+                build_frame(68, 1'b0, -1);
+                begin : tbq
+                    integer qi;
+                    $display("  [F2X X5c] TB-FCS injected words (last 12):");
+                    for (qi = xq_wr - 12; qi < xq_wr; qi = qi + 1)
+                        $display("  [TBQ %0d] c=%02h d=%016h", qi, xq_c[qi], xq_d[qi]);
+                end
+                repeat (400) @(posedge u_dut.rx_clk_out_1);
+                $display("  [F2X X5c-b] TB-FCS frame replayed : rx_frames %0d->%0d crc_err %0d->%0d",
+                         rf3, u_dut.rx_stat_frames, rc3, u_dut.rx_stat_crc_err);
+                chk("X5c calibration: TB-FCS frame passes our own RX",
+                    (u_dut.rx_stat_crc_err === rc3) && (u_dut.rx_stat_frames > rf3),
+                    "calibration: replay path is faithful (no crc_err for a TB-computed FCS)");
+                chk("X5c same content, DUT-TX frame passes our own RX",
+                    (u_dut.rx_stat_crc_err === rc2) && (u_dut.rx_stat_frames > rf2),
+                    "derived: TX FCS must equal TB FCS for the same 68B content");
+
+            // -------- X5d: 同一 60B 线上内容, 两种 FCS 覆盖面 (校准过的 A/B) --------
+            f2x_build_pad(1'b0);                 // 标准: FCS 覆盖 pad
+            repeat (400) @(posedge u_dut.rx_clk_out_1);
+            $display("  [F2X X5d-1] TB frame, FCS over 60 padded bytes: rx_frames=%0d crc_err=%0d",
+                     u_dut.rx_stat_frames, u_dut.rx_stat_crc_err);
+            chk("X5d-1 TB frame with pad-covered FCS passes our own RX",
+                (u_dut.rx_stat_crc_err === rc3), "calibration: RX accepts the standard scope");
+            f2x_build_pad(1'b1);                 // DUT 风格: FCS 只覆盖 18 数据字节
+            repeat (400) @(posedge u_dut.rx_clk_out_1);
+            $display("  [F2X X5d-2] TB frame, FCS over 18 data bytes : rx_frames=%0d crc_err=%0d",
+                     u_dut.rx_stat_frames, u_dut.rx_stat_crc_err);
+            chk("X5d-2 TB frame with data-only FCS is flagged crc_err (discrimination)",
+                (u_dut.rx_stat_crc_err === (rc3 + 32'd1)),
+                "derived: the only difference is the FCS scope => RX wants the pad inside");
+            end
+        end
+
+        release u_dut.txsrc_tdata;  release u_dut.txsrc_tkeep;
+        release u_dut.txsrc_tvalid; release u_dut.txsrc_tlast;
+
+        $display("==== tb_p7b_chain done: %0d checks, %0d fail ====", checks, fails);
+        if (fails == 0) $display("VERDICT = PASS"); else $display("VERDICT = FAIL");
+        $finish;
+    end
+
+    task snap_take;
+        integer n;
+        begin
+            u_dut.u_pcie_xdma.axil_write(32'h18, 32'h1);
+            n = 0;
+            while (n < 4000) begin
+                u_dut.u_pcie_xdma.axil_read(32'h1C, v);
+                if (v[1] === 1'b1) n = 4000; else begin n = n + 1; @(posedge u_dut.pcie_axi_aclk); end
+            end
+        end
+    endtask
+
+    initial begin
+        #8000000;
+        $display("  [FAIL] WATCHDOG timeout (simulation did not finish)");
+        $display("VERDICT = FAIL");
+        $finish;
+    end
+
+endmodule

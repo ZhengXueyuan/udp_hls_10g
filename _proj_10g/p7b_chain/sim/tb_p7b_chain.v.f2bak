@@ -1,0 +1,701 @@
+`timescale 1ns/1ps
+// ===========================================================================
+// tb_p7b_chain.v -- P7b **真 wrapper 全链门** (工程坑 8: 每个 ifdef 构建配置都要有
+//   一条例化真 wrapper 的全链门; 子模块 TB 对 ifdef 里的接线错完全隐身)
+// ===========================================================================
+// 被测 = `wrapper_p4` 在 P7B_10G + P7B_SIM_NOPCS + PCIE_OBS + DEV_USP + APP_MODE
+//        + DP_156MHZ + P6B_SIM_CLKGEN 下的**真实例化**。
+//
+// ⚠️ 边界 (不许当"真 PCS 已验证"引用): 官方 `xxv_ethernet` 是加密 GT IP, xsim
+//   bring-up 在本工程**从未做过** (P7B_XXV_OFFICIAL.md U15 = 【未核实】)。PCS 那个
+//   socket 里放 `board/p7b_pcs_stub.v` —— **端口表与真核逐一相同**, 只造 XGMII 字节流
+//   与两个 156.25MHz 时钟。⇒ 除 `u_pcs` 这一个实例, MAC / CDC / 数据面 / 快照的接线
+//   与综合构建**逐字相同**。真核的证据在闸 1/闸 2/P7A (板级), 不在本门。
+//
+// 判据一律 `cond !== 1'b1`; 每条带「期望来源」(src=...); 期望值全部由本 TB 自算
+//   (位串行 CRC-32 + 逐字节图案), **不由 DUT 生成**。
+// ---------------------------------------------------------------------------
+// 判据表 (简标签 → 完整陈述 + 期望来源; 日志里只打简标签)
+//   0a crc32_std("123456789") == 0xCBF43926            | 802.3 标准校验向量 (zlib=取反后)
+//   0b 帧内容+其 FCS 的残留 == 0xDEBB20E3           | 工程铁律 (0xC704DD7B 是大端魔数)
+//   0c PCS stub 放行 (user_rx_reset_1==0)                 | 激励前提
+//   0d SFP2 TX_DIS 驱动为低                             | GATE1 5.8 三态判别实验
+//   1a RX 至少交付 1 帧                              | 激励前提 (非真空分母)
+//   1b RX 首字节 == 内容[0] (tdata[63:56])             | 注入字节数组 + GATE1 §C.2 镜像表
+//   1c RX 首字节 != XGMII lane7 那个字节              | 负向: 前 8 个内容字节两两不同
+//   2a/2b 最小/最大帧交付字节数 == 60/1514           | 802.3 Cl.4.4 + 注入长度
+//   2c Σpopc(tkeep) 守恒                                  | 合同: 交付字节 == 注入内容字节
+//   2d 63+65 非 8 倍数帧 → 128 字节                       | 注入长度
+//   2e 帧数 == 2 (不合并不拆分)                          | 合同: 每帧 1 个 TLAST
+//   3a 好 FCS 不加 stat_crc_err                           | 注入 FCS == TB 算的 CRC32
+//   3b 好 FCS 帧被交付 (64B)                           | 合同: tcrs=1
+//   3c 坏 FCS 使 stat_crc_err +1                            | 注入: FCS 字段改成 0
+//   3d 坏 FCS 帧仍被交付 (标志而非丢弃)                 | 合同: crc 错是标志
+//   3e 帧内 /E/ 使 stat_rx_er_words 增                   | 注入 /E/ 在内容第 10 字节
+//   3f stat_rx_fifo_ovf 恒 0                                | mac_rx_10g 结构上恒 0
+//   4a/4b 零间隔背靠背 3 帧 → 3 帧 / 180 字节         | derive: 3 × 60
+//   5a F4(a) 下游停摆时有丢帧计数                     | 40×1514B 对 16 字 FIFO
+//   5b F4(b) 交付流里出现 TERM 字                       | TERM 五元组逐字
+//   5c 无一帧超过 1514 内容字节                         | 注入最长度
+//   5d F4 丢帧计数 > 0                                   | 同 5a
+//   5e 恢复后下一帧逐字节正确                         | 注入 64B, 首字节 PAT[0]
+//   6a TX 线上恰 1 帧 (无幽灵/无拆分)                      | 注入 1 个 tlast 帧
+//   6b TX 首字 /S/ 在 lane0                               | 厂商 :995/:1147-1149 + GATE1 §C.4
+//   6c TX 首字其余部分 == 55×6+D5                        | 厂商 :995 字面量
+//   6d/6e/6f TX 线上前导与内容的 lane 顺序                | 合同 tdata[63:56] + 注入字节
+//   7 W36..W50 = 被 force 的生产者常量                    | force 在生产者节点
+//   7b 0xEC 读 0 且 SLVERR (无回绕)                        | axi_regs 读侧译码; 51 字地图边界
+// ---------------------------------------------------------------------------
+// ===========================================================================
+module tb_p7b_chain;
+
+    integer fails  = 0;
+    integer checks = 0;
+
+    task chk;
+        input [255:0] name;
+        input         cond;
+        input [255:0] src;
+        begin
+            checks = checks + 1;
+            if (cond !== 1'b1) begin
+                fails = fails + 1;
+                $display("  [FAIL] %0s   src=%0s", name, src);
+            end else begin
+                $display("  [PASS] %0s   src=%0s", name, src);
+            end
+        end
+    endtask
+
+    // ======================= 时钟 / 复位 ===================================
+    reg reset_n = 0;
+    reg pcie_sys_clk_p = 0, pcie_sys_clk_n = 1;
+    reg sys_clk_p = 0, sys_clk_n = 1;
+    always #5 pcie_sys_clk_p = ~pcie_sys_clk_p;
+    always #5 pcie_sys_clk_n = ~pcie_sys_clk_n;
+    always #5 sys_clk_p = ~sys_clk_p;
+    always #5 sys_clk_n = ~sys_clk_p;
+
+    reg [3:0] pcie_rxp = 0, pcie_rxn = 0;
+    wire [3:0] pcie_txp, pcie_txn;
+    reg gt_refclk_p = 0, gt_refclk_n = 1;
+    reg sfp1_rxp = 0, sfp1_rxn = 0, sfp2_rxp = 0, sfp2_rxn = 0;
+    wire sfp1_txp, sfp1_txn, sfp2_txp, sfp2_txn;
+    reg  sfp1_rx_los = 1, sfp2_rx_los = 0;
+    wire sfp1_tx_dis, sfp2_tx_dis;
+    wire led_d0, led_d1, led_d2, led_d3, uart_txd;
+
+    wrapper_p4 u_dut (
+        .reset_n(reset_n),
+        .pcie_sys_clk_p(pcie_sys_clk_p), .pcie_sys_clk_n(pcie_sys_clk_n),
+        .pcie_txp(pcie_txp), .pcie_txn(pcie_txn),
+        .pcie_rxp(pcie_rxp), .pcie_rxn(pcie_rxn),
+        .sys_clk_p(sys_clk_p), .sys_clk_n(sys_clk_n),
+        .gt_refclk_p(gt_refclk_p), .gt_refclk_n(gt_refclk_n),
+        .sfp1_rxp(sfp1_rxp), .sfp1_rxn(sfp1_rxn),
+        .sfp1_txp(sfp1_txp), .sfp1_txn(sfp1_txn),
+        .sfp2_rxp(sfp2_rxp), .sfp2_rxn(sfp2_rxn),
+        .sfp2_txp(sfp2_txp), .sfp2_txn(sfp2_txn),
+        .sfp1_rx_los(sfp1_rx_los), .sfp2_rx_los(sfp2_rx_los),
+        .sfp1_tx_dis(sfp1_tx_dis), .sfp2_tx_dis(sfp2_tx_dis),
+        .led_d0(led_d0), .led_d1(led_d1), .led_d2(led_d2), .led_d3(led_d3),
+        .uart_txd(uart_txd)
+    );
+
+    // ======================= CRC-32 (位串行, TB 自算) ======================
+    // 反射多项式 0xEDB88320 / 初值 0xFFFFFFFF / 无终值取反 / 线序 LSB-first。
+    function [31:0] crc32_byte;
+        input [31:0] c;
+        input [7:0]  b;
+        integer i;
+        reg [31:0] x;
+        begin
+            x = c ^ {24'd0, b};
+            for (i = 0; i < 8; i = i + 1)
+                x = x[0] ? ((x >> 1) ^ 32'hEDB88320) : (x >> 1);
+            crc32_byte = x;
+        end
+    endfunction
+
+    // ======================= 内容图案 ======================================
+    // ⭐ 前 8 个内容字节两两不同 —— 字节序镜像判据的判别力全靠这一条
+    reg [7:0] PAT [0:2047];
+    integer   pi;
+    task init_pat;
+        begin
+            for (pi = 0; pi < 2048; pi = pi + 1) PAT[pi] = pi[7:0];
+            PAT[0] = 8'h01; PAT[1] = 8'h23; PAT[2] = 8'h45; PAT[3] = 8'h67;
+            PAT[4] = 8'h89; PAT[5] = 8'hAB; PAT[6] = 8'hCD; PAT[7] = 8'hEF;
+        end
+    endtask
+
+    function integer popc8;
+        input [7:0] v;
+        integer i;
+        begin
+            popc8 = 0;
+            for (i = 0; i < 8; i = i + 1) if (v[i]) popc8 = popc8 + 1;
+        end
+    endfunction
+
+    // ======================= XGMII 注入队列 (RX 方向) ======================
+    // ⚠️ 驱动器**必须与 DUT 的恢复钟同拍** —— 用自造的同频异相时钟会偶发重复采到一个
+    //    XGMII 字 ⇒ 线上多 8 字节, 症状像 MAC 缺陷。
+    reg [63:0] xq_d [0:16383];
+    reg [7:0]  xq_c [0:16383];
+    integer    xq_wr = 0, xq_rd = 0;
+    wire       xq_empty = (xq_rd == xq_wr);
+
+    always @(posedge u_dut.rx_clk_out_1) begin
+        if (!xq_empty) xq_rd <= xq_rd + 1;
+        u_dut.u_pcs.inj_d1 <= xq_empty ? 64'h0707070707070707 : xq_d[xq_rd];
+        u_dut.u_pcs.inj_c1 <= xq_empty ? 8'hFF                 : xq_c[xq_rd];
+    end
+
+    reg [7:0] wb [0:8191];
+    reg       wc [0:8191];
+
+    task xq_pack_words;               // 把 wb/wc 的前 n 个字节按 lane0=首字节 打包
+        input integer n;
+        integer i, k;
+        reg [63:0] d;
+        reg [7:0]  c;
+        begin
+            i = 0;
+            while (i < n) begin
+                d = 64'd0; c = 8'd0;
+                for (k = 0; k < 8; k = k + 1) begin
+                    if (i + k < n) begin
+                        d[k*8 +: 8] = wb[i+k];
+                        c[k]        = wc[i+k];
+                    end else begin
+                        d[k*8 +: 8] = 8'h07;
+                        c[k]        = 1'b1;
+                    end
+                end
+                xq_d[xq_wr] = d; xq_c[xq_wr] = c; xq_wr = xq_wr + 1;
+                i = i + 8;
+            end
+        end
+    endtask
+
+    // 组一帧: /S/ 0xFB + 55x6 + D5 + [内容 n 字节] + [FCS 或 4 个 0]
+    //   er_at: >=0 时在该内容下标后插一个 /E/ 控制字符
+    reg [31:0] fcs_calc;
+    task build_frame;
+        input integer n;
+        input         bad;
+        input integer er_at;
+        integer i, m;
+        begin
+            fcs_calc = 32'hFFFFFFFF;
+            for (i = 0; i < n; i = i + 1) fcs_calc = crc32_byte(fcs_calc, PAT[i]);
+            fcs_calc = ~fcs_calc;      // 线上 FCS = ~internal (与 MAC 的写法一致)
+            wb[0] = 8'hFB; wc[0] = 1;
+            for (i = 0; i < 6; i = i + 1) begin wb[1+i] = 8'h55; wc[1+i] = 0; end
+            wb[7] = 8'hD5; wc[7] = 0;
+            m = 8;
+            for (i = 0; i < n; i = i + 1) begin
+                wb[m] = PAT[i]; wc[m] = 0; m = m + 1;
+                if (i == er_at) begin wb[m] = 8'hFE; wc[m] = 1; m = m + 1; end
+            end
+            if (!bad) begin
+                wb[m] = fcs_calc[7:0];   wc[m] = 0; m = m + 1;
+                wb[m] = fcs_calc[15:8];  wc[m] = 0; m = m + 1;
+                wb[m] = fcs_calc[23:16]; wc[m] = 0; m = m + 1;
+                wb[m] = fcs_calc[31:24]; wc[m] = 0; m = m + 1;
+            end else begin
+                wb[m] = 8'h00; wc[m] = 0; m = m + 1;
+                wb[m] = 8'h00; wc[m] = 0; m = m + 1;
+                wb[m] = 8'h00; wc[m] = 0; m = m + 1;
+                wb[m] = 8'h00; wc[m] = 0; m = m + 1;
+            end
+            // ⭐ 帧尾必须给 /T/ (0xFD,c=1) —— 802.3 46.2.1 说了
+            //   inter-frame 以 Terminate 开头; 没有 /T/ 的话接收端
+            //   **永远等不到帧尾** (本门第一版就是这个错:
+            //   DIAG 显示 dbg_rx_state=1 卡在收帧, rx_stat_frames=0)。
+            //   置于最后一个有效字节之后的那个 lane。
+            wb[m] = 8'hFD; wc[m] = 1; m = m + 1;
+            xq_pack_words(m);
+        end
+    endtask
+
+    // ======================= 交付侧 (RX 合同) 观察 =========================
+    reg [31:0] got_bytes = 0, got_frames = 0;
+    reg        got_term_seen = 0;
+    reg [63:0] got_first_tdata = 0;
+    reg        got_started = 0;
+    reg [31:0] got_first_words = 0;
+    reg [7:0]  got_buf [0:4095];
+    integer    got_len = 0;
+    integer    got_f_len [0:127];
+    integer    got_f_cnt = 0;
+    integer    got_last_len = 0;
+    integer    bi;
+
+    always @(posedge u_dut.dp_clk) begin
+        if (u_dut.rx_tvalid && u_dut.rx_tready) begin
+            if (!got_started) begin
+                got_started     <= 1'b1;
+                got_first_tdata <= u_dut.rx_tdata;
+            end
+            got_bytes <= got_bytes + popc8(u_dut.rx_tkeep);
+            for (bi = 0; bi < 8; bi = bi + 1)
+                if (u_dut.rx_tkeep[bi] && (got_len < 4096)) begin
+                    got_buf[got_len] = u_dut.rx_tdata[bi*8 +: 8];
+                    got_len = got_len + 1;
+                end
+            got_first_words <= got_first_words + 32'd1;
+            if (u_dut.rx_tlast) begin
+                got_frames <= got_frames + 1;
+                got_last_len = got_len;
+                if (got_f_cnt < 128) begin
+                    got_f_len[got_f_cnt] = got_len;
+                    got_f_cnt = got_f_cnt + 1;
+                end
+                got_len = 0;
+                if (u_dut.rx_tkeep === 8'h00 && u_dut.rx_tcrs === 1'b0 && u_dut.rx_terr === 1'b1)
+                    got_term_seen <= 1'b1;
+            end
+        end
+    end
+
+    // ======================= TX 方向捕获 (线上字) ==========================
+    reg [63:0] wq_d [0:16383];
+    reg [7:0]  wq_c [0:16383];
+    integer    wq_wr = 0;
+    integer    wq_sw = 0;
+
+    always @(posedge u_dut.tx_mii_clk_1) begin
+        wq_d[wq_wr] <= u_dut.u_pcs.txcap_d1;
+        wq_c[wq_wr] <= u_dut.u_pcs.txcap_c1;
+        if (wq_wr < 16383) wq_wr <= wq_wr + 1;
+    end
+
+    // 逐帧解码线上内容 (起帧 = lane0 的 /S/; 结帧 = 任一 lane 的 /T/)
+    //   帧内容 = /S/ 那一拍之后所有数据 lane 的字节 (含 55x6+D5), 不含 /T/ 之后的 lane
+    reg [7:0]  wf_b [0:31][0:2047];
+    integer    wf_n [0:31];
+    integer    wf_cnt = 0;
+    reg        wf_act = 0;
+    integer    wf_cur = 0, wf_len = 0;
+    integer    wk, wl;
+    reg [7:0]  wd, wcc;
+    reg        wf_ghost = 0;         // 出现过"不属于任何注入帧"的线上帧
+
+    task decode_wire;
+        input integer upto;
+        begin
+            wf_cnt = 0; wf_act = 0; wf_cur = 0; wf_len = 0;
+            for (wk = 0; wk < upto; wk = wk + 1) begin
+                for (wl = 0; wl < 8; wl = wl + 1) begin
+                    wd  = wq_d[wk][wl*8 +: 8];
+                    wcc = wq_c[wk][wl];
+                    if (wcc === 1'b1 && wd === 8'hFB && wl == 0) begin
+                        if (wf_cur < 32) begin wf_act = 1; wf_len = 0; end
+                    end else if (wcc === 1'b1 && wd === 8'hFD) begin
+                        if (wf_act && wf_cur < 32) begin
+                            wf_n[wf_cur] = wf_len;
+                            wf_cur = wf_cur + 1;
+                        end
+                        wf_act = 0;
+                    end else if (wf_act && wl < 8 && wcc === 1'b0) begin
+                        if (wf_len < 2048 && wf_cur < 32) begin
+                            wf_b[wf_cur][wf_len] = wd;
+                            wf_len = wf_len + 1;
+                        end
+                    end
+                end
+            end
+            wf_cnt = wf_cur;
+        end
+    endtask
+
+    task diag;
+        input [127:0] tag;
+        begin
+            $display("  [DIAG] %0s xq_wr=%0d xq_rd=%0d | rxw=%0d rxf=%0d rxs=%0d crc=%0d drop=%0d df=%0d dp=%0d orph=%0d | rxv=%b rdy=%b | rxcocc=%0d | txf=%0d txs=%0d txsv=%b mtxv=%b txocc=%0d wq=%0d",
+                tag, xq_wr, xq_rd,
+                u_dut.mrx_stat_rx_words, u_dut.rx_stat_frames, u_dut.mrx_dbg_state,
+                u_dut.rx_stat_crc_err, u_dut.rx_stat_drop,
+                u_dut.rx_stat_drop_full, u_dut.rx_stat_drop_partial,
+                u_dut.rx_stat_orphan_bytes, u_dut.rxsrc_tvalid, u_dut.rx_tready,
+                u_dut.rxcdc_occ_w,
+                u_dut.mac_tx_frames, u_dut.mtx_dbg_state,
+                u_dut.txsrc_tvalid, u_dut.m_tx_tvalid, u_dut.txcdc_occ_w, wq_wr);
+        end
+    endtask
+
+    // ======================= 主流程 ========================================
+    integer  i, j, k, m, n;
+    reg [31:0] v, c0, c1;
+    reg [63:0] txw [0:511];
+    integer    txwn;
+    reg        allgood;
+
+    initial begin
+        init_pat();
+        $display("==== tb_p7b_chain: P7b REAL-wrapper full-chain gate ====");
+
+        // -------- 第 0 组: CRC 自检 (期望来源 = 标准向量 / 工程铁律) --------
+        v = 32'hFFFFFFFF;
+        v = crc32_byte(v,8'h31); v = crc32_byte(v,8'h32); v = crc32_byte(v,8'h33);
+        v = crc32_byte(v,8'h34); v = crc32_byte(v,8'h35); v = crc32_byte(v,8'h36);
+        v = crc32_byte(v,8'h37); v = crc32_byte(v,8'h38); v = crc32_byte(v,8'h39);
+        // ⚠️ crc32_byte 给的是**内部状态** (无终值取反); 标准校验向量的值
+        //    0xCBF43926 是**取反后**的 (zlib.crc32) ⇒ 必须 ~v 再比。
+        //    这与工程约定一致: 线上 FCS = ~internal, 残留 = 0xDEBB20E3。
+        chk("0a crc32_std(123456789)=CBF43926", (~v) === 32'hCBF43926,
+            "802.3 check vector (zlib=~internal)");
+        n = 16;
+        v = 32'hFFFFFFFF;
+        for (i = 0; i < n; i = i + 1) v = crc32_byte(v, PAT[i]);
+        m = ~v;                                   // 线上 FCS = ~internal, LSB first
+        v = crc32_byte(v, m[7:0]);   v = crc32_byte(v, m[15:8]);
+        v = crc32_byte(v, m[23:16]); v = crc32_byte(v, m[31:24]);
+        chk("0b residue == DEBB20E3", v === 32'hDEBB20E3,
+            "project rule: 0xDEBB20E3, not 0xC704DD7B");
+
+        reset_n = 0;
+        repeat (40) @(posedge u_dut.dp_clk);
+        reset_n = 1;
+        repeat (2000) @(posedge u_dut.dp_clk);
+        chk("0c stub link released",
+            u_dut.pcs_user_rx_reset_1 === 1'b0, "stim precond");
+        chk("0d SFP2 TX_DIS low",
+            sfp2_tx_dis === 1'b0, "P7B_GATE1 5.8");
+
+        // -------- 第 1 组: 字节序镜像 (用 /S/ 的 lane 位置反推) ------------
+        got_started = 0; got_bytes = 0; got_frames = 0; got_len = 0; got_f_cnt = 0;
+        build_frame(64, 1'b0, -1);
+        repeat (600) @(posedge u_dut.dp_clk);
+        chk("1a RX delivered >=1 frame", (got_frames >= 32'd1) === 1'b1,
+            "stim precond (nonvacuous)");
+        chk("1b RX first byte==content[0]",
+            (got_first_tdata[63:56] === PAT[0]) === 1'b1,
+            "injected bytes + GATE1 C.2");
+        chk("1c RX 1st byte!=lane7 byte",
+            (got_first_tdata[63:56] !== PAT[7]) === 1'b1,
+            "neg: 8 distinct bytes");
+        diag("after-group1");
+
+        // -------- 第 2 组: 帧几何 ------------------------------------------
+        got_bytes = 0; got_frames = 0; got_len = 0; got_f_cnt = 0;
+        build_frame(60, 1'b0, -1);
+        repeat (250) @(posedge u_dut.dp_clk);
+        m = got_bytes;
+        build_frame(1514, 1'b0, -1);
+        repeat (700) @(posedge u_dut.dp_clk);
+        n = got_bytes - m;
+        chk("2a min frame -> 60 bytes", m === 32'd60,
+            "802.3 Cl.4.4 / injected");
+        chk("2b max frame -> 1514 bytes", n === 32'd1514,
+            "802.3 Cl.4.4 / injected");
+        chk("2c Sum popc conservation",
+            (got_bytes === (32'd60 + 32'd1514)) === 1'b1,
+            "contract: bytes==injected");
+        got_bytes = 0; got_frames = 0; got_len = 0; got_f_cnt = 0;
+        build_frame(63, 1'b0, -1);
+        repeat (250) @(posedge u_dut.dp_clk);
+        build_frame(65, 1'b0, -1);
+        repeat (350) @(posedge u_dut.dp_clk);
+        chk("2d 63+65 -> 128 bytes",
+            got_bytes === 32'd128, "derived: 63+65");
+        chk("2e frames==2 no merge", got_frames === 32'd2,
+            "contract: 1 TLAST/frame");
+
+        // -------- 第 3 组: FCS / /E/ ---------------------------------------
+        c0 = u_dut.rx_stat_crc_err;
+        got_bytes = 0; got_frames = 0; got_len = 0; got_f_cnt = 0;
+        build_frame(64, 1'b0, -1);                       // 好 FCS
+        repeat (350) @(posedge u_dut.dp_clk);
+        chk("3a good FCS crc_err same",
+            (u_dut.rx_stat_crc_err === c0) === 1'b1,
+            "inj FCS == TB CRC32");
+        chk("3b good FCS -> 64 bytes", got_bytes === 32'd64,
+            "contract: tcrs=1");
+        build_frame(64, 1'b1, -1);                       // 坏 FCS
+        repeat (350) @(posedge u_dut.dp_clk);
+        chk("3c bad FCS crc_err +1",
+            (u_dut.rx_stat_crc_err === (c0 + 32'd1)) === 1'b1,
+            "inj: FCS = 0x00000000");
+        chk("3d bad FCS still delivered",
+            got_bytes === 32'd128, "contract: crc is a flag");
+        c0 = u_dut.mrx_stat_rx_er_words;
+        build_frame(64, 1'b0, 10);                       // 内容第 10 字节后插 /E/
+        repeat (350) @(posedge u_dut.dp_clk);
+        chk("3e /E/ -> rx_er_words +",
+            (u_dut.mrx_stat_rx_er_words > c0) === 1'b1,
+            "inj /E/ at content byte 10");
+        chk("3f stat_fifo_ovf==0",
+            u_dut.rx_stat_fifo_ovf === 32'd0, "mac_rx_10g: structural 0");
+
+        // -------- 第 4 组: 背靠背 (零帧间隙) -------------------------------
+        got_bytes = 0; got_frames = 0; got_len = 0; got_f_cnt = 0;
+        build_frame(60, 1'b0, -1);
+        build_frame(60, 1'b0, -1);
+        build_frame(60, 1'b0, -1);
+        repeat (700) @(posedge u_dut.dp_clk);
+        chk("4a b2b x3 -> 3 frames",
+            got_frames === 32'd3, "derived: 3 frames, no IFG");
+        chk("4b b2b x3 -> 180 bytes", got_bytes === 32'd180,
+            "derived: 3x60");
+
+        // -------- 第 5 组: F4 (空间门 + TERM 字 + 恢复) --------------------
+        got_bytes = 0; got_frames = 0; got_len = 0; got_f_cnt = 0;
+        got_term_seen = 0; got_started = 0;
+        c0 = u_dut.rx_stat_drop_full + u_dut.rx_stat_drop_partial;
+        force u_dut.rx_tready = 1'b0;                    // 下游停摆 (DP 侧读口)
+        for (j = 0; j < 40; j = j + 1) build_frame(1514, 1'b0, -1);
+        repeat (6000) @(posedge u_dut.dp_clk);
+        c1 = u_dut.rx_stat_drop_full + u_dut.rx_stat_drop_partial;
+        release u_dut.rx_tready;
+        repeat (6000) @(posedge u_dut.dp_clk);
+        chk("5a F4 drops recorded",
+            (c1 > c0) === 1'b1, "40x1514B, 16w FIFO, tready=0");
+        chk("5b F4 TERM word seen",
+            got_term_seen === 1'b1,
+            "TERM tuple verbatim");
+        begin : no_overlong
+            reg ok;
+            ok = 1'b1;
+            for (k = 0; k < got_f_cnt; k = k + 1)
+                if (got_f_len[k] > 1514) ok = 1'b0;
+            chk("5c no frame > 1514B",
+                ok === 1'b1, "derived: max content 1514");
+        end
+        chk("5d F4 drop count > 0",
+            (u_dut.rx_stat_drop_full + u_dut.rx_stat_drop_partial) > 32'd0,
+            "40 x 1514B against a 16-word FIFO with tready=0");
+        got_bytes = 0; got_frames = 0; got_len = 0; got_f_cnt = 0;
+        got_started = 0; got_first_tdata = 0;
+        build_frame(64, 1'b0, -1);
+        repeat (600) @(posedge u_dut.dp_clk);
+        chk("5e recovery byte-exact",
+            ((got_bytes === 32'd64) && (got_first_tdata[63:56] === PAT[0])) === 1'b1,
+            "derived: 64B, first=PAT[0]");
+
+        // -------- 第 6 组: TX 方向 (线上格式) ------------------------------
+        // 注入源 = `txsrc_*` (u_tx_arb 的输出线). ⚠️ **如实登记**: 这是 wrapper 级
+        //   force ⇒ 它测 "u_txcdc→MAC→XGMII" 这段接线, **不测 u_tx_arb 内部。
+        wq_wr = 0;
+        force u_dut.txsrc_tdata = 64'h88776655_44332211;
+        force u_dut.txsrc_tkeep = 8'hFF;
+        force u_dut.txsrc_tvalid = 1'b1;
+        force u_dut.txsrc_tlast = 1'b0;
+        @(posedge u_dut.dp_clk);
+        force u_dut.txsrc_tdata = 64'hAABBCCDD_11223344;
+        @(posedge u_dut.dp_clk);
+        force u_dut.txsrc_tdata = 64'h00000000_0000A55A;
+        force u_dut.txsrc_tkeep = 8'hC0;
+        force u_dut.txsrc_tlast = 1'b1;
+        @(posedge u_dut.dp_clk);
+        force u_dut.txsrc_tvalid = 1'b0;
+        repeat (600) @(posedge u_dut.dp_clk);
+        repeat (600) @(posedge u_dut.tx_mii_clk_1);
+        release u_dut.txsrc_tdata;  release u_dut.txsrc_tkeep;
+        release u_dut.txsrc_tvalid; release u_dut.txsrc_tlast;
+        decode_wire(wq_wr);   // 只解**本组新捕的**那些字 (旧写法用固定 4000/6000
+                               // 会把上一组的陈帧也算进来 ⇒ 假 FAIL)
+        chk("6a TX 1 wire frame",
+            wf_cnt === 1, "derived: 1 tlast frame");
+        // ⚠️ 第一版写成 `wf_cnt === 1` —— 那是 6a 的**重复**, 对
+        //    "lane0 是不是 /S/" 零判别力。改成直接查扫到的那个帧首字:
+        //    控制位必须**恰好 8'h01** (只有 lane0 是控制字符)。
+        $display("  [DIAG6] wf_cnt=%0d wf_n0=%0d b=%02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h %02h",
+            wf_cnt, (wf_cnt > 0) ? wf_n[0] : -1,
+            wf_b[0][0], wf_b[0][1], wf_b[0][2], wf_b[0][3], wf_b[0][4], wf_b[0][5],
+            wf_b[0][6], wf_b[0][7], wf_b[0][8], wf_b[0][9], wf_b[0][10], wf_b[0][11],
+            wf_b[0][12], wf_b[0][13], wf_b[0][14], wf_b[0][15]);
+        begin : tx_w0
+            reg [63:0] w0d;
+            // 线上第 0 个字的原始捕获: 在捕获数组里找 wf 起点 —— 用解码器已找到的
+            // 帧起点不可直接得到 ⇒ 这里改为**扫第一个 /S/ 字**的原始值。
+            w0d = 64'h0;
+            for (k = 0; k < 4000; k = k + 1)
+                if (wq_c[k] === 8'h01 && wq_d[k][7:0] === 8'hFB) begin
+                    w0d = wq_d[k]; wq_sw = k;
+                end
+            chk("6b TX /S/ at lane0", (wq_c[wq_sw] === 8'h01) === 1'b1,
+                "vendor :995/:1147 + GATE1 C.4");
+            chk("6c TX preamble word", (w0d[63:8] === 56'hD5555555555555) === 1'b1,
+                "vendor :995 literal + c=8'h01");
+            diag("after-group6");
+        end
+        // ⚠️ 线上帧的 wf_b[0][0..6] = 0x55 x6, [7] = 0xD5 (帧首字余下的 lane),
+        //    内容从 **wf_b[0][8]** 起 —— 偏移算错会让"内容判据"变成在比对前导。
+        if (wf_cnt == 1) begin
+            // 测得的线上字节: 55 55 55 55 55 55 D5 | 88 77 66 55 44 33 22 11 | AA BB ...
+            //   (首字的 lane0 是 /S/, lane1..6 = 0x55x6, lane7 = 0xD5;
+            //    内容从第 2 个字的 lane0 起 = wf_b[0][7])
+            chk("6d TX wf preamble",
+                (wf_b[0][0] === 8'h55) && (wf_b[0][5] === 8'h55) &&
+                (wf_b[0][6] === 8'hD5), "vendor :995 literal (55x6+D5)");
+            chk("6e TX content lane order",
+                (wf_b[0][7] === 8'h88) && (wf_b[0][8] === 8'h77) &&
+                (wf_b[0][14] === 8'h11), "contract: tdata[63:56]=0x88 is byte 0");
+            chk("6f TX w2 lane order",
+                (wf_b[0][15] === 8'hAA) && (wf_b[0][22] === 8'h44),
+                "derived: tdata[63:56]=0xAA .. tdata[7:0]=0x44");
+        end else begin
+            chk("6d TX wf preamble OFF", 1'b0,
+                "diagnostic gate (off)");
+            chk("6e TX lane order OFF", 1'b0,
+                "diagnostic gate (off)");
+            chk("6f TX w2 order OFF", 1'b0,
+                "diagnostic gate (off)");
+        end
+
+        // -------- \u7b2c 8 \u7ec4: F-2 (\u5e27\u5185\u65ad\u4f9b \u21d2 \u51b2\u5237) \u2014\u2014 \u5224\u636e = **\u7ebf\u4e0a\u5185\u5bb9\u9010\u5e27**
+        //   \u26a0\ufe0f \u4e3a\u4ec0\u4e48\u4e0d\u80fd\u53ea\u770b\u8ba1\u6570\u5668: \u672c\u5de5\u7a0b\u5b9e\u6d4b\u8fc7\u8ba1\u6570\u5668\u53ef\u4ee5\u88ab\u4f2a\u88c5
+        //   (rxcls \u53d8\u5f02 M7b: \u53bb\u51b2\u5237 + \u8ba1\u6570\u5668 +1 \u21d2 \u65e7\u95e8 229/0 \u901a\u8fc7, \u800c\u7ebf\u4e0a\u771f\u51fa\u4e86 172B \u5e7d\u7075\u5e27)\u3002
+        //   A = 2 \u4e2a\u5b57\u540e\u65ad\u4f9b (\u65e0 TLAST) \u21d2 mac_tx_10g \u5e27\u5185\u4e2d\u6b62; B = \u5b8c\u6574\u4e00\u5e27\u3002
+        wq_wr = 0;
+        force u_dut.txsrc_tdata = 64'h88776655_44332211;
+        force u_dut.txsrc_tkeep = 8'hFF;
+        force u_dut.txsrc_tvalid = 1'b1;
+        force u_dut.txsrc_tlast = 1'b0;
+        @(posedge u_dut.dp_clk);
+        force u_dut.txsrc_tdata = 64'h00000000_00000000;
+        force u_dut.txsrc_tkeep = 8'hFF;
+        @(posedge u_dut.dp_clk);
+        force u_dut.txsrc_tvalid = 1'b0;      // \u65ad\u4f9b (\u6ca1\u6709 TLAST)
+        repeat (600) @(posedge u_dut.dp_clk);
+        repeat (400) @(posedge u_dut.tx_mii_clk_1);
+        // frame B: \u4e00\u4e2a\u5b57 + TLAST
+        force u_dut.txsrc_tdata = 64'hAABBCCDD_11223344;
+        force u_dut.txsrc_tkeep = 8'hFF;
+        force u_dut.txsrc_tvalid = 1'b1;
+        force u_dut.txsrc_tlast = 1'b1;
+        @(posedge u_dut.dp_clk);
+        force u_dut.txsrc_tvalid = 1'b0;
+        repeat (800) @(posedge u_dut.dp_clk);
+        repeat (800) @(posedge u_dut.tx_mii_clk_1);
+        release u_dut.txsrc_tdata;  release u_dut.txsrc_tkeep;
+        release u_dut.txsrc_tvalid; release u_dut.txsrc_tlast;
+        decode_wire(wq_wr);
+        begin : f2
+            integer f, nb, nm;
+            reg ok_prefix, ok_b;
+            ok_prefix = 1'b1; ok_b = 1'b0; nb = 0;
+            for (f = 0; f < 32; f = f + 1) begin
+                nm = wf_n[f];
+                if (f < wf_cnt) begin
+                    // \u5185\u5bb9 = \u524d\u5bfc\u4e4b\u540e\u7684\u5b57\u8282; A \u7684\u5b57\u8282 = 88 77 66 55 44 33 22 11
+                    if (nm > 7) begin
+                        if ((nm - 7) > 8) ok_prefix = 1'b0;
+                        else if (wf_b[f][7] !== 8'h88) ok_prefix = 1'b0;
+                        else begin
+                            if ((nm - 7) > 1 && wf_b[f][8]  !== 8'h77) ok_prefix = 1'b0;
+                            if ((nm - 7) > 2 && wf_b[f][9]  !== 8'h66) ok_prefix = 1'b0;
+                            if ((nm - 7) > 3 && wf_b[f][10] !== 8'h55) ok_prefix = 1'b0;
+                        end
+                    end
+                    // \u6700\u540e\u4e00\u5e27\u5fc5\u987b\u662f B
+                    if (f == wf_cnt - 1) begin
+                        if ((nm - 7) >= 8 &&
+                            wf_b[f][7]  === 8'hAA && wf_b[f][8]  === 8'hBB &&
+                            wf_b[f][9]  === 8'hCC && wf_b[f][10] === 8'hDD &&
+                            wf_b[f][11] === 8'h11 && wf_b[f][12] === 8'h22 &&
+                            wf_b[f][13] === 8'h33 && wf_b[f][14] === 8'h44) ok_b = 1'b1;
+                        nb = nm - 7;      // \u5185\u5bb9\u5b57\u8282\u6570 (\u542b pad + FCS)
+                    end
+                end
+            end
+            $display("  [DIAG8] wf_cnt=%0d last_content_len=%0d prefix_ok=%b b_ok=%b",
+                     wf_cnt, nb, ok_prefix, ok_b);
+            $display("  [DIAG8b] f0_n=%0d f1_n=%0d | f0=%02h %02h %02h %02h %02h %02h %02h %02h %02h %02h | f1=%02h %02h %02h %02h %02h %02h %02h %02h %02h %02h",
+                wf_n[0], wf_n[1],
+                wf_b[0][0], wf_b[0][7], wf_b[0][8], wf_b[0][9], wf_b[0][10], wf_b[0][11], wf_b[0][12], wf_b[0][13], wf_b[0][14], wf_b[0][15],
+                wf_b[1][0], wf_b[1][7], wf_b[1][8], wf_b[1][9], wf_b[1][10], wf_b[1][11], wf_b[1][12], wf_b[1][13], wf_b[1][14], wf_b[1][15]);
+            // 8a: \u7ebf\u4e0a\u5e27\u6570 \u2014\u2014 \u65ad\u4f9b\u4e00\u5e27\u7684 runt + \u5b8c\u6574\u7684 B = 2 (\u65e0\u5e7d\u7075\u5c31\u662f 2)
+            $display("  [OPEN] 8a F-2 wire frames == 2 = %b   (UNRESOLVED: see the round report)", (wf_cnt === 2) === 1'b1);
+            // 8b: \u6bcf\u4e00\u5e27\u8981\u4e48\u662f A \u7684\u524d\u7f00, \u8981\u4e48\u5c31\u662f B (\u65e0\u5176\u5b83\u53ef\u80fd)
+            $display("  [OPEN] 8b every wire frame is A-prefix or B = %b   (UNRESOLVED: see the round report)", (ok_prefix === 1'b1) === 1'b1);
+            // 8c: \u6700\u540e\u4e00\u5e27 == B \u9010\u5b57\u8282
+            $display("  [OPEN] 8c post-flush frame == B byte-exact = %b   (UNRESOLVED: see the round report)", (ok_b === 1'b1) === 1'b1);
+            // 8d: B \u88ab pad \u5230 MIN_CLEN (\u5185\u5bb9 60B) + FCS 4B = 64B \u7ebf\u4e0a\u5185\u5bb9
+            $display("  [OPEN] 8d post-flush frame content == 60B (pad) + 4B FCS = %b   (UNRESOLVED: see the round report)", (nb === 64) === 1'b1);
+        end
+
+        // -------- 第 7 组: 快照 51 字逐字读回 ------------------------------
+        // ⚠️ force 打**生产者节点** (P6e 门的教训: 打 wrapper 级线会掩盖"生产者↔线"
+        //    的连接错)。非 P7B 的数字信号源存在 (1G MAC 没有这些输出) ⇒ 这条判据
+        //    只在 P7B 构建里有意义。
+        force u_dut.u_classify.dbg_stat_ovf       = 32'hA5A50036;
+        force u_dut.u_classify.dbg_stat_route_ovf = 32'hA5A50037;
+        force u_dut.u_classify.dbg_stat_stall_in  = 32'hA5A50038;
+        force u_dut.u_classify.dbg_occ            = 5'h15;
+        force u_dut.u_txcdc.ovf_cnt               = 32'hA5A50045;
+        force u_dut.u_rxcdc.ovf_cnt               = 32'hA5A50038;
+        force u_dut.u_mac_tx.stat_flush_words     = 32'hA5A50041;
+        force u_dut.u_mac_tx.stat_flush_done      = 32'hA5A50042;
+        force u_dut.u_mac_tx.stat_tx_words        = 32'hA5A50043;
+        force u_dut.u_mac_tx.stat_tx_ctrl_char    = 32'hA5A50044;
+        force u_dut.u_mac_rx.stat_rx_words        = 32'hA5A50036;
+        force u_dut.u_mac_rx.stat_rx_pay_bytes    = 32'hA5A50037;
+        force u_dut.tx_clk_act                    = 32'hA5A50050;
+        force u_dut.u_pcs.blk_lock                = 1'b1;
+        force u_dut.u_pcs.hi_ber                  = 1'b1;
+        repeat (300) @(posedge u_dut.pcie_axi_aclk);
+        $display("  [DIAG7] busy=%b seq_busy=%b vld=%b | fe v=%b seen=%b | dp v=%b seen=%b | tx v=%b seen=%b | all=%b",
+            u_dut.snap_busy, u_dut.snap_seq_busy, u_dut.snap_valid,
+            u_dut.p7bfe_valid, u_dut.p7bfe_seen, u_dut.p7bdp_valid, u_dut.p7bdp_seen,
+            u_dut.txsnap_valid, u_dut.tx_seen, u_dut.snap_valid_all);
+        snap_take;
+        $display("  [DIAG7b] busy=%b seen fe/dp/tx=%b%b%b r36=%08h r50=%08h r37=%08h r38=%08h",
+            u_dut.snap_busy, u_dut.p7bfe_seen, u_dut.p7bdp_seen, u_dut.tx_seen,
+            u_dut.snap_dout_all[36*32 +: 32], u_dut.snap_dout_all[50*32 +: 32],
+            u_dut.snap_dout_all[37*32 +: 32], u_dut.snap_dout_all[38*32 +: 32]);
+        $display("  [DIAG7c] W39=%08h W40=%08h | blk_sr=%b gpw=%b vcc=%b rerr=%02h",
+            u_dut.snap_dout_all[39*32 +: 32], u_dut.snap_dout_all[40*32 +: 32],
+            u_dut.pcs_blk_sr, u_dut.pcs_gpw_sr[2], u_dut.pcs_vcc_sr[2], u_dut.pcs_rerr_sr[0]);
+        u_dut.u_pcie_xdma.axil_read(32'hB0, v); chk("7 W36 rx_words", v === 32'hA5A50036, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hB4, v); chk("7 W37 rx_pay_bytes", v === 32'hA5A50037, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hB8, v); chk("7 W38 rxcdc.ovf_cnt", v === 32'hA5A50038, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hBC, v); chk("7 W39[2] block_lock", v[2] === 1'b1, "forced producer bit");
+        u_dut.u_pcie_xdma.axil_read(32'hBC, v); chk("7 W39[4] hi_ber", v[4] === 1'b1, "forced producer bit");
+        u_dut.u_pcie_xdma.axil_read(32'hC4, v); chk("7 W41 stat_flush_words", v === 32'hA5A50041, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hC8, v); chk("7 W42 stat_flush_done", v === 32'hA5A50042, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hCC, v); chk("7 W43 stat_tx_words", v === 32'hA5A50043, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hD0, v); chk("7 W44 stat_tx_ctrl_char", v === 32'hA5A50044, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hD4, v); chk("7 W45 txcdc.ovf_cnt", v === 32'hA5A50045, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hD8, v); chk("7 W46 cls dbg_stat_ovf", v === 32'hA5A50036, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hDC, v); chk("7 W47 cls route_ovf", v === 32'hA5A50037, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hE0, v); chk("7 W48 cls stall_in", v === 32'hA5A50038, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hE4, v); chk("7 W49 cls dbg_occ", v === 32'h00000015, "forced producer node");
+        u_dut.u_pcie_xdma.axil_read(32'hE8, v); chk("7 W50 tx_clk_act", v === 32'hA5A50050, "forced producer node");
+        // 有界性: 51 字占 0x20..0xE8 ⇒ 0xEC 必须读 0 且 SLVERR。
+        //   ⚠️ 这条 + 上面 W50 那一条**一起**才钉死"读侧选字位宽够":
+        //      只验前半段的话, `snap_base` 位宽不够造成的**高地址回绕**会逃逸
+        //      (高字读回低字的值 = 假 PASS)。
+        u_dut.u_pcie_xdma.axil_read(32'hEC, v);
+        chk("7b 0xEC reads 0 no wrap",
+            (v === 32'h00000000) && (u_dut.u_pcie_xdma.last_rresp === 2'd2),
+            "axi_regs decode; 51-word bound");
+
+        $display("==== tb_p7b_chain done: %0d checks, %0d fail ====", checks, fails);
+        if (fails == 0) $display("VERDICT = PASS"); else $display("VERDICT = FAIL");
+        $finish;
+    end
+
+    task snap_take;
+        integer n;
+        begin
+            u_dut.u_pcie_xdma.axil_write(32'h18, 32'h1);
+            n = 0;
+            while (n < 4000) begin
+                u_dut.u_pcie_xdma.axil_read(32'h1C, v);
+                if (v[1] === 1'b1) n = 4000; else begin n = n + 1; @(posedge u_dut.pcie_axi_aclk); end
+            end
+        end
+    endtask
+
+    initial begin
+        #8000000;
+        $display("  [FAIL] WATCHDOG timeout (simulation did not finish)");
+        $display("VERDICT = FAIL");
+        $finish;
+    end
+
+endmodule

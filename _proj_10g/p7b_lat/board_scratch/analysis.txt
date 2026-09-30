@@ -1,0 +1,176 @@
+====================================================================================================
+P7b 分段延迟 -- 换算  (F_FE = 156.253906 MHz [P7A], F_DP = 156.2585 MHz [P6B])
+  硬下限口径 = (8+L)*8/1.0312e+10  (标称) ; 实测线速率 = 1.031276e+10 (+0.0025%)
+====================================================================================================
+case         Lreq   Lfe  ms  mn |    a->b    b->c    c->e   e->e2   c->e2 | (B)a->e2 (A)=(B)-s    bound | evt(a,b,c,e,e2) pair
+------------------------------------------------------------------------------------------------------------------------------
+r0_nostim158   158   114   0   0 |   25.60   25.56   44.80   89.60  134.39 |   185.55    90.91    94.64 | (1, 1, 1, 1, 1) OK
+r0_base100    100    66   0   0 |   25.60   25.56   44.80   44.80   89.60 |   140.76    83.35    57.41 | (2, 2, 2, 2, 2) OK
+r0_base158    158   333   0   0 |   25.60   25.59   44.80  262.39  307.18 |   358.37    93.84   264.53 | (3, 3, 3, 3, 3) OK
+r0_base1514  1514  1514   0   0 |   25.60   25.59   44.80 1203.13 1247.93 |  1299.12   118.42  1180.70 | (1, 1, 1, 1, 1) OK
+r0_rep100a    100   100   0   0 |   25.60   25.56   44.80   76.80  121.59 |   172.76    88.97    83.78 | (1, 1, 1, 1, 1) OK
+r0_rep158a    158   158   0   0 |   25.60   25.59   44.80  121.59  166.39 |   217.58    88.81   128.78 | (1, 1, 1, 1, 1) OK
+r0_rep1514a  1514  1514   0   0 |   25.60   25.56   44.80 1203.13 1247.93 |  1299.10   118.39  1180.70 | (2, 2, 2, 2, 2) OK
+r0_rep100b    100   100   0   0 |   25.60   25.60   44.80   70.40  115.19 |   166.39    82.61    83.78 | (1, 1, 1, 1, 1) OK
+r0_rep158b    158   158   0   0 |   25.60   25.60   44.80  121.59  166.39 |   217.59    88.81   128.78 | (1, 1, 1, 1, 1) OK
+r0_rep1514b  1514  1514   0   0 |   25.60   25.58   44.80 1209.53 1254.33 |  1305.51   124.81  1180.70 | (1, 1, 1, 1, 1) OK
+r0_mut_b_n10   158   158   1  10 |   89.60  -38.41   44.80  121.59  166.39 |   217.58    88.80   128.78 | (1, 1, 1, 1, 1) OK
+r0_mut_c_n10   158   158   3  10 |   25.60   89.59  -19.20  121.59  102.39 |   217.58    88.81   128.78 | (2, 2, 2, 2, 2) OK
+r0_mut_a_n10   158   158   5  10 |  -38.40   25.57   44.80  121.59  166.39 |   153.56    24.78   128.78 | (1, 1, 1, 1, 1) OK
+r0_mut_d_n10   158   333   4  10 |   25.60   25.56   44.80  262.39  307.18 |   358.34    93.81   264.53 | (3, 2, 2, 2, 2) MISMATCH
+r0_mut_b_n30   158   158   1  30 |  217.59 -166.43   44.80  121.59  166.39 |   217.56    88.78   128.78 | (1, 1, 1, 1, 1) OK
+r0_mut_b_n0   158   158   1   0 |   25.60   25.56   44.80  121.59  166.39 |   217.55    88.78   128.78 | (3, 3, 1, 1, 1) MISMATCH
+r0_postmut158   158   158   0   0 |   25.60   25.57   44.80  121.59  166.39 |   217.56    88.78   128.78 | (1, 1, 1, 1, 1) OK
+r1_nostim158   158   114   0   0 |   25.60   25.59   44.80   89.60  134.39 |   185.58    90.94    94.64 | (2, 2, 2, 2, 2) OK
+r1_base100    100   100   0   0 |   25.60   25.55   44.80   76.80  121.59 |   172.74    88.96    83.78 | (2, 2, 2, 2, 2) OK
+r1_base158    158    66   0   0 |   25.60   25.58   44.80   51.20   95.99 |   147.18    89.77    57.41 | (2, 2, 2, 2, 2) OK
+r1_base1514  1514   333   0   0 |   25.60   25.56   44.80  262.39  307.18 |   358.34    93.81   264.53 | (2, 2, 2, 2, 2) OK
+r1_rep158     158   158   0   0 |   25.60   25.57   44.80  121.59  166.39 |   217.56    88.78   128.78 | (2, 2, 2, 2, 2) OK
+r1_mut_b_n10   158   158   1  10 |   89.60  -38.41   44.80  121.59  166.39 |   217.58    88.80   128.78 | (1, 1, 1, 1, 1) OK
+r1_mut_c_n10   158   158   3  10 |   25.60   89.58  -19.20  121.59  102.39 |   217.57    88.79   128.78 | (1, 1, 1, 1, 1) OK
+r1_mut_e_n10   158   158   0   0 |   25.60   25.56   44.80  121.59  166.39 |   217.55    88.78   128.78 | (1, 1, 1, 1, 1) OK
+r1_mut_a_n10   158   158   5  10 |  -38.40   25.56   44.80  121.59  166.39 |   153.55    24.78   128.78 | (1, 1, 1, 1, 1) OK
+r1_mut_d_n10   158   158   4  10 |   25.60   25.56   44.80  121.59  166.39 |   217.55    88.77   128.78 | (1, 1, 1, 1, 1) OK
+r1_mut_b_n30   158   158   1  30 |  217.59 -166.43   44.80  121.59  166.39 |   217.55    88.78   128.78 | (2, 4, 2, 2, 2) MISMATCH
+r1_mut_b_n0   158   111   1   0 |   25.60   25.59   44.80   83.20  127.99 |   179.18    86.87    92.32 | (3, 3, 3, 3, 3) OK
+r1_postmut158   158   158   0   0 |   25.60   25.57   44.80  121.59  166.39 |   217.56    88.79   128.78 | (1, 1, 1, 1, 1) OK
+r2_nostim158   158   111   0   0 |   25.60   25.56   44.80   83.20  127.99 |   179.15    86.83    92.32 | (2, 2, 2, 2, 2) OK
+r2_base100    100    66   0   0 |   25.60   25.57   44.80   51.20   95.99 |   147.17    89.76    57.41 | (2, 2, 2, 2, 2) OK
+r2_base158    158   333   0   0 |   25.60   25.59   44.80  262.39  307.18 |   358.37    93.84   264.53 | (3, 3, 3, 3, 3) OK
+r2_base1514  1514  1514   0   0 |   25.60   25.58   44.80 1203.13 1247.93 |  1299.11   118.41  1180.70 | (1, 1, 1, 1, 1) OK
+r2_rep100a    100   100   0   0 |   25.60   25.58   44.80   70.40  115.19 |   166.37    82.59    83.78 | (1, 1, 1, 1, 1) OK
+r2_rep158a    158    66   0   0 |   25.60   25.57   44.80   44.80   89.60 |   140.76    83.36    57.41 | (2, 2, 2, 2, 2) OK
+r2_rep1514a  1514  1514   0   0 |   25.60   25.58   44.80 1209.53 1254.33 |  1305.51   124.81  1180.70 | (1, 1, 1, 1, 1) OK
+r2_rep100b    100   100   0   0 |   25.60   25.59   44.80   76.80  121.59 |   172.78    89.00    83.78 | (1, 1, 1, 1, 1) OK
+r2_rep158b    158   158   0   0 |   25.60   25.57   44.80  121.59  166.39 |   217.56    88.78   128.78 | (1, 1, 1, 1, 1) OK
+r2_rep1514b  1514  1514   0   0 |   25.60   25.56   44.80 1209.53 1254.33 |  1305.50   124.79  1180.70 | (3, 3, 1, 1, 1) MISMATCH
+r2_mut_b_n10   158   158   1  10 |   89.60  -38.43   44.80  121.59  166.39 |   217.56    88.79   128.78 | (1, 1, 1, 1, 1) OK
+r2_mut_c_n10   158   158   3  10 |   25.60   89.57  -19.20  121.59  102.39 |   217.57    88.79   128.78 | (1, 1, 1, 1, 1) OK
+r2_mut_a_n10   158   158   5  10 |  -38.40   25.60   44.80  121.59  166.39 |   153.59    24.81   128.78 | (1, 1, 1, 1, 1) OK
+r2_mut_d_n10   158   158   4  10 |   25.60   25.58   44.80  121.59  166.39 |   217.57    88.79   128.78 | (2, 2, 2, 2, 2) OK
+r2_mut_b_n30   158   158   1  30 |  217.59 -166.44   44.80  121.59  166.39 |   217.55    88.77   128.78 | (1, 1, 1, 1, 1) OK
+r2_mut_b_n0   158   158   1   0 |   25.60   25.58   44.80  121.59  166.39 |   217.57    88.79   128.78 | (1, 1, 1, 1, 1) OK
+r2_postmut158   158   158   0   0 |   25.60   25.59   44.80  121.59  166.39 |   217.58    88.81   128.78 | (1, 1, 1, 1, 1) OK
+r3_nostim158   158   114   0   0 |   25.60   25.56   44.80   89.60  134.39 |   185.55    90.91    94.64 | (1, 1, 1, 1, 1) OK
+r3_base100    100    66   0   0 |   25.60   25.56   44.80   44.80   89.60 |   140.76    83.35    57.41 | (2, 2, 2, 2, 2) OK
+r3_base158    158   333   0   0 |   25.60   25.59   44.80  262.39  307.18 |   358.37    93.84   264.53 | (3, 3, 3, 3, 3) OK
+r3_base1514  1514  1514   0   0 |   25.60   25.59   44.80 1203.13 1247.93 |  1299.12   118.42  1180.70 | (1, 1, 1, 1, 1) OK
+r3_rep100a    100   100   0   0 |   25.60   25.56   44.80   76.80  121.59 |   172.76    88.97    83.78 | (1, 1, 1, 1, 1) OK
+r3_rep158a    158   158   0   0 |   25.60   25.59   44.80  121.59  166.39 |   217.58    88.81   128.78 | (1, 1, 1, 1, 1) OK
+r3_rep1514a  1514  1514   0   0 |   25.60   25.56   44.80 1203.13 1247.93 |  1299.10   118.39  1180.70 | (2, 2, 2, 2, 2) OK
+r3_rep100b    100   100   0   0 |   25.60   25.60   44.80   70.40  115.19 |   166.39    82.61    83.78 | (1, 1, 1, 1, 1) OK
+r3_rep158b    158   158   0   0 |   25.60   25.60   44.80  121.59  166.39 |   217.59    88.81   128.78 | (1, 1, 1, 1, 1) OK
+r3_rep1514b  1514  1514   0   0 |   25.60   25.58   44.80 1209.53 1254.33 |  1305.51   124.81  1180.70 | (1, 1, 1, 1, 1) OK
+r3_mut_b_n10   158   158   1  10 |   89.60  -38.41   44.80  121.59  166.39 |   217.58    88.80   128.78 | (1, 1, 1, 1, 1) OK
+r3_mut_c_n10   158   158   3  10 |   25.60   89.59  -19.20  121.59  102.39 |   217.58    88.81   128.78 | (2, 2, 2, 2, 2) OK
+r3_mut_a_n10   158   158   5  10 |  -38.40   25.57   44.80  121.59  166.39 |   153.56    24.78   128.78 | (1, 1, 1, 1, 1) OK
+r3_mut_d_n10   158   333   4  10 |   25.60   25.56   44.80  262.39  307.18 |   358.34    93.81   264.53 | (3, 2, 2, 2, 2) MISMATCH
+r3_mut_b_n30   158   158   1  30 |  217.59 -166.43   44.80  121.59  166.39 |   217.56    88.78   128.78 | (1, 1, 1, 1, 1) OK
+r3_mut_b_n0   158   158   1   0 |   25.60   25.56   44.80  121.59  166.39 |   217.55    88.78   128.78 | (3, 3, 1, 1, 1) MISMATCH
+r3_postmut158   158   158   0   0 |   25.60   25.57   44.80  121.59  166.39 |   217.56    88.78   128.78 | (1, 1, 1, 1, 1) OK
+
+==== 干净样本 (ack=1 + 计数一致 + fe_len==请求长度): 26 条 ====
+     L     n | (B) 首字节->整帧交付          (A)=(B)-线上串行化          a->b / b->c / c->e(SOP) e(SOP)->e(TLAST)      
+   100     7 |   170.03 [ 166.37, 172.78]    86.24 [  82.59,  89.00]  25.60/ 25.58/ 44.80    74.05 [  70.40,  76.80]
+   158    11 |   217.57 [ 217.55, 217.59]    88.79 [  88.78,  88.81]  25.60/ 25.58/ 44.80   121.59 [ 121.59, 121.59]
+  1514     8 |  1301.51 [1299.10,1305.51]   120.81 [ 118.39, 124.81]  25.60/ 25.58/ 44.80  1205.53 [1203.13,1209.53]
+
+---- 硬下限校验 (B) >= (8+L)*8/10.3125e9 ----
+   PASS (64 条 ack=1 全部通过)
+
+---- (B) 对帧长的仿射拟合 (只用干净样本) ----
+   slope  = 0.799818 ns/byte   线上标称 = 0.775758 ns/byte   比 = 1.0310
+   intercept(L=0) = 90.61 ns  (8B 前导的串行化 = 6.21 ns)
+   SOP->SOP 流水之和 (a->b + b->c + c->e) = 95.98 ns
+
+---- 变异 (观测链上的可编程延迟, 参考 = L=158 无变异样本均值) ----
+   ref n=11  a->b=25.60  b->c=25.58
+   case         msel   mn  Lfe |   D(a->b)   期望 a->b |   D(b->c)   期望 b->c
+   r0_mut_b_n10    1   10  158 |    +64.00      0.00 |    -63.99      0.00
+   r0_mut_c_n10    3   10  158 |     +0.00      0.00 |    +64.01     64.00
+   r0_mut_a_n10    5   10  158 |    -64.00     64.00 |     -0.01      0.00
+   r0_mut_d_n10    4   10  333 |     +0.00      0.00 |     -0.02      0.00
+   r0_mut_b_n30    1   30  158 |   +192.00      0.00 |   -192.01      0.00
+   r1_mut_b_n10    1   10  158 |    +64.00      0.00 |    -63.99      0.00
+   r1_mut_c_n10    3   10  158 |     +0.00      0.00 |    +64.00     64.00
+   r1_mut_a_n10    5   10  158 |    -64.00     64.00 |     -0.02      0.00
+   r1_mut_d_n10    4   10  158 |     +0.00      0.00 |     -0.02      0.00
+   r1_mut_b_n30    1   30  158 |   +192.00      0.00 |   -192.01      0.00
+   r2_mut_b_n10    1   10  158 |    +64.00      0.00 |    -64.01      0.00
+   r2_mut_c_n10    3   10  158 |     +0.00      0.00 |    +63.99     64.00
+   r2_mut_a_n10    5   10  158 |    -64.00     64.00 |     +0.02      0.00
+   r2_mut_d_n10    4   10  158 |     +0.00      0.00 |     -0.00      0.00
+   r2_mut_b_n30    1   30  158 |   +192.00      0.00 |   -192.02      0.00
+   r3_mut_b_n10    1   10  158 |    +64.00      0.00 |    -63.99      0.00
+   r3_mut_c_n10    3   10  158 |     +0.00      0.00 |    +64.01     64.00
+   r3_mut_a_n10    5   10  158 |    -64.00     64.00 |     -0.01      0.00
+   r3_mut_d_n10    4   10  333 |     +0.00      0.00 |     -0.02      0.00
+   r3_mut_b_n30    1   30  158 |   +192.00      0.00 |   -192.01      0.00
+
+---- 健康位 ----
+   r0_nostim158 ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=46854 anchor_evt(fe=56854 dp=56854) drp_to=0
+   r0_base100  ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=18962 anchor_evt(fe=63785 dp=63785) drp_to=0
+   r0_base158  ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=34471 anchor_evt(fe=4215 dp=4215) drp_to=0
+   r0_base1514 ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=30738 anchor_evt(fe=34647 dp=34647) drp_to=0
+   r0_rep100a  ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=40541 anchor_evt(fe=52845 dp=52845) drp_to=0
+   r0_rep158a  ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=13112 anchor_evt(fe=25528 dp=25528) drp_to=0
+   r0_rep1514a ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=26941 anchor_evt(fe=5849 dp=5849) drp_to=0
+   r0_rep100b  ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=63796 anchor_evt(fe=39413 dp=39413) drp_to=0
+   r0_rep158b  ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=12594 anchor_evt(fe=4859 dp=4859) drp_to=0
+   r0_rep1514b ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=14563 anchor_evt(fe=32903 dp=32903) drp_to=0
+   r0_mut_b_n10 ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=3849 anchor_evt(fe=64860 dp=64860) drp_to=0
+   r0_mut_c_n10 ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=37872 anchor_evt(fe=36355 dp=36355) drp_to=0
+   r0_mut_a_n10 ack=1 fe_cap_seen=1 busy=0 lane_flags=0 cal_evt=30412 anchor_evt(fe=4442 dp=4442) drp_to=0
+   r0_mut_d_n10 ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=52206 anchor_evt(fe=18318 dp=18318) drp_to=0
+   r0_mut_b_n30 ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=54221 anchor_evt(fe=2217 dp=2217) drp_to=0
+   r0_mut_b_n0 ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=21396 anchor_evt(fe=41665 dp=41665) drp_to=0
+   r0_postmut158 ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=42961 anchor_evt(fe=47555 dp=47555) drp_to=0
+   r1_nostim158 ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=43528 anchor_evt(fe=20506 dp=20506) drp_to=0
+   r1_base100  ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=33108 anchor_evt(fe=62014 dp=62014) drp_to=0
+   r1_base158  ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=2145 anchor_evt(fe=52459 dp=52459) drp_to=0
+   r1_base1514 ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=51868 anchor_evt(fe=61512 dp=61512) drp_to=0
+   r1_rep158   ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=28262 anchor_evt(fe=9475 dp=9475) drp_to=0
+   r1_mut_b_n10 ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=14350 anchor_evt(fe=57238 dp=57238) drp_to=0
+   r1_mut_c_n10 ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=62668 anchor_evt(fe=41252 dp=41252) drp_to=0
+   r1_mut_e_n10 ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=41242 anchor_evt(fe=21403 dp=21403) drp_to=0
+   r1_mut_a_n10 ack=1 fe_cap_seen=1 busy=0 lane_flags=0 cal_evt=39258 anchor_evt(fe=19147 dp=19147) drp_to=0
+   r1_mut_d_n10 ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=25374 anchor_evt(fe=5066 dp=5066) drp_to=0
+   r1_mut_b_n30 ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=8479 anchor_evt(fe=55252 dp=55252) drp_to=0
+   r1_mut_b_n0 ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=45062 anchor_evt(fe=6619 dp=6619) drp_to=0
+   r1_postmut158 ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=40294 anchor_evt(fe=20752 dp=20752) drp_to=0
+   r2_nostim158 ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=10812 anchor_evt(fe=65217 dp=65217) drp_to=0
+   r2_base100  ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=15754 anchor_evt(fe=23900 dp=23900) drp_to=0
+   r2_base158  ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=38657 anchor_evt(fe=24891 dp=24891) drp_to=0
+   r2_base1514 ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=5502 anchor_evt(fe=34262 dp=34262) drp_to=0
+   r2_rep100a  ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=12780 anchor_evt(fe=40687 dp=40687) drp_to=0
+   r2_rep158a  ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=24637 anchor_evt(fe=40315 dp=40315) drp_to=0
+   r2_rep1514a ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=55151 anchor_evt(fe=31728 dp=31728) drp_to=0
+   r2_rep100b  ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=59023 anchor_evt(fe=63034 dp=63034) drp_to=0
+   r2_rep158b  ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=50640 anchor_evt(fe=31221 dp=31221) drp_to=0
+   r2_rep1514b ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=54304 anchor_evt(fe=37453 dp=37453) drp_to=0
+   r2_mut_b_n10 ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=62697 anchor_evt(fe=45324 dp=45324) drp_to=0
+   r2_mut_c_n10 ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=16086 anchor_evt(fe=38607 dp=38607) drp_to=0
+   r2_mut_a_n10 ack=1 fe_cap_seen=1 busy=0 lane_flags=0 cal_evt=59404 anchor_evt(fe=50612 dp=50612) drp_to=0
+   r2_mut_d_n10 ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=25331 anchor_evt(fe=21922 dp=21922) drp_to=0
+   r2_mut_b_n30 ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=16840 anchor_evt(fe=36247 dp=36247) drp_to=0
+   r2_mut_b_n0 ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=42464 anchor_evt(fe=33186 dp=33186) drp_to=0
+   r2_postmut158 ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=53355 anchor_evt(fe=46504 dp=46504) drp_to=0
+   r3_nostim158 ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=46854 anchor_evt(fe=56854 dp=56854) drp_to=0
+   r3_base100  ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=18962 anchor_evt(fe=63785 dp=63785) drp_to=0
+   r3_base158  ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=34471 anchor_evt(fe=4215 dp=4215) drp_to=0
+   r3_base1514 ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=30738 anchor_evt(fe=34647 dp=34647) drp_to=0
+   r3_rep100a  ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=40541 anchor_evt(fe=52845 dp=52845) drp_to=0
+   r3_rep158a  ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=13112 anchor_evt(fe=25528 dp=25528) drp_to=0
+   r3_rep1514a ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=26941 anchor_evt(fe=5849 dp=5849) drp_to=0
+   r3_rep100b  ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=63796 anchor_evt(fe=39413 dp=39413) drp_to=0
+   r3_rep158b  ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=12594 anchor_evt(fe=4859 dp=4859) drp_to=0
+   r3_rep1514b ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=14563 anchor_evt(fe=32903 dp=32903) drp_to=0
+   r3_mut_b_n10 ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=3849 anchor_evt(fe=64860 dp=64860) drp_to=0
+   r3_mut_c_n10 ack=1 fe_cap_seen=1 busy=0 lane_flags=1 cal_evt=37872 anchor_evt(fe=36355 dp=36355) drp_to=0
+   r3_mut_a_n10 ack=1 fe_cap_seen=1 busy=0 lane_flags=0 cal_evt=30412 anchor_evt(fe=4442 dp=4442) drp_to=0
+   r3_mut_d_n10 ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=52206 anchor_evt(fe=18318 dp=18318) drp_to=0
+   r3_mut_b_n30 ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=54221 anchor_evt(fe=2217 dp=2217) drp_to=0
+   r3_mut_b_n0 ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=21396 anchor_evt(fe=41665 dp=41665) drp_to=0
+   r3_postmut158 ack=1 fe_cap_seen=1 busy=0 lane_flags=2 cal_evt=42961 anchor_evt(fe=47555 dp=47555) drp_to=0
+
+DONE
