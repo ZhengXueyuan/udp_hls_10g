@@ -543,13 +543,25 @@ $ git check-ignore -q "$f" ; echo $?
 2. **闸2 的完整证据面**（`_proj_10g/xxv_gate2/`）—— 整目录排除是**照任务书执行**，不代表闸2 的证据已归档；它正在增长（会话内 429 KB → 88 MB）。
 3. **8 份笔记我未逐份通读全文**（合计 345,503 B）。§B 的引用表来自**机械化抽取 + 抽样核对**（`P7B_GATE1.md` 证据地图、`P7B_MAC_GATEFIX.md` §1/§10、`P7B_RXCLASSIFY_DESIGN.md` §变异段落 逐段读过）。**完全可能存在"引用在正文散文里、不带路径前缀"的情形没被抽到**。
 4. **`.gitignore` 草案只对 33 个代表路径实测过**（§A.0），不是对全量 970 个条目跑过。执行前建议补一次全量对照：加规则后跑 `git status --porcelain -uall | grep '^??' | wc -l`，期望值 **≈ 639**（= 970 − 327 放行 − 若干已跟踪）。
-5. ⚠️ **行尾纪律的一处实际违例（实测）**：`git diff` 涉及 **80 个 `.bat`**，其中 **75 个仍是 CRLF、5 个已变成 LF-only**：
-   `_proj_10g/sim/run_tb_p7a_counters.bat`、`review_scratch/run.bat`、`review_scratch/runmac.bat`、
-   `sim/snapcdc/atk/ratio/run_atk_ratio.bat`、`sim/snapcdc/atk/reset/run_atk_reset.bat`。
-   它们的 **HEAD blob 是 CRLF**（`git cat-file blob HEAD:<f> | grep -cU $'\r'` 实测 = 全行数）
-   ⇒ 是本次编辑把 CRLF 改掉了。本工程纪律写明"`.bat` 只允许 ASCII + CRLF"，且记忆里有
-   "LF 行尾导致 bat 执行失败"的历史坑。**未核实这 5 个门是否真的跑不起来**（未执行任何门）。
-   ⇒ **建议提交前把这 5 个文件转回 CRLF（保留编辑内容）**。新增的 10 个 `.bat` 实测全部 CRLF ✅。
+5. ⚠️ **行尾：一条已被证伪的归因（2026-09-30 订正）** —— 原稿写"`git diff` 涉及 **80 个 `.bat`**，其中
+   **5 个已变成 LF-only**：…，它们的 **HEAD blob 是 CRLF**（`git cat-file blob HEAD:<f> | grep -cU $'\r'` 实测 = 全行数）
+   ⇒ **是本次编辑把 CRLF 改掉了**"。**该归因不成立**：本仓 `core.autocrlf=true`
+   （`git config --get core.autocrlf` 实测 `true`）⇒ 索引 / HEAD blob 里**永远存 LF** ⇒
+   **从 HEAD blob 看不出工作区的行尾**，所以不能由"HEAD blob 是 CRLF"推出"是本次编辑改坏的"
+   （同一课见 `PORT_NOTES.md` 的 P7b 节教训 8：`core.autocrlf=true` 下从 HEAD blob 看不出工作区的行尾，
+   本轮"有两次测量栽在这上面"）。
+   **实际事实（已转正 = 作为事实登记，不是推论）**：工作区里**确实存在本来就不是 CRLF 的 `.bat`** ——
+   那是**既存状态**、**不是本轮编辑引入的**（`P7B_HANDOFF.md` §4 第 6 条原先记 **11 个** ——
+   ⚠️ **该数字已作废**；2026-09-30 两处统一为**实测值**，命令
+   `git ls-files '*.bat' | while IFS= read -r f; do if LC_ALL=C grep -qU $'\r' "$f"; then echo CRLF; else echo LF-only; fi; done | sort | uniq -c`
+   ⇒ 结果 = **304 CRLF / 16 LF-only**（总 320）；⚠️ **计数随文件增删而变，命令如上可复现**。
+   另用 Python 按**字节**数 `\r\n` / `\n` 交叉复核，结果相同；⚠️ 不要用按行计数的 `grep -c $'\r'` 写法。
+   故此处只作事实登记）；工程纪律"`.bat` 只允许 ASCII + CRLF"依然成立 —— 那批 LF-only 是对纪律的
+   **既存**违例，与本轮编辑无关。原稿点名的 5 个文件（`_proj_10g/sim/run_tb_p7a_counters.bat`、
+   `review_scratch/run.bat`、`review_scratch/runmac.bat`、`sim/snapcdc/atk/ratio/run_atk_ratio.bat`、
+   `sim/snapcdc/atk/reset/run_atk_reset.bat`）**本轮实测已全部是 CRLF**（逐文件 `CRLF 行数 == LF 行数`）。
+   ⇒ **本方案不碰任何 `.bat` 的行尾**（零 diff）：不开"转回 CRLF"的动作（点名的 5 个已是 CRLF），
+   也不为既存的那批 LF-only 单独开一个提交面。
 6. **`git add -u` 的边界**：本方案建议 L1 用"目录限定的 `-u`"，但其精确路径集我未逐条枚举
    （`git status --porcelain | grep '^ M'` 的 107 行已在 §C 分类，**执行者需按目录逐个 `add`**，不要图省事写 `-A`）。
 

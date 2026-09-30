@@ -4,28 +4,51 @@
 施工策略 (2026-08-23 用户拍板): **1G 先行、10G-ready** — 数据面统一 64bit 宽流水 @125MHz,
 10G 时仅提时钟到 156.25MHz, 流水线不改。设计审查与总计划: `../udp_hls_eco/design_review/` (01-04)。
 
-## 当前状态与下一步 (2026-09-29)
+## 当前状态与下一步 (2026-09-30)
 
-**P7b (10G 数据面上板第一轮) 进行中**: **闸 0 ✅ / 闸 1 ✅ / 新 64 位 MAC ✅ (未接入) /
-`rx_classify` v2 ✅ (未落进 `rtl/`)**; **闸 2 (真网卡 802.3 裁决) 进行中、闸 3 (全链门)/闸 4 (板级验收) 未起**。
+**P7b (10G 数据面) 五个闸全部收口**: **闸 0 ✅ / 闸 1 ✅ / 闸 2 ✅ / 闸 3 ✅ / 闸 4 ✅ (板级验收通过)**。
+新 64 位 XGMII MAC **已接入 `board/wrapper_p4.v` 的 `ifdef P7B_10G`**; `rx_classify` v2 **已落进 `rtl/`**。
+两个真缺陷已修: ① `/S/` 落 XGMII **lane4** 的帧 SOP 字非满对齐 (`mac_rx_10g.v` +122/−25);
+② pad/FCS 修复打出的 **TX 时序回归** (`mac_tx_10g.v` 的 `padrem`/`lw_ts` 等价化简)。
+**合并构建 `WNS +0.128 / WHS +0.010`、三类失败端点全 0**; 位流 sha256 `0e1c8088…b557`。
+
+⚠️ **但有 3 件事别记错**:
+- **闸 4 的唯一 FAIL = `C8`** (`pcs_vcc_cyc` 8 位饱和 ⇒ "在涨"结构性不可判; **判据一字未改、非设计缺陷**);
+  **另有 4 项未测** = `F1-E4b` (RX 方向载荷逐字节) · `F1-E5` · `F1-E6` · `F5b` (RTO/重传计数结构性不可读)。
+  ⭐ **最终判据表 38 行 = `PASS=33` / `FAIL=1` / `未测=4` —— 以 `_proj_10g/notes/P7B_GATE4_ACCEPT3.md` §2 的表为准**
+  (⚠️ 此前流传的"32"作废: 它把两条"骑墙行"的一半计入 PASS 又各记一个未测行 ⇒ 37 行, 在 36 行表里不自洽)。
+- **产品级第一优先 = 10G 线速未达标**: app 发生器 **1 字节/拍** ⇒ 实测载荷 **1.248 Gbps** = 线速 ~12.5%。
+  ⚠️ 闸 1 的 9,999.94 Mbps 与闸 2 的 NIC link **只证明链路/物理层**, **数据面端到端从未跑过线速**。
+- **闸 4 的三条 FAIL 去向里, 没有一条是"现象变好了"**: 2 条是**判据改了** (`T_RUN` 拆分 / `N_SELF` 加容差),
+  1 条是**判据修好了、首次真的被评估** (`N_XCHK` 的 `${assoc+x}` 守卫对关联数组恒假 ⇒ 结构性从未评估)。
 
 **接手必读 (按序, 都在本仓内)**:
-1. `P7B_SPEC.md` —— 施工规格: 路线与 license 分叉 / 接口冻结 / 闸序 / **66 条正判据 + 9 条负对照**。
-2. `_proj_10g/notes/P7B_GATE1.md` —— **闸 1 板级读数原始件** (2 通道官方 PCS 板内 J7↔J8 自环:
-   6.6 s / **30,056,095 帧零错** · 9,999.94 Mbps · 三条负对照按期望翻转 · 1a GT 内部环回补测)。
-3. `_proj_10g/notes/P7B_{MAC_DESIGN,MAC_GATEFIX,MAC_TIMING}.md` —— 新 64 位 XGMII MAC
-   (单元门 **252/0**; 与 PCS 合并 **WNS +0.401 / 三类失败端点全 0**; ⚠️ **未接入 `board/wrapper_p4.v`**)。
-4. `_proj_10g/notes/P7B_IMPLICIT_GATE_FIX.md` + `P7B_IMPLICIT_GATE_ROLLOUT.md` —— 隐式网**哑门**修复
-   (`implicitly declared` 在 Vivado 2025.2 恒 0 ⇒ 必须补 xelab/synth 面; 铺开 87 文件 / 261 处)。
-5. `_proj_10g/notes/P7B_U7_AND_PEER.md` —— 字节序取证 (**lane0 = 首字节** ⇒ MAC 做纯 8 字节镜像)
-   + 闸 2 的对端机现状。
-6. `PORT_NOTES.md` 的 "2026-09-29 P7b" 节 —— 里程碑日志 + 10 条教训 + 未结项清单。
+1. ⭐ **`_proj_10g/notes/P7B_HANDOFF.md`** —— **下一轮开工先读这份**: 环境现状 (板子在发图案流 / PCIe 窗口活着 /
+   唯一连线 `J8↔enp1s0f1np1` / `tools/peer_ssh.py` + `PEER_PW` / `/32` 路由会被静默冲掉) ·
+   状态总表 · 下一步三件事与前置 · 待办账 16 条 · **产品级 Gap 6 条** · 用户偏好 · 全局经验 30–34 条。
+2. `P7B_SPEC.md` —— 施工规格: 路线与 license 分叉 / 接口冻结 / 闸序 / **66 条正判据 + 9 条负对照**。
+3. `_proj_10g/notes/P7B_GATE4_ACCEPT{,2,3}.md` + `P7B_GATE4_CRITERIA_CLOSEOUT.md` —— **闸 4 三轮读数** +
+   判据侧收口 + **产品级 Gap 6 条**。
+4. `_proj_10g/notes/P7B_{UDP_APP_ROOTCAUSE,UDP_DIAG2,LANEFIX}.md` —— 板级失效的根因链 (三假设全否 →
+   **lane4 双证** → 修法 +122/−25 + 判据族扫描)。
+5. `_proj_10g/notes/P7B_{TIMING_RERUN,MAC_TIMING_FIX,BUILD_FINAL}.md` —— `−0.173 / 39 失败` → `padrem` 等价化简
+   → **合并构建 +0.128 / 0 失败**。
+6. `_proj_10g/notes/P7B_REGRESSION.md` + `P7B_CHAIN_COVERAGE.md` + **`P7B_GATE_HARNESS_FIX.md`** —— **136 门全仓回归**
+   (1 处真回归 **已收口** + 21 既存 + 8 哑门 **3 条已修**) · 链级门 **80→106** 与反例双跑 · 门修复的收口与反例。
+7. `_proj_10g/notes/P7B_EVIDENCE_AUDIT.md` —— **历史证据污染审计** (两个缺陷对已入库读数影响到什么程度)。
+8. `P7B_VENDOR_EXAMPLE_DEFECTS.md` · `P7B_LATENCY_GAPS.md` —— 厂商两笔账结案 · 延迟两个缺口的归因。
+9. `PORT_NOTES.md` 的 "2026-09-30 P7b（闸 3 收口 → 闸 4 板级通过）" 节 —— 里程碑日志 + 11 条教训 + 未结项清单。
 
-⚠️ **P7b 尚未完成** —— 闸 2/3/4 未起、MAC 未接入 wrapper、v2 未落 `rtl/`, **别按"已完成"接手**。
+⚠️ **两条"别按已完成接手"的账**:
+- ~~`p4_rxclass` / `p4_rxclass_xk` 真回归未收口~~ ⇒ ✅ **已收口** (`_proj_10g/notes/P7B_GATE_HARNESS_FIX.md`:
+  两条门的 xvlog 行各补 1 个 `..\..\rtl\fifo_sync.v` ⇒ **EXIT=0**、判据与基线逐字相同、**未改 RTL**;
+  同轮还修了 3 条哑门 `p4_replay` / `p5c_rev_elab` / `p4indm_4gates`)。⚠️ 两条门脚本在 `.gitignore` 里 ⇒ **放行处理中**。
+- **延迟有三个缺口**: `L_PCS` (最大) / fast path → app 队列 (零读数) / `(c)→(d)` 两个 tap (只缺一个真 IPv4/UDP 帧)。
+
 ⚠️ **本条与下面"10G-ready 设计决策"第 2 条冲突时以本条为准**: 那句"10G 前端 = PG157 AXIS 输出
 加一层 shim"**已作废** —— P7b 闸 0 定的是官方 `xxv_ethernet` 取 `CORE = Ethernet PCS/PMA 64-bit`
 (**XGMII 出**) + **自写 64 位 XGMII MAC** (`P7B_SPEC.md` §0/§2.2)。其余三条决策不变。
-(P6b 时代的接手入口仍是 `P6B_SUMMARY.md`; 观测通道现役表 = `P6E_OBS.md`。)
+(P6b 时代的接手入口仍是 `P6B_SUMMARY.md`; 观测通道现役表 = `P6E_OBS.md`, 快照窗口现为 **51 字**。)
 
 ## 10G-ready 设计决策 (不可违背)
 

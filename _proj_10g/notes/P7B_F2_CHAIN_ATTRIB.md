@@ -245,7 +245,7 @@ MUT-NOFLUSH: 70 checks, 10 fail   (含 X3 "no ghost" / "frame1 is B" / 帧数)
 
 ---
 
-## 10. 附带发现 (与 F-2 无关): DEFECT-REG #1 —— mac_tx_10g 补 pad 帧的 FCS 覆盖面
+## 10. 附带发现 (与 F-2 无关): DEFECT-REG #1 —— mac_tx_10g 补 pad 帧的 FCS 覆盖面 [✅ **已修**: `effef26`]
 
 **现象**: `mac_tx_10g` 对**需补 pad 的短帧**算出的 FCS **只覆盖数据字节, 不含 pad**;
 `mac_rx_10g` (以及任何标准对端) 的 CRC 覆盖**收到的全部字节 (含 pad)** ⇒ **自己的 TX 与 RX 不一致**。
@@ -276,6 +276,8 @@ TB 把线上捕获字回放进 RX 注入队列 (`f2x_loop`), 判据 = `rx_stat_c
 **我们的 RX 要求 pad 计入 FCS**。结合 1G 版 `rtl/mac_tx_64.v` (`crc_en = (state==S_DATA) || (state==S_PAD)`,
 pad 计入) 与 10G 版 `mac_tx_10g.v:207` (`crc_en = (state==S_DATA) && ...`, pad 在合并尾字里生成、不进 CRC)
 ——**两个 MAC 对同一线上格式的 FCS 结论不一致**, 10G 版是偏离方。
+（⚠️ 上面这段引的是**修前**的 `mac_tx_10g.v`; 该偏离**已于 `effef26` 修掉** —— 修后 10G 版也把 pad 计入
+FCS, `crc_en` 移到 `:258`, 两个 MAC 口径一致。见本节末"修法"。）
 P6b 板级证据 (真 ping/ARP 通) 落在 1G 版上 ⇒ 1G 口径经真实网卡验收过。
 
 **为什么既有门都看不见**: 单元门 `tb_mac_10g.v` 的 pad 用例把**期望 FCS** 定义成
@@ -284,8 +286,33 @@ P6b 板级证据 (真 ping/ARP 通) 落在 1G 版上 ⇒ 1G 口径经真实网�
 
 **影响面 (定级用)**: 10G 下所有 < 60 内容字节的帧 (ARP 应答 42B、TCP 纯 ACK 54B …) 会被对端丢;
 且经 `u_tx_arb` 的 HLS 慢路径帧 (ARP/ICMP/TCP 握手) 大量落在此区间。
-**修法方向 (未做, rtl/ 本轮禁改)**: 让 pad 字节参与 CRC (把 pad 生成并入 CRC 输入, 或在尾字生成时
-对 pad 计数再喂 CRC), 并按 X5d-1 的口径在单元门补一条"pad 计入 FCS"的判据 (oracle 必须独立于实现)。
+**修法 (✅ 已落地, 提交 `effef26`「P7b 闸3 功能入库: rx_classify v2 落地 + MAC 接进 wrapper + pad/FCS 缺陷修复」,
+文件 `_proj_10g/p7b_mac/rtl/mac_tx_10g.v`)**: 让 pad 字节**参与 CRC** —— pad 在线上就是紧接内容之后的
+值 `0x00` 的正常数据字节, 与 `crc32_64` 的 lane 序 (= 线上字节序) 同向 ⇒ 只需把 **keep 扩到 pad 位置**、
+并把 **pad 位置的 `d` 压成 0**, 就是"内容 ++ pad"的正确 CRC 输入 (新增"一套"逻辑 = 0)。落到源码 4 处
+(`git show --numstat effef26` 记该文件 `+58 / −12`):
+① 新增 `cmask64(n)` (`:211-219`) = "前 n 个 lane 置 1"的掩码 —— 合同允许 keep 之外的 lane 是**任意残值**,
+   `crc_d = cw_data & cmask64(cw_len)` (`:257`) 先把它们压 0, 否则残值会被当 pad 喂进 CRC;
+② `crc_keep` (`:254-256`) 从"内容"扩到"内容 + pad": S_DATA 末字 = `8'hFF << (8 - lw_ts)`
+   (`lw_ts` = 内容残余 + 本字 pad), S_TAIL0 纯 pad 字 = `8'hFF`, S_TAIL0 尾起始字 = `8'hFF << (8 - p0_use)`;
+③ `crc_en` (`:258-259`) 在 S_TAIL0 恒 1 (纯 pad 字也必须推进 CRC);
+④ pad 可能**跨字** ⇒ 末内容字那一拍锁存的 `lw_fcs` (`:340`) 不再是最终值: 新增组合量
+   `p0_fcs = crc_nxt ^ 32'hFFFFFFFF` (`:269`), 由 S_TAIL0 尾起始字的发射 mux (`:287`) 取用,
+   并在 `:373` `m_fcs <= p0_fcs` 覆盖之 (纯 pad 字的 `tstart0=8` ⇒ 那个中间态不被取用)。
+`init/en/d/keep` 仍与发射同拍 (工程坑 1); **RX 一行未动**。对账 (提交信息): 修前线上 FCS
+`e4 16 1d c3` → 修后 `11 41 ab 91` (zlib 独立复核) ⇒ 上面证据 B 的"自家 TX 出、自家 RX 判 crc_err"消失。
+
+**判据跟着改了 (不改 oracle ⇒ 修完照样判不出来)**: 原 oracle 是 `fcsb = calc_fcs(20)` —— **只算内容字节**,
+与当时实现的覆盖面**逐字同源** ⇒ 实现漏 pad 时 oracle 同步漏 (`252 checks / 0 fail` 全绿; 提交信息记其位置为
+`tb_mac_10g.v:925`, 现该行已被取代, 原判据与替换理由逐字留在 `tb_mac_10g.v:920-925` 的订正注释里)。
+现改为**独立 oracle `fcs_chk_wire` (`tb_mac_10g.v:472-492`), 输入 = 从线上解出的字节 `expb[]`**
+(含 DUT 自补的 pad), 两条判据: (a) DUT 写在线上的 FCS 字段 == `CRC(线上全部内容字节 incl pad)` 的终值取反;
+(b) 自洽残差 —— 线上内容 + FCS 全流过 ⇒ `0xDEBB20E3` (与 `mac_rx_10g` 同一魔数)。
+调用点 = 组 8.2 的 pad 用例 (`:925`) + 新增的 **TX→RX 自洽回放组**(组 11, `:1164-1214`:
+内容 L = 1/18/42/54/57 + 60/200 对照, 逐档判 `rx_fcrs==1` 且交付逐字节)。
+⇒ **判据 252 → 337** (`_proj_10g/p7b_mac/sim/_mut_logs/00_clean.log`: `337 checks, 0 fail`, `VERDICT = PASS`);
+变异 **16 条**全符预期 —— 其中 **M11a**(整块回退到 HEAD 语义) 的 FAIL 集与"直接拿 HEAD 的 RTL 跑"
+**逐条相同**(等价标定), **M11d 等价, 如实报"没抓到"**。
 **未核实**: 802.3 §3.2.9 原文不在本仓 (未逐字核); 但"自家 TX/RX 不一致"已由 X5a/X5d 自证, 不依赖外部标准。
 
 ---
@@ -314,5 +341,10 @@ P7B_MUT='D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\p7b_chain\_f2_scratch' cmd //c
 1. `sim/tb_p7b_chain.v`: 新增 F2X 组 (X1a/X1b/X2/X3/X4 + X5a-d) —— 合同正确的 F-2 链级判据 + 归因诊断
    (`[F2W]`/`[RAW]`/`[INJW]`/`[TR]`/`[WFRAME]`/`[F2X]` 打印)。窗口用快照基准, 注入用 negedge 落地。
 2. 原 F-2 组的 4 条 `[OPEN]` 行改为标注 **SUPERSEDED by F2X X4**(读数与历史保留, 不改成"通过")。
-3. X5a 登记为 **REGISTERED DEFECT #1** 判据 (修好之前应保持红) + `[DEFECT-REG #1]` 醒目打印。
+3. X5a 登记为 **REGISTERED DEFECT #1** 判据 + `[DEFECT-REG #1]` 醒目打印。
+   ✅ **2026-09-30 订正**：该缺陷（pad/FCS 覆盖面）**已修**（提交 `effef26`）⇒ **该判据现已转绿**：
+   修后链级门 `80 checks, 0 fail` / `VERDICT = PASS`，`X5a pad frame complete+padFCS` 判 `[PASS]`
+   （`_proj_10g/p7b_chain/logs/f2x11_pristine_newmac_FINAL.log:1760,1889`）。
+   原句"**修好之前应保持红**"**已作废**；`[DEFECT-REG #1]` 打印保留、转为**回归守卫**
+   （变异 `MUT-PADNOCRC` 把它重新打红）。同源订正见本文件 §10 标题的 `[✅ 已修: effef26]`。
 4. 备份: `sim/tb_p7b_chain.v.f2bak`。

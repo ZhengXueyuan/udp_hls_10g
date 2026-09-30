@@ -100,11 +100,20 @@
 
 反向那条**不是凑数**：它给 `LOS`/`/E/` 一个"本方向健康时恒 0"的对照面，并且在负对照里当**独立证人**（§5.8）。
 
-### 2.2 流量源：**官方 example 的模块，未改一行**
+### 2.2 流量源：**官方 example 的模块**（闸 1 那次构建：未改一行；后续构建：参数化副本 —— 见下）
 
 - 文件：`_proj_10g/xxv_probe/pcs64_ex/pcs64_ex/imports/pcs64_pkt_gen_mon.v`
-  （**明文**，145846 B，sha256 `2782d688b5ea4e676be4e984735f759d9c7be7d6ebd6a2a0ac93f095ab0e03e6`；
-  被 `xxv_loop/tcl/s2_build.tcl` **按绝对路径直接加进工程，不复制、不改**）
+  （**明文**，145846 B，sha256 `2782d688b5ea4e676be4e984735f759d9c7be7d6ebd6a2a0ac93f095ab0e03e6`）
+- ⚠️ **"不复制、不改"只对闸 1 这一次验收构建成立**（2026-09-30 订正）：
+  **闸 1 的板级读数对应的就是出厂原件、未改一行** —— `logs/s2_build_FINAL.txt:251` 综合的是厂商路径那份，
+  位流 sha256 `5560375b…72ee2c` 即出自那次构建（§4.1 / §8 登记值）；
+  **后续构建用的是参数化副本** `xxv_loop/rtl/pcs64_pkt_gen_mon_ds.v`（`S2_STAGE = round2` 起：
+  `logs/s2_build_stdout.txt:274` 综合的是副本；现役 `.xpr` 也只挂副本）。
+  **副本与原件在 CRC 参数行（`CRC_POLYNOMIAL` / `init_crc`）上逐字节一致**（对这两行 `diff` 空输出）；
+  实质差异只有 `pay_sel` 一条支路（`data_select = {1'b0, pay_sel}`，`pay_sel=0` 即原件行为）+ 模块改名
+  （其余 ~4,758 行差异是原件 LF / 副本 CRLF 的行尾差 —— `diff -w` 后只剩 16 行）。
+  ⚠️ 日志里的 `S2_COPY_DIFF_LINES = 0` **不能当"逐字节相同"的证据**：
+  它是 `if {[catch {exec diff …} dout]} { set dout "" }` 的**假零**（真实 `diff` 有 4,758 行差异）。
 - 图案（从该文件自己的字面量推出来，**不是猜的**）：`preamble = 64'hFB_55_55_55_55_55_55_D5`、
   `dest_addr = 48'hFF_FF_FF_FF_FF_FF`、`source_addr = 48'h14_FE_B5_DD_9A_82`、`length_type = 16'h0600`；
   `data_select = 2'b0` ⇒ **载荷是全 0**（不是 PRBS）；`insert_crc = 1'b0` ⇒ **不插 FCS**；
