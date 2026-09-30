@@ -1288,6 +1288,7 @@ module wrapper_p4 (
     // 默认构建里这两组是"已声明未用" (零网表影响, 同原有 app_udp_stat_* 状态)。
     wire [31:0] udpapp_tx_bytes, udpapp_tx_frames, udpapp_rx_bytes, udpapp_rx_frames;
     wire [31:0] udpapp_rx_null, udpapp_mismatch;
+    wire [31:0] udpapp_tx_ovf;   // P7B-BIZ W56: TX 字 FIFO 拒写 (同类回归的唯一见证者)
     wire        udpapp_active, udpapp_done;
     wire [3:0]  udpapp_led;
 
@@ -2164,6 +2165,11 @@ module wrapper_p4 (
     wire [15:0] hls_msg_tdata;
     wire        hls_msg_tvalid;
     wire [31:0] srx_stat_commit, srx_stat_drop;
+    // P7B-BIZ 追加 C: 两个同族"本拍空间门"缺陷的**板级守卫计数器**
+    //   (slow_adp 的两个 `.wr()` 原先没把空间门预 AND ⇒ 拒写事件**结构性不可见**;
+    //    修好后它们恒 0, 但一旦写门将来回归本拍 `full`, 它们会立刻响 ⇒ 必须有板级读数,
+    //    否则"修好了"这件事只有仿真背书 —— 本工程已因"自检在板级结构性为 0"吃过一次亏)
+    wire [31:0] srx_stat_fifo_ovf, stx_stat_fifo_ovf;
     wire [63:0] stx_tdata;
     wire [7:0]  stx_tkeep;
     wire        stx_tvalid, stx_tready, stx_tlast;
@@ -2362,6 +2368,7 @@ module wrapper_p4 (
         .hls_rst_n      (hls_rst_n),
         .stat_commit    (srx_stat_commit),
         .stat_drop      (srx_stat_drop),
+        .stat_fifo_ovf  (srx_stat_fifo_ovf),   // P7B-BIZ → W60
         .dbg_starv      (srx_dbg_starv),
         .dbg_hls_rst    ()
     );
@@ -2402,7 +2409,8 @@ module wrapper_p4 (
         .m_axis_tready  (stx_tready),
         .m_axis_tlast   (stx_tlast),
         .stat_frames    (stx_stat_frames),
-        .stat_purge     (stx_stat_purge)
+        .stat_purge     (stx_stat_purge),
+        .stat_fifo_ovf  (stx_stat_fifo_ovf)    // P7B-BIZ → W59
     );
 
     // =====================================================================
@@ -2499,6 +2507,7 @@ module wrapper_p4 (
         .stat_rx_frames (udpapp_rx_frames),
         .stat_rx_null   (udpapp_rx_null),
         .stat_mismatch  (udpapp_mismatch),
+        .stat_tx_ovf    (udpapp_tx_ovf),   // P7B-BIZ: → 快照字 W56 (不接 = 被综合优化掉)
         .active         (udpapp_active),
         .done           (udpapp_done),
         .led            (udpapp_led)
@@ -3061,6 +3070,8 @@ module wrapper_p4 (
     //    W24-W31 全是"跨域完整性锚点"与"新时钟域的正证据" (见下面 §7.1 注释)。
     // ⚠️ 扩窗的处数从"五处"变成**七处** (P6B_SPEC §7.4): 多出来的两处是
     //    ⑥ 三个门自己的参数 (tb_axi_regs / tb_snap_cdc / tb_p6e_pcie_*) 
+    //    (P7B-BIZ 另加两处**本工程特有的**守卫: ⑧ `_proj_10g/notes/p7b_biz_win/check_window.py`
+    //      静态核装配项数/槽号/旧字不移位 ⑨ `tb_biz_win.v` 逐字读回 — 见 P7B_BIZ_WINDOW.md)
     //    ⑦ **两束的索引表** (rtl/snap_seq.v 的 fe_idx_of/dp_idx_of —— 它们必须与下面
     //       fe_src/dp_src 的**拼接项数与顺序**逐项一致; 错一处只会读出"另一个字的正确值")。
     //    ⇒ 唯一能抓 ⑥⑦ 的手段是**逐字读回 32 个字**(全链门)，lint 全程沉默。
@@ -3074,15 +3085,41 @@ module wrapper_p4 (
     //     同一处还有 **`snap_base` 的位宽** (见 `_proj_pcie/rtl/axi_regs.v`):
     //     `{snap_idx,5'b0}` 最大 = (51-1)<<5 = 1600 ⇒ **必须 ≥ 12 位** (旧 11 位会
     //     **静默回绕**: 高地址字读回低地址字的值 = 假 PASS)。本轮的 36→51 一并改了。
-    //     还有 **`snap_idx`**: `r_word[5:0] - 8` 最大 55 ⇒ 6 位仍够 (未变)。
-    localparam SNAP_NW_P6E = 51;        // 总字数 W0..W50
+    //     ⚠️ **P7B-BIZ 订正**: 本轮把 `ar_word/w_word/r_word` 加宽到 **7 位** (见下), 所以
+    //     `snap_idx = r_word[6:0] - 8` 最大 56 ⇒ 7 位 ✓。
+    // 字宽 61 (P7B-BIZ, 2026-09-30): 51 → 61 (**W51..W60**, 10 个新字)。
+    //   ⚠️ W57/W58 = **追加 B** (重传**会话**的定性观测量, 不是计数是状态);
+    //   ⚠️ W59/W60 = **追加 C** (slow_tx_adp / slow_rx_adp 的 `stat_fifo_ovf`,
+    //      两个同族"本拍空间门"缺陷修好后的**板级守卫**), 源都已是模块输出端口。
+    //   ⭐ **本轮的硬上限从 56 抬到 119 —— 靠的是把读侧地址译码加宽 1 位** (见下),
+    //      这是**被逼出来的一步**, 不是顺手改的: 6 个新字 = 57 字 > 旧的 56 字上限,
+    //      而"砍到 55 字"会砍掉本轮点名的判据 (tx_bytes/rx_bytes/mismatch = R3 的判决量;
+    //      retx = F5b; tx_ovf = 那一类静默丢字的唯一见证者)。
+    //   ⚠️⚠️ **为什么不能"不加宽、直接填满 56"** (旧版这里写的理由, 保留作账):
+    //     读侧 SLVERR 负对照 (`rd <未实现> == 0xffffffff`, 闸 4 的 B5/G4) 需要**至少
+    //     一个空 word**。旧译码 `ar_word = araddr[7:2]` 只有 6 位 ⇒ 字 0..63:
+    //       · 56 字 ⇒ `SNAP_LAST_IDX = 63` = 满量程 ⇒ **再也读不出 SLVERR** ⇒ 判据静默无牙;
+    //       · "下一个空地址" `0x20+4*56 = 0x100` **又回绕别名**到 word 0 = MAGIC ⇒ 假 FAIL。
+    //     ⇒ **加宽译码** (ar_word/w_word/r_word 6 → **7** 位, 见 `_proj_pcie/rtl/axi_regs.v`)
+    //       是唯一同时满足"6 个新字"与"负对照必须有牙"的改法, 且**对 < 0x100 的全部
+    //       既有地址逐位等价** (0x00..0xFC 仍映射到字 0..63), 顺带修掉一个既存隐患
+    //       (旧译码下写 `0x108` 会别名到 SCRATCH!)。新的界 = **119 字**
+    //       (字 8..126, 空 word 127 = 0x1FC 当负对照地址)。
+    //   ⚠️ **预算复算** (本轮的 61): 61 ≤ 119 ✓; 未实现地址 = 0x20+4*61 = **0x114** ✓
+    //     (字 69, 真正未实现); `{snap_idx,5'b0}` 最大 = (61-1)<<5 = 1920 < 4096 ✓
+    //     (`axi_regs` 的 `snap_base` 已是 [11:0], 本轮**不需要**再动那一行);
+    //     `snap_idx = r_word[6:0]-8` 最大 56 ⇒ 7 位 ✓。
+    //   动机 = 真实业务(TCP 演示 app)的板侧 oracle: `app_pattern` 的载荷校验计数
+    //   (**R3 / Gap#3 `F1-E4b`**: TCP RX 载荷逐字节) + `tx_stat_retx` (**`F5b`**) +
+    //   `app_udp_pattern.stat_tx_ovf` (**"每帧静默丢 1 整字"那一类缺陷的唯一见证者**)。
+    localparam SNAP_NW_P6E = 61;        // 总字数 W0..W60 (未实现地址 = 0x114 = word 69)
     // ⚠️ 这两个是 **snap_seq (链式序列器)** 的两束, **P7b 未改** —— P7b 的 15 个新字走
     //    三条独立的 snap_cdc 束 (见采集段的"三束并行"注释), 所以这里仍是 14/22。
     localparam SNAP_FE_NW  = 14;        // FE 束字数 (b 域 = gmii_clk)
     localparam SNAP_DP_NW  = 22;        // DP 束字数 (b 域 = dp_clk)
     // P7b 三条新束的字数 (与上面同源: 装配段 `snap_dout_all` 的项数必须与之对账)
     localparam SNAP_P7BFE_NW = 3;       // W36..W38 (b 域 = gmii_clk)
-    localparam SNAP_P7BDP_NW = 12;      // W39/W40, W45..W50 (b 域 = dp_clk)
+    localparam SNAP_P7BDP_NW = 22;      // W39/W40, W45..W50 + **W51..W60 (P7B-BIZ)** (b 域 = dp_clk)
     localparam SNAP_TX_NW    = 4;       // W41..W44 (b 域 = tx_mii_clk)
     wire         pcie_clk_gt, pcie_clk;
     wire         pcie_axi_aclk, pcie_axi_aresetn;
@@ -3279,6 +3316,7 @@ module wrapper_p4 (
     // =====================================================================
     // =====================================================================
     // P7b: 新增仪表的采集 (W36..W50) —— **三束并行**方案, 逐条给理由
+    //      (P7B-BIZ 在 u_snap_p7bdp 里续加 10 个业务字 W51..W60, 见下 `biz_w5x` 处)
     //----------------------------------------------------------------------
     // 为什么不把它们塞进 snap_seq 的 FE/DP 束 (那本来更"整齐"):
     //   snap_seq 的映射表是**单一来源 + 带自检**的 (rtl/snap_seq.v), 改它就必须同步改
@@ -3289,7 +3327,7 @@ module wrapper_p4 (
     //
     // 三束 (全部 `clk_a = pcie_axi_aclk`, `req_a = snap_req` —— 主机那一个写脉冲):
     //   u_snap_p7bfe : clk_b = gmii_clk (= PCS 恢复钟)  NW=3  → W36/W37/W38
-    //   u_snap_p7bdp : clk_b = dp_clk                   NW=12 → W39/W40, W45..W50
+    //   u_snap_p7bdp : clk_b = dp_clk                   NW=22 → W39/W40, W45..W50, **W51..W60**
     //   u_snap_tx    : clk_b = tx_fe_clk (= tx_mii_clk) NW=4  → W41..W44
     // ⚠️ W41..W44 在 **tx 域** ⇒ 归 u_snap_tx (多比特计数器**不许** 2FF)。
     //    装配顺序见下面的 `snap_dout_all` (逐项写出, 不靠"拼接从右往左"这种记忆)。
@@ -3429,7 +3467,7 @@ module wrapper_p4 (
     //    端口的拼接上在 xsim 里**读回 z** (本门实测: seen 全 1 而
     //    dout 全 z) —— 这种错只有逐字读回的门能抓。
     wire [95:0]  p7bfe_dout;    // [2:0] → 槽 0/1/2
-    wire [383:0] p7bdp_dout;    // [11:0] → 槽 0..11
+    wire [SNAP_P7BDP_NW*32-1:0] p7bdp_dout;  // [15:0] → 槽 0..15 (P7B-BIZ: 12 → 16)
     wire [127:0] txsnap_dout;   // [3:0]  → 槽 0..3
     wire        p7bfe_valid, p7bdp_valid, txsnap_valid;
     wire        p7bfe_busy,  p7bdp_busy,  txsnap_busy;
@@ -3447,10 +3485,69 @@ module wrapper_p4 (
     wire [127:0] txsnap_din = 128'd0;
 `endif
 
-    // p7bdp 的 12 个槽: 槽 0/1/6..11 是本模块的信号, 槽 2..5 由 **tx 束**搬来
+    // ---- P7B-BIZ: dp 束的 槽 12..21 = 快照字 W51..W60 --------------------------
+    //   动机 (两条**点名的**产品级缺口, 见 `_proj_10g/notes/P7B_BIZ_PLAN.md` §7-d/§7-e):
+    //     · **R3 / Gap#3 `F1-E4b`** —— TCP **RX 载荷逐字节**没有板侧 oracle:
+    //       `app_pattern` 的 `stat_rx_bytes` / `stat_mismatch` **只被 `app_status_uart`
+    //       消费**, 而它的 `uart_txd` 在板上**接不到任何可读通道** (本板无 UART)
+    //       ⇒ 此前 TCP 上行载荷"对不对"在窗口里**结构性不可判**。本束把它接出来。
+    //     · **`F5b`** —— `tcp_tx_frame.stat_retx` (RTO/重传回卷次数) 是 wrapper 内部 wire
+    //       (`:1496` 声明, `:2142` 由 tcp_tx_frame 驱动), 此前**不在窗口**
+    //       ⇒ 闸 4 登记为"结构性不可读"。
+    //   ⚠️ 四个源**全是 dp 域寄存器输出** ⇒ 满足 snap_cdc 的前提
+    //      ("din_b 只在 clk_b 沿变化"); 与既有 W39/W40/W45..W50 同一个束、同一个域。
+    //   ⚠️ `app_*` 三个源所在的 `app_pattern` 例化**只在 `ifdef APP_MODE` 里** (见 `:1072`
+    //      ~ `:1490` 那个大块) ⇒ 非 APP_MODE 构建里它们是**未驱动的 wire** ⇒
+    //      必须用 `ifdef APP_MODE` 兜常量, **不能**直接引用 (未驱动线进快照 = X 传播,
+    //      板上表现为"这个字读出 zzzz/随机值", 而 lint 全程沉默)。
+    //   ⚠️ `tx_stat_retx` 相反: 它**在所有构建里都存在** (tcp_tx_frame 的例化在
+    //      `ifdef APP_MODE` **之外**) ⇒ 不包守卫, 免得默认构建白丢一个真值。
+    //   ⚠️ 位宽逐项核对: 4×32 = **128** = `biz_din` 的宽度; 拼接项数 **恰好 4**。
+`ifdef APP_MODE
+    wire [31:0] biz_w51 = app_tx_bytes;     // 槽 12: TCP 演示 app TX 载荷字节
+    wire [31:0] biz_w52 = app_tx_frames;    // 槽 13: TCP 演示 app TX 载荷帧数
+    wire [31:0] biz_w53 = app_rx_bytes;     // 槽 14: TCP 演示 app RX 载荷字节
+    wire [31:0] biz_w54 = app_mismatch;     // 槽 15: 载荷逐字节失配数 (R3 的判决量)
+    wire [31:0] biz_w56 = udpapp_tx_ovf;    // 槽 17: UDP app TX 字 FIFO 拒写 (回归守卫)
+`else
+    // 非 APP_MODE 构建: `app_pattern` / `app_udp_pattern` 不存在 ⇒ 常量占位
+    //   (装配出来恒 0, 是预期的, 不是缺陷)。
+    wire [31:0] biz_w51 = 32'd0;
+    wire [31:0] biz_w52 = 32'd0;
+    wire [31:0] biz_w53 = 32'd0;
+    wire [31:0] biz_w54 = 32'd0;
+    wire [31:0] biz_w56 = 32'd0;
+`endif
+    // W55 的源 `tcp_tx_frame.stat_retx` **在所有构建里都存在** (它的例化在 `ifdef APP_MODE`
+    // 之外) ⇒ 不包守卫, 免得默认构建白丢一个真值。
+    wire [31:0] biz_w55 = tx_stat_retx;     // 槽 16: 重传/RTO 回卷次数 (F5b 的判决量)
+    // ---- 追加 B (2026-09-30): 重传**会话**的定性观测 (都不新增状态) --------------
+    //   来源 = `tcp_tx_frame` 的两个**已有寄存器输出** (`o_retx_hi`/`o_retx_active`
+    //   = 本文件 `:2144-2145` 的接线), 它们是 `reg retx_hi`/`reg retx_active`
+    //   (`rtl/tcp_tx_frame.v:236,238`) 的纯 assign 引出 ⇒ **dp 域寄存器输出**
+    //   ⇒ 满足 snap_cdc 的前提 (`din_b` 只在 `clk_b` 沿变化)。**未新造任何状态**。
+    //   为什么要它们 (板级 S1 的新发现: 每条 TCP 连接多发 ~11.9 个重复 seq 整段):
+    //     W55 只能给**次数**; 这两条给**状态** —— `retx_active=1` 表示采样时刻正处在
+    //     一次回卷重放会话中, `retx_hi` 是该会话的重放上界 (= 回卷前的 snd_nxt)。
+    //     与对端 pcap 的 seq 对齐即可判: 重复段落的 seq 上沿是否落在 [snd_una, retx_hi]。
+    //   ⚠️ 口径: `retx_hi` **只在 `retx_active=1` 时有效** (会话结束它不再更新)。
+    wire [31:0] biz_w57 = tx_retx_hi;                  // 槽 18: 回卷重放上界 (会话中有效)
+    wire [31:0] biz_w58 = {31'd0, tx_retx_active};     // 槽 19: 重传会话进行中 (1 位)
+    // ---- 追加 C: 慢路径两个适配器的拒写计数 (源 = 模块输出端口, 已在 dp 域) ----------
+    //   ⚠️ 口径: 两个都是"**本拍空间门**没预 AND ⇒ 拒写事件不可见"那一族缺陷的守卫;
+    //      修复后应**恒 0**, 非 0 = 又出现了静默丢失 (与 W35/W56 同族)。
+    wire [31:0] biz_w59 = stx_stat_fifo_ovf;           // 槽 20: slow_tx_adp u_wf 拒写
+    wire [31:0] biz_w60 = srx_stat_fifo_ovf;           // 槽 21: slow_rx_adp o_ovf 拒写
+    // ⚠️ **6 个源全是 dp 域寄存器输出** ⇒ 满足 snap_cdc 的前提 (din_b 只在 clk_b 沿变化);
+    //    源与**槽号**的对应关系写在名字里 (`biz_w<字>`), 装配处不再数拼接 —— 这是刻意的:
+    //    本工程两次踩过"拼接项数/顺序错一处只读出另一个字的正确值"(见本段开头的扩窗注释),
+    //    逐字具名后, "槽位错位"这一类错在文本层面就可见 (静态检查器 `check_window.py` 会核)。
+
+    // p7bdp 的 16 个槽: 槽 0/1/6..11 是本模块的信号, 槽 2..5 由 **tx 束**搬来
     //   (W41..W44 在 tx_mii_clk 域, 不能在这里引用) ⇒ 这里只驱动自己的那些槽,
     //   装配时 (snap_dout_all) 才把 tx 束的 4 个字插到 W41..W44 的位置。
-    wire [383:0] p7bdp_din;
+    //   P7B-BIZ 新增 槽 12..21 (W51..W60): 源 = 上面那 10 条 `biz_w5x` (全是 dp 域寄存器输出)。
+    wire [SNAP_P7BDP_NW*32-1:0] p7bdp_din;
     genvar gi;
     generate
         for (gi = 0; gi < 12; gi = gi + 1) begin : g_p7bdp
@@ -3466,6 +3563,22 @@ module wrapper_p4 (
                             32'd0;                      // 槽 2..5: 由 tx 束装配
         end
     endgenerate
+    // ---- P7B-BIZ: 槽 12..21 (**逐槽显式 assign**, 不并进上面的 generate) ----------
+    //   为什么不写成 `(gi >= 12) ? biz_din[(gi-12)*32 +: 32]` 并让循环跑满 16:
+    //   那个写法在 `gi < 12` 的迭代里会实例化出**负基址的 part-select** (`[-384 +: 32]`) ——
+    //   它落在三元表达式的未选分支里, 语义上无害, 但**是否被工具在详细化阶段求值依赖实现**
+    //   (本工程的教训: 这种"某个工具恰好放过"的写法不该留在会被 Vivado 综合的路径上)。
+    //   逐槽显式 assign 把它变成纯常量下标, 且新增部分**一眼可数** (4 项)。
+    assign p7bdp_din[12*32 +: 32] = biz_w51;   // 槽 12 → W51 app_pattern.stat_tx_bytes
+    assign p7bdp_din[13*32 +: 32] = biz_w52;   // 槽 13 → W52 app_pattern.stat_tx_frames
+    assign p7bdp_din[14*32 +: 32] = biz_w53;   // 槽 14 → W53 app_pattern.stat_rx_bytes
+    assign p7bdp_din[15*32 +: 32] = biz_w54;   // 槽 15 → W54 app_pattern.stat_mismatch
+    assign p7bdp_din[16*32 +: 32] = biz_w55;   // 槽 16 → W55 tcp_tx_frame.stat_retx
+    assign p7bdp_din[17*32 +: 32] = biz_w56;   // 槽 17 → W56 app_udp_pattern.stat_tx_ovf
+    assign p7bdp_din[18*32 +: 32] = biz_w57;   // 槽 18 → W57 tcp_tx_frame.o_retx_hi
+    assign p7bdp_din[19*32 +: 32] = biz_w58;   // 槽 19 → W58 tcp_tx_frame.o_retx_active
+    assign p7bdp_din[20*32 +: 32] = biz_w59;   // 槽 20 → W59 slow_tx_adp.stat_fifo_ovf
+    assign p7bdp_din[21*32 +: 32] = biz_w60;   // 槽 21 → W60 slow_rx_adp.stat_fifo_ovf
 
     snap_cdc #(.W(32), .NW(SNAP_P7BFE_NW)) u_snap_p7bfe (
         .clk_a(pcie_axi_aclk), .rst_n(pcie_axi_aresetn), .req_a(snap_req),
@@ -3507,10 +3620,24 @@ module wrapper_p4 (
     // 合体 busy: 任一束在飞就是 busy (主机的 "trigger→poll done"协议靠它)
     assign snap_busy = snap_seq_busy | p7bfe_busy | p7bdp_busy | txsnap_busy;
 
-    // ---- 51 字装配 (**逐项写出**: 每项的槽号在注释里, 不依赖"从右往左"的记忆) ----
+    // ---- 61 字装配 (**逐项写出**: 每项的槽号在注释里, 不依赖"从右往左"的记忆) ----
     //   ⚠️ 这条总线是 axi 域的组合量, 源全是 snap_cdc 的 `dout_a` 寄存器 ⇒ 采集沿稳定。
-    //   ⚠️ 非 P7B 构建里三条新束的 din 全是常量 ⇒ 后 15 个字读回恒 0 (预期, 不是缺陷)。
+    //   ⚠️ 非 P7B 构建里三条新束的 din 全是常量 ⇒ 后 25 个字读回恒 0 (预期, 不是缺陷);
+    //      非 APP_MODE 构建里 W51..W54 / W56 同理 (逐字源 = 常量), 但 **W55/W57/W58 仍真**
+    //      (它们的源 = tcp_tx_frame, 在任何构建里都例化)。
+    //   ⚠️ **新增项一律写在最上面 (= 向量 MSB 端 = 最高槽号)**: 这样 W0..W50 的槽号
+    //      逐项不动 (已入库的板级读数不受影响)。写错位置 = 全体旧字平移 = 假读数。
     wire [SNAP_NW_P6E*32-1:0] snap_dout_all = {
+        p7bdp_dout[21*32 +: 32],   // W60 slow_rx_adp.stat_fifo_ovf (rx 适配器拒写; 恒 0)
+        p7bdp_dout[20*32 +: 32],   // W59 slow_tx_adp.stat_fifo_ovf (tx 适配器拒写; 恒 0)
+        p7bdp_dout[19*32 +: 32],   // W58 tcp_tx_frame.o_retx_active (会话进行中, 1 位)
+        p7bdp_dout[18*32 +: 32],   // W57 tcp_tx_frame.o_retx_hi (回卷重放上界; 会话中有效)
+        p7bdp_dout[17*32 +: 32],   // W56 app_udp_pattern TX 字 FIFO 拒写 (padrem 类回归的守卫)
+        p7bdp_dout[16*32 +: 32],   // W55 tx_stat_retx (TCP 重传/RTO 回卷次数; F5b)
+        p7bdp_dout[15*32 +: 32],   // W54 app_pattern 载荷失配 (必须恒 0 增量; R3/F1-E4b)
+        p7bdp_dout[14*32 +: 32],   // W53 app_pattern RX 载荷字节 (TCP 上行板侧账)
+        p7bdp_dout[13*32 +: 32],   // W52 app_pattern TX 载荷帧数 (TCP 下行几何账)
+        p7bdp_dout[12*32 +: 32],   // W51 app_pattern TX 载荷字节 (TCP 下行板侧账)
         p7bdp_dout[11*32 +: 32],   // W50 tx_mii_clk 活性 (toggle 沿计数)
         p7bdp_dout[10*32 +: 32],   // W49 rx_classify 字 FIFO 当前占用
         p7bdp_dout[9*32 +: 32],    // W48 rx_classify 输入停等拍数
@@ -3702,14 +3829,18 @@ module wrapper_p4 (
 
     axi_regs #(
         .MAGIC_V    (32'h50360001),
-        .BUILD_ID_V (32'h00000007),     // ⚠️ 每次改动自增 (前置闸读这一项认位流)
+        .BUILD_ID_V (32'h00000008),     // ⚠️ 每次改动自增 (前置闸读这一项认位流)
                                         //    1 = 最小版 / 2 = 合体版 8 字 / 3 = 合体版 16 字
                                         //    4 = 合体版 24 字 (+ W16-W23 慢路径健康位)
                                         //    5 = P6b 双时钟域 32 字 (W24-W31 跨域锚点)
                                         //    6 = **P6b + F4 修复**: 36 字 (W32-W35 = F4 的 4 个新计数器)
                                         //    7 = **P7b**: 51 字 (W36-W50), 五束
                                         //        (snap_seq 的 FE14+DP22 + p7bfe3 + p7bdp12 + tx4)
-        .SNAP_NW    (SNAP_NW_P6E)       // 51 = 14+22 (snap_seq) + 3+12+4 (P7b 三束)
+                                        //    8 = **P7B-BIZ**: 61 字 (W51-W60: 业务观测面 + 重传会话定性 +
+                                        //        慢路径两个拒写守卫)
+                                        //        ⚠️ 本项由 TL 在本轮**统一合体构建**时自增
+                                        //        (本轮三路 agent 共改本文件 ⇒ 只在合体时改一次)
+        .SNAP_NW    (SNAP_NW_P6E)       // 61 = 14+22 (snap_seq) + 3+22+4 (P7b 三束, BIZ 加 10)
     ) u_pcie_regs (
         .clk            (pcie_axi_aclk),
         .rst_n          (pcie_axi_aresetn),
@@ -3732,7 +3863,7 @@ module wrapper_p4 (
         //   (snap_seq 的 FE+DP 两束 + 本轮新加的 p7bfe/p7bdp/tx 三束):
         //   · busy  = 合体 ⇒ 主机不会在任一束还在飞的时候重触发
         //   · valid = `snap_valid_all` ⇒ 五束本代全到齐才采 (否则读到 "**半代**快照")
-        //   · din   = `snap_dout_all` (51 字, axi 域装配, 见采集段)
+        //   · din   = `snap_dout_all` (61 字, axi 域装配, 见采集段)
         .snap_busy      (snap_busy),
         .snap_valid     (snap_valid_all),
         .snap_din       (snap_dout_all),

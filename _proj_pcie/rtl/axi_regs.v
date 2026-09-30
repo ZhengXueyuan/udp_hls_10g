@@ -25,10 +25,19 @@
 //                         [6]   = MMCM locked 的 **axi 域同步版** —— DP 束在 DP 时钟停摆时
 //                                 根本读不到, 所以 locked 必须在这里也有一份 (§6.4)
 //                         [15:7]= 0 (保持)
-//   0x20 RO  SNAP_W0    = 快照字 0 (FE 束 = 前端 gmii_clk 125MHz 域)
-//   0x24 RO  SNAP_W1    ... 一直到 0xAC SNAP_W35 (共 **36 字**; P6b 32 → 36 是因为
-//                         F4 修复新增了 4 个丢帧守恒计数器 W32..W35)。
-//                         W0..W31 的语义**逐位未变**; W32..W35 见 P6E_OBS.md 的寄存器表。
+//   0x20 RO  SNAP_W0    = 快照字 0 (FE 束 = 前端 gmii_clk 域)
+//   0x24 RO  SNAP_W1    ... 一直到 **0x110 SNAP_W60** (共 **61 字**; 演进 8→16→24→32→36→51→57→59→61)。
+//                         **P7B-BIZ 新增 W51..W56** (业务观测面):
+//                           W51 app_pattern TX 载荷字节 / W52 TX 载荷帧数 /
+//                           W53 RX 载荷字节 / W54 **载荷失配数**(R3/F1-E4b) /
+//                           W55 **tcp_tx_frame.stat_retx** (F5b) /
+//                           W56 **app_udp_pattern.stat_tx_ovf** (静的丢字类回归守卫)
+//                           W57 **tcp_tx_frame.o_retx_hi** (回卷重放上界; 会话中有效)
+//                           W58 **tcp_tx_frame.o_retx_active** (重传会话进行中; 低 1 位)
+//                           W59 **slow_tx_adp.stat_fifo_ovf** (u_wf 拒写; 守卫, 恒 0)
+//                           W60 **slow_rx_adp.stat_fifo_ovf** (o_ovf 拒写; 守卫, 恒 0)
+//                         旧字 W0..W50 的语义与地址**逐位未变**。
+//                         未实现地址 = **0x114** (word 69) ⇒ 读回 0xffffffff。
 //   ⚠️ 扩窗要**七处同改** (P6b 起; 前五处是 24 字版定的, ⑥⑦ 是双域之后新增的):
 //      ① `SNAP_NW` (单一来源: wrapper 的 `SNAP_NW_P6E`) ② 两束的拼接项数
 //         (`fe_src`/`dp_src`; 项数必须 = wrapper 的 SNAP_FE_NW / SNAP_DP_NW)
@@ -41,10 +50,16 @@
 //   ⚠️ 扩窗会把"未实现地址"的边界推后 ⇒ 验收脚本里那个"读未实现地址应得 SLVERR"的**地址也得跟着挪**
 //      (0x18→0x44→0x60→0x84→0xA0 都是这么挪的; **36 字版 ⇒ 0xB0** = word 44)。
 //      ⚠️ 别以为 0xB0 是笔误: 36 字把 0x20..0xAC 全占了 (word 8..43) ⇒ 第一个空地址就是
-//         word 44 = 0xB0。挑它同时满足"< 0x100 不触发 ar_word 的 256B 回绕"这条红线。
-//      ⚠️ 挪的时候**绝不能挑 ≥0x100**: `ar_word = araddr[7:2]` 只有 6 位 ⇒ 地址每 256 字节回绕,
-//         挑 0x100 会别名到 word 0 = MAGIC (≠0xffffffff) ⇒ 判据假 FAIL; 24 字版挑 0x160 则别名到
-//         已实现字 ⇒ 假 PASS。地址不挪的后果是"新功能上线"被门报成回归 (本工程已经踩过两次)。
+//         word 44 = 0xB0 (36 字时代的红线是"< 0x100 不触发 ar_word 的 256B 回绕")。
+//      ⚠️ ⭐ **2026-09-30 (P7B-BIZ) 这条红线被解除了**: 窗口跨过 0xFF 需要字 64 (= 0x100) 可寻址,
+//         于是把 `ar_word/w_word/r_word` **从 6 位加宽到 7 位** (`araddr[8:2]`) ⇒
+//           · < 0x100 的全部既有地址**逐位等价** (仍映射到字 0..63) ⇒ 零回归;
+//           · 未实现地址的可行域从 {word 64} 扩到 {word 65..127} = 0x104..0x1FC ⇒
+//             窗口上限从 56 字抬到 **119 字** (字 8..126); 现役 = 61 字, 未实现 = 0x114;
+//           · **顺带修掉一个既存隐患**: 旧 6 位译码下, 写 `0x108` 会别名到 word 2 = SCRATCH
+//             (写 `0x118` 会别名到 SNAP_CTRL ⇒ **一次误写就能触发快照**) —— 现在 ≥0x100 一律
+//             SLVERR。改前若有人依赖过这个别名, 那是依赖了一个缺陷。
+//      ⚠️ 挪的时候**绝不能挑 ≥0x200**: 7 位译码下地址每 512 字节回绕 (`0x200` → word 0 = MAGIC)。
 //
 // ⚠️ **为什么用"显式触发"而不是"自动周期刷新" (设计取舍, 别改成自动的)**:
 //   主机读 N 个字要走 N 笔独立 PCIe 事务 (几十 µs), 而自动刷新的周期只要短于这个窗口,
@@ -71,10 +86,11 @@ module axi_regs #(
     parameter [31:0]  BUILD_ID_V = 32'h00000001,
     // 快照字数: 必须与 wrapper 的 `snap_cdc #(.NW())` 和 `snap_src` 项数**同值**。
     // 位宽由它推导 ⇒ 扩窗时端口宽度自动跟着走 (手写 256 位的话, 扩到 16 字就是静默截断)。
-    // **上限 = 32** (受读侧选字 `snap_idx` 5 位与 SLVERR 边界 `r_word[5:0]` 限制)。
-    // ⚠️ 2026-09-29 更正: 这里原先写"上限 16 (读侧选字用 r_word[3:0])" —— 那是**过时且错位**的
-    //   说明。真正把上一版卡在 16 的是 `snap_base` 的**位宽** (旧 `[8:0]` 装不下 17 字起的
-    //   {snap_idx,5'b0}), 与读侧的位宽无关; 该行已加宽到 `[9:0]` (见读侧译码处注释)。
+    // ⚠️ 历次"上限"说法全部作废 (它们各自只对当时那个位宽成立)。**现役上限 = 119 字**,
+    //   由 ① `ar_word` 7 位 (字 0..127) ② 快照从字 8 起 ③ 负对照需要留 1 个空字 共同决定:
+    //   字 8..126 = 119 字, 未实现地址 = word 127 = 0x1FC。
+    //   (另一条更松的界: `snap_base` 12 位 ⇒ {snap_idx,5'b0} ≤ 4095 ⇒ NW ≤ 129。)
+    //   ⇒ ⚠️ 想再扩窗**先看这两处位宽**, 再看验收脚本的未实现地址 (第 ⑤ 处)。
     parameter integer SNAP_NW    = 8
 ) (
     input  wire        clk,
@@ -129,7 +145,11 @@ module axi_regs #(
     reg [31:0] awaddr_r, wdata_r;
     reg [3:0]  wstrb_r;
     wire       wr_go   = aw_hit && w_hit && !s_axil_bvalid;
-    wire [5:0] w_word  = awaddr_r[7:2];
+    // ⚠️ P7B-BIZ: **6 位 → 7 位** (awaddr[8:2]) —— 理由见本文件头部与
+    //   `snap_base` 处的长注释: 57 字窗口需要字 64 (= 0x100) 可寻址,
+    //   同时把旧译码下的一个隐患一并修掉 (**旧译码写 0x108 会别名到 SCRATCH**)。
+    //   对 < 0x100 的全部既有地址**逐位等价** (仍映射到字 0..63)。
+    wire [6:0] w_word  = awaddr_r[8:2];
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -148,13 +168,13 @@ module axi_regs #(
             if (wr_go) begin
                 s_axil_bvalid <= 1'b1;
                 wr_count <= wr_count + 32'd1;
-                if (w_word == 6'd2) begin                       // 0x08 SCRATCH (RW)
+                if (w_word == 7'd2) begin                       // 0x08 SCRATCH (RW)
                     if (wstrb_r[0]) scratch[7:0]   <= wdata_r[7:0];
                     if (wstrb_r[1]) scratch[15:8]  <= wdata_r[15:8];
                     if (wstrb_r[2]) scratch[23:16] <= wdata_r[23:16];
                     if (wstrb_r[3]) scratch[31:24] <= wdata_r[31:24];
                     s_axil_bresp <= 2'b00;
-                end else if (w_word == 6'd6) begin               // 0x18 SNAP_CTRL (写侧触发)
+                end else if (w_word == 7'd6) begin               // 0x18 SNAP_CTRL (写侧触发)
                     s_axil_bresp <= 2'b00;                       // 数据位在 snap_clr 里用掉
                 end else begin                                   // 其余地址: 非法写
                     s_axil_bresp <= 2'b10;                       // SLVERR
@@ -169,8 +189,8 @@ module axi_regs #(
 
     // ---------------- 读通道 ----------------
     reg [31:0] araddr_r;
-    reg [5:0]  r_word;
-    wire [5:0] ar_word = s_axil_araddr[7:2];
+    reg [6:0]  r_word;                                      // P7B-BIZ: 6 → 7 位 (0x100 不再回绕)
+    wire [6:0] ar_word = s_axil_araddr[8:2];
     reg        decode_err_r;
 
     // ---------------- 数据面快照寄存器 (0x18-0x3C) ----------------
@@ -180,7 +200,7 @@ module axi_regs #(
     reg         snap_done_r, snap_seen_r;
     reg [15:0]  snap_gen_r;
 
-    wire        snap_clr = wr_go && (w_word == 6'd6);      // 对 0x18 的一次成功写
+    wire        snap_clr = wr_go && (w_word == 7'd6);      // 对 0x18 的一次成功写
     assign      snap_req = snap_clr;                       // wr_go 恰好 1 拍宽 ⇒ 天然是脉冲
 
     always @(posedge clk or negedge rst_n) begin
@@ -199,7 +219,8 @@ module axi_regs #(
 
     // 读侧译码: SNAP_NW 个字 = word 8..(8+SNAP_NW-1) = 0x20..
     //   NW=24 时是 0x20..0x7C (未实现 = 0x84); NW=32 时 0x20..0x9C (=0xA0);
-    //   **NW=36 时是 0x20..0xAC (未实现 = 0xB0)**
+    //   NW=36 时 0x20..0xAC (未实现 = 0xB0); NW=51 时 0x20..0xE8 (=0xEC);
+    //   **NW=55 时 0x20..0xF8 (未实现 = 0xFC)** ← P7B-BIZ 现役 (word 63 是唯一的空地址)
     // ⚠️⚠️ 下标必须是 `r_word - 8`, **不能**直接截 r_word 的低位 —— 这里连踩两次:
     //   8 字版写 `r_word[2:0]`, 恰好 8..15 → 0..7 正确 (纯属巧合);
     //   扩到 16 字时换 `r_word[3:0]` ⇒ word 16..23 回绕到 0..7, **且** 0x20 也被当成 W8
@@ -209,7 +230,7 @@ module axi_regs #(
     //   (r_word=39 → [4:0]=7 → 7-8 mod 32 = 31 ✓, **纯属算术巧合**); 36 字立刻错
     //   (r_word=43 → [4:0]=11 → 11-8 = 3, 正确值是 35) ⇒ 高 4 个字**静默串到低地址**。
     //   ⇒ 位宽必须与 SNAP_NW 一起走: NW=36 需要 6 位索引 + 11 位字节偏移。lint 全程沉默。
-    wire [5:0]  snap_idx    = r_word[5:0] - SNAP_W0_IDX[5:0];
+    wire [6:0]  snap_idx    = r_word[6:0] - SNAP_W0_IDX[6:0];   // P7B-BIZ: 同宽 7 位
     // ⚠️⚠️ **这一行必须装得下 {snap_idx, 5'b0}** (36 字 ⇒ **11 位**) —— 写窄了最高位被
     //   **静默截断**, symptom 精确且隐蔽: 字数 ≥ 9+8=17 起, 高地址的字会回绕读到低地址的字
     //   (NW=24 时 `0x60..0x7C` 这 8 个读回 W0..W7 的值; NW=32 时 16 个错)。
@@ -224,6 +245,16 @@ module axi_regs #(
     //     ⚠️ 12 位同时把本设计的**绝对上限**钉死: 字偏移 = (NW-1)<<5 ≤ 4095 ⇒ NW ≤ 129;
     //        但真正先撞到的是 `ar_word = araddr[7:2]` (6 位) 与 `SNAP_W0_IDX=8`
     //        ⇒ **NW ≤ 56**。两个界里 56 更紧 ⇒ 56 才是硬上限 (见 wrapper 的预算注释)。
+    //   ★ **P7B-BIZ (2026-09-30) 收口: NW 51 → 61** (W51..W60 十个业务字)。
+    //     ⚠️ 过程留档 (下次扩窗会再遇到同一道题): 6 个新字 = 57 > 旧的 56 字上限, 而当时
+    //        "未实现地址"必须存在的约束把上限钉在 56 —— 且末字 (word 63 = 0xFC) 一旦被占,
+    //        读侧 SLVERR 负对照 (`(r_word <= SNAP_LAST_IDX) ? OKAY : SLVERR`) 就**恒为 OKAY**
+    //        ⇒ 判据静默无牙 (闸 4 的 B5/G4 正是这条)。而"下一个空地址" `0x20+4*56 = 0x100`
+    //        在 6 位译码下回绕到 word 0 = MAGIC ⇒ 假 FAIL。
+    //     ⇒ 解法不是砍字, 而是**把译码加宽 1 位** (上面 `ar_word`/`w_word`/`r_word` → 7 位):
+    //        < 0x100 逐位等价 (零回归), 未实现地址域扩到 0x104..0x1FC ⇒ **上限抬到 119 字**。
+    //        本行的 12 位**不需要再动** (max {56,5'b0} = 1792 < 4096 ✓, 真正会更早撞上的是
+    //        7 位的 `ar_word`)。
     wire [11:0] snap_base   = {snap_idx, 5'b0};
     // SNAP_STATUS 位域 (**必须恰好 32 位**):
     //   [31:16] gen | [15:7] 0 (9 位) | [6] locked_axi | [5:3] fe_state | [2] seen | [1] done | [0] busy
@@ -235,14 +266,14 @@ module axi_regs #(
     reg [31:0] rdata_mux;
     always @* begin
         case (r_word)
-            6'd0:    rdata_mux = MAGIC_V;
-            6'd1:    rdata_mux = BUILD_ID_V;
-            6'd2:    rdata_mux = scratch;
-            6'd3:    rdata_mux = freecnt;
-            6'd4:    rdata_mux = hw_status;
-            6'd5:    rdata_mux = 32'hDEADBEEF;
-            6'd6:    rdata_mux = 32'd0;                        // 0x18 写口, 读回 0
-            6'd7:    rdata_mux = snap_status;                  // 0x1C
+            7'd0:    rdata_mux = MAGIC_V;
+            7'd1:    rdata_mux = BUILD_ID_V;
+            7'd2:    rdata_mux = scratch;
+            7'd3:    rdata_mux = freecnt;
+            7'd4:    rdata_mux = hw_status;
+            7'd5:    rdata_mux = 32'hDEADBEEF;
+            7'd6:    rdata_mux = 32'd0;                        // 0x18 写口, 读回 0
+            7'd7:    rdata_mux = snap_status;                  // 0x1C
             // 快照字: word 8..(8+SNAP_NW-1) —— 用 if 按参数判范围 (case 的标签没法由参数生成),
             // 这样扩窗时只需要改 SNAP_NW 一个数, 不会漏掉某个标签 ⇒ 也就不会回绕读错字。
             default: rdata_mux = ((r_word >= SNAP_W0_IDX) && (r_word <= SNAP_LAST_IDX))
@@ -254,7 +285,7 @@ module axi_regs #(
         if (!rst_n) begin
             s_axil_arready <= 1'b1; s_axil_rvalid <= 1'b0;
             s_axil_rdata <= 32'd0; s_axil_rresp <= 2'b00;
-            araddr_r <= 32'd0; r_word <= 6'd0; decode_err_r <= 1'b0;
+            araddr_r <= 32'd0; r_word <= 7'd0; decode_err_r <= 1'b0;
         end else begin
             if (s_axil_arready && s_axil_arvalid) begin
                 araddr_r <= s_axil_araddr; r_word <= ar_word;

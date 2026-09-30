@@ -40,6 +40,11 @@
 //     理由: 生成器跑在传输之前, 它看不到也不该等末字的线上消费。stat_tx_frames/
 //     stat_tx_bytes/TX_GAP 都记在**推送侧** ⇒ "app 已发" = "app 已交付", 与
 //     下游帧器计数 (udp_tx_frame.stat_frames) 在无丢帧时逐帧一致。
+//     ⚠️ **P7B-W9 订正 (2026-09-30)**: 上面这条等式的成立**以前提**"推送侧不丢字"
+//     为前提 —— 而修复前字 FIFO 的空间门一拍错位, 恰好破坏该前提 (P7B_10G 下每帧
+//     静默丢 1 个整字的同时 stat_tx_bytes 照加) ⇒ 旧口径下 "W9 载荷 = 线上载荷"
+//     不成立 (线上每帧少 8 B)。现已修复 (见 u_txf 处) 并加了 `stat_tx_ovf`
+//     自检回读 ⇒ 等式恢复, 且不成立时**有计数器**。
 //
 // 【RX】(← wrapper 的 app_udp_rx_* ← udp_split 帧缓冲播放器, 帧级 store-and-forward)
 //   · 载荷**逐字节**比对图案流, 失配计 stat_mismatch (字节数, 粘滞)。
@@ -119,6 +124,12 @@ module app_udp_pattern #(
     output reg  [31:0] stat_rx_frames,
     output reg  [31:0] stat_rx_null,     // 收到的 0 长数据报帧数 (rx_len==0)
     output reg  [31:0] stat_mismatch,    // 失配字节数 (粘滞)
+    // P7B-BIZ: TX 字 FIFO 拒写 (推入落不下) 次数 —— 见本文件 u_txf 处的长注释:
+    //   修复前它是**结构性恒 0**(空间门预 AND) ⇒ 那一类"每帧静默丢 1 字"在**整个设计里
+    //   没有任何计数器看得见** (藏了整整一轮的原因)。修复后仍应恒 0, 但**判据有牙**了。
+    //   ⚠️ 接出到板级的必要性: 只加端口不接快照字会被综合整条优化掉 ⇒
+    //   板级观测 = `board/wrapper_p4.v` 的快照字 **W56** (与 `mac_rx_64.stat_fifo_ovf`→W35 同款)。
+    output reg  [31:0] stat_tx_ovf,
     output reg         active,           // TX: 正在发帧 或 在帧间限速间隙里
     output reg         done,             // TX_BYTES 已发完 (粘滞, TX_BYTES!=0 才有意义)
     output reg  [3:0]  led,
@@ -467,8 +478,17 @@ module app_udp_pattern #(
     reg         first_frm;    // 本会话首帧 (复位置 1, 首帧启动拍清)
 
     // ---- 字 FIFO: 生成器 → 帧器 (让"生成"与"线上传输"并行, 见头注释) ----
+    // ⚠️ **写口合同 (P7B-W9 修复, 2026-09-30)**: `txf_wr` 是**寄存器** (本轮决定、
+    //    下拍落笔) ⇒ 空间门必须用 `fifo_sync.full_next` (**下一拍的**精确满值, 含本拍
+    //    在飞写与本拍读), 不能用本拍的 `txf_full`。用本拍 `full` 会有一拍错位:
+    //    "本拍 full=0 (D-1 占) + 下拍有一笔在飞写" ⇒ 下拍 full=1 ⇒ 已被计入
+    //    `stat_tx_bytes`/`seg_sent` 的那笔写被 FIFO **静默丢弃** (P7B_10G 下实测
+    //    每帧丢 1 个整字 = 8 B; 见 fifo_sync.v 头注释与 P7B_W9_GAP.md)。
+    //    同款修复先例: rtl/mac_rx_64.v:131 (P6b F4)。
+    //    不变式 (修复后单调成立): `txf_wr(T) ⇒ !txf_full(T)` —— 因为置位它的 gen_ok/
+    //    nul_push 都要求 `!full_next(T-1)`, 而 full_next(T-1) == full(T)。
     wire [72:0] txf_out;
-    wire        txf_empty, txf_full;
+    wire        txf_empty, txf_full, txf_full_n, txf_ovf_pulse;
     wire        txf_rd = m_tvalid && m_tready;     // 头字被下游消费
     assign m_tdata  = txf_out[63:0];
     assign m_tkeep  = txf_out[71:64];
@@ -476,11 +496,31 @@ module app_udp_pattern #(
     assign m_tlast  = txf_out[72];
     fifo_sync #(.W(73), .D(256), .AW(8)) u_txf (
         .clk(clk), .rst_n(rst_n),
-        .wr(txf_wr && !txf_full), .din(txf_in),
+        // P7B-W9: 空间门**移到生产者侧** (gen_ok / nul_push 判 `txf_full_n`)。
+        //   这里**不再**预 AND `!txf_full` —— 旧写法 `.wr(txf_wr && !txf_full)` 把
+        //   FIFO 内部的 `ovf_pulse = wr && full` **结构性地**钉成 0 (wr 已含 !full),
+        //   于是"拒写"这条自检回路失效: 丢字没有任何计数器能看见 (工程坑 24「哑门」
+        //   同族)。去预 AND 后: 不变式成立时 `wr == txf_wr` (逐笔等价, 见上), 一旦
+        //   生产者判据回归本拍 `full` ⇒ `ovf_pulse` **真的会响**。
+        .wr(txf_wr), .din(txf_in),
         .rd(txf_rd), .dout(txf_out),
         .empty(txf_empty), .full(txf_full),
+        .full_next(txf_full_n),         // 空间门 (生产者侧) 用这个
+        .ovf_pulse(txf_ovf_pulse),      // 拒写脉冲 (自检; 恒 0 = 无静默丢失)
         .dbg_wptr(), .dbg_rptr(), .dbg_full(), .dbg_empty()
     );
+
+    // ---- "无静默丢失"自检回读 (P7B-W9): FIFO 拒写次数 ----
+    // 合同 (rtl/fifo_sync.v:16-17): 生产侧必须把 `ovf_pulse` 接成计数器,
+    // **恒 0 才叫"无静默丢失"**; 非 0 = 有一笔已计入 stat_tx_bytes/seg_sent 的字
+    // 落笔失败 (正是 P7B_10G 每帧 -8 B 的机理)。
+    // 修复后本计数器**结构性恒 0**: 由 u_txf 处的不变式 `txf_wr ⇒ !txf_full`,
+    // `ovf_pulse = wr && full = txf_wr && full` 恒假; 而一旦生产者判据回归本拍
+    // `full`, 它立刻会响 ⇒ 这是一条**有牙齿**的回归守卫 (修复前它是结构性哑的)。
+    // ⚠️ 板级可见性 (2026-09-30 P7B-BIZ 已收口): 本计数器现已是**模块输出端口**
+    //    (端口表里的 `output reg [31:0] stat_tx_ovf`), 由 `board/wrapper_p4.v` 接到
+    //    快照字 **W56** (与 `mac_rx_64.stat_fifo_ovf`→W35 同款)。⇒ 原 `reg` 声明**删除**
+    //    (端口自带 reg 语义), 其余逻辑一字未动 —— 修复 agent 的 4 处修复与验证不受影响。
 
     wire [11:0] left = seg_len - seg_sent;                     // 本帧剩余字节
     wire [3:0]  need = (left >= 12'd8) ? 4'd8 : left[3:0];     // 本字字节数
@@ -501,12 +541,13 @@ module app_udp_pattern #(
     wire        pay_ok  = (seg_len <= PLEN_MAX);
     wire [7:0]  gen_byte = pay_ok ? tx_lfsr[31:24] : 8'hA5;
     // 生成本拍这一字节 (有空间且本帧还有字节没生成)
-    wire        gen_ok  = (txs == T_FRM) && !txf_full && !nul_pend &&
+    // P7B-W9: 空间门用 `txf_full_n` (下一拍精确满), 不是本拍 `txf_full` —— 见 u_txf 处
+    wire        gen_ok  = (txs == T_FRM) && !txf_full_n && !nul_pend &&
                           (seg_sent < seg_len);
     // 本拍产出的字节正好凑齐本字 ⇒ 同拍推入 FIFO (零气泡: 无独立"呈交"拍)
     wire        push_now = gen_ok && ((bcnt + 4'd1) >= need);
     // 帧收尾 (末字已推入 FIFO) —— 帧计数/限速/done 判定的唯一落点 (P5f: 推送侧)
-    wire        nul_push = (txs == T_FRM) && nul_pend && !txf_full;
+    wire        nul_push = (txs == T_FRM) && nul_pend && !txf_full_n;
 `ifdef P7B_10G
     // =====================================================================
     // 8 字节/拍 TX (P7B_10G): 剩余 >= 8 字节时**一拍推一个满字**; 剩 < 8 的
@@ -720,6 +761,7 @@ module app_udp_pattern #(
             nul_pend <= 1'b0; gap_cnt <= 16'd0; remain <= 32'd0;
             first_frm <= 1'b1;
             stat_tx_bytes <= 32'd0; stat_tx_frames <= 32'd0;
+            stat_tx_ovf <= 32'd0;
             active <= 1'b0; done <= 1'b0;
             rx_lfsr <= SEED;
             cmp_d <= 64'd0; cmp_k <= 8'h00; cmp_n <= 4'd0; cmp_i <= 4'd0;
@@ -828,6 +870,9 @@ module app_udp_pattern #(
 
             // active: 发帧中 或 帧间限速间隙 (板级 LED "有会话" 语义)
             active <= (txs == T_FRM) || (txs == T_GAP);
+
+            // P7B-W9 自检回读: FIFO 拒写 (本轮决定的推入落不下) 计一次。恒 0 = 无静默丢失。
+            if (txf_ovf_pulse) stat_tx_ovf <= stat_tx_ovf + 32'd1;
 
             //=================================================================
             // RX 引擎 (装载与比对并行)

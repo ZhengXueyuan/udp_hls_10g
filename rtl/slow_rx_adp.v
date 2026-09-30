@@ -58,7 +58,12 @@ module slow_rx_adp #(
     // diag18 看门狗诊断 (纯 assign, UART 快照 SV/HR 字段): starv = 饥饿累计拍
     // (有数据不读; 每 ~16.8ms 回到 0 = 看门狗循环复位 HLS), hls_rst_n 直出
     output wire [21:0] dbg_starv,
-    output wire        dbg_hls_rst
+    output wire        dbg_hls_rst,
+    // P7B-latent (2026-09-30): 输出字节 FIFO (u_ofifo) 拒写**字节**数 ——
+    // **结构上恒 0** (写门 = !o_full_next)。非 0 = 交付给 HLS 的字节流有洞。
+    // ⚠️ 新端口一律**追加在端口表末尾** (本模块目前全是具名例化, 但保持这条规矩
+    //    可以让将来任何一个位置连接例化都不会被打乱)。
+    output reg  [31:0] stat_fifo_ovf
 );
     // ---------------- 输入侧: 整帧缓冲 + 提交/回卷 ----------------
     // frame_fifo 字 = {tlast, tkeep, tdata} 73 位
@@ -95,8 +100,15 @@ module slow_rx_adp #(
     );
 
     // ---------------- 输出侧: 9bit 字节 FIFO -> HLS ----------------
+    // ⚠️ 写口合同 (P7B-latent 修复, 2026-09-30): `o_wr` 是**寄存器** (本轮决定、
+    //    下拍落笔) ⇒ 空间门必须用 `o_full_next` (**下一拍**的精确满值), 不能用本拍
+    //    `o_full`。用本拍 `full` 有一拍错位: "本拍 full=0 (2047 占) + 本拍有一笔在飞
+    //    写 + 本拍还要再写一笔" ⇒ 下拍 full=1 ⇒ 那一**字节**被 fifo_sync 静默丢弃
+    //    ⇒ 交给 HLS 的帧少 1 字节且其后全部错位。可达性唯一闸 = 单帧字节数 > 1783
+    //    (开播门 occ<=256 + 一帧只写 8+载荷 字节), 见
+    //    `_proj_10g/notes/P7B_LATENT_FIFO_FIX.md` (含逐拍相位推导与反例双跑)。
     wire [8:0] o_dout;
-    wire       o_empty, o_full;
+    wire       o_empty, o_full, o_full_next, o_ovf;
     reg        o_wr;
     reg  [8:0] o_din;
 
@@ -104,14 +116,27 @@ module slow_rx_adp #(
         .clk(clk), .rst_n(rst_n),
         .wr(o_wr), .din(o_din),
         .rd(hls_rx_tvalid && hls_rx_tready),
-        .dout(o_dout), .empty(o_empty), .full(o_full)
+        .dout(o_dout), .empty(o_empty), .full(o_full),
+        .full_next(o_full_next),             // P7B-latent: 空间门 (下一拍满)
+        .ovf_pulse(o_ovf)                    // P7B-latent: 拒写脉冲 (自检, 恒 0)
     );
+    // 无静默丢失自检回读 (fifo_sync.v:16-17 的合同): 恒 0 才叫"无丢字"。
+    // 修复后**结构性恒 0** (写门 = !o_full_next ⇒ 落笔拍 full 必为 0); 一旦写门回归
+    // 本拍 `full`, 它立刻会响。
+    // ⚠️ 板级可见性: 本计数器已是模块输出端口 (`stat_fifo_ovf`)。要进快照窗口需在
+    //    `board/wrapper_p4.v` 三处加 (① 端口连线 ② 快照字打包 ③ 文档表) —— 本轮
+    //    **未接** (该文件归另一个 agent), 见笔记 §可见性。
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) stat_fifo_ovf <= 32'd0;
+        else if (o_ovf) stat_fifo_ovf <= stat_fifo_ovf + 32'd1;
+    end
     assign hls_rx_tdata  = {7'b0, o_dout};
     assign hls_rx_tvalid = !o_empty;
 
     // ---- o_fifo 占用计数 (节流 + 观测) ----
-    // 与 fifo 精确同步: 写入接受 = o_wr && !o_full (播放器只在 !o_full 时写),
-    // 读出 = rd。占用 = 写-读滚动。
+    // 与 fifo 精确同步: 写入接受 = o_wr && !o_full 且**落笔当拍必不满** —— 播放器
+    // 只在 `!o_full_next` 时写 (P7B-latent 修复), 即"本轮决定的写下拍一定落笔",
+    // 故 o_wr 逐笔等于一次真实写入; 读出 = rd。占用 = 写-读滚动。
     reg  [11:0] occ;
     wire        o_pop = hls_rx_tvalid && hls_rx_tready;
     // ---- 看门狗: HLS 有数据可读 (tvalid) 但长期不读 = 内部死锁 -> 复位 ----
@@ -237,7 +262,9 @@ module slow_rx_adp #(
                 P_IDLE: if (committed != 8'd0 && occ <= 12'd256) begin
                     pstate  <= P_PRE; pre_cnt <= 3'd0;
                 end
-                P_PRE: if (!o_full) begin
+                // ⚠️ 空间门一律用 `o_full_next` (下一拍满), **不是** `o_full` ——
+                //    o_wr 是寄存器, 本拍判据必须预测"落笔那一拍"的满 (P7B-latent)。
+                P_PRE: if (!o_full_next) begin
                     o_wr  <= 1'b1;
                     o_din <= {1'b0, (pre_cnt == 3'd7) ? 8'hD5 : 8'h55};
                     if (pre_cnt == 3'd7) pstate <= P_LOAD;
@@ -251,7 +278,7 @@ module slow_rx_adp #(
                     ff_rd  <= 1'b1;
                     pstate <= P_EMIT;
                 end
-                P_EMIT: if (!o_full) begin
+                P_EMIT: if (!o_full_next) begin
                     o_wr  <= 1'b1;
                     o_din <= {last_byte_of_frame, cur_byte};
                     if (idx == nb - 4'd1) begin

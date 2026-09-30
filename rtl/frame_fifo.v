@@ -12,6 +12,10 @@
 //     RAMB36E1 保留 (WNS 时序驱动在主存 64bit 宽路径, 与侧存独立)。
 //   P6c: 加 dbg_rd_addr/dbg_rd_side 边存组合读口 (tlast 位图转储: 冻结后按 rptr±32
 //     直读边存 bit SW-1, 看 tlast=1 的帧末拍落在哪些槽)。纯读, 无逻辑耦合。
+//   P7B-latent (2026-09-30): 端口表**末尾**加 full_next/ovf_pulse (与 fifo_sync 的
+//     同名端口同形同义)。**纯增量**: 既有读写逻辑一行未改, 未接者逐位不变。加在
+//     末尾是必需的 —— `tb/tb_frame_fifo.v:90` 是**位置连接**例化 (只给前 10 个位置),
+//     插在 full 之后会把后续位置映射整体错位。
 // 布局: 主存 = NB x RAMB36E1 (512 字 x72 SDP, 覆盖 din[63:0]); 边存 = LUTRAM reg 数组
 //   [0:D-1] 单块覆盖全深 (无片选/回卷; W=73 时 SW=9 位存 tkeep+tlast), 读出寄存器
 //   side_dout_r <= mem_s[rptr_n] —— 1 拍读延迟与主存 DOA_REG=0 对齐, 呈现时
@@ -76,7 +80,14 @@ module frame_fifo #(
     // 址 = 边存槽址 (低 AW 位, 天然 mod D); 与读指针/空满逻辑零耦合。W<=64 时
     // 无边存, 读出恒 0 (SW=1 占位宽度)。
     input  wire [AW-1:0] dbg_rd_addr,
-    output wire [SW-1:0] dbg_rd_side
+    output wire [SW-1:0] dbg_rd_side,
+    // ---- P7B latent-FIFO 收口 (2026-09-30): 写口空间/拒写探针 ----
+    // 与 `fifo_sync` 的同名端口**同形同义** (rtl/fifo_sync.v:39-40)。加在端口表
+    // **末尾**是刻意的: 本模块存在**位置连接**例化 (`tb/tb_frame_fifo.v:90` 只给前
+    // 10 个位置), 插在中间会把 `full` 之后的位置映射整体错位。全部在场例化都是
+    // **具名**连接, 故常量 0 个受影响 (逐位等价, 见下)。
+    output wire          full_next,    // 下一拍的 full (精确; 生产侧空间门用)
+    output wire          ovf_pulse     // = wr && full: 本拍有一次写被拒 (静默丢失)
 );
 
     localparam NB = D / 512;                  // 片数; 每片 512 字 (全实例 D%512==0)
@@ -258,6 +269,23 @@ module frame_fifo #(
                           : main_sel[W-1:0]);
     assign empty = empty_n;
     assign full  = full_n;
+
+    // ---- P7B latent-FIFO 收口: 下一拍满 / 拒写 (纯组合, 与读写逻辑零耦合) ----
+    // 写口合同与 `fifo_sync.v` 头注释**逐条同义** (那份写得更细, 见它):
+    //   · `full` 是**本拍**的组合值。生产者的推入若是**寄存器** (本轮决定、下拍落笔),
+    //     用本拍 `full` 做空间门就有**一拍错位**: "本拍 full=0 (D-1 占) + 本拍有在飞
+    //     写" ⇒ 下拍 full=1 ⇒ 该笔写被 `wr_ok` 静默丢掉 (无背压、无计数)。
+    //   · 空间门必须用 `full_next` = **下一拍 full 的精确值** (含本拍在飞写与本拍读):
+    //     它与落笔拍的判据 `!full_n` **同值** ⇒ `!full_next` ⇔ "本轮决定的推入下拍
+    //     一定落笔" (先例: fifo_sync 的 F4 修复 / mac_rx_64.v / app_udp_pattern.v)。
+    //   · `ovf_pulse = wr && full`: 本拍有一次写被拒 (字静默丢失)。生产侧必须把它
+    //     接成计数器 —— **恒 0 才叫"无静默丢失"**。
+    //   ⚠️ **rollback 拍不适用**: 该拍 `wptr` 实际取 `wsnap` (不是 `wptr_n`), 故
+    //      `full_next` 在那拍是按无回卷推的。使用者**不得**同拍同时 rollback + 用
+    //     `full_next` 门一次写 (slow_tx_adp/slow_rx_adp 都不这么做: 回卷拍不写字)。
+    assign full_next = (wptr_n[AW-1:0] == rptr_n[AW-1:0]) &&
+                       (wptr_n[AW] != rptr_n[AW]);
+    assign ovf_pulse = wr && full_n;
 
     // P4b-7-P6 诊断读出 (纯线束, 与逻辑零耦合)
     assign dbg_wptr  = wptr;

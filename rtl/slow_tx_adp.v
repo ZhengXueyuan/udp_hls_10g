@@ -24,7 +24,10 @@ module slow_tx_adp (
     input  wire        m_axis_tready,
     output wire        m_axis_tlast,
     output reg  [31:0] stat_frames,    // 成功转出帧数
-    output reg  [31:0] stat_purge      // 前导非法/fifo 满回卷帧数
+    output reg  [31:0] stat_purge,     // 前导非法/fifo 满回卷帧数
+    // P7B-latent (2026-09-30): 字 FIFO 拒写次数 —— **结构上恒 0** (契约见 fifo_sync.v
+    // 头注释与 frame_fifo.v 的 full_next 注释)。非 0 = 有已计入的字被静默丢弃。
+    output reg  [31:0] stat_fifo_ovf    // u_wf 拒写次数 (恒 0; 非 0 = 静默丢失)
 );
     // ---------------- HLS -> 9bit 字节 FIFO ----------------
     // FWFT 契约 (铁律 #4): rd 必须与消费同拍 (组合), 寄存器化 rd 会让同一字节
@@ -59,10 +62,19 @@ module slow_tx_adp (
     reg        ostate;
 
     // 字 frame_fifo = {tlast, tkeep, tdata} 73 位; rd 组合 (FWFT 同拍消费)
+    // ⚠️ 写口合同 (P7B-latent 修复, 2026-09-30): `wf_wr` 是**寄存器** (本轮决定、
+    //    下拍落笔) ⇒ 空间门必须用 `wf_full_next` (**下一拍**的精确满值), 不能用本拍
+    //    `wf_full`。用本拍 `full` 有一拍错位: "本拍 full=0 (511 占) + 本拍还有一笔在飞
+    //    写" ⇒ 下拍 full=1 ⇒ 该笔写被 frame_fifo **静默丢弃**。命中相位时丢的正是
+    //    **帧末字 (带 tlast)** ⇒ 帧已 commit (stat_frames++), 而线上该帧永远不闭合
+    //    (与 app_udp_pattern 的 P7B-W9 同族; 同款修法先例 fifo_sync 头注释 /
+    //    mac_rx_64.v:131 / app_udp_pattern.v:497)。可达性构造与反例双跑见
+    //    `_proj_10g/notes/P7B_LATENT_FIFO_FIX.md`。
     reg         wf_wr, wf_snap, wf_rlbk;
     reg  [72:0] wf_din;
     wire [72:0] wf_dout;
-    wire        wf_empty, wf_full;
+    // wf_full 修复后**不再被读** (保留连线只为排障/未来使用; 空间门一律 full_next)。
+    wire        wf_empty, wf_full, wf_full_next, wf_ovf;
     wire        wf_rd;
 
     frame_fifo #(.W(73), .D(512), .AW(9)) u_wf (
@@ -70,8 +82,20 @@ module slow_tx_adp (
         .wr(wf_wr), .din(wf_din),
         .snap(wf_snap), .rollback(wf_rlbk),
         .rd(wf_rd), .dout(wf_dout), .empty(wf_empty), .full(wf_full),
-        .dbg_rd_addr(9'd0), .dbg_rd_side()   // P6c 诊断读口未用 (tcp_echo 实例才接)
+        .dbg_rd_addr(9'd0), .dbg_rd_side(),  // P6c 诊断读口未用 (tcp_echo 实例才接)
+        .full_next(wf_full_next),            // P7B-latent: 空间门 (下一拍满)
+        .ovf_pulse(wf_ovf)                   // P7B-latent: 拒写脉冲 (自检, 恒 0)
     );
+    // 无静默丢失自检回读 (合同: 生产侧必须把拒写接成计数器, 恒 0 才叫无丢字)。
+    // 修复后**结构性恒 0** (写门 = !full_next ⇒ 落笔拍 full 必为 0); 一旦生产者判据
+    // 回归本拍 `full`, 它立刻会响 ⇒ 这是一条有牙齿的回归守卫。
+    // ⚠️ 板级可见性: 本计数器已是模块输出端口 (`stat_fifo_ovf`)。要进快照窗口需
+    //    在 `board/wrapper_p4.v` 三处加 (① 端口连线 ② 快照字打包 ③ 文档表) ——
+    //    本轮**未接** (该文件归另一个 agent), 见笔记 §可见性。
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) stat_fifo_ovf <= 32'd0;
+        else if (wf_ovf) stat_fifo_ovf <= stat_fifo_ovf + 32'd1;
+    end
 
     wire start_play = (ostate == O_IDLE) && (committed != 8'd0) && !wf_empty;
 
@@ -112,7 +136,9 @@ module slow_tx_adp (
                 T_DATA: if (!i_empty) begin
                     // 4 字节回持: 满 4 后每来 1 字节, 最老字节毕业进打包器。
                     // in_last 拍毕业字节直接合成末字 (tlast 必须落在帧的最后一个字)。
-                    if (hc == 3'd4 && !wf_full && !abort) begin
+                    // ⚠️ 空间门用 `wf_full_next` (下一拍满), **不是** `wf_full` ——
+                    //    wf_wr 是寄存器, 本拍判据必须预测"落笔那一拍"的满 (P7B-latent)。
+                    if (hc == 3'd4 && !wf_full_next && !abort) begin
                         if (pc == 4'd7) begin
                             wf_wr  <= 1'b1;
                             wf_din <= {in_last, 8'hFF, pw[63:8], hold[31:24]};
@@ -149,7 +175,9 @@ module slow_tx_adp (
                     if (hc != 3'd4) hc <= hc + 3'd1;
                     if (in_last) begin
                         // hold 里 4 字节 = FCS, 已随回持丢弃 (永不毕业)
-                        if (hc == 3'd4 && !abort && !wf_full) begin
+                        // 提交门同样用 full_next: 与"末字下拍一定落笔"同门 ⇒
+                        // "commit 了但末字进不去" 这种静默态结构性不存在。
+                        if (hc == 3'd4 && !abort && !wf_full_next) begin
                             commit_pulse <= 1'b1;
                             stat_frames  <= stat_frames + 1;
                         end else begin
