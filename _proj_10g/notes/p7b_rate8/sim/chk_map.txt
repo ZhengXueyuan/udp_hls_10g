@@ -1,0 +1,78 @@
+1	TX 帧长 = 42 + 载荷
+2	TX ethertype = IPv4
+3	TX IP proto = UDP
+4	TX IP total_len
+5	TX IP 头校验和正确
+6	TX src ip
+7	TX dst ip = peer
+8	TX src port = 8081
+9	TX dst port = 8081
+10	TX UDP len
+11	TX UDP 校验和正确 (伪头+头+载荷)
+12	P② 全部 TX 帧载荷 = 图案流连续前缀 (逐字节)
+13	N4 peer 表空 ⇒ o_ready = 0
+14	N4 peer 表空 ⇒ TX 零帧 (保守设计)
+15	N4 app 侧先挡住 (i_tx_ready=0), 一帧都没推出去
+16	N? app RX 0 帧
+17	N? app 口零拍
+18	N1/N2 无可学帧 (未匹配) ⇒ TX 仍零帧
+19	N1 拆分器关 ⇒ 2 帧走 HLS 慢路径
+20	N1 拆分器关 ⇒ HLS 侧见 echo (stat_commit=2)
+21	N1 拆分器关 ⇒ 无 meta 脉冲 (零学习)
+22	N2 端口过滤外 ⇒ 仍走 HLS
+23	N2 端口过滤外 ⇒ HLS 侧见 echo
+24	N2 端口过滤外 ⇒ 无 meta 脉冲
+25	N3 坏 FCS ⇒ stat_drop_crc = 1
+26	N3 坏 FCS ⇒ 有 TLAST ⇒ 无残帧计数
+27	N3 坏 FCS ⇒ 已判为 app 帧, 不进 HLS
+28	N3 坏 FCS ⇒ 从 HLS 路撤回 1 帧
+29	N3 坏 FCS ⇒ meta 仍脉冲 1 次 (见下语义边界)
+30	N3 (文档化边界) 坏 FCS 帧头字段仍被学入 peer 表
+31	N3 (文档化边界) 学到 peer 后 TX 照常启动
+32	P① 3 帧交付 app (2×1472 + 1×0)
+33	P① app 口恰 3 帧
+34	P① 其中 1 帧是 0 长 (null beat)
+35	P① app 计 3 帧
+36	P① app 计 1 个 0 长数据报
+37	P① app 校验 2944 字节
+38	P① app 口 snoop 2944 字节 (独立旁证)
+39	P① app RX **零失配** (载荷逐字节 = 图案)
+40	P① app 口 tkeep 全程高位连续
+41	P① meta_valid 恰 3 个脉冲 (每帧 1 次)
+42	P① meta_src_mac = 注入帧的 src mac
+43	P① meta_src_ip = 注入帧的 src ip
+44	P① meta_src_port = 注入帧的 src port
+45	P① meta_len = 末帧 (0 长) 的载荷长度
+46	P① 命中帧零泄漏到 HLS
+47	P① 3 帧从 HLS 路撤回
+48	P⑤ 收到对端一帧后 o_ready = 1 (learn-on-RX)
+49	P⑤ 学到 peer 后 app 立即开始发帧
+50	P⑤ 首帧 = 42 + 1472
+51	P③ i_en=0 ⇒ TX 静默 (无残余帧)
+52	P③(a) 0 长: 恰 1 帧上线
+53	P③(b) 1472: 恰 1 帧上线
+54	P③(c) 1500: 恰 1 帧上线 (阈值下限)
+55	P③(d) 1501: **零帧上线** (帧内中止)
+56	P③(d) stat_drop_len = 1
+57	P③(d) 中止后后续帧照常 (1472 上线)
+58	P③ TX 帧器计数 == 捕获帧数 (中止帧不计数)
+59	P③(e/f) RX 1500+1501 字节载荷均交付 app
+60	P③(e/f) app 口收 3001 字节 (无半帧/无丢字)
+61	P③(e/f) RX 边界载荷逐字节零失配
+62	P③(e/f) app 口 tkeep 仍高位连续
+63	P⑤b 学到 peer B 后继续发帧
+64	P⑤b RX 仍零失配 (换 peer 的那帧续图案)
+65	P④ 突发确实溢出丢帧 (8x 于消费率)
+66	P④ 突发: stat_drop_part = 0 (无半帧残帧)
+67	P④ 突发: 无 CRC 丢弃
+68	P④ 交付字节 == stat_app_bytes (无半帧泄漏)
+69	P④ app 口 tkeep 仍全程高位连续
+70	P④ s_axis_tready 全程恒 1 (T1 结构性不反压)
+71	P④ 8 帧全被判定为 app 帧
+72	P④ 突发丢帧后重新使能 ⇒ 新帧仍逐字节零失配
+73	P⑥ 有界会话: stat_tx_bytes = 1000 (逐字节精确)
+74	P⑥ 有界会话: 恰 1 帧 (单帧 = min(TX_BYTES, i_paylen))
+75	P⑥ 有界会话: 呈交 1000 有效字节
+76	P⑥ 有界会话: 125 拍 (= ceil(1000/8))
+77	P⑥ 有界会话: done 粘滞
+78	P⑥ 有界会话: done 之后零新增拍
