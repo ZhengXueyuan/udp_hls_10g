@@ -129,7 +129,7 @@
 | **D2** **独立佐证**：网卡**硬件**计数 | 同口径 ±3% | 任务书 D2 + 本工程两次"用户态 socket 天花板"教训（冒烟时 socket 只交付 3858/855,930 帧） | 网卡 `rx_packets` Δ=820,615 / `unicast` Δ=820,614 ⇒ **956.3 Mbps** vs 板子 956.0 ⇒ **偏差 0.03%**；`rx_errors`/`rx_missed` 增量 0 | **PASS** |
 | **D3** **独立路径**逐字节 | verifier exit 0 | `_proj_pcie/smoke_scratch/verify_pcap_pattern.py` 头注释（socket 口径无判别力 ⇒ 换 tcpdump + 离线代数） | 2000 包 / **1999 帧**：**1999/1999 逐字节**等于由本帧反解状态生成的图案流；**1998/1998 严格相邻**；**0 处无法归因**；`tcpdump: 0 packets dropped by kernel` | **PASS** |
 | **D3b** 流从 **offset 0** 开始（新增） | 某帧状态 == SEED | 任务书 D 的"流从 offset 0"；`rtl/app_udp_pattern.v` 种子 `0x9E3779B97F4A7C15` | 状态 == SEED 的帧是**抓到的第 0 帧**（且该帧被逐字节复算通过）⇒ 抓包在流起点之前武装 | **PASS** |
-| **D4a** 图案失配 W13 | 0 | `P6E_OBS.md`（**必须恒 0**） | `0` | **PASS** |
+| **D4a** 图案失配 W13 | 0 | `P6E_OBS.md`（**同窗 `ΔW10>0` 时恒 0**） | `0`（本窗 RX 侧**仅 100 B**：教学帧 `ΔW10=1`，见 `host_p6b_final_accept_d.log:40`） | **PASS（限 100 B）** —— ⚠️ 本验收的"逐字节"由 **D3** 承担（**TX 方向 + pcap 独立路径**）；"失配恒 0"是过度声称，见 `P7B_W13_AUDIT.md` §②-V9/V10 |
 | **D4b** FCS 错帧 W3 | 0 | `P6E_OBS.md`（物理层/前端配方） | `0` | **PASS** |
 | **E9** `ΔW9/ΔW8` ≈ 1472.0 B/帧 | `[1471,1473]` | `wrapper_p4.v` 的 app 固定 `i_paylen=1472` | **1472.0015 B/帧**（ΔW9=1,207,528,464 / ΔW8=820,331） | **PASS** |
 
