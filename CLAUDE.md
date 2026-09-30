@@ -6,6 +6,21 @@
 
 ## 当前状态与下一步 (2026-09-30)
 
+⭐ **10G 线速已达标** (2026-09-30 下午, **RATE 里程碑**): 两刀 = ① **8 路并行图案发生器**
+(`rtl/app_udp_pattern.v`, 包在既有宏 `P7B_10G` 内, 1474 → **186 拍/帧**) ② **组帧器乒乓重叠**
+(`rtl/udp_tx_frame.v`, **新宏 `UDP_TX_OVL`**, 378 → **191 拍/帧**; 构建脚本 `board/build_p7b_ku5p.tcl:145`
+的 `verilog_define` 已加 `UDP_TX_OVL=1`)。**主判据 (板内自洽、不依赖主机墙钟)
+`ΔW20/(ΔW5/156.25e6)` = 813,794.7 fps** (R1/R2/R3/L20 四轮**逐字一致**到 3×10⁻⁶; FE/DP 交叉差 **+0.0003%**)
+⇒ **线上载荷 9.531 Gbps (最保守口径) = 同几何上限 99.61% · 达标界 6.8 Gbps 的 ×1.402 · XGMII 占空 99.9991%**;
+拍/帧 **192.00**; 四项差分账 `d_dma/d_board = 0.99802` 且 **`Δcrc=Δbad=Δovf=0`** ⇒ **板子清白**;
+负对照 N-a (拉 `TX_DIS`) ⇒ NIC 计数全 0 而**同窗 `ΔW20` 仍 813,802 fps** ⇒ **两条口径独立性被直接证明**。
+合并构建 `WNS +0.136 / WHS +0.010 / 三类失败端点全 0`; 位流 sha256 `4eeb0f5f…3133`。
+原件 = **`_proj_10g/notes/P7B_RATE_RESULT.md`** (板级测量) + `P7B_RATE_{BOTTLENECK,DATAPATH,8WAY,FRAMER,BUILD,MEASURE_PLAN}.md`。
+⚠️ **两刀都包在宏内 ⇒ 关掉 `UDP_TX_OVL` 就回到 HEAD 的帧器行为 (默认分支逐字保留, 343 insertions / 0 deletions)**;
+⚠️ **`UDP_TX_OVL` 只在 `board/build_p7b_ku5p.tcl` 这一个构建里打开** (未改任何别的构建脚本);
+⚠️ **口径注意**: 本构建的帧几何经三台独立仪器定案为 **载荷 1464 B / 线长 1510 B / 192.00 拍**,
+与测量计划书的 **1472 / 1518 / 193.24** 不同 —— **错的是计划书**, 不是板子。
+
 **P7b (10G 数据面) 五个闸全部收口**: **闸 0 ✅ / 闸 1 ✅ / 闸 2 ✅ / 闸 3 ✅ / 闸 4 ✅ (板级验收通过)**。
 新 64 位 XGMII MAC **已接入 `board/wrapper_p4.v` 的 `ifdef P7B_10G`**; `rx_classify` v2 **已落进 `rtl/`**。
 两个真缺陷已修: ① `/S/` 落 XGMII **lane4** 的帧 SOP 字非满对齐 (`mac_rx_10g.v` +122/−25);
@@ -17,27 +32,42 @@
   **另有 4 项未测** = `F1-E4b` (RX 方向载荷逐字节) · `F1-E5` · `F1-E6` · `F5b` (RTO/重传计数结构性不可读)。
   ⭐ **最终判据表 38 行 = `PASS=33` / `FAIL=1` / `未测=4` —— 以 `_proj_10g/notes/P7B_GATE4_ACCEPT3.md` §2 的表为准**
   (⚠️ 此前流传的"32"作废: 它把两条"骑墙行"的一半计入 PASS 又各记一个未测行 ⇒ 37 行, 在 36 行表里不自洽)。
-- **产品级第一优先 = 10G 线速未达标**: app 发生器 **1 字节/拍** ⇒ 实测载荷 **1.248 Gbps** = 线速 ~12.5%。
-  ⚠️ 闸 1 的 9,999.94 Mbps 与闸 2 的 NIC link **只证明链路/物理层**, **数据面端到端从未跑过线速**。
+- ~~**产品级第一优先 = 10G 线速未达标**: app 发生器 **1 字节/拍** ⇒ 实测载荷 **1.248 Gbps** = 线速 ~12.5%。
+  ⚠️ 闸 1 的 9,999.94 Mbps 与闸 2 的 NIC link **只证明链路/物理层**, **数据面端到端从未跑过线速**。~~
+  ⇒ ✅ **已关闭 (2026-09-30 下午, RATE 里程碑; 见本节开头)**。⚠️ **但这一轮的 4 项未测不许当通过**:
+  **RX 方向载荷逐字节** · **工具自报的"图案真失配"** · **`N-b1` (`TX_GAP` 低速档, 未做)** ·
+  **`W9` 与线上差 8 B/帧的 RTL 定位** (`P7B_RATE_RESULT.md` §4 末/§9)。
 - **闸 4 的三条 FAIL 去向里, 没有一条是"现象变好了"**: 2 条是**判据改了** (`T_RUN` 拆分 / `N_SELF` 加容差),
   1 条是**判据修好了、首次真的被评估** (`N_XCHK` 的 `${assoc+x}` 守卫对关联数组恒假 ⇒ 结构性从未评估)。
 
 **接手必读 (按序, 都在本仓内)**:
-1. ⭐ **`_proj_10g/notes/P7B_HANDOFF.md`** —— **下一轮开工先读这份**: 环境现状 (板子在发图案流 / PCIe 窗口活着 /
+1. ⭐ **`_proj_10g/notes/P7B_HANDOFF.md`** —— **下一轮开工先读这份**: 环境现状 (**板子已停** /
+   **PCIe 观测窗口不可读 —— 要读板侧得走"先烧位流 → 再重启对端机"** /
    唯一连线 `J8↔enp1s0f1np1` / `tools/peer_ssh.py` + `PEER_PW` / `/32` 路由会被静默冲掉) ·
-   状态总表 · 下一步三件事与前置 · 待办账 16 条 · **产品级 Gap 6 条** · 用户偏好 · 全局经验 30–34 条。
-2. `P7B_SPEC.md` —— 施工规格: 路线与 license 分叉 / 接口冻结 / 闸序 / **66 条正判据 + 9 条负对照**。
-3. `_proj_10g/notes/P7B_GATE4_ACCEPT{,2,3}.md` + `P7B_GATE4_CRITERIA_CLOSEOUT.md` —— **闸 4 三轮读数** +
-   判据侧收口 + **产品级 Gap 6 条**。
-4. `_proj_10g/notes/P7B_{UDP_APP_ROOTCAUSE,UDP_DIAG2,LANEFIX}.md` —— 板级失效的根因链 (三假设全否 →
+   状态总表 · 下一步四件事与前置 · 待办账 19 条 · **产品级 Gap 7 条** · 用户偏好 · 全局经验 30–34 条。
+2. ⭐ **本轮的 RATE 笔记 (10G 线速达标 = 产品级第一优先的关闭件, 共 7 份)**:
+   **`P7B_RATE_RESULT.md`** (板级测量原件: 判据表 / 四项差分账 / 两条负对照 / **未测清单** / 停板步骤) ·
+   `P7B_RATE_BOTTLENECK.md` (瓶颈定位: 1474 拍/帧 = 1.248 Gbps, 与板侧吻合 0.0002%) ·
+   `P7B_RATE_DATAPATH.md` (独立核算: 单流 4.84 / 双流 9.51 Gbps) ·
+   `P7B_RATE_8WAY.md` (第一刀: 8 路并行 + **逐字节等价五重证据**) ·
+   `P7B_RATE_FRAMER.md` (第二刀: 组帧器乒乓 378→191 拍, `o_busy` 只变一处) ·
+   `P7B_RATE_BUILD.md` (合并构建 `+0.136 / 0 失败`, 位流 sha256 `4eeb0f5f…3133`) ·
+   `P7B_RATE_MEASURE_PLAN.md` (测量方案; ⚠️ 其 **1472/1518/193.24** 口径**已被实测推翻**,
+   真值是 **1464/1510/192.00** —— 读它时先读 `P7B_RATE_RESULT.md` §4)。
+3. `P7B_SPEC.md` —— 施工规格: 路线与 license 分叉 / 接口冻结 / 闸序 / **66 条正判据 + 9 条负对照**。
+4. `_proj_10g/notes/P7B_GATE4_ACCEPT{,2,3}.md` + `P7B_GATE4_CRITERIA_CLOSEOUT.md` —— **闸 4 三轮读数** +
+   判据侧收口 + **产品级 Gap 6 条**（⚠️ 该 6 条是**闸 4 当时**的口径; RATE 轮关闭了第 1 条、新增 1 条 ⇒
+   现役口径 = **7 条**, 见 `P7B_HANDOFF.md` §5）。
+5. `_proj_10g/notes/P7B_{UDP_APP_ROOTCAUSE,UDP_DIAG2,LANEFIX}.md` —— 板级失效的根因链 (三假设全否 →
    **lane4 双证** → 修法 +122/−25 + 判据族扫描)。
-5. `_proj_10g/notes/P7B_{TIMING_RERUN,MAC_TIMING_FIX,BUILD_FINAL}.md` —— `−0.173 / 39 失败` → `padrem` 等价化简
+6. `_proj_10g/notes/P7B_{TIMING_RERUN,MAC_TIMING_FIX,BUILD_FINAL}.md` —— `−0.173 / 39 失败` → `padrem` 等价化简
    → **合并构建 +0.128 / 0 失败**。
-6. `_proj_10g/notes/P7B_REGRESSION.md` + `P7B_CHAIN_COVERAGE.md` + **`P7B_GATE_HARNESS_FIX.md`** —— **136 门全仓回归**
+7. `_proj_10g/notes/P7B_REGRESSION.md` + `P7B_CHAIN_COVERAGE.md` + **`P7B_GATE_HARNESS_FIX.md`** —— **136 门全仓回归**
    (1 处真回归 **已收口** + 21 既存 + 8 哑门 **3 条已修**) · 链级门 **80→106** 与反例双跑 · 门修复的收口与反例。
-7. `_proj_10g/notes/P7B_EVIDENCE_AUDIT.md` —— **历史证据污染审计** (两个缺陷对已入库读数影响到什么程度)。
-8. `P7B_VENDOR_EXAMPLE_DEFECTS.md` · `P7B_LATENCY_GAPS.md` —— 厂商两笔账结案 · 延迟两个缺口的归因。
-9. `PORT_NOTES.md` 的 "2026-09-30 P7b（闸 3 收口 → 闸 4 板级通过）" 节 —— 里程碑日志 + 11 条教训 + 未结项清单。
+8. `_proj_10g/notes/P7B_EVIDENCE_AUDIT.md` —— **历史证据污染审计** (两个缺陷对已入库读数影响到什么程度)。
+9. `P7B_VENDOR_EXAMPLE_DEFECTS.md` · `P7B_LATENCY_GAPS.md` —— 厂商两笔账结案 · 延迟两个缺口的归因。
+10. `PORT_NOTES.md` 的 "2026-09-30 P7b RATE 里程碑" 节 + "2026-09-30 P7b（闸 3 收口 → 闸 4 板级通过）" 节
+    —— 里程碑日志 + 教训 + 未结项清单。
 
 ⚠️ **两条"别按已完成接手"的账**:
 - ~~`p4_rxclass` / `p4_rxclass_xk` 真回归未收口~~ ⇒ ✅ **已收口** (`_proj_10g/notes/P7B_GATE_HARNESS_FIX.md`:
@@ -112,7 +142,9 @@
 - **演示 app** `rtl/app_udp_pattern.v`: UDP 版图案发生器 + 校验器 (xorshift64 / 种子
   `0x9E3779B97F4A7C15` / 先取后推进, 与 `peer.exe --udp-*` 逐字节一致)。
   RX 校验 **1 字节/拍 II=1 无缝** (1 字前瞻寄存器) ⇒ 天花板 = 1G 线速 (125 MB/s @125MHz);
-  10G 需换 8 路并行 (8 步 xorshift/拍)。TX 限速 = 帧间 `TX_GAP` 拍 (默认 58000 ≈ 24.7 Mbps,
+  10G 需换 8 路并行 (8 步 xorshift/拍) ⇒ ⭐ **2026-09-30 已落地 (RATE 轮)**: TX 发生器与 RX 校验器
+  **同批**改成 8 字节/拍 (`M^k` 常量 XOR 网), 但**包在既有宏 `P7B_10G` 内** ——
+  **默认构建 (未定义该宏) 仍逐字是上面这条 1 B/拍路径**。TX 限速 = 帧间 `TX_GAP` 拍 (默认 58000 ≈ 24.7 Mbps,
   与 `peer --rate-mbps 20/25` 同量级), 超 `PLEN_MAX` 的帧冻结 LFSR 保住线上图案流连续。
   **默认不激活**: 无 peer (`udp_tx_cfg.o_ready=0`) ⇒ 零帧; `i_en=0` ⇒ 不校验。
 - **配置** (wrapper): `udp_split.cfg_dst_ip` = 本板 IP / `cfg_port0` = 8081 (8080 由

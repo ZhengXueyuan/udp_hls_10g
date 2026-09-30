@@ -18,6 +18,7 @@
 | P7a 10G PHY（PCS/PMA + gearbox）板级验收原件 | `P7A_RESULT.md` + `P7A_SPEC.md` |
 | P7b 闸 1 / 闸 2 / 闸 4 板级读数原件 | `_proj_10g/notes/P7B_GATE1.md` / `P7B_GATE2.md` / `P7B_GATE4_ACCEPT{,2,3}.md` |
 | **P7b 下一轮开工先读**（环境现状 / 状态总表 / 下一步 / 待办账 / 产品级 Gap） | `_proj_10g/notes/P7B_HANDOFF.md` |
+| ⭐ **10G 线速达标（RATE）的板级测量原件** | `_proj_10g/notes/P7B_RATE_RESULT.md` + 同族 `P7B_RATE_{BOTTLENECK,DATAPATH,8WAY,FRAMER,BUILD,MEASURE_PLAN}.md`（瓶颈定位 / 独立核算 / 两刀 / 构建 / 测量方案） |
 | P7b 其余笔记 | `_proj_10g/notes/P7B_{XXV_OFFICIAL,MAC_DESIGN,MAC_REVIEW,MAC_GATEFIX,MAC_TIMING,RXCLASSIFY_AUDIT,RXCLASSIFY_DESIGN,IMPLICIT_GATE_FIX,IMPLICIT_GATE_ROLLOUT,U7_AND_PEER}.md` |
 | 施工日志、踩坑、决策、教训 | `PORT_NOTES.md` |
 | 工程规范与铁律 | `CLAUDE.md` |
@@ -28,7 +29,12 @@
 10G 方向的**闸 0/闸 1/闸 2/闸 3/闸 4 全部收口** —— **闸 4 板级验收三轮 `PARTIAL → PARTIAL → 通过`**；
 **唯一 FAIL = `C8`**（观测面 8 位饱和计数器，"在涨"结构性不可判；**判据一字未改、非设计缺陷**），
 **另有 4 项未测（`F1-E4b` · `F1-E5` · `F1-E6` · `F5b`）—— 最终判据表 38 行 = `PASS=33` / `FAIL=1` / `未测=4`，以 `_proj_10g/notes/P7B_GATE4_ACCEPT3.md` §2 为准**。
-**产品级第一优先 = 10G 线速未达标**（app 发生器 **1 字节/拍** ⇒ 实测载荷 **1.248 Gbps** = 线速的 ~12.5%）。
+⭐ **产品级第一优先 = 10G 线速未达标 ⇒ 本轮（2026-09-30 下午）已关闭**：两刀（**8 路并行图案发生器** +
+**组帧器乒乓重叠**）落地后，**主判据（板内自洽、不依赖主机墙钟）`ΔW20/(ΔW5/156.25e6)` = 813,794.7 fps**，
+四轮逐字一致到 3×10⁻⁶ ⇒ **线上载荷 9.531 Gbps（最保守口径）= 同几何上限的 99.61% · 达标界的 1.402 倍 ·
+XGMII 占空 99.9991%**。读数与原件 = `_proj_10g/notes/P7B_RATE_RESULT.md`。
+⚠️ 本构建的帧几何经三台独立仪器定案为 **载荷 1464 B / 线长 1510 B / 192.00 拍**，与测量计划书的
+**1472 / 1518 / 193.24** 不同 —— **错的是计划书**（详见该笔记 §4）。
 
 ### ✅ 已完成
 
@@ -49,6 +55,7 @@
 | **P7b-门修复收口** | 真回归（`p4_rxclass` / `p4_rxclass_xk` 门清单各补 1 个 `rtl/fifo_sync.v`）+ **3 条哑门/坏脚本**（`p4_replay` 补 DONE 判据 / `p5c_rev_elab` 补 2 件 + ERROR 硬判据 / `p4indm_4gates` 改委托 P4 矩阵） | ✅ 两条门由红转绿（**EXIT=0**，三模式 161 行 PASS，**与基线逐字相同；未改 RTL**）；哑门 3 条自证 + **反例 4 条真跑按期望翻转**；⚠️ 两条门脚本在 `.gitignore` 里 ⇒ **放行处理中** |
 | ⭐ **P7b-闸4** | **10G 板级验收**（快照 51 字 + PCS 链路 + 端到端 F 组） | ✅ **通过** — 三轮 `PARTIAL → PARTIAL → 通过`：脚本 **`PASS=26/FAIL=1/SKIP=1`** + 快照 **`15/0/0`**；**最终判据表 38 行 = `PASS=33` / `FAIL=1`（仅 `C8`）/ `未测=4`（`F1-E4b`·`F1-E5`·`F1-E6`·`F5b`）—— 以 `P7B_GATE4_ACCEPT3.md` §2 为准**；F3 = 3000 帧逐字节 + GF(2) 反解（**无需重烧**），F4 = pcap 端点 **106,182 / 106,174 fps** vs 板侧 106,003 fps（**+0.17%**）；**`F5a`（不掉链）从"未测"升级为"定性 PASS"，`F5b`（重传计数）仍未测** |
 | ⭐ **P7b-修** | **两个真缺陷修复**：① `/S/` 落 XGMII **lane4** 的帧 SOP 字非满对齐（`mac_rx_10g.v` **+122/−25**）；② pad/FCS 修复打出的 TX 时序回归（`mac_tx_10g.v` 的 `padrem`/`lw_ts` **等价化简** +28/−1） | ✅ **①** 板级复证：单发教学即被认领、成批 **20/20** 认领、图案流 **2999 帧逐字节**等于图案流且偏移 0 连续；**②** 合并构建 **WNS +0.128 / WHS +0.010 / 三类失败端点全 0**（上轮 39 条 setup 违例全部消失，位流 sha256 `0e1c8088…b557`） |
+| ⭐ **P7b-线速（RATE）** | ⭐ **10G 线速达标**（**产品级第一优先，本轮关闭**）：两刀 = ① **8 路并行图案发生器**（`rtl/app_udp_pattern.v`，包在既有宏 `P7B_10G` 内，`M^k` 常量 XOR 网、**逐字节等价**，发生器 **1474 → 186 拍/帧**；TX 与 RX 校验器同批改）② **组帧器乒乓重叠**（`rtl/udp_tx_frame.v`，**新宏 `UDP_TX_OVL`**，**378 → 191 拍/帧**，`o_busy` 只在"帧首拍 → 上一实现窗口起点"之间变长且唯一消费方是 `udp_tx_cfg`）—— ⚠️ **`UDP_TX_OVL` 现在在 `board/build_p7b_ku5p.tcl` 里是打开的（只影响这一个 P7b 构建）；关掉它就回到 HEAD 的帧器行为（`ifdef` 的默认分支逐字保留，343 insertions / 0 deletions）** | ✅ **板级达标** — 主判据 `ΔW20/(ΔW5/156.25e6)` = **813,794.7 fps**（四轮 R1/R2/R3/L20 **逐字一致**到 3×10⁻⁶；FE/DP 双域交叉差 **+0.0003%**）；**拍/帧 192.00**；**线上载荷 9.531 Gbps（最保守口径）= 同几何上限 99.61% / 达标界 ×1.402 / XGMII 占空 99.9991%**；四项差分账 `d_dma/d_board = 0.99802`、**`Δcrc=Δbad=Δovf=0`**；负对照 N-a（拉 `TX_DIS`）⇒ NIC 计数全 0 而**同窗 `ΔW20` 仍 813,802 fps** ⇒ **两条口径的独立性被直接证明**；构建 `WNS +0.136 / 三类失败端点全 0`，位流 sha256 `4eeb0f5f…3133` |
 
 **⭐ 新 MAC 修掉的一个真缺陷（DEFECT #1）**
 
@@ -76,9 +83,12 @@
 
 ### 🚧 进行中 / 未完成
 
-- **产品级第一优先 = 10G 线速未达标**：app 发生器 **1 字节/拍** ⇒ 实测载荷 **1.248 Gbps** / 线上 **1.287 Gbps**
-  = 线速的 **~12.5%**；修法 = **8 路并行**（TX 发生器与 RX 校验器**必须同批改**）⇒ ~9.98 Gbps。
-  ⚠️ **闸 1（9,999.94 Mbps）与闸 2 的 NIC link 只证明链路/物理层能到 10G —— 数据面端到端从未跑过线速。**
+- ~~**产品级第一优先 = 10G 线速未达标**（app 发生器 **1 字节/拍** ⇒ 实测载荷 **1.248 Gbps** / 线上 **1.287 Gbps**
+  = 线速的 **~12.5%**；⚠️ 闸 1 的 9,999.94 Mbps 与闸 2 的 NIC link **只证明链路/物理层能到 10G ——
+  数据面端到端从未跑过线速**）~~ ⇒ ✅ **已于 2026-09-30 下午关闭（见上表「P7b-线速（RATE）」）**。
+  ⚠️ **但它这一轮的 4 项未测不许当通过**（登记在 `_proj_10g/notes/P7B_RATE_RESULT.md` §9）：
+  **RX 方向载荷逐字节** · **工具自报的"图案真失配"**（未采信也未否定）· **`N-b1`（`TX_GAP` 低速档，未做）** ·
+  **`W9` 与线上差 8 B/帧的 RTL 定位**（§4 末，**未定位**）。
 - **`C8` 仍 FAIL**：`pcs_vcc_cyc` **8 位饱和** ⇒ "在涨"结构性不可判；**判据一字未改、非设计缺陷**，正证据（非 0）成立。
 - **4 项未测**：`F1-E4b`（RX 方向载荷逐字节 —— 本构建 app 是 UDP 版，**TCP 载荷没有消费者**）·
   `F1-E5` · `F1-E6`（负对照，本轮未做）· `F5b`（RTO/重传计数 —— `tx_stat_retx` **不在 51 字快照窗口内 ⇒ 结构性不可读**，要闭合得改观测面）。
@@ -105,9 +115,10 @@
   结论措辞只能是「**F4/F-2 修复之后该现象没有出现**」（样本量 1，不能写「证明已修好」）。
 
 **下一步**（细节与前置条件见 `_proj_10g/notes/P7B_HANDOFF.md` §3）：
-① **支线 —— PCS/PHY 内部延迟**（最大延迟缺口；需第二轮构建开 `C_ADD_GT_CNTRL_STS_PORTS` +
+① **把这条 10G 路径接到真实业务**（本轮线速是在**演示图案 app** 上跑出来的；真实 TCP/UDP 业务在 10G 下的
+端到端验收仍是空的）；② **支线 —— PCS/PHY 内部延迟**（最大延迟缺口；需第二轮构建开 `C_ADD_GT_CNTRL_STS_PORTS` +
 从 `generate_target example` 抄 45 个 GT 控制输入；⚠️ 厂商例程里 `assign ctl_local_loopback = 1'b1` 是**死网**，照抄拿不到 GT 环回）；
-② **把延迟终点推到 app 队列**（对端机 root 现已具备）；③ **10G 线速**（app 发生器 8 路并行）。
+③ **把延迟终点推到 app 队列**（对端机 root 现已具备）。
 
 ## 怎么跑
 
@@ -299,7 +310,8 @@ bash sim/p4sim/run_matrix_p4dfix.sh -only stallgate             # git-bash 入�
 
 | 基线 | 适用 | 时序（routed） | 资源 | 出处 |
 |---|---|---|---|---|
-| **P7b 10G 变体**（**合并构建** = lane4 修复 + TX 时序修复后） | KU5P；官方 PCS + 自写 64 位 MAC + 数据面 | **WNS +0.128 / WHS +0.010 / 三类失败端点全 0**（11 个 intra clock group + 3 条 inter + 3 条 async **逐组 0 失败**） | LUT 70,095 (32.31%) · FF 68,471 (15.78%) · CARRY8 1413 · **BRAM tile 348 (72.50%)** · URAM 0 · DSP 4 · Bonded IOB 10 · BUFGCE 5 · GTYE4 6/16 | `board/p7b_ku5p_timing.rpt` / `board/p7b_ku5p_util.rpt` / `_proj_10g/notes/P7B_BUILD_FINAL.md`（位流 sha256 `0e1c8088…b557`） |
+| ⭐ **P7b 线速构建（RATE，最新）**（= 合并构建 + **两刀**：`P7B_10G` 内的 8 路并行发生器 + **`UDP_TX_OVL`** 乒乓组帧器） | KU5P；官方 PCS + 自写 64 位 MAC + 数据面（**10G 线速达标的位流**，sha256 `4eeb0f5f…3133`） | **WNS +0.136 / WHS +0.010 / 三类失败端点全 0**（全部 intra/inter/other path group **逐组 0 失败**）；两处重点：`txoutclk_out[0]_3` **+0.765 → +0.141**（路径属 `u_mac_tx` 的 CRC/padrem 局部簇、**无本轮新逻辑** ⇒ 布局漂移）、两个 256×73 bank **都落 LUTRAM** | LUT 71,727 (33.06%) · FF 69,287 (15.97%) · CARRY8 1410 · **BRAM tile 348 (72.50%，逐数不变)** · LUT as Memory 6654 (+336) · URAM 0 · DSP 4 · Bonded IOB 10 · GTYE4 6/16 | `board/p7b_ku5p_{timing,util}.rpt`（mtime 17:50）/ `_proj_10g/notes/P7B_RATE_BUILD.md` |
+| **P7b 10G 变体（闸 4 验收构建）**（**合并构建** = lane4 修复 + TX 时序修复后） | KU5P；官方 PCS + 自写 64 位 MAC + 数据面 | **WNS +0.128 / WHS +0.010 / 三类失败端点全 0**（11 个 intra clock group + 3 条 inter + 3 条 async **逐组 0 失败**） | LUT 70,095 (32.31%) · FF 68,471 (15.78%) · CARRY8 1413 · **BRAM tile 348 (72.50%)** · URAM 0 · DSP 4 · Bonded IOB 10 · BUFGCE 5 · GTYE4 6/16 | `board/p7b_ku5p_timing.rpt` / `board/p7b_ku5p_util.rpt` / `_proj_10g/notes/P7B_BUILD_FINAL.md`（位流 sha256 `0e1c8088…b557`） |
 | **P6b 1G 数据面** | KU5P；1G 验收位流（双时钟域） | **WNS +0.168 / WHS +0.010 / WPWS 0.000**，**0 失败端点** | —— | `P6B_ACCEPT.md` §1.1/§1.2（位流 sha256 `c1770086…48ca`，`BUILD_ID=6`） |
 
 - ⚠️ **P7b 的 clock group 名后缀逐轮漂移**（裸名/`_1` ↔ `_2`/`_3`，根因已定位到工具侧 `opt_design` 的
@@ -330,5 +342,6 @@ bash sim/p4sim/run_matrix_p4dfix.sh -only stallgate             # git-bash 入�
 | P7a 10G PHY 板级验收（含四条新教训） | `P7A_RESULT.md` + `P7A_SPEC.md` |
 | P7b 路线与 license 分叉 / 接口冻结 / 闸序 / 判据表 / 未覆盖清单 | `P7B_SPEC.md` |
 | P7b 闸 1、闸 2、MAC 设计·审查·门修·时序、`rx_classify` 审计与设计、隐式网修复与铺开、字节序与对端现状 | `_proj_10g/notes/P7B_*.md` |
-| **P7b 闸 3/闸 4 收口 + 两个真缺陷修复**（lane4 根因与修法 / 时序回归与修复 / 合并构建 / 闸 4 三轮与判据收口 / 136 门回归 / 链级门 80→106 / 历史证据污染审计 / 厂商两笔账 / 延迟两缺口 / **下一轮交接**） | `_proj_10g/notes/P7B_{UDP_APP_ROOTCAUSE,UDP_DIAG2,LANEFIX,TIMING_RERUN,MAC_TIMING_FIX,BUILD_FINAL,GATE4_ACCEPT,GATE4_ACCEPT2,GATE4_ACCEPT3,GATE4_CRITERIA_CLOSEOUT,GATE4_PLAN,GATE4_TOOLING,GATE4_TOOLING_FIX2,REGRESSION,GATE_HARNESS_FIX,CHAIN_COVERAGE,EVIDENCE_AUDIT,VENDOR_EXAMPLE_DEFECTS,LATENCY_GAPS,HANDOFF}.md` |
+| **P7b 闸 3/闸 4 收口 + 两个真缺陷修复**（lane4 根因与修法 / 时序回归与修复 / 合并构建 / 闸 4 三轮与判据收口 / 136 门回归 / 链级门 80→106 / 历史证据污染审计 / 厂商两笔账 / 延迟两缺口 / **下一轮交接**） | `_proj_10g/notes/P7B_{UDP_APP_ROOTCAUSE,UDP_DIAG2,LANEFIX,TIMING_RERUN,MAC_TIMING_FIX,BUILD_FINAL,GATE4_ACCEPT,
+GATE4_ACCEPT2,GATE4_ACCEPT3,GATE4_CRITERIA_CLOSEOUT,GATE4_PLAN,GATE4_TOOLING,GATE4_TOOLING_FIX2,REGRESSION,GATE_HARNESS_FIX,CHAIN_COVERAGE,EVIDENCE_AUDIT,VENDOR_EXAMPLE_DEFECTS,LATENCY_GAPS,HANDOFF}.md` |
 | 里程碑日志与教训（P6b 收口 / P7a / P7b 等各节） | `PORT_NOTES.md` 对应各节 |
