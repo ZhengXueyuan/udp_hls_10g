@@ -32,7 +32,8 @@
 | **PCIe 观测窗口的次序约束** | ⭐ **首选：烧完新位流直接 `remove`+`rescan`（≈5 s，不重启对端机）** —— 判别式 = `lspci` 的 `LnkSta`：**`x4` 有救 / `x0` 没救**。⚠️ **只有场景 A（主机 POST 时 FPGA 跑的是无 PCIe 的设计）才需要重启**；本工程的日常形态是场景 B（POST 时带 PCIe、之后再重烧）。**判活按 BAR 读**（`0x00 == 0x50360001`），**不看 `lspci`**；⚠️ `0xffffffff` 在两个场景下**不可区分**（这正是它曾被误判成"只能重启"的原因）。配方 = `P7B_PCIE_RESCAN_RECOVERY.md` §3（本轮 Stage 1 **独立复证 3 次**）。 |
 | **物理层** | 10GBASE-R 合规：P7a BER 上界 4.997e-13（`P7A_RESULT.md`）；闸 1 板内自环 9,999.94 Mbps（`P7B_GATE1.md`）。⭐ **数据面侧也已达线速**（RATE 轮）。⚠️ 本体是板对板连接器 + PCB 板材的**贴边设计**（10.3125 < 手册的 12 GHz 边界，裕量 ~14%）。 |
 | **license** | 本机 `Xilinx.lic` 覆盖 `xxv_eth_mac_pcs` 等（`permanent uncounted`）。**按 CORE 分叉**：PCS-only 能出位流、**含 MAC 的变体被拒**。`generate_target` 成功 ≠ 能出位流。 |
-| **工作区** | **HEAD = `d417589`**（RATE 轮已由 TL 提交）。**BIZ 轮改动全部未提交**：6 个已跟踪文件（`board/wrapper_p4.v` · `_proj_pcie/rtl/axi_regs.v` · `rtl/{app_udp_pattern,frame_fifo,slow_rx_adp,slow_tx_adp}.v`）+ 门脚本/TB 若干 + **19 份新笔记**（`git status --short` 91 行可核）。 |
+| **工作区** | ✅ **BIZ 轮已全部提交并推送**：**HEAD = `origin/master` = `ba9d706`**（领先 0 / 落后 0），工作区只剩 **11 个刻意不入库的 `_tmp_*.py`**（早先 `P6B_COMMIT_PLAN.md` §4.2 已裁决「不提交（留盘）」，理由：一次性脚本、多数含未修的 ECO 路径；该计划另建议「若要可复现，改名移到 `sim/p4gates/tools/`」——**未做**）。本轮的 4 笔：`d417589`(RATE) → `6ec6d2f`(RTL) → `2ec6813`(证据 206 文件) → `ba9d706`(文档)。 |
+| ⚠️ **仓库外文件不在版本控制内** | **`D:\repo\XCKU5PMini\CLAUDE.md`**（上一层目录，**不是**本仓 —— 本仓根是 `udp_hls_10g`）本轮被重写了整个 P7b 节，但**它不在任何 git 仓库里**（`git rev-parse` 报 `fatal: not a git repository`）⇒ **这份订正只存在于磁盘上**。⚠️ 若将来重建/覆盖该文件，请从 `README.md` / `udp_hls_10g/CLAUDE.md` / 本文件回捞（那三处有同源内容）。 |
 
 **改板子状态的两条命令**（⚠️ **`TX_DIS` 的写地址是 `0x08`**，不是旧的 `0x10` —— 闸 4 工具轮已订正）：
 
