@@ -453,6 +453,45 @@ module tb_mac_10g;
     endtask
 
     // =====================================================================
+    // ⭐ 独立 FCS oracle (2026-09-30, DEFECT #1 的**判据结构**修复)
+    // ---------------------------------------------------------------------
+    // oracle 的输入 = **线上实际发出去的字节** (tx_decode 解出的 expb[0..clen-1], 含 DUT
+    //   自己补的 pad), **不是** TB 喂进去的内容 ⇒ 覆盖集由线上内容定义, 与 DUT 内部
+    //   "CRC 覆盖哪些字节"的写法无关。
+    // ⚠️ 对照被替换掉的那条同源 oracle (原组 8.2):
+    //     `chk(expb[60] === fcsb[0] && expb[63] === fcsb[3], ...)` 里的 fcsb 来自
+    //     `calc_fcs(n)` = **只对内容字节**做 CRC —— 与当时实现 (mac_tx_10g: crc_en 只在
+    //     S_DATA)&(crc_keep = tkeep) 的覆盖面**逐字相同** ⇒ 实现把 pad 漏掉时 oracle 同步
+    //     漏掉 ⇒ 结构上判不出来 (实测 pristine 252 checks / 0 fail)。
+    //     算术不是同源的 (tb_crc_byte 是独立位串行实现, 组 1 用标准向量校准), 同源的是
+    //     **覆盖集的定义** —— 缺陷正好落在覆盖集上, 所以它藏得住。
+    //   本 oracle 两条判据:
+    //     (a) DUT 写在线上的 FCS 字段 == CRC(线上全部内容字节 incl pad) 的终值取反,
+    //     (b) 自洽残差: 线上内容+FCS 全部流过 ⇒ 0xDEBB20E3 (与 mac_rx_10g 同一魔数)
+    // =====================================================================
+    task fcs_chk_wire(input [8*16-1:0] tag, input integer clen);
+        integer i2, e2;
+        reg [31:0] c2;
+        begin
+            c2 = 32'hFFFFFFFF;
+            for (i2 = 0; i2 < clen; i2 = i2 + 1) c2 = tb_crc_byte(c2, expb[i2]);
+            c2 = c2 ^ 32'hFFFFFFFF;
+            $display("     [FCSW] %0s clen=%0d oracle=%02x %02x %02x %02x | wire=%02x %02x %02x %02x",
+                     tag, clen, c2[7:0], c2[15:8], c2[23:16], c2[31:24],
+                     expb[clen], expb[clen+1], expb[clen+2], expb[clen+3]);
+            e2 = 0;
+            if (expb[clen+0] !== c2[7:0])   e2 = e2 + 1;
+            if (expb[clen+1] !== c2[15:8])  e2 = e2 + 1;
+            if (expb[clen+2] !== c2[23:16]) e2 = e2 + 1;
+            if (expb[clen+3] !== c2[31:24]) e2 = e2 + 1;
+            chk(e2 === 0, {tag, " FCS == CRC(wire bytes incl pad)"});
+            c2 = 32'hFFFFFFFF;
+            for (i2 = 0; i2 < clen + 4; i2 = i2 + 1) c2 = tb_crc_byte(c2, expb[i2]);
+            chk(c2 === 32'hDEBB20E3, {tag, " wire residue == 0xDEBB20E3"});
+        end
+    endtask
+
+    // =====================================================================
     // F-2 幽灵帧检测器 (基于**线上内容**, 与计数器无关) —— 2026-09-29 新增 (GATEFIX D1)
     //   判据形态取自 P6B_CDC_AUDIT.md B8 (F11 判定实验的三条判据):
     //     ① 该帧 FCS 残差合法 (== 0xDEBB20E3) —— ⚠️ 幽灵帧恰恰是 **FCS 正确**的,
@@ -589,6 +628,9 @@ module tb_mac_10g;
     // 主流程
     // =====================================================================
     integer i, k, w, base, wi, gA, gB, ecnt, sum_len;
+    integer sz;                       // 组 11 的每档内容长度
+    integer clen_w;                   // 组 11 的线上内容长度 (含 pad)
+    reg [8*16-1:0] tagbuf;            // 组 11 的判据名前缀 (ASCII; 8*16 = 16 字符)
 
     initial begin
         $display("=== tb_mac_10g start ===");
@@ -875,7 +917,12 @@ module tb_mac_10g;
         for (k = 0; k < 20; k = k + 1) if (expb[k] !== cbuf[k]) ecnt = ecnt + 1;
         for (k = 20; k < 60; k = k + 1) if (expb[k] !== 8'h00) ecnt = ecnt + 1;
         chk(ecnt === 0, "TX pad: 前 20 字节 == 内容, 后 40 字节 == 0");
-        chk(expb[60] === fcsb[0] && expb[63] === fcsb[3], "TX pad: FCS 逐字节正确");
+        // ⚠️ 2026-09-30 判据结构修复: 原判据
+        //   `chk(expb[60] === fcsb[0] && expb[63] === fcsb[3], "TX pad: FCS 逐字节正确")`
+        //   **已删除** —— fcsb 来自 calc_fcs(20) = **只对内容字节**的 CRC, 与当时实现的
+        //   覆盖面同源 ⇒ 实现漏掉 pad 时 oracle 同步漏掉 (DEFECT #1 就是这么藏的)。
+        //   替代 = fcs_chk_wire (独立 oracle: 输入是**线上字节**, 含 DUT 补的 pad)。
+        fcs_chk_wire("TX pad(20B)     ", 60);
 
         // 8.3 非 8 字节整数倍 (内容与 FCS 跨字)
         //   ⚠️ 2026-09-29 (GATEFIX D4): 用例从 61..63 扩到 **61..65** —— 补上 /T/ 落
@@ -1100,6 +1147,71 @@ module tb_mac_10g;
         for (i = 0; i < 200; i = i + 1)
             if (rx_got[rx_fs[0]+i] !== cbuf[i]) ecnt = ecnt + 1;
         chk(ecnt === 0, "环回: 200 字节逐字节一致");
+
+        // =============================================================
+        // 组 11: TX→RX 自洽 (2026-09-30 新增; DEFECT #1 的**常驻**判据)
+        //   判据 = **自家 TX 发出的帧, 回放进自家 RX 必须被接受** (rx_fcrs == 1),
+        //          且交付内容**逐帧逐字节** == 内容 + pad 0 (不靠计数器对账)。
+        //   覆盖: L=1 (极端最小) / 18 (F2 文档原案) / 42 (ARP 应答尺寸) /
+        //         54 (TCP 纯 ACK 尺寸) / 57 (pad 全落在末内容字, 无 S_TAIL0 纯 pad 字) /
+        //         60 (无 pad 对照) / 200 (>60 普通帧对照)
+        //   期望来源: 802.3 (FCS 覆盖收到的**全部**字节) + 我们自己的 RX 是独立实现
+        //     (mac_rx_10g + 另一个 crc32_64 实例; 其覆盖集 = **收到的**字节流)
+        //     ⇒ TX/RX 的 FCS 覆盖面若不一致, 回放必然 crc_err ⇒ tcrs=0。
+        //   为什么必须常驻: 这正是 2026-09-30 抓到 DEFECT #1 的手段 (校准过的 A/B 回放),
+        //     而当时单元门 252 checks / 0 fail 全 PASS —— 同源 oracle 与计数器都看不见它。
+        // =============================================================
+        $display("-- 组 11: TX->RX 自洽 (own TX frame must be ACCEPTED by own RX)");
+        for (k = 0; k < 7; k = k + 1) begin
+            case (k)
+                0: begin sz = 1;   tagbuf = "TX->RX L=1      "; end
+                1: begin sz = 18;  tagbuf = "TX->RX L=18     "; end
+                2: begin sz = 42;  tagbuf = "TX->RX L=42     "; end
+                3: begin sz = 54;  tagbuf = "TX->RX L=54     "; end
+                4: begin sz = 57;  tagbuf = "TX->RX L=57     "; end
+                5: begin sz = 60;  tagbuf = "TX->RX L=60     "; end
+                default: begin sz = 200; tagbuf = "TX->RX L=200    "; end
+            endcase
+            clen_w = (sz < 60) ? 60 : sz;                 // 线上内容长度 (含 pad)
+            $display("  -- 11.%0d 内容 %0d B ⇒ 线上内容 %0d B (pad %0d B)",
+                     k, sz, clen_w, clen_w - sz);
+            reset_all;
+            txq_n = 0; txq_i = 0; base = xcap_n; rx_clr;
+            tx_load_frame(sz);
+            tx_wait;
+            wi = find_s(base);
+            chk(wi >= 0, {tagbuf, "TX found /S/"});
+            tx_decode(wi);
+            chk(idx === clen_w + 4,   {tagbuf, "wire bytes == content+pad+FCS"});
+            chk(ndata_after_t === 0,  {tagbuf, "no data lane after /T/"});
+            chk(nidle >= 12,          {tagbuf, "IFG >= 12 /I/"});
+            ecnt = 0;
+            for (w = 0; w < sz; w = w + 1) if (expb[w] !== cbuf[w]) ecnt = ecnt + 1;
+            for (w = sz; w < clen_w; w = w + 1) if (expb[w] !== 8'h00) ecnt = ecnt + 1;
+            chk(ecnt === 0, {tagbuf, "payload then zero pad, byte-exact"});
+            fcs_chk_wire(tagbuf, clen_w);      // 独立 oracle (输入 = 线上字节, 含 pad)
+            // ---- 回放: 线上捕获字 (自 /S/ 起) 打进自家 RX ----
+            //   48 拍 ≥ 最长档 (L=200 ⇒ 线上 204B ⇒ 27 拍) + IFG 余量
+            reset_all;
+            rx_clr;
+            drv_idle_all;
+            for (i = 0; i < 48; i = i + 1) begin
+                drv_d[i] = xcap_d[wi + i];
+                drv_c[i] = xcap_c[wi + i];
+            end
+            rx_fcrs[0] = 0; rx_fl[0] = 0; rx_fterr[0] = 0;   // 清陈旧值 (计数器不可信)
+            drv_run(48);
+            chk(rx_frn === 1,      {tagbuf, "RX delivered exactly 1 frame"});
+            chk(rx_fcrs[0] === 1,  {tagbuf, "RX tcrs==1 (own TX frame ACCEPTED by own RX)"});
+            chk(rx_fl[0] === clen_w, {tagbuf, "RX payload == content+pad bytes"});
+            chk(rx_fterr[0] === 0, {tagbuf, "RX terr==0"});
+            ecnt = 0;
+            for (i = 0; i < sz; i = i + 1)
+                if (rx_got[rx_fs[0] + i] !== cbuf[i]) ecnt = ecnt + 1;
+            for (i = sz; i < clen_w; i = i + 1)
+                if (rx_got[rx_fs[0] + i] !== 8'h00) ecnt = ecnt + 1;
+            chk(ecnt === 0, {tagbuf, "RX payload byte-exact (content + zero pad)"});
+        end
 
         $display("=== tb_mac_10g done: %0d checks, %0d fail ===", nchk, nfail);
         if (nfail !== 0) $display("VERDICT = FAIL");

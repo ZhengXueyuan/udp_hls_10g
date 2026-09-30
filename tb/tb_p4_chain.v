@@ -1609,9 +1609,13 @@ module tb_p4_chain;
                          u_rx.fend_pay, u_rx.emit_v, m_tready, u_rx.plen_l);
             // 缺陷 A 排障: burst0 帧尾区段逐拍 (fast 路由接受/保持)
             if (k >= 85560 && k <= 85600 && (f_tvalid || u_rx.state != 3'd0))
-                $display("RXW k=%0d v=%b rdy=%b d=%016h kp=%02h l=%b u=%b rxst=%0d pc=%0d cls=%0d",
+                // P7b v2 落地: rx_classify v2 **没有 FSM** (v1 的 `state` 寄存器已不存在) ⇒
+                //   本字段改打印 v2 的等价可观测量 `dbg_occ` (字 FIFO 当前占用)。
+                //   ⚠️ 仅 $test$plusargs("PROBE") 下的诊断打印, 无判据依赖 (证据: v1 的
+                //   `state`/`route`/`sk_*` 等内部名在 tb/ 与 board/ 里只此两处引用, 且都在 PROBE 块内)。
+                $display("RXW k=%0d v=%b rdy=%b d=%016h kp=%02h l=%b u=%b rxst=%0d pc=%0d cocc=%0d",
                          k, f_tvalid, f_tready, f_tdata, f_tkeep, f_tlast, f_tuser,
-                         u_rx.state, u_rx.pcount, u_classify.state);
+                         u_rx.state, u_rx.pcount, u_classify.dbg_occ);
         end
     end
 
@@ -1666,8 +1670,8 @@ module tb_p4_chain;
                         u_slow_rx.abort, u_slow_rx.resync_drop, u_slow_rx.in_frame,
                         u_slow_rx.u_ff.full, u_slow_rx.committed);
             if (k % 32'd5000 == 0)
-                $display("PROBE k=%0d | cls state=%0d | srx pstate=%0d cmt=%0d ab=%b rsd=%b ifm=%b ffw=%0d ffr=%0d occw=%0d | hls rxrdy=%b txv=%b txrdy=%b cs=%h hrn=%b txreq=%b | stx tstate=%0d cmt=%0d",
-                         k, u_classify.state, u_slow_rx.pstate, u_slow_rx.committed,
+                $display("PROBE k=%0d | cls occ=%0d rqovf=%0d | srx pstate=%0d cmt=%0d ab=%b rsd=%b ifm=%b ffw=%0d ffr=%0d occw=%0d | hls rxrdy=%b txv=%b txrdy=%b cs=%h hrn=%b txreq=%b | stx tstate=%0d cmt=%0d",
+                         k, u_classify.dbg_occ, u_classify.dbg_stat_route_ovf, u_slow_rx.pstate, u_slow_rx.committed,
                          u_slow_rx.abort, u_slow_rx.resync_drop, u_slow_rx.in_frame,
                          u_slow_rx.u_ff.wptr, u_slow_rx.u_ff.rptr,
                          (u_slow_rx.u_ofifo.wptr - u_slow_rx.u_ofifo.rptr),

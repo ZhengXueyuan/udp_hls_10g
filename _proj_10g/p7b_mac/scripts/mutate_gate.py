@@ -73,6 +73,38 @@ MUTS = [
     ("M10 RX 帧闭合条件拆掉 (FSM 永停在收帧态)", "mac_rx_10g.v",
      "if (t_v) in_active <= 1'b0;      // 帧闭合",
      "if (1'b0) in_active <= 1'b0;      // 帧闭合 (M10: 闭合条件被拆掉)", "caught"),
+    # ===================================================================
+    # 2026-09-30: DEFECT #1 (mac_tx_10g 补 pad 帧的 FCS **不含 pad**) 的修复配套。
+    #   判据结构也一并改了 (同源 oracle → 独立 oracle + TX→RX 自洽回放), 所以这一族
+    #   变异是给**新判据**验牙用的。
+    #   ⚠️ M11a 是"逐字复现修复前语义"的那一个: CRC 输入换回"只有内容" (keep=cw_keep /
+    #      d=cw_data / en 不含 S_TAIL0) ⇒ S_TAIL0 里 CRC 寄存器冻结 ⇒ p0_fcs 退化成
+    #      lw_fcs ⇒ 与 HEAD 版行为逐位相同。实证: 直接拿 HEAD 的 mac_tx_10g.v 跑同一门
+    #      = 337 checks / 17 fail, 与本变异应报同一条 FAIL 集 (sim/_mut_logs/PRECOND_*)。
+    # ===================================================================
+    ("M11a DEFECT #1 复现: pad 不进 CRC (整块回退)", "mac_tx_10g.v",
+     "    wire [7:0]  crc_keep = (state == S_TAIL0)\n"
+     "                           ? ((p0_rst != 6'd0) ? 8'hFF : (8'hFF << (5'd8 - p0_use)))\n"
+     "                           : (cw_last ? (8'hFF << (5'd8 - lw_ts)) : cw_keep);\n"
+     "    wire [63:0] crc_d    = (state == S_TAIL0) ? 64'd0 : (cw_data & cmask64(cw_len));\n"
+     "    wire        crc_en   = (state == S_DATA)  ? (cw_len != 4'd0)\n"
+     "                         : (state == S_TAIL0) ? 1'b1 : 1'b0;",
+     "    wire [7:0]  crc_keep = cw_keep;\n"
+     "    wire [63:0] crc_d    = cw_data;\n"
+     "    wire        crc_en   = (state == S_DATA) && (cw_len != 4'd0);", "caught"),
+    ("M11b pad 只从末内容字的 CRC 里去掉", "mac_tx_10g.v",
+     "                           : (cw_last ? (8'hFF << (5'd8 - lw_ts)) : cw_keep);",
+     "                           : cw_keep;", "caught"),
+    ("M11c pad 只从 S_TAIL0 续字的 CRC 里去掉", "mac_tx_10g.v",
+     "    wire        crc_en   = (state == S_DATA)  ? (cw_len != 4'd0)\n"
+     "                         : (state == S_TAIL0) ? 1'b1 : 1'b0;",
+     "    wire        crc_en   = (state == S_DATA) && (cw_len != 4'd0);", "caught"),
+    # 等价变异: S_TAIL0 里 p0_use = min(m_pad_left, 8) 且 m_dhere 恒 0 ⇒ p0_use == 8
+    #   与 p0_rst != 0 只在 m_pad_left == 8 处不同, 而那里两种写法都取 8'hFF ⇒ 全等价。
+    ("M11d (等价变异) 纯 pad 判定 p0_rst!=0 写成 p0_use==8", "mac_tx_10g.v",
+     "                           ? ((p0_rst != 6'd0) ? 8'hFF : (8'hFF << (5'd8 - p0_use)))",
+     "                           ? ((p0_use == 5'd8) ? 8'hFF : (8'hFF << (5'd8 - p0_use)))",
+     "not_caught"),
 ]
 
 

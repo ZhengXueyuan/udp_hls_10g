@@ -128,7 +128,7 @@ module tb_p6e_pcie_wrapper;
 
         $display("  --- 判据 1-3: AXI 读通路 (替身主机 → wrapper 内 axi_regs) ---");
         u_dut.u_pcie_xdma.axil_read(32'h00, v); chk("1  MAGIC", v, 32'h50360001);
-        u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("2  BUILD_ID (P6b+F4 双域 36 字=6)", v, 32'h00000006);
+        u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("2  BUILD_ID (P7b 五束 51 字=7)", v, 32'h00000007);
         u_dut.u_pcie_xdma.axil_read(32'h14, v); chk("3  MARKER", v, 32'hDEADBEEF);
         // HW_STATUS 字段: [7:5]=msi_vec_w [4]=msi_enable [3]=user_lnk_up [2:0]=0
         u_dut.u_pcie_xdma.axil_read(32'h10, v);
@@ -294,12 +294,12 @@ module tb_p6e_pcie_wrapper;
         //    那是 **XDMA 的 AXI-Lite 主机**在错误响应时填的数据, 不是 axi_regs 的行为
         //    (axi_regs 的读 mux 对未实现地址给 0 + rresp=SLVERR)。替身不模仿 XDMA 那一段,
         //    所以本门只能验 rresp —— 两边各验自己能验的那一半, 别把结论张冠李戴。
-        // ⚠️ 32 字快照把 0x20-0x9C 全占了 (word 43 = 0xAC) ⇒ 未实现地址 = word 44 = **0xB0**
-        //    (随地图扩张挪过: 0x18 -> 0x44 -> 0x60 -> 0x84 -> 0xA0 -> 0xB0)。
+        // ⚠️ **P7b (2026-09-29) 地图又长了**: 51 字快照占 0x20..0xE8 (word 58) ⇒ 未实现地址 = word 59 = **0xEC**
+        //    (随地图扩张挪过: 0x18 -> 0x44 -> 0x60 -> 0x84 -> 0xA0 -> 0xB0 -> 0xEC).
         //    绝不能用 ≥0x100 的地址: `ar_word = araddr[7:2]` 6 位 ⇒ 每 256 字节回绕
         //    (0x100 别名到 MAGIC ⇒ 假 PASS 于"读出的不是 0xffffffff"这类判据)。
-        u_dut.u_pcie_xdma.axil_read(32'hB0, v);
-        chk("9  未实现地址 0xB0 ⇒ rresp = SLVERR", {30'd0, u_dut.u_pcie_xdma.last_rresp}, 32'd2);
+        u_dut.u_pcie_xdma.axil_read(32'hEC, v);
+        chk("9  未实现地址 0xEC ⇒ rresp = SLVERR", {30'd0, u_dut.u_pcie_xdma.last_rresp}, 32'd2);
 
         // ⚠️ release 的层次名必须与上面 force 的目标**逐字一致** (坑 22: 名字不一致时
         //    xelab 直接报 "not declared under prefix"; 但漏 release 是**静默**的 —— 后续判据

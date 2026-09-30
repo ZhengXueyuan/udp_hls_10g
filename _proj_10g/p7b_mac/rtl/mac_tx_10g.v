@@ -5,6 +5,8 @@
 // 输出帧 (线上, XGMII 一拍 8 个字符):
 //   [lane0:/S/(c=1) + lane1..6:0x55 + lane7:0xD5] [内容 DA..payload] [pad 到 60] [FCS 4B]
 //   [/T/ 落在最后一个有效字节之后的那个 lane] [/I/ 补满 IFG (>= 12 个 /I/)]
+// ⭐ FCS 覆盖面: **内容字节 + 补出来的 pad 字节** (802.3 3.2.9: FCS 覆盖 <data> 全部字节;
+//   pad 是 <data> 的一部分) —— 2026-09-30 修复 (原实现只覆盖内容, 短帧被自家 RX 拒收)。
 // 前导/IFG 常量与出处见 rtl/mac_10g_defs.vh §2/§3; FCS 见 §4。
 // 源约定 (与 1G 版逐字相同): 每词 tkeep != 0 (高位有效, = mac_rx_10g 的输出约定);
 //   帧边界**只**靠 tlast (TX 字流不带 tuser/SOP) —— rtl/mac_tx_64.v:21
@@ -201,18 +203,23 @@ module mac_tx_10g (
         end
     endfunction
 
-    // ---- CRC 挂在"本拍发射的 cw"上 (en/d/keep 与发射同拍) ----
-    wire [31:0] crc, crc_nxt;
-    wire        crc_init = (state == S_PRE);
-    wire        crc_en   = (state == S_DATA) && (cw_len != 4'd0);
-    crc32_64 u_crc (
-        .clk(clk), .rst_n(rst_n),
-        .init(crc_init), .en(crc_en),
-        .d(cw_data), .keep(cw_keep),
-        .crc(crc), .crc_nxt(crc_nxt)
-    );
+    // ---- cw_data 的前 n 个 lane (合同序: lane0 = [63:56]) 置 1, 其余置 0 ----
+    //   用途: 修复 DEFECT #1 后 CRC 的 keep 会把 **pad lane** 也标成有效 (pad 要进 FCS),
+    //   而 crc32_64 对被 keep 标为有效的 lane 一律取 d 的值 ⇒ 必须先把 tkeep 之外的 lane
+    //   (合同上可以是任意残值) 压成 0x00, 否则会把残值当 pad 喂进 CRC。
+    //   n = popc(tkeep) ⇒ 对合同允许的"高位有效"输入, 该掩码与 keep 覆盖的 lane 逐位一致。
+    function [63:0] cmask64;
+        input [3:0] n;
+        integer l;
+        begin
+            cmask64 = 64'd0;
+            for (l = 0; l < 8; l = l + 1)
+                if (l < n) cmask64[63 - 8*l -: 8] = 8'hFF;
+        end
+    endfunction
 
     // ---- 末内容字那一拍的组合量 (合并字就用它算出来的 t_start 与 fcs) ----
+    wire [31:0] crc, crc_nxt;      // CRC 寄存器 / 组合下一值 (驱动器见下方 u_crc, 与发射同拍)
     wire [15:0] lw_L    = plen + {12'd0, cw_len};
     wire [5:0]  lw_pad  = (lw_L >= ETH_MIN_CLEN) ? 6'd0 : (ETH_MIN_CLEN - lw_L);
     wire [5:0]  lw_room = 6'd8 - {2'd0, cw_len};
@@ -227,6 +234,39 @@ module mac_tx_10g (
     wire [4:0]  p0_use = (p0_ph > p0_room) ? p0_room : p0_ph;
     wire [4:0]  p0_ts  = m_dhere + p0_use;
     wire [5:0]  p0_rst = m_pad_left - {1'b0, p0_use};
+
+    // ---- ⭐ CRC 挂在"本拍发射的 cw"上 (en/d/keep 与发射同拍) ----
+    // ⚠️ 2026-09-30 修复 DEFECT #1 (notes/P7B_F2_CHAIN_ATTRIB.md §10):
+    //   **pad 字节必须参与 FCS**。802.3 3.2.9 的 FCS 覆盖 <data> 的**全部**字节; 补 pad 后
+    //   的 60B 最小帧里 pad 就属于 <data> ⇒ 只喂内容字节会让线上 FCS 与自家 RX / 任何标准
+    //   对端不一致 (实测: 自家 TX 的短帧被自家 RX 判 crc_err; 10G 下所有 <60B 内容帧中招)。
+    //   改法 = 把 pad 生成**并入 CRC 输入** (pad 字节 = 值 0x00 的正常数据字节, 在线上紧接
+    //   内容之后; 与 crc32_64 的 lane 序 = 线上字节序同向) ⇒ 只需把 keep 扩到 pad 位置、
+    //   并把 pad 位置的 d 压成 0, 就是"内容 ++ pad"的正确 CRC 输入 (新增"一套"逻辑 = 0):
+    //     · S_DATA 末字: keep 由"内容"扩到"内容 + 本字 pad"(lw_ts 个字节 = 本字有效字节数),
+    //       且 pad 位置的 d 强制 0 (tkeep 之外的 lane 按合同可以是任意值, 不能喂进去)
+    //     · S_TAIL0 纯 pad 续字: 整字 8 个 0 值字节 (keep=8'hFF, d=0) ⇒ 寄存器推进 8 字节
+    //     · S_TAIL0 尾起始字: keep = 本字 pad 字节数 ⇒ crc_nxt = M^{本字pad}·crc = 含本字
+    //       pad 的最终 CRC (该字与尾向量同拍 ⇒ 必须组合, 见 p0_fcs)
+    //   未变: init/en/d/keep 全部与发射同拍 (工程坑 1: 寄存器化 en 会让 CRC 与字节流错位);
+    //         无终值取反 (终值取反只在写 FCS 字段时做, 见 lw_fcs/p0_fcs)
+    wire        crc_init = (state == S_PRE);
+    wire [7:0]  crc_keep = (state == S_TAIL0)
+                           ? ((p0_rst != 6'd0) ? 8'hFF : (8'hFF << (5'd8 - p0_use)))
+                           : (cw_last ? (8'hFF << (5'd8 - lw_ts)) : cw_keep);
+    wire [63:0] crc_d    = (state == S_TAIL0) ? 64'd0 : (cw_data & cmask64(cw_len));
+    wire        crc_en   = (state == S_DATA)  ? (cw_len != 4'd0)
+                         : (state == S_TAIL0) ? 1'b1 : 1'b0;
+    crc32_64 u_crc (
+        .clk(clk), .rst_n(rst_n),
+        .init(crc_init), .en(crc_en),
+        .d(crc_d), .keep(crc_keep),
+        .crc(crc), .crc_nxt(crc_nxt)
+    );
+
+    // S_TAIL0 尾起始字的 FCS: 本字 pad 已进 CRC 输入 ⇒ crc_nxt 就是"内容+全部 pad"的 CRC
+    //   (纯 pad 字里 p0_fcs 是中间态, 那里 merge_d 的 tstart0=8 ⇒ 尾向量不被取用)
+    wire [31:0] p0_fcs  = crc_nxt ^ 32'hFFFFFFFF;   // 终值取反 (小端上线)
 
     // ---- 发射 mux (组合) ----
     reg [63:0] tx_d;
@@ -244,7 +284,7 @@ module mac_tx_10g (
                          tx_c = merge_c(lw_ts); end
                      else begin
                          tx_d = bswap64(cw_data); tx_c = 8'h00; end
-            S_TAIL0: begin tx_d = merge_d(cw_data, m_dhere, p0_ts, m_fcs);
+            S_TAIL0: begin tx_d = merge_d(cw_data, m_dhere, p0_ts, p0_fcs);
                            tx_c = merge_c(p0_ts); end
             S_TAIL1: begin tx_d = tail_d(m_fcs, m_tptr); tx_c = tail_c(m_tptr); end
             S_ABORT: begin tx_d = {56'h07070707070707, XGMII_T}; tx_c = 8'hFF; end
@@ -293,7 +333,10 @@ module mac_tx_10g (
                         stat_abort    <= stat_abort + 32'd1;
                         stat_tx_short <= stat_tx_short + 32'd1;
                     end else if (cw_last) begin
-                        // 末内容字: FCS 本拍结清 (crc_nxt 含本字), 与内容/pad 合并成同一拍发出
+                        // 末内容字: FCS 本拍结清 (crc_nxt 含本字**及其内 pad**), 与内容/pad
+                        //   合并成同一拍发出。⚠️ 仅当 lw_pr == 0 (pad 全部落在本字) 时它才是
+                        //   最终 FCS; 否则剩余 pad 在 S_TAIL0 里发出, 最终 FCS 由 p0_fcs 组合
+                        //   结清并覆盖 m_fcs (中间那几拍是纯 pad 字 ⇒ 尾向量不被取用)
                         m_fcs  <= lw_fcs;
                         m_clen <= (lw_L >= ETH_MIN_CLEN) ? lw_L : ETH_MIN_CLEN;
                         if (lw_pr != 6'd0) begin
@@ -325,6 +368,9 @@ module mac_tx_10g (
                 // ---------------------------------------------------
                 // 纯 pad 续字 (只在 pad 超过末内容字容量时进入)
                 S_TAIL0: begin
+                    // FCS 在"尾起始字"上是**组合**结清的 (pad 已进 CRC ⇒ 与末内容字锁存的
+                    //   m_fcs 不同, 必须用 p0_fcs; 纯 pad 字里 tstart0=8 ⇒ 该值不被取用)
+                    m_fcs <= p0_fcs;
                     if (p0_rst != 6'd0) begin
                         m_dhere    <= 4'd0;
                         m_pad_left <= p0_rst;
