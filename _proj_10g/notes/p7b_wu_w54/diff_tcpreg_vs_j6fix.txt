@@ -1,0 +1,32 @@
+--- _proj_10g/notes/p7b_biz_tcpreg/tcpreg_j6.sh	2026-10-07 02:23:19.887237600 +0800
++++ _proj_10g/notes/p7b_wu_w54/j6_fix.sh	2026-10-07 03:16:16.166782800 +0800
+@@ -29,6 +29,10 @@
+ T=${P7B_TOOLS:-/home/a/xdma_test/dma_ip_drivers-patched/XDMA/linux-kernel/tools}
+ D=/dev/xdma0_user
+ cd /tmp/p7b_biz || exit 9
++# ⭐ 2026-10-07 (W54 关闸轮) 唯一改动: 被测二进制可切换 + 在日志里自证其 md5。
++#   与 tcpreg_j6.sh (md5 3e7422b2…) 逐字同款台架 —— 只多 BIN 这一格, 保证与阶梯轮可比。
++BIN=${BIN:-./p7b_tcp_src}
++[ -x "$BIN" ] || { echo "BIN_NOT_FOUND $BIN"; exit 9; }
+ 
+ PACE=${PACE:-0}
+ if [ "$PACE" != "0" ]; then EXTRA="--pace-bps $PACE"; else EXTRA=""; fi
+@@ -42,7 +46,8 @@
+ echo "J6META_SCRIPT=$0 J6META_SCRIPT_MD5=$(md5sum "$0" 2>/dev/null | cut -d' ' -f1)"
+ echo "J6META_BIT_SHA=${BIT_SHA:-n/a}"
+ echo "PACE_BPS=$PACE"
+-echo "SRC_CMD=./p7b_tcp_src --host 192.168.100.2 --port 8080 --seconds $SECS $EXTRA"
++echo "BIN=$BIN BIN_MD5=$(md5sum "$BIN" 2>/dev/null | cut -d' ' -f1)"
++echo "SRC_CMD=$BIN --host 192.168.100.2 --port 8080 --seconds $SECS $EXTRA"
+ echo "J6META_BOARD_MAGIC=$(brd 0x00) J6META_BOARD_BID=$(brd 0x04)"
+ echo "### J6META_END $(date +%s.%N)"
+ 
+@@ -69,7 +74,7 @@
+ # J15 板内时基: 紧贴传输窗的两点 (W5=156.25MHz 自由计数 / W53=app 收字节 / W54=失配)
+ #   => 板侧速率 = ΔW53 / (ΔW5/156.25e6), 不依赖主机墙钟、也不含 tcpdump/收尾的死时间。
+ bash "$S" snap "${TAG}_t0" 5 53 54 || { echo "TCPREG_ABORT t0_snapshot"; exit 1; }
+-./p7b_tcp_src --host 192.168.100.2 --port 8080 --seconds "$SECS" $EXTRA
++$BIN --host 192.168.100.2 --port 8080 --seconds "$SECS" $EXTRA
+ echo "SRC_RC=$? $(date +%s.%N)"
+ echo "### PHASE t1_snapshot $(date +%s.%N)"
+ bash "$S" snap "${TAG}_t1" 5 53 54 || { echo "TCPREG_ABORT t1_snapshot"; exit 1; }

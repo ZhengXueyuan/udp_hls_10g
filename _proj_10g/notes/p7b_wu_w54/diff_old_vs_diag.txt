@@ -1,0 +1,34 @@
+--- ../../../_proj_pcie/p7b_biz/p7b_tcp_src.cpp	2026-09-30 18:37:34.024234800 +0800
++++ p7b_tcp_src_diag.cpp	2026-10-07 01:22:47.659180700 +0800
+@@ -79,6 +79,7 @@
+     P7bPat rx(0);                 // 下行: 板侧每连接偏移 0 起
+     std::vector<uint8_t> sbuf(chunk), rbuf(1 << 20);
+     long long tx_bytes = 0, rx_bytes = 0, rx_mism_bytes = 0, rx_first_mis = -1;
++    long long partial_sends = 0, skip_bytes = 0, first_partial_at = -1;  // DIAG (WU_LOOP)
+     double t0 = now_s(), t_eof = 0;
+     int eof_seen = 0, send_err = 0;
+     double next_report = t0 + 1.0;
+@@ -106,6 +107,9 @@
+         if (pr > 0 && (p.revents & (POLLOUT | POLLERR | POLLHUP)) && !send_err) {
+             tx.fill(sbuf.data(), (size_t)chunk);
+             ssize_t n = send(fd, sbuf.data(), (size_t)chunk, MSG_NOSIGNAL);
++            if (n > 0 && n < (ssize_t)chunk) {   // DIAG (WU_LOOP): partial send => pattern SKIP
++                partial_sends++; skip_bytes += (long long)chunk - n;
++                if (first_partial_at < 0) first_partial_at = tx_bytes; }
+             if (n > 0) tx_bytes += n;
+             else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+                 send_err = errno; printf("SRC_SEND_ERR errno=%d tx_bytes=%lld\n", errno, tx_bytes);
+@@ -122,9 +126,11 @@
+     double t1 = now_s();
+     close(fd);
+     printf("SRC_SUM tx_bytes=%lld rx_bytes=%lld dur_s=%.3f tx_Mbps=%.3f rx_Mbps=%.3f "
+-           "eof_seen=%d eof_at_s=%.3f send_err=%d rx_first_mismatch=%lld rx_mism_bytes=%lld\n",
++           "eof_seen=%d eof_at_s=%.3f send_err=%d rx_first_mismatch=%lld rx_mism_bytes=%lld "
++           "partial_sends=%lld skip_bytes=%lld first_partial_at=%lld\n",
+            tx_bytes, rx_bytes, t1 - t0, tx_bytes * 8.0 / (t1 - t0) / 1e6, rx_bytes * 8.0 / (t1 - t0) / 1e6,
+-           eof_seen, t_eof - t0, send_err, rx_first_mis, rx_mism_bytes);
++           eof_seen, t_eof - t0, send_err, rx_first_mis, rx_mism_bytes,
++           partial_sends, skip_bytes, first_partial_at);
+     printf("SRC_DONE\n");
+     return (send_err == 0 && tx_bytes > 0 && (!verify_down || rx_first_mis < 0)) ? 0 : 1;
+ }
