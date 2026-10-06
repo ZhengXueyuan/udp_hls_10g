@@ -1,0 +1,65 @@
+
+****** xsim v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Wed Oct  7 02:07:34 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source xsim.dir/tb_wu_review/xsim_script.tcl
+# xsim {tb_wu_review} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+[HB] t=4000 ns cyc=0 eq_bad=0 new_diff=0 lock_bad=0
+PH0: random walk (occ full range + events + gnt jitter)
+  [READ] PH0 stat_wu: new=43 leg=58 head=58
+  PASS == u_head per-cycle (all phases)
+  PASS one cycle (comparator has teeth)
+  PASS ockstep (rc_id/tick_cnt/scan_id)
+  [READ] eq_bad=0 new_diff=59402 lock_bad=0
+PH1: winq = 3 (floor(winq/4)=0 => new arm condition unreachable)
+  [READ] winq[0]: new=0003 leg=0003 head=0003 (expect 0003)
+  [READ] wscan=0: new wu_zero=0 leg=1 head=1
+  [READ] PH1 fires: new=0 leg=1 head=1
+  PASS q=3 => cannot arm, structurally)
+  PASS m COULD => fix loses capability)
+  PASS PH1c LEGACY count == HEAD count
+PH2: winq = 5 + Zeno hover (win 1..3, never exactly 0)
+[HB] t=524292000 ns cyc=65536 eq_bad=0 new_diff=60689 lock_bad=0
+  [READ] PH2 fires: new=0 leg=0 head=0
+  PASS m floor(5/4)=1 => needs exact 0)
+  PASS ta: both conditions unreachable)
+PH3: winq = 3072 (N=16 pool split, product config) three points
+  [READ] winq[0]: new=0c00 (expect 0C00)
+  PASS l split effective winq[0]=0x0C00
+  PASS  NEW armed (wscan=72 < wq/4=768)
+  PASS ion: 1072 < wq/2=1536 => 0 fires
+  PASS PH3d still armed (not fired)
+  [READ] PH3 fires: new=1 head=0; wu_mark[0]=0624 (expect ~061c)
+  PASS e NEW fires (wscan=1572 >= wq/2)
+  PASS (same stim, win never exactly 0)
+  PASS d window at fire (obs semantics)
+PH4: two connections, conn0 busy / conn1 fully idle - spare conn wu?
+  [READ] winq[0]=0c00
+  PASS occ => conn1 enters danger zone)
+  [READ] PH4 fires: new=2 head=0
+  PASS  emitted 1 wu (shared-occ noise)
+  PASS PH4c HEAD 0 fires
+PH5: oscillation across 3/4 (occ 40000 <-> 20000): wu per cycle
+  [DBG] PH5 iter0 arm-check: occ=40000 winq0=c000 wz=1 pbws=23c0
+  [DBG] PH5 iter0 after drain: occ=24400 cycles=15601 wz=1 pbws=0000 statwu=0
+[HB] t=1048580000 ns cyc=131072 eq_bad=0 new_diff=118878 lock_bad=0
+  [READ] PH5 fires: new=5 head=0 (5 cycles)
+  PASS PH5a one wu per cycle (5/5)
+  PASS PH5b HEAD 0 fires
+PH6: healthy high-window phase (occ 500..8000, data flowing) => 0 extra wu
+  [READ] PH6 fires: new=0 leg=0 head=0 (40 scans, healthy)
+  PASS extra wu (frame-rate discipline)
+  PASS PH6b HEAD 0 too
+------------------------------------------------------------
+cumulative: eq_bad=0 (E1) new_diff=144935 (E2) lock_bad=0
+WU-REVIEW GATE OK
+$finish called at time : 1421236 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/sim/p5wu_review/tb_wu_review.v" Line 624
+exit
+INFO: [Common 17-206] Exiting xsim at Wed Oct  7 02:07:36 2026...

@@ -14,6 +14,15 @@
 #     ② J6META_* 元数据块: 跑的时刻 (UTC+epoch) / 目标 / 时长 / 脚本 md5 / BIT_SHA / 板侧身份。
 #        ⚠️ 位流 sha256 传不进来时打 n/a, 但 **板侧身份 (MAGIC/BID) 是现场读的、不可伪造**
 #        (开始与结束各读一次 ⇒ 中途被重烧可检出)。
+#
+#   ⭐⭐ 2026-10-07 (wu 闭环测量轮) 三处加固 —— J6-ladder 判据 (b)/(c) 的台架自证要求:
+#     ③ ss 采样**去掉 `state established` 过滤** (`-tinma`): 板子在连接建立 ~9 ms 即发 FIN
+#        ⇒ 对端 socket 进 CLOSE_WAIT ⇒ 旧写法每跑只剩第 1 秒一条可用样本
+#        (判据原文 P7B_BIZ_PLAN.md §4.1b (b); 出处 P7B_WU_PACE_AUDIT.md §8-⑤)。
+#        分析侧只取含 `pacing_rate` 的条目 (TIME_WAIT 残骸无 socket 详情 ⇒ 自动排除)。
+#     ④ tcpdump `timeout` SECS+14 → **SECS+4** + 记录 PID, t1 快照后**显式 kill**:
+#        旧值 > 跑间隔 ⇒ 相邻跑的包会串进同一个 pcap (判据原文 (c), 已造成过一次误读)。
+#     ⑤ 本跑 sha256 身份: 见 J6META_SCRIPT_MD5 (台架自身可追溯)。
 set -u
 SECS=${1:-6}; PCAP=${2:-/tmp/tcpreg.pcap}; TAG=${3:-J6}
 S=/tmp/p7b_biz/p7b_snap.sh
@@ -45,11 +54,13 @@ echo "### PHASE pre_snapshot $(date +%s.%N)  NW=${NW:-61}"
 bash "$S" full "${TAG}_pre" || { echo "TCPREG_ABORT pre_snapshot"; exit 1; }
 
 rm -f "$PCAP"
-( timeout $((SECS+14)) tcpdump -i enp1s0f1np1 -s 96 -w "$PCAP" "tcp and host 192.168.100.2" >/tmp/tcpdump_${TAG}.log 2>&1 & )
+# ④ timeout = SECS+4 (< 本脚本总时长 ⇒ 与下一跑天然隔离); PID 记录供收尾显式 kill (双保险)
+( timeout $((SECS+4)) tcpdump -i enp1s0f1np1 -s 96 -w "$PCAP" "tcp and host 192.168.100.2" >/tmp/tcpdump_${TAG}.log 2>&1 & echo $! >/tmp/tcpdump_${TAG}.pid )
 sleep 1.5
 
+# ③ 无 state 过滤 (-a): 板子 9 ms 发 FIN ⇒ established 过滤结构性只剩 1 条样本
 ( for i in $(seq 1 $((SECS+3))); do
-    echo "SS_T $(date +%s.%N) $(ss -tinm state established '( dport = :8080 or sport = :8080 )' 2>/dev/null | tr '\n' '|')"
+    echo "SS_T $(date +%s.%N) $(ss -tinma '( dport = :8080 or sport = :8080 )' 2>/dev/null | tr '\n' '|')"
     sleep 1
   done > /tmp/ss_${TAG}.log 2>&1 & )
 
@@ -62,6 +73,8 @@ bash "$S" snap "${TAG}_t0" 5 53 54 || { echo "TCPREG_ABORT t0_snapshot"; exit 1;
 echo "SRC_RC=$? $(date +%s.%N)"
 echo "### PHASE t1_snapshot $(date +%s.%N)"
 bash "$S" snap "${TAG}_t1" 5 53 54 || { echo "TCPREG_ABORT t1_snapshot"; exit 1; }
+# ④ 收尾显式 kill tcpdump (timeout 之外的双保险; 不再让尾巴跨到下一跑)
+kill "$(cat /tmp/tcpdump_${TAG}.pid 2>/dev/null)" 2>/dev/null
 sleep 2
 
 echo "### PHASE post_snapshot $(date +%s.%N)"

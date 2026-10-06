@@ -1,0 +1,37 @@
+@echo off
+set "REPO_ROOT=%~dp0..\..\."
+for %%I in ("%REPO_ROOT%") do set "REPO_ROOT=%%~fI"
+if "%REPO_ROOT:~-1%"=="\" set "REPO_ROOT=%REPO_ROOT:~0,-1%"
+if not exist "%REPO_ROOT%\CLAUDE.md" (
+  echo [PATHGUARD FAIL] cannot locate this checkout from %~f0
+  echo   derived REPO_ROOT = %REPO_ROOT%
+  exit /b 1
+)
+rem --- pathguard tripwire: refuse to run if a LIVE line points outside ---
+set "P4PY=C:\Users\zhxue\anaconda3\python.exe"
+if exist "%P4PY%" goto :pg_py_ok
+set "P4PY="
+for %%P in (python.exe) do if not defined P4PY set "P4PY=%%~$PATH:P"
+:pg_py_ok
+if not defined P4PY goto :pg_sc_done
+if not exist "%REPO_ROOT%\sim\p4gates\p4gate.py" goto :pg_sc_done
+"%P4PY%" "%REPO_ROOT%\sim\p4gates\p4gate.py" selfcheck --root "%REPO_ROOT%" --bat "%~f0" --quiet || exit /b 1
+:pg_sc_done
+
+REM run_tb_app_wu.bat -- P7b-WU 门: app_ctrl C6 (窗口重开通告 wu) 的同激励 A/B
+REM   同一激励/同 gnt 同时驱动两臂:
+REM     u_new = app_ctrl (默认参数, 修复后) · u_old = app_ctrl #(.WU_LEGACY(1)) (修复前)
+REM   主判据: 现场模态 (窗口被托在 56..128, 从不恰好 0) 下 新臂必发 / 旧臂 0 次;
+REM           设计工况 (occ>=winq => wscan==0) 下 两臂各发 1 次 (两臂都活着)。
+REM 判据: TB 内部逐项 PASS/FAIL + 末行 "P7B WU GATE OK" / "P7B WU GATE FAIL n"
+REM 独立工作目录 sim\p5wu\run (工程铁律: 残留 xsim 进程占 xsim.dir 会让门假失败)
+cd /d %~dp0
+set XV=C:\AMDDesignTools\2025.2\Vivado\bin
+set RTL=%REPO_ROOT%\rtl
+set TB=%REPO_ROOT%\tb
+set SIM=%REPO_ROOT%\sim\p5wu\run
+
+if not exist "%SIM%" mkdir "%SIM%"
+echo PROBE-TB=[%TB%]
+echo PROBE-RTL=[%RTL%]
+echo PROBE-SIM=[%SIM%]

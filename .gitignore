@@ -646,3 +646,31 @@ _proj_10g/notes/p7b_mac_timing_fix/ooc/
 sim/p5wu/*
 !sim/p5wu/run_tb_app_wu.bat
 !sim/p5wu/*.v
+
+# ============================================================================
+# P7b `wu` 修复闭环 (2026-10-07) 的两个并发 agent 工作目录
+# 口径同全仓: 排 xsim 工作目录/激励向量/同名 RTL 副本/大体积产物, 留门驱动与文本读数。
+# ⚠️ `_proj_10g/notes/p7b_wu_loop/fix/wu_fix_P0_r1.pcap.gz` 单文件 **45.8 MB** ——
+#    全局 `*.pcap` **挡不住** `.pcap.gz` (2026-10-07 实测它会漏进 `git add` 的清单里) ⇒
+#    本条补挡, 沿用"抓包一律不入库"的既定策略。
+# ⚠️ 顺序敏感: `app_ctrl_head.v` / `head_rtl/` 是**同名 RTL 的副本**(rtl/ 是唯一真源,
+#    本工程一贯排除), 所以必须排在 `!*.v` 放行行**之后** —— gitignore 最后匹配者胜。
+# 位置敏感: 留在末尾。
+# ============================================================================
+*.pcap.gz
+
+# ---- sim/p5wu_review (对抗审查的独立三臂复核台) ----
+sim/p5wu_review/*
+!sim/p5wu_review/*.bat
+!sim/p5wu_review/*.v
+!sim/p5wu_review/runrev2/
+sim/p5wu_review/runrev2/*
+!sim/p5wu_review/runrev2/*.txt
+sim/p5wu_review/app_ctrl_head.v
+
+# ---- sim/p5wu_regress (回归 agent 的 A/B 重跑台; 内含 90 MB xsim 工作目录) ----
+sim/p5wu_regress/*
+!sim/p5wu_regress/*.bat
+!sim/p5wu_regress/*.py
+!sim/p5wu_regress/*.out
+sim/p5wu_regress/head_rtl/

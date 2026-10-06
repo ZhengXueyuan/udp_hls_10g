@@ -1,0 +1,81 @@
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Wed Oct  7 02:34:38 2026
+# Process ID         : 11312
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/sim/p5wu/run
+# Command line       : xsim.exe -log xsim_wu.log -mode tcl -source {xsim.dir/tb_app_wu/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/sim/p5wu/run/xsim_wu.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/sim/p5wu/run\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 52010 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_app_wu/xsim_script.tcl
+# xsim {tb_app_wu} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+P1: establish + danger-band modality (window held at 56..128 by app drain)
+  PASS P1a NEW winq[0] = full pool
+  PASS P1b OLD winq[0] = full pool
+  [WITNESS] danger-band sampled win: min=63 max=120 (40 scans) exact0 hit: scan=0 model=0
+  PASS P1c danger phase sampled
+  PASS P1d sampled win >= 56
+  PASS P1e sampled win <= 128
+  PASS P1f win never exactly 0
+  PASS P1g model win never 0
+  PASS P1h NEW armed (wu_zero=1)
+  PASS P1i OLD not armed
+  PASS P1j OLD wu_mark = full pool
+  PASS P1k armed+small => 0 fires
+  PASS P1l OLD 0 fires same phase
+P2: app keeps consuming => window reopens (peer stalled, no external frames)
+  PASS P2a reopened => 1 fire
+  PASS P2b OLD 0 fires (same stim.)
+  PASS P2c notified val in [wq/2,+step]
+  PASS P2d notified val > 1 MSS
+  [READ] fire#1 wu_mark=24695 (expect ~24576) @cyc~34850
+  PASS P2e level holds w/o gnt (M1)
+  PASS P2f OLD wu_req stays 0
+P3: wu_gnt handshake (ackq model: grant iff requested)
+  PASS P3a wu_req released by gnt
+  PASS P3b NEW stat_wu=1 (reg 0x96)
+  PASS P3c OLD stat_wu=0
+P4: high-window phase (app drained the buffer => wscan = full) 20 scans, no more fires
+  PASS P4a occ drained (wscan=full)
+  PASS P4b disarmed (win>=winq/4)
+  PASS P4c 0 extra fires in high phase
+  PASS P4d OLD still 0
+P5: second cycle (peer burst fills buffer => consume again => notify again)
+  PASS P5a burst never pushed win to 0
+  PASS P5b NEW re-armed
+  PASS P5c OLD 0 in burst phase
+  PASS P5d 2nd cycle => 2nd fire
+  PASS P5e fire#2 val in [wq/2,+step]
+  PASS P5f OLD 0 across both cycles
+  PASS P5g fire#2 consumed by gnt
+P6: designed condition (occ >= winq => wscan exactly 0): BOTH arms must fire
+  PASS P6a OLD armed at exactly 0
+  PASS P6b NEW armed too
+  PASS P6c NEW fire#3
+  PASS P6d OLD fire#1 (arm alive)
+  PASS P6e OLD notified val = full
+------------------------------------------------------------
+lockstep violation cycles (must be 0) = 0
+NEW notifications = 3 (expect 3) . OLD = 1 (expect 1 = P6 designed condition only)
+  PASS Z1 lockstep (same stimulus)
+P7B WU GATE OK
+$finish called at time : 743884 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/tb/tb_app_wu.v" Line 442
+exit
+INFO: [Common 17-206] Exiting xsim at Wed Oct  7 02:34:40 2026...
+P7B WU GATE PASS
