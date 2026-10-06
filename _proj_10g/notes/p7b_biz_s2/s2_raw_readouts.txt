@@ -1,0 +1,124 @@
+# P7B-BIZ Stage 2 —— 关键原始读数汇总 (2026-10-06 晚)
+# 位流: wrapper_p4.bit sha256 d20c08c9e3483359d278893f58b69e921c02b33427430ebe1664571ec0655ed5
+# 板: BID=0x00000008 / MAGIC=0x50360001 / UNIMPL(0x114)=0xffffffff
+# 对端: a-MS-7850 / enp1s0f1np1 (SFC9120 @10G) 192.168.100.100/32, NM managed=no
+
+=== [1] J12 (W54 的牙) —— badbyte 两跑 (--bytes 65536) ===
+P0 pre : W53=0x00000000 W54=0x00000000            (gen=9)
+run    : --flip-at -1  (no flip)  bytes=65536 drained_down_bytes=1048576
+P1 post: W53=0x00010000 W54=0x00000000            (gen=10)   dW53=65536  dW54=0    <- 负例不响
+P2 pre : W53=0x00010000 W54=0x00000000            (gen=11)
+run    : --flip-at 32768  old=0x93 new=0x92      bytes=65536
+P3 post: W53=0x00020000 W54=0x00000001            (gen=12)   dW53=65536  dW54=1    <- 正例精确 1
+
+=== [2] TCP 下行 300 连接 (fresh state, 重烧后第一跑) ===
+SINK_SUM conns=300 fail_conns=0 bytes=314572800 clean_conns=300 bad_conns=0
+         mismatch_bytes=0 wall_s=2.806 net_s=2.805 agg_Mbps=897.047
+W51 (app tx bytes) = 0x12c00000 = 314572800   (== 300 x 1 MiB, 精确)
+W52 (app tx frames)= 0x00034a94 = 215700      (== 300 x 719, 精确)
+W55 (stat_retx)    = 0x0000016d = 365         (pre=0)
+W14 = 217695  W15 = 0x12e5c2cc = 317047500  W20 = 218296  W22 = 208824  W23 = 300
+W3=W4=W21=W46=W47=W48=W49=W56=W57(=active 时无效)=0 (W58=0 采样)
+J3  : dW15 - socket = 317047500 - 314572800 = 2474700 = dupseq(1695) x 1460  精确
+pcap: PCHK_PKTS 218292 / PLEN_HIST [(1460,217095),(296,299)] / IPTOT [(1500,...),(40,598),(44,300),(336,299)]
+      dupseq=1695 (mean 5.650/conn) / 3 条最大流 first_mismatch=-1 gaps=0 uniq=1048576
+J2b : pcap 帧 218292 vs dW20 218296 (差 4 = 抓包窗边界); 窗内 d(rx_eth_crc_err)=0 d(nodesc_drops)=0
+
+=== [3] TCP 下行 300 连接 (重烧前, 同工具; A/B 用) ===
+SINK_SUM conns=300 fail_conns=0 bytes=314572800 clean_conns=300 bad_conns=0 mismatch_bytes=0 agg_Mbps=895.445
+W55 = 0x17f - 0x9 = 374  |  dupseq = 1878 | dW15 - socket = 2741880 = 1878 x 1460 精确
+
+=== [4] 双向抓包 (60 连接) —— dup-ACK 证据 ===
+s2_bidir.pcap: 60 conns / board retx data seg = 370 / peer dup-ACKs = 482 (1.34/conn)
+dup-ACK runs >= 3 : 106      retx 前有 >=3 连续 dup-ACK : 202/370
+                             retx 前有 >=1 dup-ACK     : 310/370 (0 dup-ACK: 60/370)
+包级样例 (conn 54076, t 相对):
+  +0.000000 P [F]                       <- 上一条连接尾
+  +0.000047 B [FA] seq=305419896        <- SYN-ACK (ISN=0x12345678)
+  +0.000047 B [PA] seq=305419897 len=1460   <- 数据段 1
+  +0.000073 P [A]  ack=305419897            <- 握手 ACK (ack=ISN+1)
+  +0.000084 B [PA] seq=305421357 ... 305424277  <- 段 2..4
+  +0.000097 P [A] ack=305419897   <- 对端重复 ACK (不推进)
+  +0.000104 P [A] ack=305419897
+  +0.000109 P [A] ack=305419897   <- 三连 dup-ACK
+  +0.000118 B [PA] seq=305425737..305428657
+  +0.000151 B [PA] seq=305419897 len=1460  <- ⭐ 板回卷: 从 snd_una 整段重放
+  +0.000151 B [PA] seq=305421357 / 305422817 / 305424277 /
+                 305425737 / 305427197 / 305428657 / 305430117   <- 共 8 段
+  ⇒ 一次 rewind = 重放 [snd_una, snd_nxt] 整段 (8 x 1460 = 11680 B)
+SYN 计数: 60 conns 恰 60 个 SYN-ACK (无重复 SYN-ACK); FIN = 120 (每连接 2 个 FIN)
+
+=== [5] UDP 上行 (s1_3_run.sh 4 段 + 自跑 5 段) ===
+s1_3 : off_end(p3)=2235179008 == W11(p3); off_end(p4)=3153518592 == W11(p4); W13=0
+s2_udp5 (从 off 3153518592 接力, 5 段): 每段 dW11 == S 精确, dW10 == pkts 精确, dW13 = 0
+  p2 918339584/918339584  p3 835106816/835106816  p4 893657088/893657088  p5 381306880/381306880
+  TOTAL S = 3409952768 = dW11  (3.41 GB)
+  W3/W4/W32/W33/W34/W35/W46/W47/W48/W49 全 0; W56=0 W60=0; W55 不变(=18)
+  板子下行同时 floods ~9.5 Gbps (W20 0x038c9de2 -> 0x041cda03)
+
+=== [6] J8 负对照 --skip-at (从 off 6563471360, 跳过 1 个 datagram) ===
+SKIP_ONE at_off=6564978688 (requested 6564943360) paylen=1472
+UDP_SUM pkts=259392 pay_bytes=381825024 off_start=6563471360 off_end=6945297856 skip_pkts=1
+W11 PRE 0x8736a000=2268504064 -> POST 0x9df8d000=2650329088
+dW11 = 381825024  == pay_bytes 精确 (我们没发那一帧 ⇒ "不是板子丢")
+dW13 = 0x16948792 = 378832786
+期望 (朴素模型) = (381825024 - 1507328) x 255/256 = 378832080   (偏差 +706 = +0.00019%)
+  ⚠️ 该比较是 LFSR-vs-LFSR 确定性序列, 不是 i.i.d. (4M 字节同型采样率 = 0.9961228 vs 1-1/256=0.9960938)
+
+=== [7] J0 UDP 下行几何 (板子在 floods, 813 kfps) ===
+pcap 300 帧 (s2_dl.pcap): eth_len=1514, ip_tot=1500, udp_len=1480, payload=1472  (300/300)
+                            src 192.168.100.2:8081 -> 192.168.100.100:8081
+板侧 (gen 28 -> 29, 同一次 latch):
+  dW8  = 1871790  (app 发帧)      dW20 = 1871790  (MAC 发帧)   -> 差 0
+  dW9  = 2755274712 (app 发字节)  dW8 x 1472 = 2755274880       -> 差 -168 B (6.1e-8)
+  dW43 = 361255450 (XGMII 字)     dW43/dW20 = 192.999989        (期望 193.000)
+  dW9 vs Sigma_线上载荷 = 1472 x dW20 = 2755274880 -> 差 -168 B
+  W56 = 0 (stat_tx_ovf, 回归守卫)   W3 = W4 = W21 = W32..W49 = 0
+  dW5 = 361258837 cyc @156.25MHz = 2.312057 s -> fps = 809577.9
+    = 156.25e6/193   (RATE 轮 813794.7 = 156.25e6/192 ⇒ 修复使帧周期 192 -> 193 拍, -0.52%)
+  载荷率 = 9.5336 Gbps / 线上率 = 9.8315 Gbps (1518 B/帧)
+NIC: d(port_rx_good_bytes)/d(port_rx_packets) = 2455472778/1617570 = 1518.0009
+     (期望 1518.0000 = 1514 + FCS 4; 缺陷态 = 1510.0000)
+     d(port_rx_nodesc_drops)=+5165, d(rx_eth_crc_err)=0
+
+=== [8] 4 进程 taskset 0-3 洪泛到 9999 (非 app 口) ===
+peer: 564864 x3 + 78080 = 1772672 pkts / pay 8.35 Gbps
+板: dW0 = 1769731 (差 -2941 = -0.166%, 板侧 W3/W4/W46/W47 全 0)
+    dW37/dW0 = 1513.9984 (= payload+42 精确), dW1/dW0 = 1518 (含 FCS)
+    dW19 (slow_rx_adp 丢) = 1762431  ⇒ 非 app 口 99.4% 被慢路径丢 = 设计分工
+    dW5 = 400642895 cyc = 2.564115 s ⇒ 线上率 8.3817 Gbps
+
+=== [9] TCP 上行 (peer -> board, port 8080) —— ⭐ 与 Stage 1 严重不一致 ===
+4 次实测 (含重烧后第一次连接): tx_Mbps = 5.680 / 5.173 / 4.806 / 6.226
+  SRC_EOF_AT 0.009 (板 FIN 早到, 与 Stage 1 同); rx_first_mismatch=-1 (下行干净)
+板侧: dW53 (app rx bytes) 与 dW22 (pass_TCP) 同步增长 ⇒ app 消费 = 到达率 (app 不是瓶颈)
+窗口: 板通告窗单调下降 47408 -> 36392 -> ... -> 9440 (样例), 稳态 ~1.8-3.6 KB, 不恢复
+  ss: rwnd_limited:6ms(100.0%)  snd_wnd:3640  cwnd:44  notsent:280336  minrtt:0.008
+  ping RTT = 0.094/0.112/0.135 ms (链路本身快)
+对照: Stage 1 (RATE 位流, 同工具/同端口): tx_Mbps = 1073.043, W22 = 588310 帧
+
+=== [10] J10 HLS 8080 回显 + 8082 负对照 ===
+HLS_ECHO port=8080 n=1000 ok=1000 bad=0 dur_s=0.124
+  dW0 = dW6 = dW7 = dW20 = 1000 (四个精确)
+HLS_ECHO port=8082 n=200 ok=0 bad=200 dur_s=100.130
+  dW6 = 204 (提交了)  dW7 = 11 (几乎不涨)  ⇒ 丢在 HLS, 不在分类器
+
+=== [11] N-a (TX_DIS, 写 0x08=0x2) ===
+BEFORE carrier=1 changes=5 -> AFTER_TXDIS carrier=0 changes=6 operstate=down (readback 0x2)
+-> AFTER_RESTORE carrier=1 changes=7
+
+=== [12] J11 停板守恒 (重烧后) ===
+PAIR W20 A=0x00000000 (gen=1) B=0x00000000 (gen=2) over 2.5 s
+ID_MAGIC 0x50360001 / ID_BID 0x00000008 / ID_MARKER 0xdeadbeef / ID_UNIMPL 0xffffffff / ID_OK
+carrier=1 carrier_changes=9; 所有业务计数归 0
+
+=== [13] 一处**新发现的 PCIe 恢复前置条件** (配方扩展) ===
+场景: 主机 POST 时 FPGA 跑的是**厂商设计** (QSPI 启动, 1 个 BAR)
+      ⇒ 之后烧我们的位流 (2 个 BAR) + **设备级** remove+rescan:
+         dmesg: "pci 0000:02:00.0: BAR 1 [mem size 0x10000]: can't assign; no space"
+                "xdma:map_bars: Failed to detect XDMA config BAR"  ⇒ probe err -22, 无 /dev/xdma*
+      根因: 父桥 (0000:00:1c.0) 的内存窗在 POST 时按厂商设计定为 **1M**, 装不下 BAR0(1M)+BAR1(64K)
+      修法: **连根端口一起 remove + rescan**  (内核重算桥窗 ⇒ df200000-df3fffff [size=2M])
+         echo 1 > /sys/bus/pci/devices/0000:00:1c.0/remove; sleep 2; echo 1 > /sys/bus/pci/rescan
+      此后 "2 BARs: config 1, user 0" probe 成功, /dev/xdma* 重建, BAR 读 0x50360001
+      ⚠️ 同一轮内**后续**的重烧只需设备级 remove+rescan (BAR 布局已在缓存里正确)
