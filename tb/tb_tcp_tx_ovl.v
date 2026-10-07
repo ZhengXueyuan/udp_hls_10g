@@ -127,6 +127,10 @@ module tb_tcp_tx_ovl;
     integer cov_aborts, cov_cdadj, cov_ctrlblock_real, c6_gated;
     integer c6_req_win, e_c6, e_c6_grant;   // M-C6 定向窗口 (审查构造)
     integer e_f1_delta, e_f1_cyc;           // F1: delta 非负 / 每拍 wrap-safe
+    // ⭐ P7B-RETXFIX 判据 (2026-10-07): 重放预算跨度 / 收尾跳写 / 控制预留同拍
+    integer e_replay_span, e_replay_jump, e_c2_resv, cov_c2_resv, rep_f0, rep_smax;
+    integer cov_jump_ev;   // 跳写事件数 (覆盖见证: 预算被撞到时 replay_jump 拍数)
+    reg     rep_full;      // ⭐ r4: 本会话 = RTO 全会话 (replay_full) ⇒ 跨度判据豁免
     reg     stuck_r;                        // 自锁会话去重 (每会话只计一次)
     reg     win_prev, c6_hold;              // 窗口上升沿检测 / 窗口内持请求
 `ifdef TCP_TX_OVL
@@ -190,6 +194,8 @@ module tb_tcp_tx_ovl;
         cov_aborts=0; cov_cdadj=0; cov_ctrlblock_real=0; c6_gated=0;
         c6_req_win=0; e_c6=0; e_c6_grant=0; win_prev=1'b0; c6_hold=1'b0;
         e_f1_delta=0; e_f1_cyc=0; stuck_r=1'b0;
+        e_replay_span=0; e_replay_jump=0; e_c2_resv=0; cov_c2_resv=0;
+        rep_f0=0; rep_smax=0; cov_jump_ev=0; rep_full=1'b0;
         n_frames=0; n_data=0; n_ctrl=0; n_dead_skip=0;
         cov_replay_sessions=0; cov_replay_frames=0; cov_plen0=0; cov_singlebeat=0;
         cov_ctrlblock=0; cov_conns=0; cov_fin_min=0; min_fin_gap=1000000;
@@ -1070,6 +1076,26 @@ module tb_tcp_tx_ovl;
             //   (gnt 是组合信号 `svc_x && retx_req`; 窗口内允许"会话启动 gnt",
             //    但**绝不准**在 adv_infl 拍上出 gnt —— 那说明门被绕开了)
             if (u_dut.retx_gnt && d_adv_infl) e_c6_grant = e_c6_grant + 1;
+            // ⭐ P7B-RETXFIX 判据 C (M-C2 确定性化, 2026-10-07): 契约 FIX-2' "帧首拍同拍
+            //   预留 +1" —— 消耗 seq 的 SYN/FIN/RST 在 start_ack 拍上必须**同拍**出现
+            //   (wr,val,id) 三件套 (upd_wr_ctrl ∧ upd_val=rb_snd_nxt+1 ∧ upd_id=start_id)。
+            //   旧见证 (seqmono/seqcont) 靠"8 拍窗内恰好落一个数据帧"的巧合 —— 实测在
+            //   udp_hls_10g_fix 轮静默 (原树 StageC 轮命中 1 次)。本判据按契约判 ⇒
+            //   M-C2 (预留寄存 8 拍) 首拍即红, 与交错相位无关。旧见证保留不删。
+            if (u_dut.start_ack && (u_dut.aq_syn | u_dut.aq_fin | u_dut.aq_rst)) begin
+                cov_c2_resv = cov_c2_resv + 1;
+                if (!u_dut.upd_wr_ctrl ||
+                    (u_dut.upd_val != (u_dut.rb_snd_nxt + 32'd1)) ||
+                    (u_dut.upd_id != u_dut.start_id)) begin
+                    e_c2_resv = e_c2_resv + 1;
+                    if (e_c2_resv < 6)
+                        $display("[FAIL] C2: seq-consuming start_ack missing same-cycle +1 (wr=%b val=%h id=%0d want=%h/%0d) @%0d",
+                                 u_dut.upd_wr_ctrl, u_dut.upd_val, u_dut.upd_id,
+                                 u_dut.rb_snd_nxt + 32'd1, u_dut.start_id, cyc);
+                end
+            end
+            // 覆盖见证: 预算被撞到 (跳写拍) —— 判"判据是否被走到" (防空判据)
+            if (u_dut.replay_jump) cov_jump_ev = cov_jump_ev + 1;
             // T8 结构性判据: RX 引擎与 TX 引擎**同时在飞**的拍数占比 (乒乓定义)
             // RX "在飞" = 状态非 IDLE **或** 正在收帧 (收帧期 rx_state 仍 = RX_IDLE!)
             if (((d_rx_state != 2'd0) || !u_dut.recv_first) && (d_tx_state != 3'd0))
@@ -1082,6 +1108,8 @@ module tb_tcp_tx_ovl;
                 rep_max  = u_dut.rb_snd_una;
                 rep_una = u_dut.rb_snd_una;
                 rep_t0  = cyc;
+                rep_f0  = cov_replay_frames;   // ⭐ P7B-RETXFIX: 会话重放帧计数锚
+                rep_full = u_dut.replay_full;  // ⭐ r4: RTO 全会话 ⇒ 跨度判据豁免
             end
             if (!u_dut.retx_active && retx_prev) begin
                 j9_dl = 60000; j9_conn = u_dut.retx_id_r; j9_hi = rep_hi_w;
@@ -1098,6 +1126,24 @@ module tb_tcp_tx_ovl;
                         $display("DBG replay tail short: hi=%h max=%h frames=%0d adv_writes=%0d @%0d",
                                  rep_hi_w, rep_max, rep_fcnt, rep_wcnt, cyc);
                 end
+            // ⭐ P7B-RETXFIX 判据 A (重放预算): 本会话重放帧数 (迟到帧计数差分) 必须
+            //   ≤ RETX_SPAN+1 (K 帧 + 1 拍捕获滑移)。旧行为 = 整窗重放 (实测 StageC
+            //   轮同 TB 平均 2.9 帧/会话, 窗口最大 ~5-6 帧) ⇒ M-K1 变体确定性命中。
+            if (!rep_full && ((cov_replay_frames - rep_f0) > (u_dut.RETX_SPAN + 1))) begin
+                e_replay_span = e_replay_span + 1;
+                $display("[FAIL] RETXFIX span: session replay frames=%0d > K+1 (%0d) conn=%0d @%0d",
+                         cov_replay_frames - rep_f0, u_dut.RETX_SPAN + 1, j9_conn, cyc);
+            end
+            if (!rep_full && ((cov_replay_frames - rep_f0) > rep_smax))
+                rep_smax = cov_replay_frames - rep_f0;
+            // ⭐ P7B-RETXFIX 判据 B (收尾跳写): 会话结束时 snd_nxt 不得低于 retx_hi
+            //   (预算耗尽必须跳写到位; 否则 tcp_rx 的 ACK 接受上界回落 ⇒ P4d 死锁面)。
+            //   M-K2 变体 (只撤跳写) 确定性命中; 全窗排空 (==) / F1 越顶 (>) 均合法。
+            if ((u_tcb.snd_nxt_r[j9_conn] - rep_hi_w) >= 32'h8000_0000) begin
+                e_replay_jump = e_replay_jump + 1;
+                $display("[FAIL] RETXFIX jump: session end snd_nxt=%h < retx_hi=%h conn=%0d @%0d",
+                         u_tcb.snd_nxt_r[j9_conn], rep_hi_w, j9_conn, cyc);
+            end
             // J9 (审查 B4 口径): 会话结束后 60k 拍内, 该连接的对端前沿必须达到 retx_hi
             //   —— 这是"覆盖由构造保证"的**可切分**形式 (与 exp_new 对齐, 不依赖会话窗口)
             if (j9_dl != 0) begin
@@ -1130,7 +1176,8 @@ module tb_tcp_tx_ovl;
         begin
             tot_red = e_parse + e_csum + e_payload + e_seqcont + e_seqmono + e_ctrl +
                       e_ctrl_to + e_onehot + e_pendbusy + e_replay + e_replay_stuck +
-                      e_ovf + e_ackf + e_f1_ring + e_j9 + e_c6 + e_f1_delta + e_f1_cyc;
+                      e_ovf + e_ackf + e_f1_ring + e_j9 + e_c6 + e_f1_delta + e_f1_cyc +
+                      e_replay_span + e_replay_jump + e_c2_resv;
             $display("---------------- TB_TCP_TX_OVL SUMMARY ----------------");
             $display("FRAMES recv=%0d data=%0d ctrl=%0d dead_skip=%0d cyc=%0d",
                      n_frames, n_data, n_ctrl, n_dead_skip, cyc);
@@ -1160,6 +1207,8 @@ module tb_tcp_tx_ovl;
             $display("OVL wsrc data=%0d ctrl=%0d rew=%0d pendclr_wrong=%0d ovf=%0d issued fin/rst/syn=%0d/%0d/%0d",
                      cnt_wsrc[0], cnt_wsrc[1], cnt_wsrc[2], pend_clr_wrong, e_ovf,
                      issued_fin, issued_rst, issued_syn);
+            $display("OVL RETXFIX span_max=%0d span_over=%0d jump_bad=%0d c2resv_n=%0d c2resv_bad=%0d jump_ev=%0d",
+                     rep_smax, e_replay_span, e_replay_jump, cov_c2_resv, e_c2_resv, cov_jump_ev);
 `endif
             $display("REDS parse=%0d csum=%0d payload=%0d seqcont=%0d seqmono=%0d ctrl=%0d ctrl_to=%0d onehot=%0d pendbusy=%0d replay=%0d stuck=%0d ovf=%0d ackf=%0d",
                      e_parse, e_csum, e_payload, e_seqcont, e_seqmono, e_ctrl,

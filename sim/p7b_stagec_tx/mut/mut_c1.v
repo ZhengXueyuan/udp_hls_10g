@@ -201,6 +201,26 @@ module tcp_tx_frame (
     parameter integer ACKQ_D  = 32;
     parameter integer ACKQ_AW = 5;
 
+    // ⭐ P7B-RETXFIX (2026-10-07, dup-ACK 自持重放环修复): 单个重传会话最多重放
+    // 多少帧。旧行为 = 整段 [snd_una, retx_hi] (在飞窗全量, 上限 ~33 帧) 被对端
+    // quickack 的 dup-ACK 反复点火 ⇒ 自持重放环 (Stage C 板级实证: 线上重复率
+    // 13.8-19.3×, 下行 889 -> 224-352 Mbps)。预算耗尽即收尾, 并把 snd_nxt 跳写
+    // 到 retx_hi。必须跳写: tcp_rx 会话期的 ACK 接受上界 = retx_hi (tcp_rx.v:294),
+    // 若会话结束时 snd_nxt < retx_hi, retx_active 落下后对端"跳到缓冲前沿"的
+    // 合法 ACK 会被拒 = P4d 死锁 (tcp_rx.v:280-293)。
+    // ⭐ r4 定版 (板级四轮实测的完整归因, 2026-10-07; 详见 `P7B_RETXFIX.md` §1.2/§1.3):
+    //   **dup-ACK 触发的会话 = K=3 截断 + tcp_rx 侧重武装纪律; RTO 触发的会话 = 全窗
+    //   (replay_full 逃逸, 不受预算约束)。**
+    //   ① 截断的必要性: 整窗重放 (Build 3) 在 10G 突发下起自持环 (13.8-19.3×)。
+    //   ② K=3 的安全前提 = 纪律在: 纪律把 [会话..progress] 窗内计数按住 ⇒ 背靠背
+    //      会话链不可形成。板级反证: 撤纪律后 K=3 恰在临界 (自身 K=3 个重复段立即
+    //      ACK ≈ 阈值 3 ⇒ 链; r2 实测 2,455 会话/1.85×/3 Mbps), K=2 虽衰减但仍
+    //      出现爬行+失配 (r3)。**链还会引出板级载荷失配** (r2 1.77 MB / r3 60 KB;
+    //      r1 纪律在 = 120 会话/0 失配, 三轮可复现) ⇒ 纪律不可省。
+    //   ③ 纪律的代价 (会话期吞对端 dup 批 ⇒ 该孔等 RTO ~100 ms) 由 **全窗 RTO** 吸收:
+    //      RTO 触发时重放整窗 ⇒ 一次 RTO 修好任意孔 (不能自持: RTO 是计时器驱动)。
+    parameter [3:0] RETX_SPAN = 4'd3;
+
 `ifdef TCP_TX_OVL
     // =========================================================================
     // P7b Stage C: 乒乓双 bank / 收发重叠 (宏 TCP_TX_OVL)
@@ -353,6 +373,8 @@ module tcp_tx_frame (
     reg         retx_active;
     reg  [3:0]  retx_id_r;
     reg  [31:0] retx_hi;
+    reg  [3:0]  replay_left;      // ⭐ P7B-RETXFIX 会话重放预算 (svc 装载, ring_start 递减)
+    reg         replay_full;      // ⭐ P7B-RETXFIX r4: 本会话 = RTO 触发 ⇒ 不受预算 (全窗)
     reg  [3:0]  scan_id;
     reg  [20:0] rto_timer [0:15];
     reg  [15:0] rto_pend;
@@ -435,15 +457,23 @@ module tcp_tx_frame (
     wire        retx_begin= svc_x && !retx_deny;
 
     // ---- TCB 三写源 (逐拍 $onehot0; 门互斥见头注) ----
+    // ⭐ P7B-RETXFIX: replay_jump = 预算耗尽的收尾跳写 (snd_nxt := retx_hi)。
+    // 前置声明在此 (三写源 mux 先引用), 组合定义在重传 ring 段 (ring_delta 之后)。
+    // 互斥性: replay_jump ⊆ ring_eval ⊆ (rx_idle ∧ retx_active ∧ !svc ∧
+    // !ack_pend_r); 与 upd_wr_data (RX_FIN) / upd_wr_ctrl (ack_pend_r) /
+    // svc_rewind (svc ⊆ !retx_active) 三对结构性互斥 ⇒ $onehot0 不变式保持。
+    wire        replay_jump;
     wire        upd_wr_data = (rx_state == RX_FIN) && (fin_cnt == 3'd0);
     wire        upd_wr_ctrl = upd_wr_data || (start_ack && (aq_syn | aq_fin | aq_rst));
-    wire        upd_wr_rew  = svc_rewind;
+    wire        upd_wr_rew  = svc_rewind || replay_jump;
     assign      upd_wr  = upd_wr_data || upd_wr_ctrl || upd_wr_rew;
     assign      upd_id  = upd_wr_data ? f_conn[rx_bank] :
-                          (upd_wr_ctrl ? start_id : svc_id);
+                          (upd_wr_ctrl ? start_id :
+                           (replay_jump ? retx_id_r : svc_id));
     assign      upd_sel = 3'd1;
     assign      upd_val = upd_wr_data ? (f_seq[rx_bank] + {20'b0, f_plen[rx_bank]}) :
-                          (upd_wr_ctrl ? (rb_snd_nxt + 32'd1) : rb_snd_una);
+                          (upd_wr_ctrl ? (rb_snd_nxt + 32'd1) :
+                           (replay_jump ? retx_hi : rb_snd_una));
     assign      retx_gnt = svc_x && retx_req;
 
     // ---- rb/cam 读口 mux (旁路拍 = 各服务引擎自己的目标连接) ----
@@ -485,7 +515,12 @@ module tcp_tx_frame (
     wire        retx_ovf = (rb_snd_nxt != retx_hi) &&
                            ((rb_snd_nxt - retx_hi) < 32'h8000_0000);
     wire        ring_start = ring_eval && (ring_delta != 32'd0) && !retx_ovf &&
-                             scan_estab;
+                             scan_estab && ((replay_left != 4'd0) || replay_full);
+    // ⭐ P7B-RETXFIX: 预算耗尽 ⇒ 本拍不起新 ring 帧, 改发收尾跳写 snd_nxt := retx_hi
+    // (下一拍会话走排空支收尾)。跳写必要性见 RETX_SPAN 参数注释 (P4d 死锁)。
+    // ⭐ r4: RTO 全会话 (replay_full) 不受预算 ⇒ 不跳写 (走 delta==0 自然排空)。
+    assign      replay_jump = ring_eval && (ring_delta != 32'd0) && !retx_ovf &&
+                              scan_estab && (replay_left == 4'd0) && !replay_full;
     wire        rd_tap = ring_start || (ring_act && (beat_cnt < nbeats));
     wire [15:0] r_tap_seq = ring_start ? rb_snd_nxt[15:0] : ring_seq[15:0];
     wire [11:0] plen_preset = (ring_delta >= 32'd1460) ? 12'd1460 : ring_delta[11:0];
@@ -666,6 +701,8 @@ module tcp_tx_frame (
             stat_eend <= 0; stat_tlast_in <= 0;
             stat_drop_len <= 0; stat_fin <= 0; stat_rst <= 0;
             retx_active <= 0; retx_id_r <= 0; retx_hi <= 0; scan_id <= 0;
+            replay_left <= 4'd0;
+            replay_full <= 1'b0;
             rto_pend <= 16'h0; ring_seq <= 0; ring_rem <= 0; tap_seq <= 0;
             nbeats <= 8'd0; beat_cnt <= 8'd0; ring_d_r <= 64'h0;
             svc_id_r <= 0; tick_cnt <= 0; rto_pend_any <= 0; ack_pend_r <= 0;
@@ -718,6 +755,8 @@ module tcp_tx_frame (
                                rb_snd_nxt;
                     if (fin_sent_r[svc_id]) fin_retx_pend[svc_id] <= 1'b1;
                     retx_id_r <= svc_id;
+                    replay_left <= RETX_SPAN;   // ⭐ P7B-RETXFIX: 本会话重放预算装载
+                    replay_full <= !retx_req;   // ⭐ r4: RTO 触发 (无挂起 dup 请求) ⇒ 全窗
                     retx_active <= retx_begin;
                     rto_pend[svc_id] <= 1'b0;
                     rto_timer[svc_id] <= RTO_LIM;
@@ -746,6 +785,7 @@ module tcp_tx_frame (
                         nbeats   <= (plen_preset + 12'd7) >> 3;
                         beat_cnt <= 8'd1;
                         ring_seq <= rb_snd_nxt + 32'd8;
+                        replay_left <= replay_left - 4'd1;   // ⭐ P7B-RETXFIX: 预算递减
                         rx_state <= RX_RING;
                     end else begin
                         // 区间发完 (ring_delta == 0): 1 拍气泡回活数据; FIN 重推

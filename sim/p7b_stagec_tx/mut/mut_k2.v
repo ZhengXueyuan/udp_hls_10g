@@ -448,7 +448,8 @@ module tcp_tx_frame (
                             !bank_rdy[rx_bank];
     wire        scan_now  = rx_idle && !ack_pend_r && !svc && !ring_eval && !rx_flush &&
                             scan_tick;
-    wire        start_ack = rx_idle && ack_pend_r && !ackq_empty && !rx_flush;
+    wire        start_ack = rx_idle && ack_pend_r && !ackq_empty && !rx_flush &&
+                            !ctrl_slot_busy;          // ← 槽跨拍独占门 (C7/C8)
     wire        ctrl_adv_inflight = ctrl_slot_busy && (|ctrl_is) && (ctrl_id == svc_id);
     wire        svc_x     = svc && !ctrl_adv_inflight;    // 回卷门 (§1.4(4))
     wire        svc_rewind= svc_x && (rb_snd_nxt != rb_snd_una) && !blocked;
@@ -464,7 +465,7 @@ module tcp_tx_frame (
     wire        replay_jump;
     wire        upd_wr_data = (rx_state == RX_FIN) && (fin_cnt == 3'd0);
     wire        upd_wr_ctrl = start_ack && (aq_syn | aq_fin | aq_rst);
-    wire        upd_wr_rew  = svc_rewind || replay_jump;
+    wire        upd_wr_rew  = svc_rewind;
     assign      upd_wr  = upd_wr_data || upd_wr_ctrl || upd_wr_rew;
     assign      upd_id  = upd_wr_data ? f_conn[rx_bank] :
                           (upd_wr_ctrl ? start_id :

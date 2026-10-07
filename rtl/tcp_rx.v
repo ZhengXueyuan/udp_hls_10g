@@ -527,12 +527,22 @@ module tcp_rx (
                     end
                 end
             end
-            // 服务确认 (tcp_tx_frame svc 回卷拍) 或真实推进 ACK — 解锁该连接计数
+            // 服务确认 (tcp_tx_frame svc 回卷拍): **只**清挂起请求。
+            // ⭐ P7B-RETXFIX (2026-10-07, r1/r4 定版): 不再于授权拍复位 in_retx/dup_cnt。
+            //   板级三轮实测的完整归因 (见 `P7B_RETXFIX.md` §1.2/§3.5-3.7):
+            //   ①「授权即重武装」+ 截断重放 ⇒ 会话自身让对端对重复段逐帧立即回 ACK,
+            //     会话还没排空就又凑满 3 个 ⇒ 背靠背会话链 ⇒ **板级实测出现载荷失配**
+            //     (r2: 2,455 会话/1.77 MB 失配; r3: 1,212 会话/60 KB 失配 —— 失配率
+            //     与会话数超线性相关, 而 r1 (纪律在) 120 会话 0 失配 逐轮可复现)。
+            //   ② 纪律的代价 = 会话期吞掉对端真 dup 批 ⇒ 该孔只能等 RTO (~100 ms)。
+            //     该代价由 tcp_tx_frame 侧的 **RTO 全会话 (replay_full)** 吸收:
+            //     RTO 触发的回放恢复整窗重放 ⇒ 一次 RTO 修好洞。
+            //   ⇒ 解锁只由「真实推进 ACK」触发 (下方分支); 语义 = 每个 snd_una
+            //     进展点至多一次快速重传 (标准 TCP)。
             if (retx_gnt) begin
                 retx_req <= 1'b0;
-                in_retx[retx_id] <= 1'b0;
-                dup_cnt[retx_id] <= 2'd0;
-            end else if (fend && s_axis_tcrs && ack_adv_l && !fend_trunc) begin
+            end
+            if (fend && s_axis_tcrs && ack_adv_l && !fend_trunc) begin
                 in_retx[conn_id_l] <= 1'b0;
                 dup_cnt[conn_id_l] <= 2'd0;
                 // SEV2-3: 真推进 ACK 已在 svc 前解决空洞 — 取消挂起重传请求,

@@ -22,7 +22,10 @@ REM   P/Q/R = F1 negative control (stimulus = review's flood probe, verbatim):
 REM     P = probe vs current OVL RTL   expect NOFLOOD
 REM     Q = probe vs mut_f1 (fix off)  expect FLOOD   <-- teeth of the F1 judge
 REM     R = probe vs default serial    expect NOFLOOD
-REM Contract: A/B/P/R RC==0; C..L/Q RC!=0.
+REM   U/V = P7B-RETXFIX 负对照 (2026-10-07):
+REM     U = mut_k1 撤预算+跳写   expect nonzero  (重放跨度判据 span>K+1)
+REM     V = mut_k2 只撤跳写      expect nonzero  (收尾跳写判据 snd_nxt<retx_hi)
+REM Contract: A/B/P/R RC==0; C..L/Q/U/V RC!=0.
 REM =====================================================================
 set "HERE=%~dp0"
 if "%HERE:~-1%"=="\" set "HERE=%HERE:~0,-1%"
@@ -62,6 +65,10 @@ call :run K "%HERE%\mut\mut_c8.v" "-d TCP_TX_OVL"
 set RCK=%errorlevel%
 call :run L "%HERE%\mut\mut_c4.v" "-d TCP_TX_OVL"
 set RCL=%errorlevel%
+call :run U "%HERE%\mut\mut_k1.v" "-d TCP_TX_OVL"
+set RCU=%errorlevel%
+call :run V "%HERE%\mut\mut_k2.v" "-d TCP_TX_OVL"
+set RCV=%errorlevel%
 call :runp P "%RTL%\tcp_tx_frame.v" "-d TCP_TX_OVL" "FLOODPROBE: NOFLOOD"
 set RCP=%errorlevel%
 call :runp Q "%HERE%\mut\mut_f1.v" "-d TCP_TX_OVL" "FLOODPROBE: FLOOD"
@@ -91,6 +98,8 @@ echo   Q probe M-F1      RC=%RCQ% (expect 0 = FLOOD verdict found; teeth)
 echo   R probe serial    RC=%RCR% (expect 0 = NOFLOOD)
 echo   S integ app to frm RC=%RCS% (expect 0 = OK)
 echo   T integ + M-S0a   RC=%RCT% (expect nonzero)
+echo   U M-K1 retxfx-off RC=%RCU% (expect nonzero; 撤预算+跳写)
+echo   V M-K2 nojump     RC=%RCV% (expect nonzero; 只撤收尾跳写)
 
 set FAILS=0
 if not "%RCA%"=="0" set /a FAILS+=1
@@ -110,9 +119,11 @@ if not "%RCQ%"=="0" set /a FAILS+=1
 if not "%RCR%"=="0" set /a FAILS+=1
 if not "%RCS%"=="0" set /a FAILS+=1
 if "%RCT%"=="0" set /a FAILS+=1
+if "%RCU%"=="0" set /a FAILS+=1
+if "%RCV%"=="0" set /a FAILS+=1
 
 echo   ---- B key readings ----
-findstr /C:"FRAMES" /C:"COV " /C:"MINGAP" /C:"CYCRX" /C:"CYCTX" /C:"FRAMEPERIOD" /C:"OVL F1" /C:"OVL C6" /C:"OVL wsrc" /C:"REDS" /C:"T8 " /C:"TB_TCP_TX_OVL" "runB\xs.log"
+findstr /C:"FRAMES" /C:"COV " /C:"MINGAP" /C:"CYCRX" /C:"CYCTX" /C:"FRAMEPERIOD" /C:"OVL F1" /C:"OVL C6" /C:"OVL wsrc" /C:"OVL RETXFIX" /C:"REDS" /C:"T8 " /C:"TB_TCP_TX_OVL" "runB\xs.log"
 echo   ---- F1 negative control (review flood probe: P fixed / Q mut_f1 / R serial) ----
 for %%M in (P Q R) do (
   echo   [%%M]:
@@ -124,7 +135,7 @@ for %%M in (S T) do (
   findstr /C:"FRAMES" /C:"WIRE" /C:"APP " /C:"T8" /C:"REDS" /C:"TB_INTEG_APP_TX" "run%%M\xs.log"
 )
 echo   ---- mutant verdicts (REDS line + verdict + first FAIL lines) ----
-for %%M in (C D E F G H I J K L) do (
+for %%M in (C D E F G H I J K L U V) do (
   echo   [%%M]:
   findstr /C:"REDS " /C:"TB_TCP_TX_OVL:" /C:"T8 " "run%%M\xs.log"
 )
