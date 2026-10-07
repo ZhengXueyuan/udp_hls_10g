@@ -1,0 +1,40 @@
+########## 闸 4 判据收口: 反例实测 2026-10-07 09:55:09 ##########
+— 正对照 (clean): 全部自洽 + 两口径同刻 ⇒ N_XCHK 必须**真的被评估**且 PASS —
+  [BAD ] clean              退出码                                  got='2' want='0'
+  [BAD ] clean              判据行                                  日志里没有 '[PASS] N_XCHK' (/tmp/g4crit_before/logs/clean.log)
+  [BAD ] clean              短语                                     日志里没有 '偏差' (/tmp/g4crit_before/logs/clean.log)
+— N_SELF: 容差 ±2 的**上界**与**牙** (真验收轮的真实形态 vs 真缺陷形态) —
+  [BAD ] ns_self_plus1      退出码                                  got='2' want='0'
+  [BAD ] ns_self_plus1      判据行                                  日志里没有 '[PASS] N_SELF' (/tmp/g4crit_before/logs/ns_self_plus1.log)
+  [BAD ] ns_self_plus1      短语                                     日志里没有 '= 1 (端点内残差 A=0 B=1' (/tmp/g4crit_before/logs/ns_self_plus1.log)
+  [BAD ] ns_self_classgap   退出码                                  got='2' want='1'
+  [BAD ] ns_self_classgap   判据行                                  日志里没有 '[FAIL] N_SELF' (/tmp/g4crit_before/logs/ns_self_classgap.log)
+  [BAD ] ns_self_classgap   短语                                     日志里没有 '-21200' (/tmp/g4crit_before/logs/ns_self_classgap.log)
+— N_XCHK 守卫 1 (同刻): 本轮真验收的取数编排 (NIC 窗先 / 板侧窗后, 错开 ~10 s) —
+  [BAD ] xchk_offset        退出码                                  got='2' want='0'
+  [BAD ] xchk_offset        判据行                                  日志里没有 '[SKIP] N_XCHK' (/tmp/g4crit_before/logs/xchk_offset.log)
+  [BAD ] xchk_offset        短语                                     日志里没有 '不是同一段' (/tmp/g4crit_before/logs/xchk_offset.log)
+— N_XCHK 守卫 2 (分辨率): 同刻但 5 s 窗 ⇒ 参考侧量子/窗口 20% ⇒ 不许硬判 —
+  [BAD ] xchk_narrow        退出码                                  got='2' want='0'
+  [BAD ] xchk_narrow        判据行                                  日志里没有 '[SKIP] N_XCHK' (/tmp/g4crit_before/logs/xchk_narrow.log)
+  [BAD ] xchk_narrow        短语                                     日志里没有 '反解不到 1%' (/tmp/g4crit_before/logs/xchk_narrow.log)
+— N_XCHK 的牙: 同刻 + 20 s 窗 + 主机侧高 30% (偏差 23%) ⇒ 必须 FAIL —
+  [BAD ] xchk_dev30         退出码                                  got='2' want='1'
+  [BAD ] xchk_dev30         判据行                                  日志里没有 '[FAIL] N_XCHK' (/tmp/g4crit_before/logs/xchk_dev30.log)
+  [BAD ] xchk_dev30         短语                                     日志里没有 '23.0' (/tmp/g4crit_before/logs/xchk_dev30.log)
+— T_RUN / T_TOOL 拆分: 真实日志 + 三种失效形态 —
+  [BAD ] t_run_ok           退出码                                  got='2' want='0'
+  [BAD ] t_run_ok           判据行                                  日志里没有 '[PASS] T_RUN' (/tmp/g4crit_before/logs/t_run_ok.log)
+  [BAD ] t_run_ok           短语                                     日志里没有 '工具接收侧失去对齐' (/tmp/g4crit_before/logs/t_run_ok.log)
+  [BAD ] t_run_ok           判据行(T_TOOL)                          日志里没有 '[SKIP] T_TOOL' (/tmp/g4crit_before/logs/t_run_ok.log)
+  [BAD ] t_tool_noframes    退出码                                  got='2' want='1'
+  [BAD ] t_tool_noframes    判据行                                  日志里没有 '[FAIL] T_TOOL' (/tmp/g4crit_before/logs/t_tool_noframes.log)
+  [BAD ] t_tool_noframes    短语                                     日志里没有 '零帧' (/tmp/g4crit_before/logs/t_tool_noframes.log)
+  [BAD ] t_run_127          退出码                                  got='2' want='1'
+  [BAD ] t_run_127          判据行                                  日志里没有 '[FAIL] T_RUN' (/tmp/g4crit_before/logs/t_run_127.log)
+  [BAD ] t_run_127          短语                                     日志里没有 '先怀疑激励侧' (/tmp/g4crit_before/logs/t_run_127.log)
+  [BAD ] t_run_noproof      退出码                                  got='2' want='1'
+  [BAD ] t_run_noproof      判据行                                  日志里没有 '[FAIL] T_RUN' (/tmp/g4crit_before/logs/t_run_noproof.log)
+  [BAD ] t_run_noproof      短语                                     日志里没有 '激励没跑' (/tmp/g4crit_before/logs/t_run_noproof.log)
+
+########## 汇总: OK=0 BAD=31 ##########

@@ -8,8 +8,11 @@
 #   把 p6e_snap_check.sh **原样**跑一遍 (只替换 TOOLS/DEV/LOG/sysfs 四个路径),
 #   然后断言:
 #     ① section 5 的地址序列**恰好**是 0x20,0x24,...,<末字> (SW 个, 连续, 不重复) —— 缺陷①的正面证据
-#        ⚠️ 几何**由 `SNAP_WORDS` 派生** (默认 61 = P7B-BIZ; 61 ⇒ 末字 0x110 / 未实现 0x114);
-#        跑 51 字时代的位流就用 `SNAP_WORDS=51 bash ...` (⇒ 0xE8 / 0xEC)。
+#        ⚠️ 几何**由 `SNAP_WORDS` 派生** (默认 63 = P7B-WU 二轮; 63 ⇒ 末字 0x118 / 未实现 0x11C);
+#        跑旧位流就用 `SNAP_WORDS=61 UNIMPL_ADDR=0x114 EXPECT_BID=0x00000008 bash ...` (⇒ 0x110 / 0x114)
+#        或 `SNAP_WORDS=51 …` (⇒ 0xE8 / 0xEC)。
+#        ⚠️ 假板子的字表也必须跟着 SW 走: 本脚本的假 `reg_rw` 里 **W61/W62 (0x114/0x118) 已按真字给值**,
+#           `0x11C` 才是 `FAKE_UNIMPL` 的坑位 —— 若只改 SW 不改假字表, 正例会在 5.0 假 FAIL。
 #     ② 一次服务里<末字地址>被读过 (旧版只到 0xAC) ③ <未实现地址>被读过 (缺陷②的新地址)
 #     ④ <未实现地址> 回 0xffffffff ⇒ 6.1 **PASS**; 改成回真数据 ⇒ 6.1 **FAIL** (负对照: 判据有牙)
 #     ⑤ 好消息况下整脚本 **0 FAIL** —— 保证断言④不是"什么都会 FAIL"的真空门
@@ -25,12 +28,12 @@ W=$BASE/selftest
 BIN=$W/bin
 rm -rf "$W"; mkdir -p "$BIN"
 # ---- 窗口几何 (**单一来源**: 与 p6e_snap_check.sh 同一个数) -------------------------
-#   默认 61 = P7B-BIZ (`board/wrapper_p4.v` 的 `SNAP_NW_P6E`); 跑 51 字旧位流: SNAP_WORDS=51。
+#   默认 63 = P7B-WU 二轮 (`board/wrapper_p4.v` 的 `SNAP_NW_P6E`); 跑 61 字旧位流: SNAP_WORDS=61。
 #   ⚠️ 上一版把 51 / 0xE8 / 0xEC **全写死在断言里** ⇒ 扩窗时"判据自己先红", 看着像
 #      "扩窗弄坏了工具"而不是"判据没跟上" (同族教训见 P7B_GATE4_CRITERIA_CLOSEOUT.md)。
-SW=${SNAP_WORDS:-61}
-LAST_A=$(printf '0X%X' $(( 0x20 + 4*(SW-1) )))   # 末字地址  (61 ⇒ 0X110)
-UNIMPL_A=$(printf '0X%X' $(( 0x20 + 4*SW )))      # 未实现地址 (61 ⇒ 0X114)
+SW=${SNAP_WORDS:-63}
+LAST_A=$(printf '0X%X' $(( 0x20 + 4*(SW-1) )))   # 末字地址  (63 ⇒ 0X118)
+UNIMPL_A=$(printf '0X%X' $(( 0x20 + 4*SW )))      # 未实现地址 (63 ⇒ 0X11C)
 N_OK=0; N_BAD=0
 ck(){ if [ "$2" = "$3" ]; then N_OK=$((N_OK+1)); printf "  [OK  ] %-28s %s\n" "$1" "$2"
       else N_BAD=$((N_BAD+1)); printf "  [BAD ] %-28s got='%s' want='%s'\n" "$1" "$2" "$3"; fi; }
@@ -47,6 +50,22 @@ ckre(){ if grep -qE -- "$2" "$3"; then N_OK=$((N_OK+1)); printf "  [OK  ] %-28s 
 #   Δ/Δt 就**恰等于**标称频率 (确定性, 不受进程启动抖动影响)。
 VCLK=$W/vclk; echo 1000 > "$VCLK"
 GENC=$W/gen; echo 7 > "$GENC"
+
+# ⚠️ 假字表的**尾段随几何走** (W61/W62 与"未实现地址"的坑位):
+#   SW ≥ 63 ⇒ 0x114/0x118 是**窗口内的真字**, `FAKE_UNIMPL` 挪到 0x11C;
+#   SW = 61 (历史口径) ⇒ 0x114 就是未实现地址 ⇒ `FAKE_UNIMPL` 必须留在那里, 否则负对照打空。
+#   ⚠️ 单引号是**故意的**: 要让 `${FAKE_UNIMPL:-…}` 原样落进生成的假 reg_rw (由它运行时展开),
+#      在这里展开会把负对照冻成常量 0xffffffff。
+#   ⚠️⚠️ **变量内容不参与 heredoc 的转义处理** (实测): 这里**不能**写 `\${...}` —— 那个反斜杠
+#      会原样落进生成的脚本, 假 reg_rw 把字面串当值打印出来 ⇒ 判据 6.1 读到空串报假 FAIL
+#      (看着像"板子不对", 实际是夹具自己坏了)。直接写 `${...}` 即可。
+if [ "$SW" -ge 63 ]; then
+  FAKE_TAIL='  0X114) V=1234;;  # W61 app_ctrl.stat_wu (次数; 非 0 才像真板)
+  0X118) V=0;;     # W62 app_ctrl.rx_occ_bytes (17 位 ⇒ 高位恒 0)
+  0X11C) V=${FAKE_UNIMPL:-0xffffffff};;   # 未实现地址 (63 字)'
+else
+  FAKE_TAIL='  0X114) V=${FAKE_UNIMPL:-0xffffffff};;   # 未实现地址 (61 字口径)'
+fi
 
 cat > "$BIN/date" <<EOS
 #!/bin/bash
@@ -69,7 +88,11 @@ T=\$(cat "$VCLK")
 V=0xffffffff
 case "\$A" in
   0X00) V=0x50360001;;
-  0X04) V=0x00000008;;
+  # ⚠️ 假板子的 BID 必须与 p6e_snap_check.sh 的 EXPECT_BID **同代** (否则正例的判据 1.2 假 FAIL,
+  #    而"正例必须 0 FAIL"是本脚本的断言⑤)。现役 = 9 (P7B-WU 二轮); 跑旧口径时 FAKE_BID=0x00000008。
+  #    ⚠️ 注释里**不许出现反引号/$( )** —— 这是**无引号 heredoc**, 它们会被当场求值
+  #       (实测: 反引号里的 EXPECT_BID 被当命令执行, 报 "command not found")。
+  0X04) V=\${FAKE_BID:-0x00000009};;
   0X08) V=0x00000000;;
   0X0C) V=\$(awk -v t="\$T" 'BEGIN{printf "0x%08x", int(t*250000000)%4294967296}');;
   0X10) V=0x00000018;;
@@ -88,8 +111,8 @@ case "\$A" in
   0XC0) V=0x00000099;; 0XC4) V=0;; 0XC8) V=0;; 0XCC) V=0;; 0XD0) V=0;;
   0XD4) V=0;; 0XD8) V=0;; 0XDC) V=0;; 0XE0) V=0;; 0XE4) V=0;;
   0XE8) V=\$(awk -v t="\$T" 'BEGIN{printf "0x%08x", int(t*312500000)%4294967296}');;
-  # ---- P7B-BIZ: W51..W60 (0xEC..0x110) 与新的未实现地址 0x114 --------------
-  #   ⚠️ 窗口 57/59 字时代的旧注释里的 0x100/0x104 已作废 (现役 = 61 字 / 0x114)
+  # ---- P7B-BIZ: W51..W60 (0xEC..0x110) ---------------------------------------
+  #   ⚠️ 窗口 57/59 字时代的旧注释里的 0x100/0x104 已作废 (现役 = 63 字 / 0x11C)
   #   ⚠️ 旧版把 0XEC 当"未实现地址" ⇒ 扩窗后它变成**窗口内的 W51** ⇒ 必须回真值,
   #      否则 5.0 "窗口内无 0xffffffff" 会假 FAIL (而负对照再也打不中未实现地址)。
   0XEC) V=1000;;   # W51 app_tx_bytes
@@ -102,7 +125,10 @@ case "\$A" in
   0X108) V=0;;                                        # W58 tcp_tx_frame.o_retx_active
   0X10C) V=0;;                                        # W59 slow_tx_adp.stat_fifo_ovf
   0X110) V=0;;                                        # W60 slow_rx_adp.stat_fifo_ovf
-  0X114) V=\${FAKE_UNIMPL:-0xffffffff};;   # 未实现地址 (61 字; 旧版 0xEC -> 0x104 -> 0x10C -> 0x114)
+  # ---- P7B-WU 二轮: W61/W62 与新的未实现地址 (尾段随 SW 走, 见上面的 FAKE_TAIL) ----
+  #   ⚠️ 与 W51 同一手法: 0x114 在 61 字时代是"未实现", 现在它**是窗口内的 W61** ⇒ 必须回真值,
+  #      否则正例的 5.0 假 FAIL + 负对照打不中真正的未实现地址 (判据成了真空门)。
+${FAKE_TAIL}
   *)    V=0xffffffff;;
 esac
 echo "Read 32-bit from address \$A : \$V"

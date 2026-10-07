@@ -68,6 +68,14 @@ for name, (a, b) in muts.items():
     assert a in src, name
     io.open('_proj_10g/notes/p7b_biz_win/neg/' + name, 'w', encoding='utf-8', newline='').write(src.replace(a, b))
 p = '_proj_10g/notes/p7b_biz_win/neg/axi_regs_mut_dec6.v'
-s = io.open(p, encoding='utf-8', newline='').read().replace("reg [6:0]  r_word;", "reg [5:0]  r_word;")
+s = io.open(p, encoding='utf-8', newline='').read()
+# ⚠️ 2026-10-07 "台架修复轮": 这一处原来是**裸 replace** —— 锚点若因 RTL 改动而消失,
+#    变异体会**静默退化成"与真文件一样"** ⇒ 负对照假通过 (本工程"判据安静失效"老坑)。
+assert "reg [6:0]  r_word;" in s, "mut_dec6 第二处锚点不在 ⇒ 拒绝产出假变异体"
+s = s.replace("reg [6:0]  r_word;", "reg [5:0]  r_word;")
 io.open(p, 'w', encoding='utf-8', newline='').write(s)
+# 变异体必须**真的与真文件不同** (上一条 assert 的同族守卫: 三个变异体逐个核)
+for name in muts:
+    m = io.open('_proj_10g/notes/p7b_biz_win/neg/' + name, encoding='utf-8', newline='').read()
+    assert m != src, "%s 与真文件逐字相同 ⇒ 变异体无效 (负对照会假通过)" % name
 print("written")

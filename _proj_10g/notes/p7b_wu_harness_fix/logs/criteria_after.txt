@@ -1,0 +1,40 @@
+########## 闸 4 判据收口: 反例实测 2026-10-07 09:55:14 ##########
+— 正对照 (clean): 全部自洽 + 两口径同刻 ⇒ N_XCHK 必须**真的被评估**且 PASS —
+  [OK  ] clean              退出码                                  0
+  [OK  ] clean              判据行                                  命中 '[PASS] N_XCHK'
+  [OK  ] clean              短语                                     命中 '偏差'
+— N_SELF: 容差 ±2 的**上界**与**牙** (真验收轮的真实形态 vs 真缺陷形态) —
+  [OK  ] ns_self_plus1      退出码                                  0
+  [OK  ] ns_self_plus1      判据行                                  命中 '[PASS] N_SELF'
+  [OK  ] ns_self_plus1      短语                                     命中 '= 1 (端点内残差 A=0 B=1'
+  [OK  ] ns_self_classgap   退出码                                  1
+  [OK  ] ns_self_classgap   判据行                                  命中 '[FAIL] N_SELF'
+  [OK  ] ns_self_classgap   短语                                     命中 '-21200'
+— N_XCHK 守卫 1 (同刻): 本轮真验收的取数编排 (NIC 窗先 / 板侧窗后, 错开 ~10 s) —
+  [OK  ] xchk_offset        退出码                                  0
+  [OK  ] xchk_offset        判据行                                  命中 '[SKIP] N_XCHK'
+  [OK  ] xchk_offset        短语                                     命中 '不是同一段'
+— N_XCHK 守卫 2 (分辨率): 同刻但 5 s 窗 ⇒ 参考侧量子/窗口 20% ⇒ 不许硬判 —
+  [OK  ] xchk_narrow        退出码                                  0
+  [OK  ] xchk_narrow        判据行                                  命中 '[SKIP] N_XCHK'
+  [OK  ] xchk_narrow        短语                                     命中 '反解不到 1%'
+— N_XCHK 的牙: 同刻 + 20 s 窗 + 主机侧高 30% (偏差 23%) ⇒ 必须 FAIL —
+  [OK  ] xchk_dev30         退出码                                  1
+  [OK  ] xchk_dev30         判据行                                  命中 '[FAIL] N_XCHK'
+  [OK  ] xchk_dev30         短语                                     命中 '23.0'
+— T_RUN / T_TOOL 拆分: 真实日志 + 三种失效形态 —
+  [OK  ] t_run_ok           退出码                                  0
+  [OK  ] t_run_ok           判据行                                  命中 '[PASS] T_RUN'
+  [OK  ] t_run_ok           短语                                     命中 '工具接收侧失去对齐'
+  [OK  ] t_run_ok           判据行(T_TOOL)                          命中 '[SKIP] T_TOOL'
+  [OK  ] t_tool_noframes    退出码                                  1
+  [OK  ] t_tool_noframes    判据行                                  命中 '[FAIL] T_TOOL'
+  [OK  ] t_tool_noframes    短语                                     命中 '零帧'
+  [OK  ] t_run_127          退出码                                  1
+  [OK  ] t_run_127          判据行                                  命中 '[FAIL] T_RUN'
+  [OK  ] t_run_127          短语                                     命中 '先怀疑激励侧'
+  [OK  ] t_run_noproof      退出码                                  1
+  [OK  ] t_run_noproof      判据行                                  命中 '[FAIL] T_RUN'
+  [OK  ] t_run_noproof      短语                                     命中 '激励没跑'
+
+########## 汇总: OK=31 BAD=0 ##########

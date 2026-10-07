@@ -10,7 +10,11 @@ T=$(cat "/d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_gate4_tools/selftest
 V=0xffffffff
 case "$A" in
   0X00) V=0x50360001;;
-  0X04) V=0x00000007;;
+  # ⚠️ 假板子的 BID 必须与 p6e_snap_check.sh 的 EXPECT_BID **同代** (否则正例的判据 1.2 假 FAIL,
+  #    而"正例必须 0 FAIL"是本脚本的断言⑤)。现役 = 9 (P7B-WU 二轮); 跑旧口径时 FAKE_BID=0x00000008。
+  #    ⚠️ 注释里**不许出现反引号/** —— 这是**无引号 heredoc**, 它们会被当场求值
+  #       (实测: 反引号里的 EXPECT_BID 被当命令执行, 报 "command not found")。
+  0X04) V=${FAKE_BID:-0x00000009};;
   0X08) V=0x00000000;;
   0X0C) V=$(awk -v t="$T" 'BEGIN{printf "0x%08x", int(t*250000000)%4294967296}');;
   0X10) V=0x00000018;;
@@ -29,8 +33,8 @@ case "$A" in
   0XC0) V=0x00000099;; 0XC4) V=0;; 0XC8) V=0;; 0XCC) V=0;; 0XD0) V=0;;
   0XD4) V=0;; 0XD8) V=0;; 0XDC) V=0;; 0XE0) V=0;; 0XE4) V=0;;
   0XE8) V=$(awk -v t="$T" 'BEGIN{printf "0x%08x", int(t*312500000)%4294967296}');;
-  # ---- P7B-BIZ: W51..W60 (0xEC..0x110) 与新的未实现地址 0x114 --------------
-  #   ⚠️ 窗口 57/59 字时代的旧注释里的 0x100/0x104 已作废 (现役 = 61 字 / 0x114)
+  # ---- P7B-BIZ: W51..W60 (0xEC..0x110) ---------------------------------------
+  #   ⚠️ 窗口 57/59 字时代的旧注释里的 0x100/0x104 已作废 (现役 = 63 字 / 0x11C)
   #   ⚠️ 旧版把 0XEC 当"未实现地址" ⇒ 扩窗后它变成**窗口内的 W51** ⇒ 必须回真值,
   #      否则 5.0 "窗口内无 0xffffffff" 会假 FAIL (而负对照再也打不中未实现地址)。
   0XEC) V=1000;;   # W51 app_tx_bytes
@@ -43,7 +47,12 @@ case "$A" in
   0X108) V=0;;                                        # W58 tcp_tx_frame.o_retx_active
   0X10C) V=0;;                                        # W59 slow_tx_adp.stat_fifo_ovf
   0X110) V=0;;                                        # W60 slow_rx_adp.stat_fifo_ovf
-  0X114) V=${FAKE_UNIMPL:-0xffffffff};;   # 未实现地址 (61 字; 旧版 0xEC -> 0x104 -> 0x10C -> 0x114)
+  # ---- P7B-WU 二轮: W61/W62 与新的未实现地址 (尾段随 SW 走, 见上面的 FAKE_TAIL) ----
+  #   ⚠️ 与 W51 同一手法: 0x114 在 61 字时代是"未实现", 现在它**是窗口内的 W61** ⇒ 必须回真值,
+  #      否则正例的 5.0 假 FAIL + 负对照打不中真正的未实现地址 (判据成了真空门)。
+  0X114) V=1234;;  # W61 app_ctrl.stat_wu (次数; 非 0 才像真板)
+  0X118) V=0;;     # W62 app_ctrl.rx_occ_bytes (17 位 ⇒ 高位恒 0)
+  0X11C) V=${FAKE_UNIMPL:-0xffffffff};;   # 未实现地址 (63 字)
   *)    V=0xffffffff;;
 esac
 echo "Read 32-bit from address $A : $V"

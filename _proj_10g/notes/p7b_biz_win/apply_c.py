@@ -3,7 +3,7 @@
 #   W60 = slow_rx_adp.stat_fifo_ovf   (o_ovf 拒写; 同上)
 #   两个都**已经是模块输出端口** ⇒ 只动 wrapper (不碰别人的 owner 文件)。
 #   ⇒ 窗口 59 -> 61 字; 未实现地址 0x10C -> 0x114
-import io, sys
+import io, re, sys
 
 def sub(p, pairs, label=""):
     s = io.open(p, encoding='utf-8', newline='').read()
@@ -13,6 +13,31 @@ def sub(p, pairs, label=""):
         s = s.replace(a, b)
     io.open(p, 'w', encoding='utf-8', newline='').write(s)
     print("ok", p)
+
+# ---- 硬守卫 (2026-10-07 "台架修复轮" 加) -------------------------------------------
+# ⚠️ 本件是**历史一次性补丁生成器**: 它按整段字符串把"窗口 59 → 61 字"那一代的文本
+#    写进现役 RTL/脚本。**重跑它 = 把 61 字版贴回现役文件** (静默回退, 本工程最贵的
+#    一类缺陷)。实测 (2026-10-07, dryrun: _proj_10g/notes/p7b_wu_harness_fix/
+#    dryrun_apply.py): 今天重跑会在第一个锚点 MISS 退出 —— 但那是**字符串巧合**,
+#    不是设计的守卫; 而 `sub()` 是**逐文件**落盘 ⇒ 一旦"前几个文件命中、后面某个
+#    MISS", 会留下**半改**状态 (更坏)。⇒ 先核 pre-state, 不符就拒绝执行 (exit 3),
+#    一个字节都不写。
+# pre-state 定义 = 现役 `board/wrapper_p4.v` 的 `SNAP_NW_P6E` 恰为 **59**
+#    (本脚本要写的其余文件与它同一代; 几何是唯一那把尺子)。
+def _guard_prestate():
+    w = 'board/wrapper_p4.v'
+    s = io.open(w, encoding='utf-8', newline='').read()
+    m = re.search(r'localparam\s+SNAP_NW_P6E\s*=\s*(\d+)\s*;', s)
+    got = int(m.group(1)) if m else -1
+    if got != 59:
+        sys.stderr.write(
+            "GUARD_REFUSE: %s 的 SNAP_NW_P6E = %s (期望 pre-state = 59).\n"
+            "  本脚本只适用于窗口 59 -> 61 那一代; 现役窗口已不是那一代\n"
+            "  => 拒绝执行, 未写任何文件 (防止把 61 字时代的文本贴回现役件).\n"
+            "  如确要重跑历史件, 请在**临时 worktree** 里 checkout 对应 revision 再跑.\n"
+            % (w, got))
+        sys.exit(3)
+_guard_prestate()
 
 W = 'board/wrapper_p4.v'
 sub(W, [

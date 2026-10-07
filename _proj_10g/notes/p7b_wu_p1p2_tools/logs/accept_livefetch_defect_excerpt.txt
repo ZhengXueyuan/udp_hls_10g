@@ -1,0 +1,38 @@
+# 摘录: p7b_gate4_accept.sh live 档取数失败的**原始输出** (2026-10-07, 修复前)
+#
+# ⚠️ 声明: 这份是**复述**。同一轮里我又跑了一次(修复后)并用了同一个日志文件名
+#    (`new_script_old_board_accept.txt`) ⇒ 原件被覆盖。下面的行是第一次运行 stdout 的
+#    逐字复制(当时贴进对话的那几行), **不是**从磁盘上的原文件读回来的。
+#    机理侧的**可复现**证据见下方「机理复现」(与板子无关, 可随时重跑)。
+
+运行: PEER_PW=*** PYTHONIOENCODING=utf-8 G4_SKIP_TRAFFIC=1 bash _proj_pcie/p7b_gate4_accept.sh
+       (修复前: 远端文本里写的是 `seq 0 $((SNAP_WORDS-1))` 与 `rd "$UNIMPL_ADDR"`)
+
+输出(逐字):
+  [INFO] **live 档**: 按判据需要取 **2 块**快照 (旧版恒取 1 块 ⇒ G2/G3/C 组被 SKIP)
+  [FATAL] 快照块 A 解析: 窗口不完整: 缺 W0 (共收到 0 字; 期望下标 0..62 连续)
+
+  [ABORT] 前置闸未过 ⇒ 后面的读数都不算数
+-------- 原始文本 --------
+SNAP_BEGIN
+TLATCH 1791334742.223548867 1791334742.227288699
+GEN 140 141
+MAGIC 0x50360001
+BID 0x00000008
+MARKER 0xdeadbeef
+UNIMPL 0x50360001
+SNAP_END
+########## PASS=0 FAIL=0 SKIP=0 ##########
+
+读法: **W 行一行都没有** (63 字窗口一个字都没取回来), `UNIMPL` 是空地址读出来的 0x00=MAGIC。
+      "缺 W0 (共收到 0 字)" 会把注意力引向"驱动/板子", 但真因在**本地脚本**:
+      远端跑的是 `sudo bash -lc <文本>`, 而 `SNAP_WORDS`/`UNIMPL_ADDR` **没有 export、也不是
+      sudo 的保留变量** ⇒ 远端 `seq 0 $((SNAP_WORDS-1))` 退化成 `seq 0 -1` = 空。
+
+# ---- 机理复现 (与板子无关, 可随时重跑; 本轮的实测输出) ----
+$ unset SNAP_WORDS; bash -c 'for i in $(seq 0 $((SNAP_WORDS-1))); do echo "W$i"; done; echo "(循环产出 0 行)"'
+(循环产出 0 行)
+$ SNAP_WORDS=63 bash -c 'n=0; for i in $(seq 0 $((SNAP_WORDS-1))); do n=$((n+1)); done; echo "行数=$n"'
+行数=63
+
+# 修复后同一命令的输出 = `logs/new_script_old_board_accept.txt` (63 行 W + G1/B_WIN 两条 FAIL)。

@@ -1,0 +1,20 @@
+#!/bin/bash
+A=$(echo "$2" | tr '[:lower:]' '[:upper:]'); OP="${3:-}"; DAT="${4:-}"
+if [ "$OP" = "w" ] && [ -n "$DAT" ]; then
+  [ "$A" = "0X18" ] && echo $(( $(cat "/d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/smoke/gen") + 1 )) > "/d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/smoke/gen"
+  echo "Write 32-bit $DAT to address $A"; exit 0
+fi
+freecnt(){ awk -v t="$(date +%s.%N)" -v f="$1" 'BEGIN{ n=int(t*f)%4294967296; printf "0x%08x", n }'; }
+case "$A" in
+  0X00) V=0x50360001;;
+  0X04) V=${FAKE_BID:-0x00000008};;                 # 现役板实测 BID = 8 (wu 修复位流)
+  0X14) V=0xdeadbeef;;
+  0X18) V=0x00000002;;
+  0X1C) V=$(awk -v g="$(cat "/d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/smoke/gen")" 'BEGIN{printf "0x%08x", g*65536+2}');;
+  0X34) V=$(freecnt 156250000);;                    # W5  前端域
+  0X80) V=$(freecnt 156250000);;                    # W24 数据面域 (A4 的被测字)
+  0X84) V=0x00000001;;                               # W25 mmcm_locked bit0 = 1 (真板实测)
+  0XB0) V=0xc7ca0efe;;                               # 现役板上 0xB0 是**已实现字** (真板实测读数)
+  *)    V=0x00000000;;
+esac
+echo "Read 32-bit from address $A : $V"

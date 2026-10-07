@@ -3,7 +3,7 @@
 #   ② 表行数判据的正则只认 **2 位十六进制地址** ⇒ 0x100/0x104 (3 位) 匹配不上
 #      (这是被"窗口跨过 0xFF"逼出来的**工具缺陷**, 不是设计问题)
 #   ③ 表里印出末字的断言用了大写 `0X100`, 而表里印的是小写 `0x100` ⇒ 逐字不符
-import io, sys
+import io, re, sys
 
 def sub(p, pairs):
     s = io.open(p, encoding='utf-8', newline='').read()
@@ -13,6 +13,25 @@ def sub(p, pairs):
         s = s.replace(a, b)
     io.open(p, 'w', encoding='utf-8', newline='').write(s)
     print("ok", p)
+
+# ---- 硬守卫 (2026-10-07 "台架修复轮" 加; 与 apply_c.py 同款, pre-state = 57) --------
+# ⚠️ 本件是**历史一次性补丁生成器** (窗口 57 字那一代的收尾修补)。重跑它会把旧一代
+#    的文本贴回现役脚本 (静默回退), 且 `sub()` 逐文件落盘 ⇒ 可能留下**半改**状态。
+#    ⇒ 先核 pre-state, 不符就拒绝 (exit 3), 不写任何文件。
+def _guard_prestate():
+    w = 'board/wrapper_p4.v'
+    s = io.open(w, encoding='utf-8', newline='').read()
+    m = re.search(r'localparam\s+SNAP_NW_P6E\s*=\s*(\d+)\s*;', s)
+    got = int(m.group(1)) if m else -1
+    if got != 57:
+        sys.stderr.write(
+            "GUARD_REFUSE: %s 的 SNAP_NW_P6E = %s (期望 pre-state = 57).\n"
+            "  本脚本只适用于窗口 57 字那一代; 现役窗口已不是那一代\n"
+            "  => 拒绝执行, 未写任何文件 (防止把旧一代文本贴回现役件).\n"
+            "  如确要重跑历史件, 请在**临时 worktree** 里 checkout 对应 revision 再跑.\n"
+            % (w, got))
+        sys.exit(3)
+_guard_prestate()
 
 # ① 标签: p6e_snap_check.sh 的 WLABEL 数组末尾补 6 项 (顺序 = 字序)
 sub('_proj_pcie/p6e_snap_check.sh', [

@@ -2,7 +2,7 @@
 #   W57 = tx_retx_hi      (tcp_tx_frame 的 reg retx_hi, dp 域 ⇒ 满足 snap_cdc 前提)
 #   W58 = {31'd0, tx_retx_active}  (同族的 reg retx_active, 1 位)
 #   ⇒ 窗口 57 -> 59 字; 未实现地址 0x104 -> 0x10C
-import io, sys
+import io, re, sys
 
 def sub(p, pairs, label=""):
     s = io.open(p, encoding='utf-8', newline='').read()
@@ -12,6 +12,26 @@ def sub(p, pairs, label=""):
         s = s.replace(a, b)
     io.open(p, 'w', encoding='utf-8', newline='').write(s)
     print("ok", p)
+
+# ---- 硬守卫 (2026-10-07 "台架修复轮" 加; 与 apply_c.py 同款, pre-state = 57) --------
+# ⚠️ 本件是**历史一次性补丁生成器** (窗口 57 -> 59 那一代)。重跑它 = 把旧一代的文本
+#    贴回现役 RTL/脚本 (静默回退)。实测: 今天重跑会在第一个锚点 MISS 退出, 但那是
+#    **字符串巧合**而不是设计的守卫; `sub()` 又是**逐文件**落盘 ⇒ 前几个文件命中、
+#    后面某个 MISS 就会留下**半改**状态。⇒ 先核 pre-state, 不符就拒绝 (exit 3), 不写。
+def _guard_prestate():
+    w = 'board/wrapper_p4.v'
+    s = io.open(w, encoding='utf-8', newline='').read()
+    m = re.search(r'localparam\s+SNAP_NW_P6E\s*=\s*(\d+)\s*;', s)
+    got = int(m.group(1)) if m else -1
+    if got != 57:
+        sys.stderr.write(
+            "GUARD_REFUSE: %s 的 SNAP_NW_P6E = %s (期望 pre-state = 57).\n"
+            "  本脚本只适用于窗口 57 -> 59 那一代; 现役窗口已不是那一代\n"
+            "  => 拒绝执行, 未写任何文件 (防止把旧一代文本贴回现役件).\n"
+            "  如确要重跑历史件, 请在**临时 worktree** 里 checkout 对应 revision 再跑.\n"
+            % (w, got))
+        sys.exit(3)
+_guard_prestate()
 
 W = 'board/wrapper_p4.v'
 sub(W, [

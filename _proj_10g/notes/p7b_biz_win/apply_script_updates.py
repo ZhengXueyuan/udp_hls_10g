@@ -1,6 +1,6 @@
 # apply_script_updates.py -- P7B-BIZ: 把"窗口 55 -> 57 / 未实现地址 -> 0x104"同步到现役脚本
 #   一次性脚本 (跑完留着当账); 每个替换都断言"原文命中", 不命中就整体退出 (不半改)。
-import io, sys
+import io, re, sys
 
 def sub(p, pairs):
     s = io.open(p, encoding='utf-8', newline='').read()
@@ -10,6 +10,25 @@ def sub(p, pairs):
         s = s.replace(a, b)
     io.open(p, 'w', encoding='utf-8', newline='').write(s)
     print("ok", p)
+
+# ---- 硬守卫 (2026-10-07 "台架修复轮" 加) -------------------------------------------
+# ⚠️ 本件是**历史一次性补丁生成器** (窗口 55 -> 57 那一代; 55 从未出厂)。重跑它会把
+#    旧一代的几何/文案贴回**现役验收脚本** (静默回退), 且 `sub()` 逐文件落盘 ⇒
+#    可能留下**半改**状态。⇒ 先核 pre-state, 不符就拒绝 (exit 3), 不写任何文件。
+def _guard_prestate():
+    w = 'board/wrapper_p4.v'
+    s = io.open(w, encoding='utf-8', newline='').read()
+    m = re.search(r'localparam\s+SNAP_NW_P6E\s*=\s*(\d+)\s*;', s)
+    got = int(m.group(1)) if m else -1
+    if got != 55:
+        sys.stderr.write(
+            "GUARD_REFUSE: %s 的 SNAP_NW_P6E = %s (期望 pre-state = 55).\n"
+            "  本脚本只适用于窗口 55 -> 57 那一代 (55 从未出厂); 现役窗口已不是那一代\n"
+            "  => 拒绝执行, 未写任何文件 (防止把旧一代几何贴回现役脚本).\n"
+            "  如确要重跑历史件, 请在**临时 worktree** 里 checkout 对应 revision 再跑.\n"
+            % (w, got))
+        sys.exit(3)
+_guard_prestate()
 
 # 1) 闸 4 验收脚本
 sub('_proj_pcie/p7b_gate4_accept.sh', [

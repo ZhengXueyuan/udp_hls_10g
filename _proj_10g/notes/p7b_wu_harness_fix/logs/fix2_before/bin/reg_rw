@@ -1,0 +1,34 @@
+#!/bin/bash
+# 假 reg_rw: $1=dev $2=addr [w [data]]; 输出形态与真 reg_rw 逐字一致
+DEV="$1"; A=$(echo "$2" | tr '[:lower:]' '[:upper:]'); OP="${3:-}"; DAT="${4:-}"
+NOW=$(cat "D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/fix2_before/vclk")          # 与假 date 同一时间基 (虚拟钟)
+echo "$A" >> "${FAKE_ADDRLOG:-/dev/null}"
+if [ "$OP" = "w" ] && [ -n "$DAT" ]; then
+  if [ "$A" = "0X18" ]; then
+    [ "${FAKE_GEN_STUCK:-0}" = "1" ] || echo $(( $(cat "D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/fix2_before/gen") + 1 )) > "D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/fix2_before/gen"
+    [ "${FAKE_STALE:-0}" = "1" ] || echo "$NOW" > "D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/fix2_before/latch"
+  fi
+  echo "Write 32-bit $DAT to address $A"; exit 0
+fi
+LT=$(cat "D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/fix2_before/latch")
+freecnt(){ awk -v t="$1" -v f="$2" 'BEGIN{ n=int((t-1700000000)*f)%4294967296; if(n<0) n+=4294967296; printf "0x%08x", n }'; }
+case "$A" in
+  0X00) V=0x50360001;;
+  0X04) V=0x00000008;;
+  0X08) V=0x00000000;;
+  0X0C) V=$(freecnt "$LT" 250000000);;
+  0X10) V=0x00000018;;
+  0X14) V=0xdeadbeef;;
+  0X18) V=0x00000000;;
+  0X1C) V=$(awk -v g="$(cat "D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/fix2_before/gen")" 'BEGIN{printf "0x%08x", g*65536+2}');;
+  0X20) V=0x00000045;; 0X24) V=0x00002bb4;; 0X28) V=0x0000014d;; 0X30) V=0x00000000;;
+  0X34) V=$(freecnt "$LT" 156250000);;                       # W5  前端域 (P7B = PCS 恢复钟 156.25)
+  0X80) V=$(freecnt "$LT" 156250000);;                       # W24 数据面域 156.25
+  0X3C) V=0x00000000;; 0X40) V=0x00000000;; 0X44) V=0x00000000;;
+  0X9C) V=0x00000000;; 0XA0) V=0x00000000;; 0XA4) V=0x00000000;; 0XA8) V=0x00000000;;
+  0XBC) V=0x2000100c;; 0XC0) V=0x000000ff;;
+  0XE8) V=$(freecnt "$LT" 156250000);;                       # W50 toggle (÷1 口径 ⇒ 156.25)
+  0XEC) V=0xffffffff;;
+  *)    V=0x00000000;;
+esac
+echo "Read 32-bit from address $A : $V"

@@ -1,0 +1,59 @@
+=== 1. 板侧最终读数 (PCIe 观测窗口**仍然活着**) ===
+MAGIC=0x50360001 BID=0x00000008 MARKER=0xdeadbeef UNIMPL=0xffffffff gen=143
+  [ABORT] BID=0x00000008 != 0x00000009 ⇒ **板上不是 63 字位流**; 下面 W61/W62 若为 0xffffffff 是 SLVERR(读失败) 不是数据
+W0=0x0187c737 W3=0x00000000 W8=0x4fa68b63 W10=0x00009460 W13=0x00000000 W14=0x018c0b14 W20=0x51329bf2 W34=0x00000000 W39=0x2000100c W40=0x000000ff
+W51=0x01900000 W52=0x00004637 W53=0x2bd63cfc W54=0x3c9160c2 W55=0x000004d0 W56=0x00000000 W57=0x123640f1 W58=0x00000000 W59=0x00000000 W60=0x00000000  # P7B-BIZ 十字
+W61=0xffffffff W62=0xffffffff  # P7B-WU 二轮新增 (stat_wu / rx_occ_bytes)
+=== 2. 对端机 /tmp 里本轮产物清单 (取回后删) ===
+-rw-r--r-- 1 tcpdump tcpdump    406314 Oct  7 00:01 /tmp/biz_j6.pcap
+-rw-rw-r-- 1 a       a            4576 Oct  6 22:43 /tmp/p7b_biz_tcp_badbyte_local.py
+-rw-r--r-- 1 tcpdump tcpdump    390878 Oct  7 00:12 /tmp/paced230_j6.pcap
+-rw-r--r-- 1 tcpdump tcpdump    817330 Oct  7 00:10 /tmp/paced2_j6.pcap
+-rw-r--r-- 1 tcpdump tcpdump  35943048 Oct  7 00:06 /tmp/paced_j6.pcap
+-rw-r--r-- 1 tcpdump tcpdump    383420 Oct  6 23:56 /tmp/rate_j6.pcap
+-rw-r--r-- 1 tcpdump tcpdump  69575204 Oct  6 23:07 /tmp/s2_bidir.pcap
+-rw-r--r-- 1 tcpdump tcpdump    459024 Oct  7 02:38 /tmp/s2_dl.pcap
+-rw-r--r-- 1 tcpdump tcpdump 398847714 Oct  6 23:07 /tmp/s2_tcp2.pcap
+-rw-r--r-- 1 tcpdump tcpdump 332613564 Oct  6 22:49 /tmp/s2_tcp.pcap
+-rw-r--r-- 1 tcpdump tcpdump    277478 Oct  7 02:23 /tmp/wu_dry.pcap
+-rw-r--r-- 1 tcpdump tcpdump 136666918 Oct  7 02:32 /tmp/wu_fix_P0_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump 136472410 Oct  7 02:33 /tmp/wu_fix_P0_r2.pcap
+-rw-r--r-- 1 tcpdump tcpdump 120851800 Oct  7 02:35 /tmp/wu_fix_P1000_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump 119920562 Oct  7 02:36 /tmp/wu_fix_P1000_r2.pcap
+-rw-r--r-- 1 tcpdump tcpdump  71748674 Oct  7 02:33 /tmp/wu_fix_P100_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump  71749450 Oct  7 02:34 /tmp/wu_fix_P100_r2.pcap
+-rw-r--r-- 1 tcpdump tcpdump  95990588 Oct  7 02:34 /tmp/wu_fix_P134_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump  96127302 Oct  7 02:34 /tmp/wu_fix_P134_r2.pcap
+-rw-r--r-- 1 tcpdump tcpdump 132694980 Oct  7 02:35 /tmp/wu_fix_P160_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump 131469972 Oct  7 02:35 /tmp/wu_fix_P160_r2.pcap
+-rw-r--r-- 1 tcpdump tcpdump  35859300 Oct  7 02:33 /tmp/wu_fix_P50_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump  35859944 Oct  7 02:33 /tmp/wu_fix_P50_r2.pcap
+-rw-r--r-- 1 root    root       459024 Oct  7 02:38 /tmp/wu_j0_s2prev.pcap
+-rw-r--r-- 1 tcpdump tcpdump   1281152 Oct  7 01:25 /tmp/wuloop_fin_p0.pcap
+-rw-r--r-- 1 tcpdump tcpdump    878480 Oct  7 01:25 /tmp/wuloop_fin_p160.pcap
+-rw-r--r-- 1 tcpdump tcpdump    413754 Oct  7 01:19 /tmp/wuloop_p0.pcap
+-rw-r--r-- 1 tcpdump tcpdump  35076116 Oct  7 01:22 /tmp/wuloop_p100.pcap
+-rw-r--r-- 1 tcpdump tcpdump    819298 Oct  7 01:21 /tmp/wuloop_p160.pcap
+-rw-r--r-- 1 tcpdump tcpdump    497060 Oct  7 02:24 /tmp/wu_neg_P0_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump    526004 Oct  7 02:24 /tmp/wu_neg_P0_r2.pcap
+-rw-r--r-- 1 tcpdump tcpdump    486992 Oct  7 02:27 /tmp/wu_neg_P1000_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump    514264 Oct  7 02:27 /tmp/wu_neg_P1000_r2.pcap
+-rw-r--r-- 1 tcpdump tcpdump  71744038 Oct  7 02:25 /tmp/wu_neg_P100_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump  71739336 Oct  7 02:25 /tmp/wu_neg_P100_r2.pcap
+-rw-r--r-- 1 tcpdump tcpdump  94970540 Oct  7 02:26 /tmp/wu_neg_P134_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump  94033542 Oct  7 02:26 /tmp/wu_neg_P134_r2.pcap
+-rw-r--r-- 1 tcpdump tcpdump   1427174 Oct  7 02:26 /tmp/wu_neg_P160_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump   1407178 Oct  7 02:27 /tmp/wu_neg_P160_r2.pcap
+-rw-r--r-- 1 tcpdump tcpdump  35859374 Oct  7 02:25 /tmp/wu_neg_P50_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump  35861184 Oct  7 02:25 /tmp/wu_neg_P50_r2.pcap
+=== 3. 网络配置复原 ===
+AFTER_CLEANUP addr: enp1s0f1np1      DOWN           fe80::3dc:7cad:d0b1:8db0/64 
+AFTER_CLEANUP route: 192.168.100.2 via 192.168.0.1 dev wlp6s0 src 192.168.0.38 uid 0 
+AFTER_CLEANUP /tmp: /tmp/biz_j6.pcap
+/tmp/paced230_j6.pcap
+hw_server=active ; uptime=up 10 hours, 23 minutes
+FINAL_STATE_INVALID (前置闸未过: BID != 9 ⇒ 窗口口径不符)
+== rc=3 ==
+--- 复原 (本 agent 跑完后把现场放回原样) ---
+enp1s0f1np1      DOWN           192.168.100.100/32 fe80::3dc:7cad:d0b1:8db0/64 
+192.168.100.2 dev enp1s0f1np1 src 192.168.100.100 uid 0 

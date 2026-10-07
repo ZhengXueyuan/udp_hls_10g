@@ -674,3 +674,31 @@ sim/p5wu_regress/*
 !sim/p5wu_regress/*.py
 !sim/p5wu_regress/*.out
 sim/p5wu_regress/head_rtl/
+
+# ---- sim/p5wu_p1p2 (P7B-WU 二轮: P1/P2 修复 + 63 字快照门) ------------------
+# 口径同 sim/p5wu (上一段): 只留门驱动 bat / TB 源码 / 脚本; run·runsnap·work_xvlog 是**产物**。
+# ⚠️ `app_ctrl_base.v` 是 `git show 95c9485:rtl/app_ctrl.v` 的**负对照臂**(仅改名), 靠 `*.v` 放行;
+#    它不是 rtl/ 的副本, 必须留在库里 (去掉这条会静默少一个对照臂)。
+# ⚠️ 放行的是 `run_*.bat`(本仓门驱动的既定命名, 先例 `sim/p5d_multi/*`) —— **不是** `run_tb_*.bat`:
+#    那会漏掉 `run_xvlog_wrapper63.bat`(编译面门的现役入口), 属"现役入口从未被 git 看见"那一族。
+sim/p5wu_p1p2/*
+!sim/p5wu_p1p2/run_*.bat
+!sim/p5wu_p1p2/*.v
+!sim/p5wu_p1p2/*.py
+
+# ---- sim/p5wu_p1p2_review / _regress (与 p1p2 同批的并发 agent 工作目录) ----
+# 同口径: 排产物, 留门驱动 / TB 源码 / 脚本。**位置敏感: 留在末尾** (本节用 `/*` + 逐类 `!`)。
+# ⚠️ 顺序敏感: 末两行是**同名 RTL 副本**的显式排除 (最后匹配者胜), 照 `sim/p5wu_review`
+#    上一段的先例 —— `rtl/` 是唯一真源; 副本留在盘上但**不入库**
+#    (实测 `app_ctrl_head_raw.v` 与 `git show HEAD:rtl/app_ctrl.v` **逐字节相同**, sha256 `c38b3b96…`)。
+sim/p5wu_p1p2_review/*
+!sim/p5wu_p1p2_review/run_*.bat
+!sim/p5wu_p1p2_review/*.v
+!sim/p5wu_p1p2_review/*.py
+sim/p5wu_p1p2_review/app_ctrl_head_raw.v
+sim/p5wu_p1p2_review/head_rtl/
+sim/p5wu_p1p2_regress/*
+!sim/p5wu_p1p2_regress/run_*.bat
+!sim/p5wu_p1p2_regress/*.v
+!sim/p5wu_p1p2_regress/*.py
+sim/p5wu_p1p2_regress/head_rtl/

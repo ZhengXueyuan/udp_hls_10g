@@ -1,0 +1,119 @@
+########## P6e 合体版验收 (数据面 + 观测通道) 2026-10-07 08:51:41 ##########
+
+===== 0. 前提 =====
+02:00.0 Serial controller [0700]: Xilinx Corporation Device [10ee:9034]
+  [INFO] 端点 BDF = 02:00.0
+  [PASS] 0.1 链路: 5.0 GT/s PCIe
+/dev/xdma0_c2h_0 /dev/xdma0_control /dev/xdma0_events_0 /dev/xdma0_events_1 /dev/xdma0_events_10 /dev/xdma0_events_11 /dev/xdma0_events_12 /dev/xdma0_events_13 /dev/xdma0_events_14 /dev/xdma0_events_15 /dev/xdma0_events_2 /dev/xdma0_events_3 /dev/xdma0_events_4 /dev/xdma0_events_5 /dev/xdma0_events_6 /dev/xdma0_events_7 /dev/xdma0_events_8 /dev/xdma0_events_9 /dev/xdma0_h2c_0 /dev/xdma0_user /dev/xdma0_xvc 
+  [PASS] 0.2 user BAR 节点存在 (/dev/xdma0_user)
+
+===== 0.3 通道活性总闸 (0xffffffff 一律当没应答, 不当数据) =====
+  [PASS] 0.3 通道在应答 (MAGIC = 0x50360001)
+
+===== 1. 身份 (前置闸: 认位流) =====
+  [PASS] 1.1 MAGIC (0x00): 0x50360001
+  [PASS] 1.2 BUILD_ID (0x04): 0x00000008
+  [PASS] 1.3 MARKER (0x14): 0xdeadbeef
+  [INFO] 1.4 HW_STATUS (0x10) = 0x00000018  ([3]=user_lnk_up [4]=msi_enable [7:5]=msi_vec_w)
+
+===== 2. 快照触发协议 (0x18 / 0x1C) =====
+  [PASS] 2.1 触发后 done 置起
+  [INFO] SNAP_STATUS: 触发前 0x00760056 -> 触发后 0x00770056 (bit0=busy bit1=done bit2=seen, [31:16]=gen)
+  [PASS] 2.2 gen 恰好 +1
+
+===== 3. 读窗口原子性 (不重新触发 ⇒ 61 字必须逐位不变) =====
+  [INFO] 第 1 次: 0x0187c737 0x87f0ac8a 0x00000252 0x00000000 0x00000000 0x5e2f74b3 0x0000038b 0x00000563 0x37ea1c1f 0x8221b480 0x00009460 0x03552800 0x00000000 0x00000000 0x018c0b14 0x033c7898 0x00078b8a 0x00000000 0x00000000 0x00000000 0x39762c92 0x00000000 0x01872f3a 0x00000000 0x5d747ec9 0x00000001 0x00000003 0x00000006 0x00000100 0x05446459 0x0187c737 0x81d18fae 0x00000000 0x00000000 0x00000000 0x00000000 0x5e2f6df0 0x81d18fae 0x00000000 0x2000100c 0x000000ff 0x00000000 0x00000000 0x5c223097 0x5a6662f3 0x05446459 0x00000000 0x00000000 0x00000000 0x00000000 0x8af8cfff 0x01900000 0x00004637 0x2bd63cfc 0x3c9160c2 0x000004d0 0x00000000 0x123640f1 0x00000000 0x00000000 0x00000000 
+  [INFO] 第 2 次: 0x0187c737 0x87f0ac8a 0x00000252 0x00000000 0x00000000 0x5e2f74b3 0x0000038b 0x00000563 0x37ea1c1f 0x8221b480 0x00009460 0x03552800 0x00000000 0x00000000 0x018c0b14 0x033c7898 0x00078b8a 0x00000000 0x00000000 0x00000000 0x39762c92 0x00000000 0x01872f3a 0x00000000 0x5d747ec9 0x00000001 0x00000003 0x00000006 0x00000100 0x05446459 0x0187c737 0x81d18fae 0x00000000 0x00000000 0x00000000 0x00000000 0x5e2f6df0 0x81d18fae 0x00000000 0x2000100c 0x000000ff 0x00000000 0x00000000 0x5c223097 0x5a6662f3 0x05446459 0x00000000 0x00000000 0x00000000 0x00000000 0x8af8cfff 0x01900000 0x00004637 0x2bd63cfc 0x3c9160c2 0x000004d0 0x00000000 0x123640f1 0x00000000 0x00000000 0x00000000 
+  [PASS] 3.1 未触发时 61 字完全不变: 0x0187c737 0x87f0ac8a 0x00000252 0x00000000 0x00000000 0x5e2f74b3 0x0000038b 0x00000563 0x37ea1c1f 0x8221b480 0x00009460 0x03552800 0x00000000 0x00000000 0x018c0b14 0x033c7898 0x00078b8a 0x00000000 0x00000000 0x00000000 0x39762c92 0x00000000 0x01872f3a 0x00000000 0x5d747ec9 0x00000001 0x00000003 0x00000006 0x00000100 0x05446459 0x0187c737 0x81d18fae 0x00000000 0x00000000 0x00000000 0x00000000 0x5e2f6df0 0x81d18fae 0x00000000 0x2000100c 0x000000ff 0x00000000 0x00000000 0x5c223097 0x5a6662f3 0x05446459 0x00000000 0x00000000 0x00000000 0x00000000 0x8af8cfff 0x01900000 0x00004637 0x2bd63cfc 0x3c9160c2 0x000004d0 0x00000000 0x123640f1 0x00000000 0x00000000 0x00000000 
+
+===== 4. ★ GMII 时钟活性 + 频率反解 (W5 = 0x34) =====
+  [INFO] W5(gmii_free): 0x607e166f -> 0x6535c619   Δ=79146922 / 0.5088s
+  [PASS] 4.1 **GMII 时钟在跑** (数据面时钟活着)
+  [INFO] 4.2 GMII 时钟 ≈ 155.56 MHz  (1G 时应 ≈125)
+
+===== 4.3 ★ 三个时钟域的频率正证据 (G2/C9) =====
+  [INFO] 前端域 gmii_free: W5 0x6558c815 -> 0x9405398c (**都是自证的新一代**, 第2点 gen=123; 时间戳半宽 ±0.0035s)
+         Δ=783053175 / 5.0150s / ÷1 ⇒ 156.1422 MHz (标称 156.25)
+  [PASS] 前端域 gmii_free = 156.1422 MHz (标称 156.25 ±1%)
+  [INFO] 数据面域 dp_free: W24 0x9385c791 -> 0xc2332706 (**都是自证的新一代**, 第2点 gen=125; 时间戳半宽 ±0.0035s)
+         Δ=783114101 / 5.0152s / ÷1 ⇒ 156.1481 MHz (标称 156.25)
+  [PASS] 数据面域 dp_free = 156.1481 MHz (标称 156.25 ±1%)
+  [PASS] TX 域 tx_clk_act = 155.7933 MHz (**÷1 口径命中**) / ÷2 ⇒ 77.8967 (⇒ wrapper_p4.v:3389 的 '÷2' 注释需订正)
+
+===== 5. 数据面计数快照 (W0..W60) =====
+  W0   0x20  rx_stat_frames   (MAC 收帧数) = 0x0187c737
+  W1   0x24  rx_stat_bytes    (MAC 收字节) = 0x87f0ac8a
+  W2   0x28  {16'd0,wl_last}  (最近线上帧长) = 0x00000252
+  W3   0x2C  rx_stat_crc_err  (FCS 错帧) = 0x00000000
+  W4   0x30  rx_stat_drop     (MAC 丢弃) = 0x00000000
+  W5   0x34  gmii_free        (前端域自由计数 ⭐G2) = 0xf20ad441
+  W6   0x38  srx_stat_commit  (交 HLS 慢路径) = 0x0000038b
+  W7   0x3C  stx_stat_frames  (**HLS** 慢路径发帧) = 0x00000567
+  W8   0x40  udpapp_tx_frames (图案 app 发帧) = 0x38ae3aa0
+  W9   0x44  udpapp_tx_bytes  (图案 app 发字节) = 0xe9d11bb0
+  W10  0x48  udpapp_rx_frames (图案 app 收帧) = 0x00009460
+  W11  0x4C  udpapp_rx_bytes  (图案 app 收字节) = 0x03552800
+  W12  0x50  udpapp_rx_null   (空/坏帧) = 0x00000000
+  W13  0x54  udpapp_mismatch  (图案失配, 必须 0) = 0x00000000
+  W14  0x58  tx_stat_frames   (TCP fast path 发帧) = 0x018c0b14
+  W15  0x5C  tx_stat_bytes    (TCP fast path 发字节) = 0x033c7898
+  W16  0x60  srx_hls_bytes    (HLS 真读走的字节) = 0x00078b8a
+  W17  0x64  hr_cnt           (hls_rst_n 低电平拍数 ÷80) = 0x00000000
+  W18  0x68  stx_stat_purge   (slow_tx_adp 回卷帧数) = 0x00000000
+  W19  0x6C  srx_stat_drop    (slow_rx_adp 丢帧) = 0x00000000
+  W20  0x70  mac_tx_frames    (**MAC 级**发帧) = 0x3a3a4b17
+  W21  0x74  tx_stat_abort    (MAC 帧内中止) = 0x00000000
+  W22  0x78  rx_stat_pass     (TCP fast path 接受帧) = 0x01872f3a
+  W23  0x7C  rx_stat_nonmatch (TCP fast path nonmatch) = 0x00000000
+  W24  0x80  dp_free          (数据面域自由计数 ⭐G2) = 0xf14fb5bf
+  W25  0x84  mmcm_locked(DP 同步版) = 0x00000001
+  W26  0x88  rxcdc_full_cycles(RX FIFO 满拍数) = 0x00000003
+  W27  0x8C  {16'd0,rxcdc_occ_max}(RX FIFO 峰值) = 0x00000006
+  W28  0x90  {16'd0,txcdc_occ_max}(TX FIFO 峰值) = 0x00000100
+  W29  0x94  txwire_stall_cycles(DP 在等线) = 0x05449bb6
+  W30  0x98  rxcdc_out_frames (RX FIFO 读侧 TLAST)⭐ = 0x0187c737
+  W31  0x9C  rxcdc_out_bytes  (RX FIFO 读侧 Σpopc)⭐ = 0x81d18fae
+  W32  0xA0  rx_stat_drop_partial(已推过字的丢帧) = 0x00000000
+  W33  0xA4  rx_stat_orphan_bytes(孤儿字节) = 0x00000000
+  W34  0xA8  rx_stat_drop_full(FIFO 满丢帧) = 0x00000000
+  W35  0xAC  rx_stat_fifo_ovf (fifo_sync 拒写, 恒 0) = 0x00000000
+  W36  0xB0  mrx_stat_rx_words  (新 MAC XGMII 收字) = 0xf20acd7f
+  W37  0xB4  mrx_stat_rx_pay_bytes(新 MAC 载荷字节) = 0x81d18fae
+  W38  0xB8  rxcdc_ovf_cnt      (RX CDC FIFO 拒写) = 0x00000000
+  W39  0xBC  pcs_status_bundle  (PCS 状态束 ⭐C1-C8) = 0x2000100c
+  W40  0xC0  pcs_evt_bundle     (PCS 事件束 8×8 饱和) = 0x000000ff
+  W41  0xC4  mtx_stat_flush_words(新 MAC 冲刷字) = 0x00000000
+  W42  0xC8  mtx_stat_flush_done (新 MAC 冲刷完成) = 0x00000000
+  W43  0xCC  mtx_stat_tx_words  (新 MAC XGMII 发字) = 0xeffd303a
+  W44  0xD0  mtx_stat_tx_ctrl_char(新 MAC 控制字符) = 0x68f4a6c8
+  W45  0xD4  txcdc_ovf_cnt      (TX CDC FIFO 拒写) = 0x05449bb6
+  W46  0xD8  cls_dbg_stat_ovf   (rx_classify 字 FIFO 拒写) = 0x00000000
+  W47  0xDC  cls_dbg_stat_route_ovf(路由队列拒写) = 0x00000000
+  W48  0xE0  cls_dbg_stat_stall_in(rx_classify 停等拍) = 0x00000000
+  W49  0xE4  cls_dbg_occ        (字 FIFO 占用) = 0x00000000
+  W50  0xE8  tx_clk_act         (TX 域 toggle 沿数 ⭐G2 = 频率×2) = 0x1e808151
+  W51  0xEC  app_tx_bytes       (TCP 演示 app TX 载荷字节) = 0x01900000
+  W52  0xF0  app_tx_frames      (TCP 演示 app TX 载荷帧数) = 0x00004637
+  W53  0xF4  app_rx_bytes       (TCP 演示 app RX 载荷字节) = 0x2bd63cfc
+  W54  0xF8  app_mismatch       (载荷逐字节失配 ⭐必须恒 0 增量) = 0x3c9160c2
+  W55  0xFC  tx_stat_retx       (TCP 重传/RTO 回卷次数 ⭐必须恒 0 增量,F5b) = 0x000004d0
+  W56  0x100 udpapp_tx_ovf      (UDP app TX 字 FIFO 拒写 ⭐必须恒 0,丢字类回归守卫) = 0x00000000
+  W57  0x104 tx_retx_hi          (回卷重放上界: 会话中 = ack 上界; **只在 W58=1 时有效**) = 0x123640f1
+  W58  0x108 tx_retx_active      (重传/回卷重放会话**进行中**; 低 1 位) = 0x00000000
+  W59  0x10C stx_stat_fifo_ovf  (slow_tx_adp u_wf 拒写; 恒 0 = 无静默丢失) = 0x00000000
+  W60  0x110 srx_stat_fifo_ovf  (slow_rx_adp o_ovf 拒写; 恒 0 = 无静默丢失) = 0x00000000
+  [PASS] 5.0 窗口内 61 字全部读得出且无 0xffffffff (SLVERR 未混入)
+  [INFO] 判读: 有 ping 流量时 W0/W1 应涨; 若 W0 涨而 W6 不涨 ⇒ 帧没进慢路径 (ARP/ICMP 收不到);
+          W6 涨而 W7 不涨 ⇒ HLS 收到了但没回 ⇒ 问题在慢路径/HLS, 不在前端。
+  [INFO] 慢路径失聪时看这四对:
+          W6 涨而 **W16 不涨** ⇒ HLS 真不读了 (不是缓冲的问题);
+          **W17 涨** ⇒ 饥饿看门狗在反复复位 HLS (÷80 = 复位次数);
+          W7 不涨时 **W18 涨** ⇒ HLS 产出了但被 slow_tx_adp 回卷 (别再怪 HLS);
+          **W20** = 线上真发出去的帧数 (以前全设计没有这个数), 与 W7 对比可分开'没产生/没上线'。
+
+===== 6. 负向: 未实现地址必须走 SLVERR =====
+  [INFO] 0x114 (未实现, word 69) = 0xffffffff ; 0x00 (实现) = 0x50360001 ; 0x14 (实现) = 0xdeadbeef
+  [PASS] 6.1 未实现地址 0x114 返回 0xffffffff (SLVERR); 同趟已实现字仍读出真值
+
+########## 汇总: PASS=15 FAIL=0 SKIP=0 (窗口 61 字; 未实现地址 0x114) ##########
+########## 日志: /tmp/p6e_snap_check.log ##########

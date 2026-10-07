@@ -14,7 +14,7 @@ LT=$(cat "/d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_gate4_tools/fix2/la
 freecnt(){ awk -v t="$1" -v f="$2" 'BEGIN{ n=int((t-1700000000)*f)%4294967296; if(n<0) n+=4294967296; printf "0x%08x", n }'; }
 case "$A" in
   0X00) V=0x50360001;;
-  0X04) V=0x00000007;;
+  0X04) V=0x00000009;;
   0X08) V=0x00000000;;
   0X0C) V=$(freecnt "$LT" 250000000);;
   0X10) V=0x00000018;;
@@ -28,7 +28,7 @@ case "$A" in
   0X9C) V=0x00000000;; 0XA0) V=0x00000000;; 0XA4) V=0x00000000;; 0XA8) V=0x00000000;;
   0XBC) V=0x2000100c;; 0XC0) V=0x000000ff;;
   0XE8) V=$(freecnt "$LT" 156250000);;                       # W50 toggle (÷1 口径 ⇒ 156.25)
-  0XEC) V=0xffffffff;;
+  0X11C) V=0xffffffff;;                                       # 未实现地址 (63 字; 旧版 0xEC -> 0x114 -> 0x11C)
   *)    V=0x00000000;;
 esac
 echo "Read 32-bit from address $A : $V"

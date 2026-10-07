@@ -6,7 +6,10 @@
 两个口径的窗口与速率), 用 sed 拼就是一堆隐式耦合; 这里全部**显式算出来**, 每个数都来自算式。
 
 形态与真读数**逐字同形** (`reg_rw` 打 `0x..`; `ethtool -S` 打 "键 十进制"):
-  快照 : SNAP_BEGIN / TLATCH / GEN / MAGIC / BID / MARKER / W0..W50 / UNIMPL / SNAP_END
+  快照 : SNAP_BEGIN / TLATCH / GEN / MAGIC / BID / MARKER / W0..W62 / UNIMPL / SNAP_END
+         ⚠️ 几何 = **63 字 / BID 9** (P7B-WU 二轮, 2026-10-07 "台架修复轮"从 51 字/BID 7 同步)
+            —— 必须与 `_proj_pcie/p7b_gate4_accept.sh` 的默认 `SNAP_WORDS`/`EXPECT_BID` 同代,
+            否则 accept 会因"窗口不完整: 缺 W51 / 身份不符"把整套反例台架打成假红 (实测)。
   NIC  : NIC_BEGIN / TLATCH / <键 十进制>... / NIC_END
 
 ⚠️ 值口径与 `board/wrapper_p4.v` 逐项对应 (不是随手编的数):
@@ -19,10 +22,43 @@
   NIC 的 TLATCH = 一次 `ethtool -S` 的起止 (~1.3 ms)。判据用的窗口 = 两块 TLATCH 的**中点差**。
 """
 import os
+import re
 import sys
 
 F = 156_250_000.0          # 三个域的标称 (P7B_10G 前端 = PCS 恢复钟; 数据面/TX 同)
 W32 = 1 << 32
+
+# 本生成器的几何 (必须与 `_proj_pcie/p7b_gate4_accept.sh` 的**默认**值同代, 否则整套反例台架
+# 会在"窗口不完整 / 身份不符"上**假红** —— 2026-10-07 "台架修复轮"实测: 51 字夹具 + BID 7
+# 喂给 63 字/BID 9 的 accept ⇒ clean 正对照退出 2、15 条反例全部 BAD)。
+NW_FIX = 63                # 快照字数 (W0..W62)
+BID_FIX = 0x00000009       # 位流身份 (P7B-WU 二轮)
+
+
+def _geo_guard():
+    """生成前先核: accept 的默认几何必须与本夹具同代 —— 不同代就**拒绝生成** (否则喂出去是假红)。
+
+    只读 `SNAP_WORDS=${SNAP_WORDS:-N}` / `EXPECT_BID=${EXPECT_BID:-0xN}` 两行 (源码是唯一权威)。"""
+    here = os.path.dirname(os.path.abspath(__file__))
+    acc = os.path.join(here, '..', '..', '..', '_proj_pcie', 'p7b_gate4_accept.sh')
+    try:
+        s = open(acc, encoding='utf-8').read()
+    except OSError as e:
+        sys.stderr.write("GEOM_GUARD_FAIL 读不到 %s: %s\n" % (acc, e))
+        sys.exit(3)
+    m1 = re.search(r'SNAP_WORDS=\$\{SNAP_WORDS:-(\d+)\}', s)
+    m2 = re.search(r'EXPECT_BID=\$\{EXPECT_BID:-(0x[0-9a-fA-F]+)\}', s)
+    nw = int(m1.group(1)) if m1 else -1
+    bid = int(m2.group(1), 16) if m2 else -1
+    if nw != NW_FIX or bid != BID_FIX:
+        sys.stderr.write(
+            "GEOM_GUARD_FAIL: accept 默认几何 = (SNAP_WORDS=%s, EXPECT_BID=0x%X), "
+            "本夹具 = (%d, 0x%X)\n  两者不同代 ⇒ 生成出来的合成读数会被 accept 判成"
+            "窗口不完整/身份不符 (假红)。\n  请先同步 gen_inputs.py 的 NW_FIX/BID_FIX "
+            "(或反过来核 RTL 的 SNAP_NW_P6E/BUILD_ID_V), 再跑。\n"
+            % (nw, bid if bid >= 0 else 0, NW_FIX, BID_FIX))
+        sys.exit(3)
+
 
 # ---- 每个 case 的"形状" ---------------------------------------------------------
 #   midA/midB : 快照 A/B 的锁存时刻 (G2 频率窗);  midC/midD : 快照 C/D 的锁存时刻 (N_XCHK 板侧窗)
@@ -86,8 +122,10 @@ TRAFFIC_END
 
 
 def snap_words(lat, w20, vcc):
-    """51 字 (W0..W50); lat = 该块锁存的时刻 (秒) ⇒ 三个域自由计数由它算出。"""
-    W = [0] * 51
+    """**63 字 (W0..W62)**; lat = 该块锁存的时刻 (秒) ⇒ 三个域自由计数由它算出。
+    W51..W62 (P7B-BIZ/WU 新增字) 全填 0 —— accept 只要求"窗口齐全 + 无 0xffffffff 混入";
+    若将来判据开始消费某个新字, **这里要跟着造它的真形态** (否则负对照会"打空")。"""
+    W = [0] * NW_FIX
     W[0] = 1000                                     # rx_stat_frames
     W[1] = 1_518_000                                # rx_stat_bytes
     W[2] = 1518                                     # 最近线上帧长
@@ -113,7 +151,7 @@ def emit_snap(path, mid, gen0, w20, vcc, half=0.025):
         fh.write("SNAP_BEGIN\n")
         fh.write("TLATCH %.9f %.9f\n" % (mid - half, mid + half))
         fh.write("GEN %d %d\n" % (gen0, gen0 + 1))
-        fh.write("MAGIC 0x50360001\nBID 0x00000007\nMARKER 0xdeadbeef\n")
+        fh.write("MAGIC 0x50360001\nBID 0x%08X\nMARKER 0xdeadbeef\n" % BID_FIX)
         for i, v in enumerate(W):
             fh.write("W%d 0x%X\n" % (i, v))
         fh.write("UNIMPL 0xffffffff\nSNAP_END\n")
@@ -171,6 +209,7 @@ def build(out, name, c, real_traffic):
 
 
 def main():
+    _geo_guard()           # 代际守卫: 夹具与 accept 默认几何必须同代 (不同代拒绝生成, 见上)
     here = os.path.dirname(os.path.abspath(__file__))
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(here, "inputs")
     real_traffic = sys.argv[2] if len(sys.argv) > 2 else ""

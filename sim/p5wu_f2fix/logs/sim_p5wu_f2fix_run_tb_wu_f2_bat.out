@@ -1,0 +1,85 @@
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Wed Oct  7 09:59:14 2026
+# Process ID         : 26984
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/sim/p5wu_f2fix/run
+# Command line       : xsim.exe -log xsim_f2.log -mode tcl -source {xsim.dir/tb_wu_f2/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/sim/p5wu_f2fix/run/xsim_f2.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/sim/p5wu_f2fix/run\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26300
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 47646 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_wu_f2/xsim_script.tcl
+# xsim {tb_wu_f2} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+PH0: winq=0 -- DUT explicit no-arm; PRE arm saturated true (unfixed)
+  PASS PH0a DUT winq=0 (granted)
+  PASS PH0b PRE winq=0
+  PASS PH0c DUT wu_act=1 (data seen; artificial)
+  PASS PH0d PRE wu_act=1
+  PASS PH0e DUT NOT armed (F2: winq==0 arm is explicitly off)
+  PASS PH0f PRE armed (old arm is saturated true)
+  PASS PH0g DUT still not armed after 8 more scans
+  PASS PH0h PRE still armed after 8 more scans (rewritten every scan)
+  [READ] PH0 fires: DUT=0 PRE=0 | wu_zero: DUT=0 PRE=1
+  PASS both arms: 0 fires for winq=0 (non-regression; both never fired)
+  PASS  has teeth: same stimulus => DIFFERENT arm state (F2 delta seen)
+  [READ] NEG mutant fires: s0=6 (DUT s0=0 PRE s0=0)
+  PASS NEG0 would-fire mutant DOES fire at winq=0 (counter is live)
+  PASS NEG1 winq=0 fire reading discriminates DUT vs would-fire mutant
+PH1: winq=1 -- both arms must fire exactly once (F2 did not kill 1/2/3)
+  PASS PH1a both winq=1
+  PASS PH1b both wu_act=1
+  PASS PH1c both armed (winq=1 arm reachable, P1 fix holds)
+  PASS PH1d both fired exactly once
+  PASS PH1e both wu_mark=1 (fire value identical)
+PH2: winq=2 -- same shape
+  PASS PH2a both armed
+  PASS PH2b both fired exactly once
+  PASS PH2c both wu_mark=2
+PH3: winq=3 -- same shape
+  PASS PH3a both armed
+  PASS PH3b both fired exactly once
+  PASS PH3c both wu_mark=3
+PH4: winq=0xC000 (default product cfg) -- both arms bit-identical
+  [STATE] PH4 winq[4]: DUT=c000 PRE=c000 | pool: DUT=00000 PRE=00000 | cap=c000
+  PASS PH4a both winq=0xC000
+  PASS PH4b both armed
+  PASS PH4c both fired exactly once
+  PASS PH4d both wu_mark=0xBF00 (fire value identical)
+  PASS PH4e at exactly winq/4: both NOT armed (strict < holds)
+  PASS PH4f no extra fire at boundary
+  PASS PH4g at winq/4 - 1: both armed (not a dead gate)
+PH5: winq=0x0C00 (pool/16) -- both arms bit-identical
+  PASS PH5a both winq=0x0C00
+  PASS PH5b both armed
+  PASS PH5c both fired exactly once
+  PASS PH5d both wu_mark=0x0C00
+------------------------------------------------------------
+lockstep violation cycles (must be 0) = 0
+fires: DUT s0=0 s1=1 s2=1 s3=1 s4=1 s5=1
+fires: PRE s0=0 s1=1 s2=1 s3=1 s4=1 s5=1
+fires: MUT s0=6 s1=2 s2=1 s3=1 s4=1 s5=1 (negative control)
+  PASS Z1 lockstep across 2 arms (same stimulus)
+  PASS re counts per slot identical DUT vs PRE (only arm state differs)
+  PASS  5 (s1..s5 one each; s0 zero => discriminator saw both outcomes)
+  PASS gged: s2..s5 == PRE (1 each); s0 +6 / s1 +1 (threshold-0 corner)
+F2 GATE PASSCOUNT 38
+F2 GATE OK
+$finish called at time : 132220 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/tb/tb_wu_f2.v" Line 471
+exit
+INFO: [Common 17-206] Exiting xsim at Wed Oct  7 09:59:16 2026...
+F2 GATE PASS

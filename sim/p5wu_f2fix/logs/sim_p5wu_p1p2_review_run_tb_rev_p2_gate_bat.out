@@ -1,0 +1,55 @@
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Wed Oct  7 09:59:18 2026
+# Process ID         : 12984
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/sim/p5wu_p1p2_review/run
+# Command line       : xsim.exe -log xsim_rev.log -mode tcl -source {xsim.dir/tb_rev_p2_gate/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/sim/p5wu_p1p2_review/run/xsim_rev.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/sim/p5wu_p1p2_review/run\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26300
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 47632 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_rev_p2_gate/xsim_script.tcl
+# xsim {tb_rev_p2_gate} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+RA: same-slot reconnect -- wu_act must be a SESSION property
+  PASS RAa session A: dut wu_act[1]=1 (data seen)
+  PASS RAb dut wu_act[1]=0 after ev_down
+  PASS RAc dut wu_act[1]=0 right after new session
+  PASS RAd dut wu_act[1] still 0 (init != false progress)
+  PASS RAe dut NOT armed at low window (P2 gate blocks)
+  [READ] RA fires: dut=0 base=1 | wu_act dut=0
+  PASS RAf dut fires 0 on reconnected IDLE session (P2 gate holds)
+  PASS RAg base fires 1 (no gate => noise on idle conn)
+RB: residual (1) -- conn that HAD data then went silent still fires
+  PASS RBa dut wu_act[1]=1 (had data)
+  [READ] RB fires over 2 occ cycles: dut=2 base=2
+  PASS b residual (1) CONFIRMED: dut fires 1 per occ cycle while silent
+  PASS RBc base same (control)
+RC: residual (2) -- never-received conn that saw a small window still waits
+  PASS RCa dut wu_act[1]=0 (never received)
+  PASS RCb dut NOT armed even though window is small
+  [READ] RC fires after reopen: dut=0 base=1
+  PASS  residual (2) CONFIRMED: dut does NOT notify (waits for persist)
+  PASS RCd base DOES notify (this is what P2 gives up)
+------------------------------------------------------------
+lockstep violation cycles (must be 0) = 0
+  PASS Z1 lockstep across 2 arms (same stimulus)
+REV_P2_GATE OK
+$finish called at time : 72236 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/sim/p5wu_p1p2_review/tb_rev_p2_gate.v" Line 276
+exit
+INFO: [Common 17-206] Exiting xsim at Wed Oct  7 09:59:20 2026...
+REV_P2_GATE PASS

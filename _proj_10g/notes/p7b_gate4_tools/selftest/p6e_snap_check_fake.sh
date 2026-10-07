@@ -2,8 +2,10 @@
 #=============================================================================
 # p6e_snap_check.sh — PCIe 寄存器窗口验收: 数据面计数经快照读出
 #   前置: (1) FPGA 已烧上**本轮的**位流, 且 BUILD_ID == EXPECT_BID:
-#              6 = P6b+F4 双域 **36 字** (历史)   |   7 = **P7b 51 字** (RATE 位流)
-#              ⚠️ P7B-BIZ 起窗口 = **61 字** (RTL 当前值) ⇒ 读 51 字位流要显式覆盖 SNAP_WORDS=51
+#              6 = P6b+F4 双域 **36 字** (历史)   |   7 = **P7b 51 字** (RATE 位流, 历史)
+#              8 = P7B-BIZ **61 字** (历史)      |   **9 = P7B-WU 二轮 63 字 (RTL 当前值)**
+#              ⚠️ 读**旧位流**必须显式覆盖: `SNAP_WORDS=61 EXPECT_BID=0x00000008 UNIMPL_ADDR=0x114`
+#                 (否则**响亮失败**: 身份闸 1.2 红 + 5.0 窗口内出现 2 个 0xffffffff)。
 #         (2) **主机已在烧录之后重启过** (PCIe 端点只认"配置先于 POST"; 见 _pcie/README.md);
 #         (3) 驱动已 insmod (本脚本自己 insmod)。
 #   用法: sudo bash [EXPECT_BID=0x00000006 SNAP_WORDS=36] p6e_snap_check.sh
@@ -21,7 +23,7 @@
 #     ① `snap_words()` 旧版把 44 个地址**手抄**成一行, 只到 0xAC 且**尾部 8 项重复**
 #        (0x80..0x9C 写了第二遍 —— 36 字时代的笔误) ⇒ 现在**由 SNAP_WORDS 派生**, 覆盖
 #        W0..W60 (0x20..0x110), 重复项结构性不可能再出现。
-#     ② "未实现地址" 0xB0 → 0xEC (51 字) → **0x114** (P7B-BIZ 61 字; = 0x20 + 4*61)。
+#     ② "未实现地址" 0xB0 → 0xEC (51 字) → 0x114 (P7B-BIZ 61 字) → **0x11C** (P7B-WU 63 字; = 0x20 + 4*63)。
 #        并且修掉旧版的一处**假 FAIL**: 判据里用的是 `$U84` 这个**从未被赋值**的
 #        0x84 时代残留变量名 (现名 UB0) ⇒ 那条判据以前**永远走 FAIL 分支**。
 #     ③ BUILD_ID 期望值 6 → **7** (P7b), 且**两个几何参数都可从环境覆盖** (见下 SNAP_WORDS)。
@@ -37,24 +39,26 @@ KO=/home/a/xdma_test/dma_ip_drivers-patched/XDMA/linux-kernel/xdma/xdma.ko
 TOOLS=/d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_gate4_tools/selftest/bin
 DEV=/d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_gate4_tools/selftest/xdma0_user
 LOG=/d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_gate4_tools/selftest/fake_run.log
-# 位流身份 (前置闸); 1=最小 2=合体8字 3=16字 4=24字 5=P6b 双域32字 6=P6b+F4 双域36字 **7=P7b 51字**
-# ⚠️ 期望值按 **board/wrapper_p4.v:3701 的 `.BUILD_ID_V`** 填 (源码是唯一权威); 以现场 0x04 读数为准,
+# 位流身份 (前置闸); 1=最小 2=合体8字 3=16字 4=24字 5=P6b 双域32字 6=P6b+F4 双域36字
+#   **7=P7b 51字 · 8=P7B-BIZ 61字 · 9=P7B-WU 二轮 63字 (现役)**
+# ⚠️ 期望值按 **board/wrapper_p4.v 的 `.BUILD_ID_V`** 填 (源码是唯一权威); 以现场 0x04 读数为准,
 #    若与源码不符 ⇒ 先查是不是烧了别人的位流, 别改这里的数去"迁就"读数。
-EXPECT_BID=${EXPECT_BID:-0x00000007}
+EXPECT_BID=${EXPECT_BID:-0x00000009}
 
 # ---- 快照窗口几何 (**单一来源**: 只写"字数", 其他全部由它派生) -------------------------
 # ⚠️ 旧版把 44 个地址**手抄**成一行 ⇒ 只到 0xAC (漏 W36..W50) **且尾部 8 项重复** (36 字时代的笔误)。
 #    现在只改这一个数: 地址 = 0x20 + 4*i (i=0..SNAP_WORDS-1), 未实现地址 = 0x20 + 4*SNAP_WORDS。
-#    61 = **P7B-BIZ** (`wrapper_p4.v` 的 `SNAP_NW_P6E = 61`; 0x20..0x110, 未实现 0x114);
-#    51 = P7b (旧位流用 `SNAP_WORDS=51 UNIMPL_ADDR=0xEC` 覆盖); 36 = P6b (`SNAP_WORDS=36`)。
-#    ⚠️ **未实现地址必须存在**: 它撑起读侧 SLVERR 负对照 (判据 6)。本轮把读侧译码
-#       从 6 位加宽到 7 位 (`_proj_pcie/rtl/axi_regs.v`) ⇒ 地址每 512 字节才回绕,
-#       `0x114` (word 69) 真正未实现 ✓; 红线 = **绝不能挑 ≥0x200** (旧红线是 ≥0x100)。
-SNAP_WORDS=${SNAP_WORDS:-61}
-UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 61 ⇒ 0x114 (51 ⇒ 0xEC)
+#    **63 = P7B-WU 二轮** (`wrapper_p4.v` 的 `SNAP_NW_P6E = 63`; 0x20..0x118, 未实现 0x11C);
+#    61 = P7B-BIZ (旧位流用 `SNAP_WORDS=61 EXPECT_BID=0x00000008 UNIMPL_ADDR=0x114` 覆盖);
+#    51 = P7b (→ `0xEC`); 36 = P6b (→ `0xB0`)。
+#    ⚠️ **未实现地址必须存在**: 它撑起读侧 SLVERR 负对照 (判据 6)。译码 7 位
+#       (`_proj_pcie/rtl/axi_regs.v`) ⇒ 地址每 512 字节才回绕,
+#       `0x11C` (word 71) 真正未实现 ✓ (上限 119 字); 红线 = **绝不能挑 ≥0x200**。
+SNAP_WORDS=${SNAP_WORDS:-63}
+UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 63 ⇒ 0x11C (61 ⇒ 0x114; 51 ⇒ 0xEC)
 snap_addr(){ printf '0x%X' $(( 0x20 + 4*$1 )); }                          # word 号 → 字节地址
 # W5 (前端域自由计数) 的**标称频率随构建而变** —— 它是判据的"期望值", 不跟上就是假 FAIL:
-#   · **P7B_10G 构建** (本脚本默认几何 61 字 / EXPECT_BID=7): 前端域 = PCS 的 CDR **恢复钟**
+#   · **P7B_10G 构建** (本脚本默认几何 63 字 / EXPECT_BID=9): 前端域 = PCS 的 CDR **恢复钟**
 #     (`board/wrapper_p4.v:658-659` 的 `ifdef P7B_10G` 分支 `assign gmii_clk = rx_clk_out_1`)
 #     ⇒ **156.25 MHz**。板级独立两点实测 156.1986 MHz (P7B_GATE4_ACCEPT.md §3.3), 证否
 #       "W5=125" 这个 P6b 时代的假设。
@@ -313,7 +317,10 @@ WLABEL=(
  "tx_retx_active      (重传/回卷重放会话**进行中**; 低 1 位)"
  # ---- P7B-BIZ 追加 C: 慢路径两个适配器的拒写守卫 (恒 0) ----
  "stx_stat_fifo_ovf  (slow_tx_adp u_wf 拒写; 恒 0 = 无静默丢失)"
- "srx_stat_fifo_ovf  (slow_rx_adp o_ovf 拒写; 恒 0 = 无静默丢失)" )
+ "srx_stat_fifo_ovf  (slow_rx_adp o_ovf 拒写; 恒 0 = 无静默丢失)"
+ # ---- P7B-WU 二轮新增 2 字 (63 字窗口; dp 域) ----
+ "app_ctrl_stat_wu   (窗口重开通告入 ackq 次数; 不是'已上线')"
+ "app_ctrl_rx_occ_bytes(app RX 可读字节, 17 位 ⇒ 高位恒 0)" )
 for (( i = 0; i < SNAP_WORDS; i++ )); do
   v=$(rd "$(snap_addr $i)")
   W[$i]=$v
@@ -333,8 +340,8 @@ echo "          W7 不涨时 **W18 涨** ⇒ HLS 产出了但被 slow_tx_adp 回
 echo "          **W20** = 线上真发出去的帧数 (以前全设计没有这个数), 与 W7 对比可分开'没产生/没上线'。"
 
 echo; echo "===== 6. 负向: 未实现地址必须走 SLVERR ====="
-# ⚠️ 这个"未实现地址"随地图扩张挪过: 0x18 -> 0x44 -> 0x60 -> 0x84 -> 0xB0 -> 0xEC -> 0xFC -> 0x104 -> **0x114**
-#    (**61 字**把 0x20..0x110 全占了 = word 8..68 ⇒ 第一个空地址 = word 69 = 0x114;
+# ⚠️ 这个"未实现地址"随地图扩张挪过: 0x18 -> 0x44 -> 0x60 -> 0x84 -> 0xB0 -> 0xEC -> 0xFC -> 0x104 -> 0x114 -> **0x11C**
+#    (**63 字**把 0x20..0x118 全占了 = word 8..70 ⇒ 第一个空地址 = word 71 = 0x11C;
 #     本轮把读侧译码加宽到 7 位, 所以"第一个空地址"不会再撞上回绕别名)。
 #    不挪 ⇒ 把"新功能上线"判成回归 (本工程已踩过两次)。
 # ⚠️ **绝不能挑 ≥0x200** (2026-09-30 订正: 译码已加宽到 7 位 `araddr[8:2]`, 回绕周期 512 字节):

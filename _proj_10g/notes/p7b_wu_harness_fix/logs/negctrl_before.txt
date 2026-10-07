@@ -1,0 +1,21 @@
+########## P7b 闸 4 负对照 2026-10-07 09:49:08 ##########
+—— 正对照 (clean) 必须**全 PASS / 退出 0** (否则本脚本自己就是真空门) ——
+  [BAD ] clean            BAD(退出码 2, 期望 0) / OK
+—— 板侧负对照 (快照文本变异) ——
+  [BAD ] genstuck         OK / MISS(日志里没有 'gen 不是恰好 +1')
+  [BAD ] emptyread        OK / MISS(日志里没有 '空读')
+  [BAD ] missinglast      OK / MISS(日志里没有 '窗口不完整: 缺 W50')
+  [BAD ] duptail          OK / MISS(日志里没有 '下标重复')
+  [BAD ] oldwindow        OK / MISS(日志里没有 '窗口不完整: 缺 W36')
+  [BAD ] offbyone         BAD(退出码 2, 期望 1) / MISS(日志里没有 'B_CONS-a')
+  [BAD ] allF             BAD(退出码 2, 期望 1) / MISS(日志里没有 'B_WIN')
+  [BAD ] wideldecode      BAD(退出码 2, 期望 1) / MISS(日志里没有 'B_UNIMPL')
+  [BAD ] w50stuck         BAD(退出码 2, 期望 1) / MISS(日志里没有 'G2-W50')
+—— NIC 侧负对照 (网关判据四件套) ——
+  [BAD ] nic_background   BAD(退出码 2, 期望 1) / MISS(日志里没有 'N_RATE')
+  [BAD ] nic_broadcast    BAD(退出码 2, 期望 1) / MISS(日志里没有 'N_UCAST')
+  [BAD ] nic_crc          BAD(退出码 2, 期望 1) / MISS(日志里没有 'N_CRC')
+  [BAD ] nic_avg          BAD(退出码 2, 期望 1) / MISS(日志里没有 'N_AVG')
+  [BAD ] nic_missing      OK / MISS(日志里没有 'NIC 文本缺字段 port_rx_unicast')
+
+########## 负对照汇总: OK=0 BAD=15 ##########

@@ -1,0 +1,250 @@
+#!/bin/bash
+#=============================================================================
+# p6e_snap_check.sh — PCIe 寄存器窗口验收: 数据面计数经快照读出
+#   前置: (1) FPGA 已烧上**本轮的**位流, 且 BUILD_ID == EXPECT_BID:
+#              6 = P6b+F4 双域 **36 字** (历史)   |   7 = **P7b 51 字** (当前代码默认)
+#         (2) **主机已在烧录之后重启过** (PCIe 端点只认"配置先于 POST"; 见 _pcie/README.md);
+#         (3) 驱动已 insmod (本脚本自己 insmod)。
+#   用法: sudo bash [EXPECT_BID=0x00000006 SNAP_WORDS=36] p6e_snap_check.sh
+#         日志: /tmp/p6e_snap_check.log
+#
+#   ⚠️ 2026-09-30 (P7b 闸 4 工具轮) 三处修复 —— 详见 _proj_10g/notes/P7B_GATE4_TOOLING.md:
+#     ① `snap_words()` 旧版把 44 个地址**手抄**成一行, 只到 0xAC 且**尾部 8 项重复**
+#        (0x80..0x9C 写了第二遍 —— 36 字时代的笔误) ⇒ 现在**由 SNAP_WORDS 派生**, 覆盖
+#        W0..W50 (0x20..0xE8), 重复项结构性不可能再出现。
+#     ② "未实现地址" 0xB0 → **0xEC** (= 0x20 + 4*51; 51 字占满 0x20..0xE8)。
+#        并且修掉旧版的一处**假 FAIL**: 判据里用的是 `$U84` 这个**从未被赋值**的
+#        0x84 时代残留变量名 (现名 UB0) ⇒ 那条判据以前**永远走 FAIL 分支**。
+#     ③ BUILD_ID 期望值 6 → **7** (P7b), 且**两个几何参数都可从环境覆盖** (见下 SNAP_WORDS)。
+#
+#   最有价值的一条 = 判据 4: **gmii 域自由计数器在两次快照之间的增量**。
+#   它一次回答两个问题:
+#     ① PHY 回送的 RXC 时钟到底有没有在跑 (这块板没有 UART, 别的手段问不出来);
+#     ② 反解出它的实际频率 (应 ≈125MHz; 也顺带证明快照 CDC 真的在搬数)。
+#   数据面"死了"还是"没时钟"这两件事, 靠这一个计数分开 —— 不算出频率就没法区分。
+#=============================================================================
+set -u
+KO=/home/a/xdma_test/dma_ip_drivers-patched/XDMA/linux-kernel/xdma/xdma.ko
+TOOLS=D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/fix2_before/bin
+DEV=D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/fix2_before/xdma0_user
+LOG=D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/fix2_before/fake_run_old_fake.log
+# 位流身份 (前置闸); 1=最小 2=合体8字 3=16字 4=24字 5=P6b 双域32字 6=P6b+F4 双域36字 **7=P7b 51字**
+# ⚠️ 期望值按 **board/wrapper_p4.v:3701 的 `.BUILD_ID_V`** 填 (源码是唯一权威); 以现场 0x04 读数为准,
+#    若与源码不符 ⇒ 先查是不是烧了别人的位流, 别改这里的数去"迁就"读数。
+EXPECT_BID=${EXPECT_BID:-0x00000007}
+
+# ---- 快照窗口几何 (**单一来源**: 只写"字数", 其他全部由它派生) -------------------------
+# ⚠️ 旧版把 44 个地址**手抄**成一行 ⇒ 只到 0xAC (漏 W36..W50) **且尾部 8 项重复** (36 字时代的笔误)。
+#    现在只改这一个数: 地址 = 0x20 + 4*i (i=0..SNAP_WORDS-1), 未实现地址 = 0x20 + 4*SNAP_WORDS。
+#    51 = P7b (`wrapper_p4.v:3078` 的 `SNAP_NW_P6E = 51`); 36 = P6b (旧位流用 `SNAP_WORDS=36` 覆盖)。
+SNAP_WORDS=${SNAP_WORDS:-51}
+UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 51 ⇒ 0xEC
+snap_addr(){ printf '0x%X' $(( 0x20 + 4*$1 )); }                          # word 号 → 字节地址
+W32=$((1<<32))                     # 增量一律按模 2^32 (计数器回绕是常态, 不是故障)
+PASS=0; FAIL=0; SKIP=0
+exec > >(tee "$LOG") 2>&1
+echo "########## P6e 合体版验收 (数据面 + 观测通道) $(date '+%F %T') ##########"
+chk(){ if [ "$2" = "$3" ]; then echo "  [PASS] $1: $2"; PASS=$((PASS+1));
+       else echo "  [FAIL] $1: got='$2' want='$3'"; FAIL=$((FAIL+1)); fi; }
+
+# reg_rw 的输出形如 "Read 32-bit ... : 0x12345678" ⇒ 抠最后一个 0x........
+rd(){ $TOOLS/reg_rw $DEV $1 w 2>/dev/null | tail -1 | sed 's/.*: *//' | grep -oE '^0x[0-9a-fA-F]+'; }
+wr(){ $TOOLS/reg_rw $DEV $1 w $2 >/dev/null 2>&1; }
+
+# 触发一次快照并等 done (SNAP_STATUS.bit1); done 是 sticky 的 ⇒ 不会漏看
+snap_take(){
+  wr 0x18 0x1
+  local i s
+  for i in $(seq 1 100); do
+    s=$(rd 0x1c); [ -z "$s" ] && continue
+    [ $(( s & 2 )) -ne 0 ] && return 0
+    sleep 0.02
+  done
+  return 1
+}
+# 快照字 W0..W(SNAP_WORDS-1) 一次读全, 打印成一行 (地址由 SNAP_WORDS 派生 ⇒ 不会读漏/读重)
+snap_words(){
+  local i
+  for (( i = 0; i < SNAP_WORDS; i++ )); do printf "%s " "$(rd "$(snap_addr $i)")"; done
+  echo
+}
+
+echo; echo "===== 0. 前提 ====="
+lspci -nn | grep -i 10ee || { echo "  [FAIL] 端点不在 (先重启主机!)"; exit 1; }
+# 别把 BDF 钉死 (上次是 02:00.0, 换槽/换内核都可能变) —— 现查现用
+BDF=$(lspci -n | grep -i '10ee:9034' | awk '{print $1}' | head -1)
+echo "  [INFO] 端点 BDF = ${BDF:-未找到}"
+chk "0.1 链路" "$(cat D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/fix2_before/sys/bus/pci/devices/0000:${BDF}/current_link_speed 2>/dev/null)" "5.0 GT/s PCIe"
+if ! lsmod | grep -qw xdma; then echo "  (insmod)"; insmod "$KO" || { echo "  [FAIL] insmod"; exit 1; }; sleep 2; fi
+ls /dev/xdma0_* | tr '\n' ' '; echo
+if [ -e $DEV ]; then echo "  [PASS] 0.2 user BAR 节点存在 ($DEV)"; PASS=$((PASS+1));
+else echo "  [FAIL] 0.2 没有 $DEV"; FAIL=$((FAIL+1)); exit 1; fi
+
+echo; echo "===== 0.3 通道活性总闸 (0xffffffff 一律当"没应答", 不当数据) ====="
+# ⚠️ 用法坑 (实测踩到, 2026-09-29): reg_rw **不因 SLVERR 报错** —— XDMA 的 AXI-Lite 主机把
+#    错误响应的数据填成 0xffffffff 交回用户态 ⇒ 0xffffffff **不是数据, 是"这次读没成功"**。
+#    一旦这样, 后面所有"按位判断"的判据都会**假通过** (例: done 位测 `s & 2`, 而
+#    0xffffffff & 2 != 0 恒真; "16 字冻结"也会因两次都读到同一个 ffffffff 而"通过")。
+#    ⇒ 先把这道总闸立起来, 拦住整类假通过。
+#    ⚠️ 注意: `lspci` 看到端点、甚至 config 空间读得出 10ee:9034, **都不能**当"设备活着"的
+#       证据 (可能是主机侧/缓存状态)。唯一靠得住的是"BAR 读得动"。
+M0=$(rd 0x00)
+if [ "$M0" = "0xffffffff" ]; then
+  echo "  [FAIL] 0.3 user BAR 全部读回 0xffffffff (SLVERR) ⇒ 观测通道没在应答, 后面判据无意义"
+  echo "        先查 (按可能性排序):"
+  echo "          1) **烧录后主机还没重启** -- PCIe 端点只认 FPGA 配置先于主机 POST"
+  echo "             (项目纪律: 烧完必重启; 四种主机侧补救实测全无效)"
+  echo "          2) 端点只是 lspci 里的陈旧条目 (config 空间可能来自主机缓存)"
+  echo "          3) 设计侧 axi_aresetn 没释放 / axi_regs 没接上 => AXI-Lite 从不应答"
+  exit 1
+fi
+echo "  [PASS] 0.3 通道在应答 (MAGIC = $M0)"; PASS=$((PASS+1))
+
+echo; echo "===== 1. 身份 (前置闸: 认位流) ====="
+chk "1.1 MAGIC (0x00)"  "$(rd 0x00)" "0x50360001"
+chk "1.2 BUILD_ID (0x04)" "$(rd 0x04)" "$EXPECT_BID"
+chk "1.3 MARKER (0x14)" "$(rd 0x14)" "0xdeadbeef"
+hw=$(rd 0x10); echo "  [INFO] 1.4 HW_STATUS (0x10) = $hw  ([3]=user_lnk_up [4]=msi_enable [7:5]=msi_vec_w)"
+
+echo; echo "===== 2. 快照触发协议 (0x18 / 0x1C) ====="
+s0=$(rd 0x1c)
+if snap_take; then echo "  [PASS] 2.1 触发后 done 置起"; PASS=$((PASS+1));
+else echo "  [FAIL] 2.1 触发后 done 一直不置 (gmii 时钟没跑?)"; FAIL=$((FAIL+1)); fi
+s1=$(rd 0x1c)
+echo "  [INFO] SNAP_STATUS: 触发前 $s0 -> 触发后 $s1 (bit0=busy bit1=done bit2=seen, [31:16]=gen)"
+if [ -n "$s0" ] && [ -n "$s1" ] && [ $(( s1 >> 16 )) -eq $(( (s0 >> 16) + 1 )) ]; then
+  echo "  [PASS] 2.2 gen 恰好 +1"; PASS=$((PASS+1))
+else echo "  [FAIL] 2.2 gen 不是恰好 +1 ($s0 -> $s1)"; FAIL=$((FAIL+1)); fi
+
+echo; echo "===== 3. 读窗口原子性 (不重新触发 ⇒ $SNAP_WORDS 字必须逐位不变) ====="
+R1=$(snap_words); R2=$(snap_words)
+echo "  [INFO] 第 1 次: $R1"
+echo "  [INFO] 第 2 次: $R2"
+chk "3.1 未触发时 $SNAP_WORDS 字完全不变" "$R1" "$R2"
+
+echo; echo "===== 4. ★ GMII 时钟活性 + 频率反解 (W5 = 0x34) ====="
+snap_take; A=$(rd 0x34); T1=$(date +%s.%N)
+sleep 0.5
+snap_take; B=$(rd 0x34); T2=$(date +%s.%N)
+if [ -z "$A" ] || [ -z "$B" ]; then echo "  [FAIL] 4.1 W5 读不出来"; FAIL=$((FAIL+1))
+else
+  DA=$((A)); DB=$((B)); DT=$(awk -v t1="$T1" -v t2="$T2" 'BEGIN{printf "%.4f", t2-t1}')
+  echo "  [INFO] W5(gmii_free): $A -> $B   Δ=$((DB-DA)) / ${DT}s"
+  if [ "$DB" -gt "$DA" ]; then
+    echo "  [PASS] 4.1 **GMII 时钟在跑** (数据面时钟活着)"; PASS=$((PASS+1))
+    echo "  [INFO] 4.2 GMII 时钟 ≈ $(awk -v d=$((DB-DA)) -v t="$DT" 'BEGIN{printf "%.2f", d/t/1e6}') MHz  (1G 时应 ≈125)"
+  else echo "  [FAIL] 4.1 GMII 时钟**没在跑** (RXC 没来 / PHY 没起 / 网线没插)"; FAIL=$((FAIL+1)); fi
+fi
+
+echo; echo "===== 4.3 ★ 三个时钟域的频率正证据 (G2/C9) ====="
+#   窗口必须 < 20 s: W24/W50 是 32 位 @156.25MHz ⇒ **每 27.49 s 回绕**一次。
+#   ⚠️ 每个域**各取自己的两点** (触发 → 锁存 → 读), 且读的是**快照字** —— 直读同一个地址两次
+#     拿到的是同一个锁存值 (Δ=0 的**假 FAIL**), 这是 P6B_ACCEPT B2 记过的坑。
+freq_check(){  # freq_check <字名> <word号> <标称MHz> <除数>   除数=2 供 W50 (toggle 沿数 = 2×频率)
+  local nm="$1" wi="$2" nom="$3" div="$4" a b t1 t2 d dt f
+  a=$(rd "$(snap_addr $wi)"); t1=$(date +%s.%N)
+  if [ "$a" = "0xffffffff" ]; then
+    echo "  [SKIP] $nm (W$wi @ $(snap_addr $wi)) 读回 0xffffffff ⇒ **该字未实现** (旧几何位流), 不当 FAIL"
+    SKIP=$((SKIP+1)); return 0
+  fi
+  snap_take || { echo "  [FAIL] $nm: 触发后 done 不置起 (该域没时钟?)"; FAIL=$((FAIL+1)); return 1; }
+  b=$(rd "$(snap_addr $wi)"); t2=$(date +%s.%N)
+  d=$(( (b - a) % W32 )); [ "$d" -lt 0 ] && d=$(( d + W32 ))
+  dt=$(awk -v x="$t1" -v y="$t2" 'BEGIN{printf "%.4f", y-x}')
+  f=$(awk -v d="$d" -v t="$dt" -v k="$div" 'BEGIN{printf "%.4f", (t>0)? d/k/t/1e6 : 0}')
+  echo "  [INFO] $nm: W$wi $a -> $b  Δ=$d / ${dt}s / ÷$div ⇒ $f MHz (标称 $nom)"
+  if awk -v f="$f" -v n="$nom" 'BEGIN{d=f-n; if(d<0)d=-d; exit !(d/n<=0.01)}'; then
+    echo "  [PASS] $nm = $f MHz (标称 $nom ±1%)"; PASS=$((PASS+1))
+  else echo "  [FAIL] $nm = $f MHz, 偏离标称 $nom 超 1% (该域没起 / 计数被钉死 / 窗口跨回绕)"; FAIL=$((FAIL+1)); fi
+}
+freq_check "前端域 gmii_free"   5 125.00 1
+freq_check "数据面域 dp_free"  24 156.25 1
+# ⚠️ W50 的 ÷ 口径**源码自相矛盾, 不许猜**: `board/wrapper_p4.v:3389` 的注释写"频率 = 沿数/2",
+#   但 RTL 是 `tx_tgl_tx <= ~tx_tgl_tx` —— **每拍翻转一次**, dp 侧数**每次变化**
+#   ⇒ 数学上是 **÷1**; 按 ÷2 读会得 78.125 MHz (**假 FAIL**)。差 2 倍, 不烧板判不了
+#   ⇒ 两个都算, 命中哪个就打印哪个 (一次上板把这条钉死)。
+freq_check_tgl(){ local nm="$1" wi="$2" nom="$3" a b t1 t2 d dt f1 f2
+  a=$(rd "$(snap_addr $wi)"); t1=$(date +%s.%N)
+  if [ "$a" = "0xffffffff" ]; then echo "  [SKIP] $nm (W$wi) 读回 0xffffffff ⇒ 该字未实现"; SKIP=$((SKIP+1)); return 0; fi
+  snap_take || { echo "  [FAIL] $nm: 触发后 done 不置起"; FAIL=$((FAIL+1)); return 1; }
+  b=$(rd "$(snap_addr $wi)"); t2=$(date +%s.%N)
+  d=$(( (b - a) % W32 )); [ "$d" -lt 0 ] && d=$(( d + W32 ))
+  dt=$(awk -v x="$t1" -v y="$t2" 'BEGIN{printf "%.4f", y-x}')
+  f1=$(awk -v d="$d" -v t="$dt" 'BEGIN{printf "%.4f", (t>0)? d/t/1e6 : 0}')
+  f2=$(awk -v d="$d" -v t="$dt" 'BEGIN{printf "%.4f", (t>0)? d/2/t/1e6 : 0}')
+  if awk -v f="$f1" -v n="$nom" 'BEGIN{d=f-n; if(d<0)d=-d; exit !(d/n<=0.01)}'; then
+    echo "  [PASS] $nm = $f1 MHz (**÷1 口径命中**) / ÷2 ⇒ $f2 (⇒ wrapper_p4.v:3389 的 '÷2' 注释需订正)"; PASS=$((PASS+1))
+  elif awk -v f="$f2" -v n="$nom" 'BEGIN{d=f-n; if(d<0)d=-d; exit !(d/n<=0.01)}'; then
+    echo "  [PASS] $nm = $f2 MHz (**÷2 口径命中**) / ÷1 ⇒ $f1"; PASS=$((PASS+1))
+  else echo "  [FAIL] $nm: ÷1 ⇒ $f1 / ÷2 ⇒ $f2 都不命中标称 $nom ±1% (Δ=$d / ${dt}s)"; FAIL=$((FAIL+1)); fi
+}
+freq_check_tgl "TX 域 tx_clk_act" 50 156.25
+
+echo; echo "===== 5. 数据面计数快照 (W0..W$((SNAP_WORDS-1))) ====="
+snap_take
+# 标签表: 下标 = word 号。逐字读回时**每一个字都要有名字**, 否则"读全了"只是形式。
+WLABEL=(
+ "rx_stat_frames   (MAC 收帧数)" "rx_stat_bytes    (MAC 收字节)"
+ "{16'd0,wl_last}  (最近线上帧长)" "rx_stat_crc_err  (FCS 错帧)"
+ "rx_stat_drop     (MAC 丢弃)" "gmii_free        (前端域自由计数 ⭐G2)"
+ "srx_stat_commit  (交 HLS 慢路径)" "stx_stat_frames  (**HLS** 慢路径发帧)"
+ "udpapp_tx_frames (图案 app 发帧)" "udpapp_tx_bytes  (图案 app 发字节)"
+ "udpapp_rx_frames (图案 app 收帧)" "udpapp_rx_bytes  (图案 app 收字节)"
+ "udpapp_rx_null   (空/坏帧)" "udpapp_mismatch  (图案失配, 必须 0)"
+ "tx_stat_frames   (TCP fast path 发帧)" "tx_stat_bytes    (TCP fast path 发字节)"
+ "srx_hls_bytes    (HLS 真读走的字节)" "hr_cnt           (hls_rst_n 低电平拍数 ÷80)"
+ "stx_stat_purge   (slow_tx_adp 回卷帧数)" "srx_stat_drop    (slow_rx_adp 丢帧)"
+ "mac_tx_frames    (**MAC 级**发帧)" "tx_stat_abort    (MAC 帧内中止)"
+ "rx_stat_pass     (TCP fast path 接受帧)" "rx_stat_nonmatch (TCP fast path nonmatch)"
+ "dp_free          (数据面域自由计数 ⭐G2)" "mmcm_locked(DP 同步版)"
+ "rxcdc_full_cycles(RX FIFO 满拍数)" "{16'd0,rxcdc_occ_max}(RX FIFO 峰值)"
+ "{16'd0,txcdc_occ_max}(TX FIFO 峰值)" "txwire_stall_cycles(DP 在等线)"
+ "rxcdc_out_frames (RX FIFO 读侧 TLAST)⭐" "rxcdc_out_bytes  (RX FIFO 读侧 Σpopc)⭐"
+ "rx_stat_drop_partial(已推过字的丢帧)" "rx_stat_orphan_bytes(孤儿字节)"
+ "rx_stat_drop_full(FIFO 满丢帧)" "rx_stat_fifo_ovf (fifo_sync 拒写, 恒 0)"
+ "mrx_stat_rx_words  (新 MAC XGMII 收字)" "mrx_stat_rx_pay_bytes(新 MAC 载荷字节)"
+ "rxcdc_ovf_cnt      (RX CDC FIFO 拒写)" "pcs_status_bundle  (PCS 状态束 ⭐C1-C8)"
+ "pcs_evt_bundle     (PCS 事件束 8×8 饱和)" "mtx_stat_flush_words(新 MAC 冲刷字)"
+ "mtx_stat_flush_done (新 MAC 冲刷完成)" "mtx_stat_tx_words  (新 MAC XGMII 发字)"
+ "mtx_stat_tx_ctrl_char(新 MAC 控制字符)" "txcdc_ovf_cnt      (TX CDC FIFO 拒写)"
+ "cls_dbg_stat_ovf   (rx_classify 字 FIFO 拒写)" "cls_dbg_stat_route_ovf(路由队列拒写)"
+ "cls_dbg_stat_stall_in(rx_classify 停等拍)" "cls_dbg_occ        (字 FIFO 占用)"
+ "tx_clk_act         (TX 域 toggle 沿数 ⭐G2 = 频率×2)" )
+for (( i = 0; i < SNAP_WORDS; i++ )); do
+  v=$(rd "$(snap_addr $i)")
+  W[$i]=$v
+  printf "  W%-3s 0x%-3s %s = %s\n" "$i" "$(printf '%02X' $((0x20+4*i)))" "${WLABEL[$i]:-<无标签>}" "$v"
+done
+# ⚠️ 窗口内**不允许**出现 0xffffffff: 译码是连续实现的 (word 8..8+NW-1) ⇒ 窗口内的 F 只可能是
+#    "SLVERR 混进窗口" (= 读没成功), **不是数据**。漏了这条, "全 F" 会被当成合法读数流下去。
+NFF=$(for (( i = 0; i < SNAP_WORDS; i++ )); do [ "${W[$i]}" = "0xffffffff" ] && echo x; done | wc -l)
+if [ "$NFF" -eq 0 ]; then echo "  [PASS] 5.0 窗口内 $SNAP_WORDS 字全部读得出且无 0xffffffff (SLVERR 未混入)"; PASS=$((PASS+1))
+else echo "  [FAIL] 5.0 窗口内有 $NFF 个字读回 0xffffffff ⇒ 不是数据 (读没成功/选字回绕)"; FAIL=$((FAIL+1)); fi
+echo "  [INFO] 判读: 有 ping 流量时 W0/W1 应涨; 若 W0 涨而 W6 不涨 ⇒ 帧没进慢路径 (ARP/ICMP 收不到);"
+echo "          W6 涨而 W7 不涨 ⇒ HLS 收到了但没回 ⇒ 问题在慢路径/HLS, 不在前端。"
+echo "  [INFO] 慢路径失聪时看这四对:"
+echo "          W6 涨而 **W16 不涨** ⇒ HLS 真不读了 (不是缓冲的问题);"
+echo "          **W17 涨** ⇒ 饥饿看门狗在反复复位 HLS (÷80 = 复位次数);"
+echo "          W7 不涨时 **W18 涨** ⇒ HLS 产出了但被 slow_tx_adp 回卷 (别再怪 HLS);"
+echo "          **W20** = 线上真发出去的帧数 (以前全设计没有这个数), 与 W7 对比可分开'没产生/没上线'。"
+
+echo; echo "===== 6. 负向: 未实现地址必须走 SLVERR ====="
+# ⚠️ 这个"未实现地址"随地图扩张挪过: 0x18 -> 0x44 -> 0x60 -> 0x84 -> 0xB0 -> **0xEC**
+#    (**51 字**把 0x20..0xE8 全占了 = word 8..58 ⇒ 第一个空地址 = word 59 = 0xEC)。
+#    不挪 ⇒ 把"新功能上线"判成回归 (本工程已踩过两次)。
+# ⚠️ **绝不能挑 ≥0x100**: axi_regs 的 `ar_word = araddr[7:2]` 只有 6 位 ⇒ **地址每 256 字节回绕**:
+#    挑 0x100 会别名到 word 0 = MAGIC (读出 0x50360001 ≠ 0xffffffff) ⇒ 判据**假 FAIL**;
+#    挑 0x160 则别名到**已实现**字 ⇒ 读出数据 ≠ ffffffff 也算过 ⇒ 判据**假 PASS**。
+# ⚠️ 2026-09-30 修: 旧版这条判据用的是 `$U84` —— 一个**从未被赋值**的 0x84 时代残留变量名
+#    (现在叫 UB0)。后果 = 判据**永远走 FAIL 分支**并且把空值当"实测值"打印出来 (假 FAIL 的一种,
+#    与"假 PASS"同族: 判据在报告里看着"跑了", 实际上它跟读数没关系)。改名后必须**同趟**
+#    再读一个**已实现**字做对照 —— 否则"读数取不到"与"译码过宽"在输出上不可区分。
+UB=$(rd "$UNIMPL_ADDR"); U00=$(rd 0x00); UMK=$(rd 0x14)
+echo "  [INFO] $UNIMPL_ADDR (未实现, word $((8+SNAP_WORDS))) = $UB ; 0x00 (实现) = $U00 ; 0x14 (实现) = $UMK"
+if [ "$UB" = "0xffffffff" ] && [ "$U00" != "0xffffffff" ] && [ "$UMK" = "0xdeadbeef" ]; then
+  echo "  [PASS] 6.1 未实现地址 $UNIMPL_ADDR 返回 0xffffffff (SLVERR); 同趟已实现字仍读出真值"; PASS=$((PASS+1))
+else echo "  [FAIL] 6.1 未实现地址 $UNIMPL_ADDR 读出 '$UB' (期望 0xffffffff) ⇒ 译码过宽, 或该地址其实是已实现字 (地址没随窗口挪)"; FAIL=$((FAIL+1)); fi
+
+echo; echo "########## 汇总: PASS=$PASS FAIL=$FAIL SKIP=$SKIP (窗口 $SNAP_WORDS 字; 未实现地址 $UNIMPL_ADDR) ##########"
+echo "########## 日志: $LOG ##########"
+exit $FAIL

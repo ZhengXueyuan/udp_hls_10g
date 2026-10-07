@@ -1,0 +1,36 @@
+########## 替身跑: tcpreg_j6.sh (改后) ##########
+  [OK  ] A1 默认档 (BID 9) 退出码 0             0
+  [OK  ] A2 几何门通过                           命中 'J6_GEOM_OK NW=63 BID=0x00000009'
+  [OK  ] A3 t0/t1 字表**含 61 62**                 命中 'SNAP_BEGIN default_t0'
+  [OK  ] A4 替身收到的 t0 字表 (+NW 真的传过去了) STUB_SNAP_CALL|NW=63|snap default_t0 5 53 54 61 62
+  [OK  ] A5 替身收到的 t1 字表                 STUB_SNAP_CALL|NW=63|snap default_t1 5 53 54 61 62
+  [OK  ] A6 full 两点仍在 (pre/post 全窗)       命中 'full default_pre'
+  [OK  ] A6b full post 仍在                         命中 'full default_post'
+  [OK  ] A7 元数据行带几何                     命中 'J6META_NW=63 J6META_EXPECT_BID=0x00000009'
+  [OK  ] A8 跑到底                                 命中 'TCPREG_J6_DONE'
+########## 替身跑: 反例 —— 板上是 BID 8 (旧位流) 而台架按 63 字跑 ##########
+  [OK  ] B1 退出码 3 (拒绝)                      3
+  [OK  ] B2 报 J6_GEOM_FAIL                          命中 'J6_GEOM_FAIL 板侧 BID=0x00000008'
+  [OK  ] B3 不再往下跑 (没有 pre_snapshot)     未出现 'PHASE pre_snapshot'
+########## 替身跑: 显式 legacy 档 (NW=61 / BID 8) ##########
+  [OK  ] C1 退出码 0                               0
+  [OK  ] C2 打 J6_GEOM_LEGACY 醒目行              命中 'J6_GEOM_LEGACY'
+  [OK  ] C3 字表**退回 5 53 54** (无 61 62)      STUB_SNAP_CALL|NW=61|snap legacy_t0 5 53 54
+  [OK  ] C4 export 生效: 替身看到 NW=61         STUB_SNAP_CALL|NW=61|id
+########## 替身跑: 反例 —— NW=61 但**没有** legacy 声明 ##########
+  [OK  ] D1 退出码 3                               3
+  [OK  ] D2 报 J6_GEOM_FAIL (NW=61 != 63)            命中 'J6_GEOM_FAIL 默认档要求 NW=63'
+########## 替身跑: 反例 —— 取数器身份闸不过 (id rc=1) ##########
+  [OK  ] E1 退出码 3                               3
+  [OK  ] E2 报取数器身份闸未过               命中 'J6_GEOM_FAIL 取数器身份闸未过'
+########## 替身跑: **改前副本** (对照; 证明缺口真的存在) ##########
+  [OK  ] G1 改前: t0 字表只有 5 53 54, 且取数器收到 **NW=<unset>** STUB_SNAP_CALL|NW=<unset>|snap before_default_t0 5 53 54
+  [OK  ] G2 改前: 没有几何门 (无 J6_GEOM_OK)  未出现 'J6_GEOM_OK'
+  [OK  ] G3 改前: 却把 NW=61 写进日志 (记录错几何) 命中 'NW=61'
+  [OK  ] G4 改前: BID=8 的板子照样跑到底 (静默) 0
+########## 替身跑: j6_fix.sh (同款) ##########
+  [OK  ] F1 默认档退出码 0                      0
+  [OK  ] F2 t0 字表含 61 62 (j6_fix 同款)        STUB_SNAP_CALL|NW=63|snap fix_default_t0 5 53 54 61 62
+  [OK  ] F3 BID 8 默认档 ⇒ 退出码 3           3
+
+########## j6 替身汇总: OK=27 BAD=0 ##########

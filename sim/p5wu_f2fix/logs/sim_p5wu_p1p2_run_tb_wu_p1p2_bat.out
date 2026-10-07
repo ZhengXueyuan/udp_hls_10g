@@ -1,0 +1,69 @@
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Wed Oct  7 09:59:01 2026
+# Process ID         : 25088
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/sim/p5wu_p1p2/run
+# Command line       : xsim.exe -log xsim_p1p2.log -mode tcl -source {xsim.dir/tb_wu_p1p2/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/sim/p5wu_p1p2/run/xsim_p1p2.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/sim/p5wu_p1p2/run\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26300
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 47620 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_wu_p1p2/xsim_script.tcl
+# xsim {tb_wu_p1p2} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+PH1: P1 -- winq=3 (winq/4==0). HEAD arm can never arm; fixed arm can.
+  PASS PH1a DUT winq=3 (granted)
+  PASS PH1b BASE winq=3
+  PASS PH1c LEG winq=3
+  [STATE] wu_act(dut)=1 wu_zero: dut=1 base=0 leg=1
+  PASS PH1d DUT progress flag set (data arrived)
+  PASS PH1e DUT armed (floor=1 fix works)
+  PASS PH1f BASE never armed (P1 counterexample)
+  PASS PH1g LEG armed (pre-fix could fire once)
+  PASS PH1h DUT fired exactly once
+  PASS PH1i BASE fired 0 (net loss proven)
+  PASS PH1j LEG fired once (pre-fix reachable)
+PH2: P2 -- conn1 idle / conn2 active, shared occ pushes BOTH windows low
+  PASS PH2a DUT winq1 = pool/2
+  PASS PH2b DUT winq2 = pool/2
+  [STATE] wu_act(dut): c1=0 c2=1 | wu_zero c1: dut=0 base=1 | c2: dut=1 base=1
+  PASS PH2c DUT progress only on conn2
+  PASS PH2d DUT armed on active conn
+  PASS PH2e DUT NOT armed on idle conn (P2 gate)
+  PASS PH2f BASE armed on idle conn (noise proven)
+  PASS PH2g BASE armed on active conn too
+  PASS PH2h DUT: idle=0 active=1 fires
+  PASS PH2i BASE: BOTH fired (noise on idle conn)
+  PASS PH2j LEG: 0 fires this phase
+PH3: boundary -- wscan == winq/4 exactly must NOT arm; winq/4-1 must arm
+  PASS PH3a DUT not armed at exactly winq/4
+  PASS PH3b no extra fire
+  PASS PH3c DUT armed at winq/4 - 1 (not a dead gate)
+PH4: stat_wu readback via reg 0x96 (same wire as snapshot word W61)
+  [READ] stat_wu: dut=2 base=2 leg=1
+  PASS PH4a DUT stat_wu=2 (1 in PH1 + 1 in PH2)
+  PASS PH4b BASE stat_wu=2 (0 + 2: one is idle-conn noise)
+  PASS PH4c LEG stat_wu=1 (PH1 only)
+------------------------------------------------------------
+lockstep violation cycles (must be 0) = 0
+fires: DUT c0=1 c1=0 c2=1 | BASE c0=0 c1=1 c2=1 | LEG c0=1 c1=0 c2=0
+  PASS Z1 lockstep across 3 arms (same stimulus)
+P1P2 GATE OK
+$finish called at time : 47948 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/tb/tb_wu_p1p2.v" Line 397
+exit
+INFO: [Common 17-206] Exiting xsim at Wed Oct  7 09:59:03 2026...
+P1P2 GATE PASS

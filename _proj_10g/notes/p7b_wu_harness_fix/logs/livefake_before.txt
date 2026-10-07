@@ -1,0 +1,36 @@
+假对端部署: tree/tools/peer_ssh.py (新版) · tree_old/tools/peer_ssh.py (旧版)
+########## fix2 ② live 路径假对端台架 2026-10-07 09:49:38 ##########
+— ②c 先钉死旧版在 CRLF 下会 ABORT(同一假对端, 不注入 py_nocrlf.sh) —
+  [OK  ] ②c 旧版: 退出码 2 (ABORT)                 2
+  [OK  ] ②c 旧版: 报的就是 CRLF 那个症状      命中 '不是 0x 十六进制'
+— ②c 新版: 同一假对端 (照旧吐 CRLF), **不做任何注入** 必须不再 ABORT —
+  [BAD ] ②c 新版: 不再 ABORT                        不该出现 '[ABORT]' (D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/livefake_before/crlf_new.log)
+  [BAD ] ②c 新版: 前置闸过了 (G1)                日志里没有 '[PASS] G1' (D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/livefake_before/crlf_new.log)
+— ②a live 取多块: 全链档必须取 4 块, 且 G2 频率/G3 守恒/C 组**不再是 SKIP** —
+  [BAD ] ②a 快照取块数 = 4                         got='0' want='4'
+  [BAD ] ②a G2-W5 频率判据跑了 (PASS)             日志里没有 '[PASS] G2-W5' (D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/livefake_before/full.log)
+  [BAD ] ②a G2-W24 频率判据跑了 (PASS)            日志里没有 '[PASS] G2-W24' (D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/livefake_before/full.log)
+  [BAD ] ②a G2-W50 跑了 (两种口径之一命中)    日志里没有 '[PASS] G2-W50' (D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/livefake_before/full.log)
+  [BAD ] ②a G3 守恒律跑了 (PASS)                   日志里没有 '[PASS] B_CONS-a' (D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/livefake_before/full.log)
+  [BAD ] ②a C 组 PCS 跑了 (PASS)                     日志里没有 '[PASS] C1-C5' (D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/livefake_before/full.log)
+  [BAD ] ②a C8 正证据 (两块对比)                 日志里没有 '[PASS] C8' (D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/livefake_before/full.log)
+  [BAD ] ②a 洪泛窗 B_G6 跑了 (PASS)                日志里没有 '[PASS] B_G6' (D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/livefake_before/full.log)
+  [OK  ] ②a 不该再出现只给了一块快照        未出现 '只给了一块快照'
+  [BAD ] ②a 整轮退出码 0                           got='2' want='0'
+— ②a SKIP_TRAFFIC 档 (runbook §8 的停机档): 必须取 2 块, 频率/守恒照样跑 —
+  [BAD ] ②a 停机档快照块数 = 2                   got='0' want='2'
+  [BAD ] ②a 停机档 G2-W5 仍跑 (旧版这里是 SKIP) 日志里没有 '[PASS] G2-W5' (D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/livefake_before/skiptraffic.log)
+  [BAD ] ②a 停机档 N_RATE 如常 SKIP                日志里没有 '[SKIP] N_RATE' (D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/livefake_before/skiptraffic.log)
+— ②b 激励命令首词是**裸绝对路径** (上报的那个失败形态): 修改后必须原样送达 —
+  [BAD ] ②b 旧版: 假对端收到的命令**被 MSYS 改写**了 日志里没有 'Program Files/Git/home/a' (D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/livefake_before/rawabs_old.calls)
+  [BAD ] ②b 旧版: 激励其实**没跑** (NIC 判据照常 FAIL) 日志里没有 '[FAIL] N_RATE' (D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/livefake_before/rawabs_old.log)
+  [BAD ] ②b 新版: 假对端收到 == 原样的绝对路径命令 日志里没有 '/home/a/xdma_test/p6e_udp_pattern --secs 3' (D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/livefake_before/rawabs_new.calls)
+  [OK  ] ②b 新版: 收到的命令里没有 Git 改写痕迹 未出现 'Program Files'
+  [BAD ] ②b 新版: T_RUN 判据 PASS (回显+退出码) 日志里没有 '[PASS] T_RUN' (D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/livefake_before/rawabs_new.log)
+  [BAD ] ②b 新版: 激励送达后 NIC 速率判据 PASS 日志里没有 '[PASS] N_RATE' (D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/livefake_before/rawabs_new.log)
+  [BAD ] ②b 新版: 整轮退出码 0                   got='2' want='0'
+— ②b 反例: 命令不可执行时, 必须报 T_RUN FAIL 并点名先怀疑激励侧—
+  [BAD ] ②b 不可执行 ⇒ T_RUN FAIL (带退出码)  日志里没有 '[FAIL] T_RUN' (D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/livefake_before/noexec.log)
+  [BAD ] ②b 且明确点名先怀疑激励侧           日志里没有 '先怀疑激励侧' (D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/livefake_before/noexec.log)
+
+########## fix2 ② 汇总: OK=4 BAD=22 ##########

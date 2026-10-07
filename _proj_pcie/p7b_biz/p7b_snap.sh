@@ -1,14 +1,19 @@
 #!/bin/bash
-# p7b_snap.sh -- 板侧 61 字快照窗口的取数器 (P7B-BIZ: BID=7 (合体后 8) / SNAP_NW=61)
-#   ⚠️ 旧位流 (RATE 轮, 51 字): `NW=51 UNIMPL_ADDR=0xEC bash p7b_snap.sh ...`
+# p7b_snap.sh -- 板侧 **63** 字快照窗口的取数器 (P7B-WU 二轮: BID=9 / SNAP_NW=63)
+#   ⚠️ 旧位流: RATE 轮 51 字 `NW=51 UNIMPL_ADDR=0xEC`; BIZ 轮 61 字 `NW=61 UNIMPL_ADDR=0x114
+#      EXPECT_BID=0x00000008` (板上 `1076e50e…1160` 就是这个; 用默认值读它会**响亮失败**:
+#      BID 8 != 9 ⇒ id_check 报 ID_FAIL + W61/W62 读回 0xffffffff ⇒ dump_words 报 SNAP_FAIL)。
 #
-# 协议 (源码唯一权威: board/wrapper_p4.v 的 `snap_dout_all` 装配 (55 字, 逐项带槽号注释);
+# 协议 (源码唯一权威: board/wrapper_p4.v 的 `snap_dout_all` 装配 (逐项带槽号注释);
 #        读法样板 _proj_pcie/p6e_snap_check.sh):
-#   ⭐ P7B-BIZ 新增 6 字:
+#   ⭐ P7B-BIZ 新增 10 字:
 #      W51 app_tx_bytes / W52 app_tx_frames / W53 app_rx_bytes /
 #      W54 app_mismatch / W55 tx_stat_retx / W56 app_udp_pattern.stat_tx_ovf /
 #      W57 tx_retx_hi (回卷重放上界) / W58 tx_retx_active (会话进行中) /
 #      W59/W60 slow_tx_adp / slow_rx_adp 的 stat_fifo_ovf (拒写守卫, 恒 0)
+#   ⭐ **P7B-WU 二轮新增 2 字** (窗口 61 → 63; 加在 MSB 端 ⇒ 旧字逐项未动):
+#      W61 app_ctrl.stat_wu        (窗口重开通告确实入 ackq 的次数; 寄存器 0x96 的同一根线)
+#      W62 app_ctrl.rx_occ_bytes   (app RX 可读字节, 17 位显式零扩展 ⇒ 高位恒 0)
 #   字 Wi 地址 = 0x20 + 4*i       触发 = 写 0x18=1       done = 0x1c 的 bit1      gen = 0x1c>>16
 #   ⚠️ reg_rw 的第 3 个参数 `w` 是**位宽**(word), 不是 write —— 读就是 `reg_rw $D 0x20 w`
 #   ⚠️ 0xffffffff **不是数据**, 是 SLVERR = "这次读没成功"。窗口内出现它 => 整窗作废。
@@ -19,7 +24,7 @@
 #
 # 用法:
 #   bash p7b_snap.sh id                      # 身份 + 通道活性 (0x00/0x04/0x14 + gen)
-#   bash p7b_snap.sh full TAG                # 触发一次 + 打全 61 字 (带名字)
+#   bash p7b_snap.sh full TAG                # 触发一次 + 打全 63 字 (带名字)
 #   bash p7b_snap.sh snap TAG [W1 W2 ...]    # 触发一次 + 只打指定字 (省时)
 #   bash p7b_snap.sh pair WORD SECS TAG      # 两点**各自自证**的差分 (速率用)
 set -u
@@ -30,9 +35,12 @@ D=/dev/xdma0_user
 #   ⚠️ **NW 上限 = 119** (读侧译码 7 位 ⇒ 字 0..127; 快照从字 8 起; 负对照需留 1 个空字)。
 #      红线随之从"≥ 0x100 回绕" 改成 **"绝不能挑 ≥ 0x200"**
 #      (0x200 在 7 位译码下回绕到 word 0 = MAGIC ⇒ 假 FAIL)。
-NW=${NW:-61}
-UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 61 ⇒ 0x114 (51 ⇒ 0xEC)
-EXPECT_BID=${EXPECT_BID:-0x00000008}
+NW=${NW:-63}
+UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 63 ⇒ 0x11C (61 ⇒ 0x114; 51 ⇒ 0xEC)
+EXPECT_BID=${EXPECT_BID:-0x00000009}
+# ⚠️ 读**旧位流**的口径 (必须显式覆盖, 别指望默认值):
+#    BIZ 61 字: `NW=61 UNIMPL_ADDR=0x114 EXPECT_BID=0x00000008 bash p7b_snap.sh ...`
+#    RATE 51 字: `NW=51 UNIMPL_ADDR=0xEC EXPECT_BID=0x00000007 bash p7b_snap.sh ...`
 
 rd(){ $T/reg_rw $D "$1" w 2>/dev/null | tail -1 | sed 's/.*: *//' | grep -oE '^0x[0-9a-fA-F]+'; }
 addr(){ printf '0x%X' $(( 0x20 + 4*$1 )); }
@@ -59,19 +67,30 @@ declare -A NAME=(
  [24]=dp_free_DP          [25]=mmcm_locked         [26]=rxcdc_full_cycles
  [27]=rxcdc_occ_max       [28]=txcdc_occ_max       [29]=txwire_stall_cycles
  [30]=rxcdc_out_frames    [31]=rxcdc_out_bytes     [32]=rx_stat_drop_partial
- [33]=rx_stat_orphan_bytes[34]=rx_stat_drop_full   [35]=rx_stat_fifo_ovf
- [36]=mrx_stat_rx_words   [37]=mrx_stat_rx_pay_bytes[38]=rxcdc_ovf_cnt
+ [33]=rx_stat_orphan_bytes [34]=rx_stat_drop_full   [35]=rx_stat_fifo_ovf
+ [36]=mrx_stat_rx_words   [37]=mrx_stat_rx_pay_bytes [38]=rxcdc_ovf_cnt
  [39]=pcs_status_bundle   [40]=pcs_evt_bundle      [41]=mtx_stat_flush_words
  [42]=mtx_stat_flush_done [43]=mtx_stat_tx_words  [44]=mtx_stat_tx_ctrl_char
  [45]=txcdc_ovf_cnt       [46]=cls_dbg_stat_ovf    [47]=cls_dbg_stat_route_ovf
- [48]=cls_dbg_stat_stall_in[49]=cls_dbg_occ       [50]=tx_clk_act
+ [48]=cls_dbg_stat_stall_in [49]=cls_dbg_occ       [50]=tx_clk_act
  # ⚠️ W51..W60 = P7B-BIZ 新增的 10 个字 (业务观测面 + 重传会话定性 + 两个拒写守卫)
- #    ⇒ **NW 必须从 51 改成 61** (Stage 2 前置闸)。
- #    地址由 NW 派生: UNIMPL_ADDR = 0x20+4*61 = **0x114**。逐字归属见
- #    `board/wrapper_p4.v` 的装配段 (源码是唯一权威)。
- [56]=udpapp_tx_ovf        [57]=tx_retx_hi          [58]=tx_retx_active
- [59]=stx_stat_fifo_ovf    [60]=srx_stat_fifo_ovf
- [56]=udpapp_tx_ovf_stat_tx_ovf
+ #    ⚠️ 2026-10-07 (测量脚本同步轮) 三处**既存**表缺陷一并修 (只动名字, 不动逻辑):
+ #       ① W51..W55 在本表里**从来没有名字** ⇒ 逐字打印成 `?`; 现补上 (与 p6e_snap_check.sh 的
+ #          WLABEL 同源, 真值源 = `board/wrapper_p4.v` 的装配段 / `P7B_BIZ_WINDOW.md` §1)。
+ #       ② `[33]=x[34]=y` 这种**紧贴写法** bash 会解析成 **键 33 的值 = "x[34]=y"**
+ #          (实测), 于是 W33/W37/W48 打印的是**另一个字的名字拼在自己后面**, 而 W34/W38/W49
+ #          反而查不到名字 ⇒ 属"判据安静失效"同族 (读的人会以为看的是那一列)。已加空格分开。
+ #       ③ 尾部曾有一行重复键 `[56]=udpapp_tx_ovf_stat_tx_ovf` 覆盖掉 `[56]=udpapp_tx_ovf`
+ #          ⇒ W56 打出的是**拼错的名字**。已删。
+ #    W61/W62 = **P7B-WU 二轮**新增 (stat_wu / rx_occ_bytes)。
+ #    地址由 NW 派生: UNIMPL_ADDR = 0x20+4*63 = **0x11C**。逐字归属见
+ #    `board/wrapper_p4.v` 的装配段 (源码是唯一权威) 与
+ #    `_proj_10g/notes/P7B_BIZ_WINDOW.md` §1 (现役槽位表)。
+ [51]=app_tx_bytes         [52]=app_tx_frames       [53]=app_rx_bytes
+ [54]=app_mismatch         [55]=tx_stat_retx        [56]=udpapp_tx_ovf
+ [57]=tx_retx_hi           [58]=tx_retx_active      [59]=stx_stat_fifo_ovf
+ [60]=srx_stat_fifo_ovf
+ [61]=app_ctrl_stat_wu     [62]=app_ctrl_rx_occ_bytes
 )
 
 id_check(){
@@ -88,7 +107,10 @@ id_check(){
     echo "  3) xdma 驱动是否 insmod"
     return 1
   fi
-  [ "$m" = "0x50360001" ] && [ "$b" = "$EXPECT_BID" ] || { echo "ID_FAIL 身份不符 (烧了别的位流? 期望 BID=$EXPECT_BID)"; return 1; }
+  [ "$m" = "0x50360001" ] && [ "$b" = "$EXPECT_BID" ] || { echo "ID_FAIL 身份不符 (烧了别的位流? 期望 BID=$EXPECT_BID, 实测 BID=$b)"; return 1; }
+  # ⚠️ 未实现地址必须**当场断言** (不能只 print): 若板上是**更大**的窗口, 这个地址会回**真数据**,
+  #    只打印 "(want ...)" 的话往下就看不出读的是哪一代几何 (本工程"判据安静失效"的老坑)。
+  [ "$u" = "0xffffffff" ] || { echo "ID_FAIL 未实现地址 $UNIMPL_ADDR 读出 '$u' (期望 0xffffffff) ⇒ 板上窗口 >= $((NW+1)) 字 (NW=$NW 覆盖值不对), 或译码过宽"; return 1; }
   return 0
 }
 

@@ -1,0 +1,8 @@
+#!/bin/bash
+A=$(echo "$2" | tr '[:lower:]' '[:upper:]')
+if [ "${3:-}" = "w" ] && [ -n "${4:-}" ]; then echo "Write 32-bit ${4} to address $A"; exit 0; fi
+case "$A" in
+  0X04) V=${STUB_BID:-0x00000009};;
+  *)    V=0x00000000;;
+esac
+echo "Read 32-bit from address $A : $V"

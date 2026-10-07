@@ -1,13 +1,19 @@
-import os, sys, time
+import os, re, sys, time
 # 假对端 = 替掉 tools/peer_ssh.py 的那一层。⚠️ 故意用 **sys.stdout.write(text) + "\n"**
 #   (走 TextIOWrapper) ⇒ 在 Windows 上由**真 Python** 翻成 CRLF —— 这正是被验的机制。
 S = os.environ.get("FAKE_STATE", ".")
 LOG = os.environ.get("FAKE_CALLS", os.path.join(S, "calls.txt"))
 F156 = 156250000.0
+# ⚠️ 2026-10-07 "台架修复轮": **必须显式 utf-8**。远端命令文本里含 ⚠ (accept 的 SNAP_REMOTE
+#    注释), 而 Windows Python 的 `open()` 默认用 **GBK**(locale) —— 不是 stdout 那层
+#    (那层有 PYTHONIOENCODING=utf-8), 于是 `open(LOG,"a").write(remote)` 直接
+#    UnicodeEncodeError 崩掉假对端 ⇒ 整个台架 22 条假红 (实测, 与几何无关的独立缺陷)。
+#    ⚠️ 只给**文件**加 encoding; stdout 的 CRLF 翻译仍必须保真 (那是被验机制之一)。
+ENC = "utf-8"
 def st(name, dflt="0"):
     p = os.path.join(S, name)
-    return open(p).read().strip() if os.path.exists(p) else dflt
-def put(name, v): open(os.path.join(S, name), "w").write(str(v))
+    return open(p, encoding=ENC).read().strip() if os.path.exists(p) else dflt
+def put(name, v): open(os.path.join(S, name), "w", encoding=ENC).write(str(v))
 def out(s):
     sys.stdout.write(s + "\n"); sys.stdout.flush()
 def freecnt(t):                      # 前端/数据面/TX 三域自由计数 (同一口径: 156.25 MHz)
@@ -15,7 +21,7 @@ def freecnt(t):                      # 前端/数据面/TX 三域自由计数 (�
 args = [a for a in sys.argv[1:] if not a.startswith("-")]
 # 命令行做一次简单梳理: 丢掉 peer_ssh.py 自己的位置参数与旗标值
 remote = sys.argv[-1]
-open(LOG, "a").write("CALL|%s\n" % remote.replace("\n", "\\n"))
+open(LOG, "a", encoding=ENC).write("CALL|%s\n" % remote.replace("\n", "\\n"))
 now = time.time()
 if "SNAP_BEGIN" in remote:                                   # ---- 快照块 ----
     g0 = int(st("gen")); g1 = g0 + 1; put("gen", g1)
@@ -24,10 +30,25 @@ if "SNAP_BEGIN" in remote:                                   # ---- 快照块 --
     lat = (t0 + t1) / 2.0
     vcc = 0x66 if blk == 0 else min(0xFF, 0x99 + blk)
     W = [100, 151800, 1518, 0, 0, freecnt(lat), 100, 4] + [0] * 12 + [0, 0, 0, 0, freecnt(lat), 1, 0, 0, 0, 0, 100, 151400, 0, 0, 0, 0] \
-        + [20000000, 151800000, 0, 0x2000100C, vcc, 0, 0, 0, 0, 0, 0, 0, 0, 0, freecnt(lat)]
+        + [20000000, 151800000, 0, 0x2000100C, vcc, 0, 0, 0, 0, 0, 0, 0, 0, 0, freecnt(lat)] \
+        + [0] * 12          # W51..W62 = P7B-BIZ/WU 新增字 (accept 只要求窗口齐全 + 无 0xffffffff)
+    # ⚠️ 几何**自适配**: 老版 accept (pre_fix2) 的远端文本是 `for i in $(seq 0 50)` (51 字),
+    #    新版是 `for i in $(seq 0 $(( 63 - 1 )))` (63 字, 占位符已在发送前替换)。假板子必须
+    #    **按请求方那一代的几何**回, 否则老版那一路会因"字数不符/身份不符"提前 ABORT,
+    #    检查点够不着激励段 (2026-10-07 实测踩到: 把 51 直接改成 63 之后 rawabs_old 退回 → 2 条 [BAD])。
+    #    ⚠️ **不许用 `"seq 0 50" in remote` 这种子串判定** —— 新版远端文本的**注释里**就含着
+    #    "旧版写死 `seq 0 50`" 这句话 (实测踩到: 新版被误判成 51 字 ⇒ 整台 22 条假红)。
+    #    只认 `for i in $(seq ...)` 这一行的**实际边界**; W[:nw] 的末字恰是 W50 自由计数 ✓
+    nwm = re.search(r'for i in \$\(seq 0 \$\(\(\s*(\d+)\s*-\s*1\s*\)\)\)', remote)
+    if nwm:
+        nw = int(nwm.group(1))
+    else:
+        nwm = re.search(r'for i in \$\(seq 0 (\d+)\)', remote)
+        nw = int(nwm.group(1)) + 1 if nwm else 63
+    bid = {63: "0x00000009", 61: "0x00000008", 51: "0x00000007"}.get(nw, "0x00000009")
     out("SNAP_BEGIN"); out("TLATCH %.9f %.9f" % (t0, t1)); out("GEN %d %d" % (g0, g1))
-    out("MAGIC 0x50360001"); out("BID 0x00000007"); out("MARKER 0xdeadbeef")
-    for i in range(51): out("W%d 0x%X" % (i, W[i]))
+    out("MAGIC 0x50360001"); out("BID %s" % bid); out("MARKER 0xdeadbeef")
+    for i in range(nw): out("W%d 0x%X" % (i, W[i]))
     out("UNIMPL 0xffffffff"); out("SNAP_END"); sys.exit(0)
 if "ethtool -S" in remote:                                   # ---- NIC 块 ----
     n = int(st("nic_n")); put("nic_n", n + 1)
