@@ -29,6 +29,8 @@ BGOOD=1375                  # 基线 (背景) 起点
 
 # ---- 造一块**规范**快照文本 ---------------------------------------------------
 # 几何: **63 字 (W0..W62)** —— P7B-WU 二轮 (2026-10-07, BID=9 / 未实现 0x11C);
+#       ⛔ 2026-10-07 Stage C BID 同步轮: 几何 / 未实现地址不变, **身份 9 → 10**
+#          (上面这句原句保留: 描述的是 P7B-WU 二轮那一代; 本夹具现 = 63 字 / BID 10)。
 #       守恒律 W30==W0+W32 / W31==W1-4·W0+W33 逐字成立;
 #       W39 = PCS 状态束 (gpw/block_lock/rx_status=1); W40 = {evt×3, vcc_cyc} vcc 在涨。
 #       ⚠️ W51..W62 = P7B-BIZ/WU 新增字, 本夹具全填 0 (accept 只要求"窗口齐全且无 0xffffffff");
@@ -50,7 +52,7 @@ gen_snap(){  # gen_snap <文件> <第一块|第二块|洪泛A|洪泛B>
   { echo SNAP_BEGIN
     echo "TLATCH $tl"
     echo "GEN $gen"
-    echo "MAGIC 0x50360001"; echo "BID 0x00000009"; echo "MARKER 0xdeadbeef"
+    echo "MAGIC 0x50360001"; echo "BID 0x0000000A"; echo "MARKER 0xdeadbeef"   # Stage C: 原 0x00000009
     local -a V=(1000 1518000 1518 0 0 $w5 998 998 0 0 0 0 0 0 0 0 0 0 0 0
                 $w20 0 0 0 $w24 1 0 0 0 0 1000 1514000 0 0 0 0
                 20000000 151800000 0 0x2000100C $vcc 0 0 0 0 0 0 0 0 0 $w50

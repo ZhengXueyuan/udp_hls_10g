@@ -19,6 +19,9 @@
 #
 # ⚠️ 假板子几何必须与**现役 RTL 同代** (= 63 字 / BID 9, P7B-WU 二轮; 2026-10-07 "台架修复轮"
 #    从 51 字/BID 8 同步过来) —— 否则正例的判据 1.2 与"窗口不完整"会**假红**。
+#    ⛔ 2026-10-07 Stage C BID 同步轮: 几何 (63 字) 不变, **身份 9 → 10**;
+#       假对端的 nw→BID 表与兜底值已跟着改 (文件内 `bid = {...}` 那行) —— 它与真 accept
+#       的 EXPECT_BID 同代 (F-b 的"按请求方那一代回"原则不变: 61/51 臂仍是 8/7)。
 # ⚠️ 本台架验的是**传输与取数编排** (取几块快照 / CRLF / 参数改写 / 判据有没有跑), **不是判据本身**;
 #    判据的"牙"由 `p7b_gate4_negctrl.sh` 的合成读数负对照负责 (那套是 15/0)。
 #
@@ -97,7 +100,8 @@ if "SNAP_BEGIN" in remote:                                   # ---- 快照块 --
     else:
         nwm = re.search(r'for i in \$\(seq 0 (\d+)\)', remote)
         nw = int(nwm.group(1)) + 1 if nwm else 63
-    bid = {63: "0x00000009", 61: "0x00000008", 51: "0x00000007"}.get(nw, "0x00000009")
+    # ⛔ 2026-10-07 Stage C: 63 字那一代的身份 9 -> 10 (兜底同改); 61/51 代 (8/7) 是历史值, 不动。
+    bid = {63: "0x0000000A", 61: "0x00000008", 51: "0x00000007"}.get(nw, "0x0000000A")
     out("SNAP_BEGIN"); out("TLATCH %.9f %.9f" % (t0, t1)); out("GEN %d %d" % (g0, g1))
     out("MAGIC 0x50360001"); out("BID %s" % bid); out("MARKER 0xdeadbeef")
     for i in range(nw): out("W%d 0x%X" % (i, W[i]))

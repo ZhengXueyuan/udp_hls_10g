@@ -12,7 +12,7 @@ check_wu_words.py -- P7B-WU 扩窗 (61 -> 63, W61/W62) 的**定向静态核对**
 
 判据 (每条对着一个具体的、本工程踩过的失效形态):
   1  SNAP_NW_P6E == 63 且 SNAP_P7BDP_NW == 24
-  2  BUILD_ID_V == 32'h9 (身份闸读它认位流)
+  2  BUILD_ID_V == 32'hA (身份闸读它认位流)   # ⛔ 2026-10-07 Stage C: 原句 = 32'h9
   3  biz_w61 / biz_w62 **都在 `ifdef APP_MODE` 里声明** (`wire [31:0]`), 且
      else 分支有常量占位 (非 APP_MODE 构建里它们是未驱动线 => X 传播)
   4  `biz_w62` 是 `{15'd0, app_rx_occ}` (**17 位显式零扩展**; 漏了 = 截断/隐式网同族)
@@ -52,9 +52,11 @@ def main():
     ck(m is not None and m.group(1) == "24", "1b SNAP_P7BDP_NW == 24",
        "(实际 %s)" % (m.group(1) if m else "?"))
 
-    # 2 身份
+    # 2 身份 (⛔ 2026-10-07 Stage C BID 同步轮: 断言值 9 → 10; 原句 = "2 BUILD_ID_V == 9")
+    #   ⚠️ 这是**代际钉**那一半: 它跟着 wrapper 的 BUILD_ID_V 走; 本门另一半 (1/3..14) 是
+    #      WU 扩窗的"逐处指纹", 与代际无关 (窗口仍 63 字 ⇒ 那半边逐字不变)。
     m = re.search(r"\.BUILD_ID_V\s*\(32'h([0-9A-Fa-f]+)\)", src)
-    ck(m is not None and int(m.group(1), 16) == 9, "2 BUILD_ID_V == 9",
+    ck(m is not None and int(m.group(1), 16) == 10, "2 BUILD_ID_V == 10",
        "(实际 %s)" % (m.group(1) if m else "?"))
 
     # 3 APP_MODE 守卫 (两个别名都要在 ifdef 块里)

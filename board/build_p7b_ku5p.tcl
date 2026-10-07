@@ -142,7 +142,15 @@ set_property used_in_synthesis false [get_files ${script_dir}/ku5p_p7b_cdc.xdc]
 #   `else` = HEAD 帧器**逐字保留**（默认分支）。关掉这个 define 就回到 HEAD 的帧器行为（帧器 378 拍/帧 → 191 拍/帧）。
 #   同时 `P7B_10G` 内的 8 路并行图案发生器（`rtl/app_udp_pattern.v`）一并生效。
 #   两者叠加 = 本次线速测量构建；既有四个宏（APP_MODE/DEV_USP/PCIE_OBS/DP_156MHZ）与 `P7B_10G` 一字未动。
-set_property verilog_define {APP_MODE=1 DEV_USP=1 PCIE_OBS=1 DP_156MHZ=1 P7B_10G=1 UDP_TX_OVL=1} [current_fileset]
+#
+# ⚠️ 2026-10-07 Stage C 追加 `TCP_TX_OVL`（本刀**唯一的开关**）：
+#   `rtl/tcp_tx_frame.v` 的 body 一分为二，`ifdef TCP_TX_OVL` = **乒乓双 bank / 收发重叠**版,
+#   `else` = 串行版。⇒ 组帧器从"串行"换成"乒乓", TCP app TX 与 RX 并行。
+#   ⛔ **宏关 ≠ HEAD**：F1 的 8 行修复（`retx_ovf` + `ring_start` 追加 `!retx_ovf`）落在
+#      **默认分支**里, 逐行 diff = 恰那 8 行（`_proj_10g/notes/P7B_STAGEC_TX_REGRESSION.md` §环境事实 2）
+#      ⇒ "关掉宏就回到 HEAD 的逐字行为"这句**对 `tcp_tx_frame.v` 已作废**。
+#   `TIMING`/面积读数由本次构建收口（设计件 §5-2 的估计 = 无实测背书）。
+set_property verilog_define {APP_MODE=1 DEV_USP=1 PCIE_OBS=1 DP_156MHZ=1 P7B_10G=1 UDP_TX_OVL=1 TCP_TX_OVL=1} [current_fileset]
 puts "P7B_VERILOG_DEFINE = [get_property verilog_define [current_fileset]]"
 set_property top $top_module [current_fileset]
 update_compile_order -fileset sources_1

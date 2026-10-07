@@ -7,6 +7,11 @@
 #      (旧的 61 字几何 = 0x20..0x110 / 未实现 0x114 / BID 8, 读旧位流时必须显式覆盖:
 #       `SNAP_WORDS=61 EXPECT_BID=0x00000008 UNIMPL_ADDR=0x114`;
 #       更旧的 51 字几何 = 0x20..0xE8 / 未实现 0xEC ⇒ `SNAP_WORDS=51 EXPECT_BID=0x00000007`);
+#      ⛔ 2026-10-07 Stage C BID 同步轮: 上面这句保留 (几何确实**仍是 63 字 / 未实现 0x11C**) —— 变的是**身份**:
+#         `BUILD_ID_V` 9 → **10** (`10 = P7b Stage C`, 源码 `board/wrapper_p4.v`)。
+#         ⇒ 默认 `EXPECT_BID` 已改 **0x0000000A**; 读 **P7B-WU 二轮 / Build 2 位流**
+#         (`1ccbd9cd84292d1a10973a1442f71ca2187e66834be5e09d7eeb22b42c6cdd07`) 需显式
+#         `EXPECT_BID=0x00000009` (几何参数不用动: 仍 63 字 / 0x11C)。
 #      p6e_snap_check.sh 是 36 字口径
 #      ⭐ **P7B-BIZ 的 6 个新字** (RTL 真值源 = `board/wrapper_p4.v` 的 `snap_dout_all`,
 #         装配项逐条带槽号注释; 全是 dp 域寄存器输出, 与 W39/W45..W50 同一束):
@@ -51,6 +56,8 @@
 #         ⚠️ P7B-WU 二轮起窗口 = **63 字** (RTL `board/wrapper_p4.v` 的 `SNAP_NW_P6E`);
 #            读**旧位流**必须显式覆盖 —— BIZ 61 字: `SNAP_WORDS=61 EXPECT_BID=0x00000008
 #            UNIMPL_ADDR=0x114`; RATE 51 字: `SNAP_WORDS=51 EXPECT_BID=0x00000007 UNIMPL_ADDR=0xEC`.
+#            ⛔ 2026-10-07 (Stage C): 默认身份 = **0x0000000A**; 读 P7B-WU 二轮 (Build 2, 63 字)
+#               位流只需覆盖 `EXPECT_BID=0x00000009` (窗口 / 未实现地址都不用动)。
 #         G4_TRAFFIC_CMD=<激励命令> · NIC_GOOD_MIN / NIC_MBPS_MIN (阈值)
 #         W5_NOM_MHZ=156.25 (前端域标称; P6b 位流取 125) · TRAFFIC_TIMEOUT=180
 #         G4_LIB_ONLY=1 (只加载函数; 负对照脚本 source 用)
@@ -112,7 +119,8 @@ BOARD_IP=192.168.100.2
 MYIP=192.168.100.100
 DEV=/dev/xdma0_user
 TOOLS=/home/a/xdma_test/dma_ip_drivers-patched/XDMA/linux-kernel/tools
-EXPECT_BID=${EXPECT_BID:-0x00000009}      # P7B-WU 二轮 = 9 (源码 board/wrapper_p4.v 的 BUILD_ID_V)
+EXPECT_BID=${EXPECT_BID:-0x0000000A}      # P7b Stage C = 10 (源码 board/wrapper_p4.v 的 BUILD_ID_V)
+# ⛔ 2026-10-07 Stage C 同步轮: 原句 = "P7B-WU 二轮 = 9"; 读 Build 2 (63 字 / BID 9) 覆盖 EXPECT_BID=0x00000009
 SNAP_WORDS=${SNAP_WORDS:-63}
 UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 63 ⇒ 0x11C (61 ⇒ 0x114; 51 ⇒ 0xEC)
 # ⚠️ 未实现地址 = 0x20 + 4*SNAP_WORDS 这条公式本轮**重新成立**: 读侧译码已加宽到 7 位
@@ -132,7 +140,7 @@ XCHK_MAX_OFFSET=${XCHK_MAX_OFFSET:-2}
 XCHK_Q=${XCHK_Q:-1}
 NIC_TOL_BASE=${NIC_TOL_BASE:-1.0}     # 容差下界 (%), 量子项更宽时取量子项
 # W5 (前端域自由计数) 的**标称**随构建而变 —— 判据的期望值, 不跟上就是假 FAIL:
-#   · P7B_10G 构建 (默认几何 63 字 / BID=9): 前端域 = PCS 的 CDR **恢复钟**
+#   · P7B_10G 构建 (默认几何 63 字 / BID=10 —— ⛔ 2026-10-07 Stage C: 原句写 "BID=9"): 前端域 = PCS 的 CDR **恢复钟**
 #     (`board/wrapper_p4.v:658-659` `ifdef P7B_10G assign gmii_clk = rx_clk_out_1`) ⇒ 156.25 MHz
 #     (板级独立两点实测 156.1986 MHz, P7B_GATE4_ACCEPT.md §3.3 — 证否 P6b 的 "W5=125" 假设)
 #   · 1G/P6b 位流 (SNAP_WORDS=36 / BID=6): 前端域 = PHY 回送的 RGMII RX 钟 ⇒ 125

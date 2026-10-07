@@ -15,8 +15,12 @@ echo "MAGIC=$(rd 0x00) BID=$BID MARKER=$(rd 0x14) UNIMPL=$(rd 0x11C) gen=$(( (s 
 # ⚠️ **前置闸 (本脚本原先没有)**: 上面这行与下面两行都**不判断**读数对不对 —— 拿新口径读旧位流
 #    会把 W61/W62 读成 0xffffffff (SLVERR) 而**看着像数据** ⇒ 必须由 BID 认代。
 #    (口径: 9 = 63 字 / 0x04 的期望值见 board/wrapper_p4.v 的 BUILD_ID_V。)
-if [ "$BID" != "0x00000009" ]; then
-  echo "  [ABORT] BID=$BID != 0x00000009 ⇒ **板上不是 63 字位流**; 下面 W61/W62 若为 0xffffffff 是 SLVERR(读失败) 不是数据"
+# ⚠️ 2026-10-07 订正 (Stage C 轮): 期望 BID 9 -> **0xA** (Build 3 / Stage C 起现役; 原句: != "0x00000009")
+#    ⛔ 同轮二次订正: 比较必须**大小写无关** —— reg_rw 打小写 (`0x0000000a`) 而期望值写大写
+#       ⇒ 原字符串比较在 BID 含字母的世代 (≥0xA) **必假 ABORT** (实测踩到; 板子是对的)。
+BID_N=$(printf '%s' "$BID" | tr 'A-F' 'a-f')
+if [ "$BID_N" != "0x0000000a" ]; then
+  echo "  [ABORT] BID=$BID != 0x0000000A (大小写归一后 $BID_N) ⇒ **板上不是 Build 3 (Stage C) 位流**; 下面 W61/W62 若为 0xffffffff 是 SLVERR(读失败) 不是数据"
   GATE_BAD=1
 else
   GATE_BAD=0
@@ -34,6 +38,6 @@ echo "AFTER_CLEANUP addr: $(ip -br addr show $IF)"
 echo "AFTER_CLEANUP route: $(ip route get 192.168.100.2 2>&1 | head -1)"
 echo "AFTER_CLEANUP /tmp: $(ls /tmp/*.pcap 2>&1 | head -2)"
 echo "hw_server=$(systemctl is-active hw_server) ; uptime=$(uptime -p)"
-# 前置闸没过 ⇒ 出声 (本脚本的读数只在 BID=9 的板上才算数)
-if [ "${GATE_BAD:-0}" != "0" ]; then echo "FINAL_STATE_INVALID (前置闸未过: BID != 9 ⇒ 窗口口径不符)"; exit 3; fi
+# 前置闸没过 ⇒ 出声 (本脚本的读数只在 BID=0xA 的板上才算数; 2026-10-07 订正: 原写 "BID=9")
+if [ "${GATE_BAD:-0}" != "0" ]; then echo "FINAL_STATE_INVALID (前置闸未过: BID != 0xA ⇒ 窗口口径不符)"; exit 3; fi
 echo "FINAL_DONE"

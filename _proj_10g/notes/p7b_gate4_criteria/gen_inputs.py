@@ -7,7 +7,9 @@
 
 形态与真读数**逐字同形** (`reg_rw` 打 `0x..`; `ethtool -S` 打 "键 十进制"):
   快照 : SNAP_BEGIN / TLATCH / GEN / MAGIC / BID / MARKER / W0..W62 / UNIMPL / SNAP_END
-         ⚠️ 几何 = **63 字 / BID 9** (P7B-WU 二轮, 2026-10-07 "台架修复轮"从 51 字/BID 7 同步)
+         ⚠️ 几何 = **63 字 / BID 10** (P7b Stage C, 2026-10-07 BID 同步轮从 63 字/BID 9 同步)
+            ⛔ 2026-10-07 Stage C: 上一行原写 "BID 9 (P7B-WU 二轮, 从 51 字/BID 7 同步)";
+               窗口仍 63 字, 只有身份变 —— 但 `_geo_guard()` 要求与 accept 默认**同代**, 必须同批改。
             —— 必须与 `_proj_pcie/p7b_gate4_accept.sh` 的默认 `SNAP_WORDS`/`EXPECT_BID` 同代,
             否则 accept 会因"窗口不完整: 缺 W51 / 身份不符"把整套反例台架打成假红 (实测)。
   NIC  : NIC_BEGIN / TLATCH / <键 十进制>... / NIC_END
@@ -31,8 +33,10 @@ W32 = 1 << 32
 # 本生成器的几何 (必须与 `_proj_pcie/p7b_gate4_accept.sh` 的**默认**值同代, 否则整套反例台架
 # 会在"窗口不完整 / 身份不符"上**假红** —— 2026-10-07 "台架修复轮"实测: 51 字夹具 + BID 7
 # 喂给 63 字/BID 9 的 accept ⇒ clean 正对照退出 2、15 条反例全部 BAD)。
+# ⛔ 2026-10-07 Stage C BID 同步轮: 上一句保留 (它是 9 字那一代的历史实测) —— 现应读作
+# "不同代 ⇒ 假红": 本夹具现 = 63 字 / BID 0xA, accept 默认也已是 63 字 / BID 0xA (`_geo_guard` 守着)。
 NW_FIX = 63                # 快照字数 (W0..W62)
-BID_FIX = 0x00000009       # 位流身份 (P7B-WU 二轮)
+BID_FIX = 0x0000000A       # 位流身份 (P7b Stage C) —— ⛔ 2026-10-07: 原值 0x00000009 (P7B-WU 二轮)
 
 
 def _geo_guard():

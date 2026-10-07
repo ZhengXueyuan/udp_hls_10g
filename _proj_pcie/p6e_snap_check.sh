@@ -3,7 +3,10 @@
 # p6e_snap_check.sh — PCIe 寄存器窗口验收: 数据面计数经快照读出
 #   前置: (1) FPGA 已烧上**本轮的**位流, 且 BUILD_ID == EXPECT_BID:
 #              6 = P6b+F4 双域 **36 字** (历史)   |   7 = **P7b 51 字** (RATE 位流, 历史)
-#              8 = P7B-BIZ **61 字** (历史)      |   **9 = P7B-WU 二轮 63 字 (RTL 当前值)**
+#              8 = P7B-BIZ **61 字** (历史)      |   9 = P7B-WU 二轮 63 字 (历史, Build 2)
+#              **10 = P7b Stage C 63 字 (RTL 当前值)** —— ⛔ 2026-10-07 Stage C BID 同步轮:
+#              窗口仍 63 字 (0x20..0x118 / 未实现 0x11C), 只有身份 9 → 10;
+#              读 P7B-WU 二轮 (Build 2) 位流覆盖 EXPECT_BID=0x00000009 (几何不用动)。
 #              ⚠️ 读**旧位流**必须显式覆盖: `SNAP_WORDS=61 EXPECT_BID=0x00000008 UNIMPL_ADDR=0x114`
 #                 (否则**响亮失败**: 身份闸 1.2 红 + 5.0 窗口内出现 2 个 0xffffffff)。
 #         (2) **主机已在烧录之后重启过** (PCIe 端点只认"配置先于 POST"; 见 _pcie/README.md);
@@ -40,10 +43,11 @@ TOOLS=/home/a/xdma_test/dma_ip_drivers-patched/XDMA/linux-kernel/tools
 DEV=/dev/xdma0_user
 LOG=/tmp/p6e_snap_check.log
 # 位流身份 (前置闸); 1=最小 2=合体8字 3=16字 4=24字 5=P6b 双域32字 6=P6b+F4 双域36字
-#   **7=P7b 51字 · 8=P7B-BIZ 61字 · 9=P7B-WU 二轮 63字 (现役)**
+#   **7=P7b 51字 · 8=P7B-BIZ 61字 · 9=P7B-WU 二轮 63字 (历史) · 10=P7b Stage C 63字 (现役)**
+#   ⛔ 2026-10-07 Stage C: 上一行原写 "9=P7B-WU 二轮 63字 (现役)"; 现役改为 10 (窗口不变)。
 # ⚠️ 期望值按 **board/wrapper_p4.v 的 `.BUILD_ID_V`** 填 (源码是唯一权威); 以现场 0x04 读数为准,
 #    若与源码不符 ⇒ 先查是不是烧了别人的位流, 别改这里的数去"迁就"读数。
-EXPECT_BID=${EXPECT_BID:-0x00000009}
+EXPECT_BID=${EXPECT_BID:-0x0000000A}       # ⛔ 2026-10-07 Stage C: 原默认 0x00000009 (P7B-WU 二轮 = 9)
 
 # ---- 快照窗口几何 (**单一来源**: 只写"字数", 其他全部由它派生) -------------------------
 # ⚠️ 旧版把 44 个地址**手抄**成一行 ⇒ 只到 0xAC (漏 W36..W50) **且尾部 8 项重复** (36 字时代的笔误)。
@@ -58,7 +62,7 @@ SNAP_WORDS=${SNAP_WORDS:-63}
 UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 63 ⇒ 0x11C (61 ⇒ 0x114; 51 ⇒ 0xEC)
 snap_addr(){ printf '0x%X' $(( 0x20 + 4*$1 )); }                          # word 号 → 字节地址
 # W5 (前端域自由计数) 的**标称频率随构建而变** —— 它是判据的"期望值", 不跟上就是假 FAIL:
-#   · **P7B_10G 构建** (本脚本默认几何 63 字 / EXPECT_BID=9): 前端域 = PCS 的 CDR **恢复钟**
+#   · **P7B_10G 构建** (本脚本默认几何 63 字 / EXPECT_BID=10 —— ⛔ Stage C: 原句 = 9): 前端域 = PCS 的 CDR **恢复钟**
 #     (`board/wrapper_p4.v:658-659` 的 `ifdef P7B_10G` 分支 `assign gmii_clk = rx_clk_out_1`)
 #     ⇒ **156.25 MHz**。板级独立两点实测 156.1986 MHz (P7B_GATE4_ACCEPT.md §3.3), 证否
 #       "W5=125" 这个 P6b 时代的假设。

@@ -1,8 +1,12 @@
 #!/bin/bash
-# p7b_snap.sh -- 板侧 **63** 字快照窗口的取数器 (P7B-WU 二轮: BID=9 / SNAP_NW=63)
+# p7b_snap.sh -- 板侧 **63** 字快照窗口的取数器 (P7b Stage C: BID=10 / SNAP_NW=63)
+#   ⛔ 2026-10-07 Stage C BID 同步轮: 原句 = "(P7B-WU 二轮: BID=9 / SNAP_NW=63)" ——
+#      窗口没动, 只有身份 9 → 10; 读 P7B-WU 二轮 (Build 2) 位流加 EXPECT_BID=0x00000009。
 #   ⚠️ 旧位流: RATE 轮 51 字 `NW=51 UNIMPL_ADDR=0xEC`; BIZ 轮 61 字 `NW=61 UNIMPL_ADDR=0x114
 #      EXPECT_BID=0x00000008` (板上 `1076e50e…1160` 就是这个; 用默认值读它会**响亮失败**:
-#      BID 8 != 9 ⇒ id_check 报 ID_FAIL + W61/W62 读回 0xffffffff ⇒ dump_words 报 SNAP_FAIL)。
+#      BID 8 != 10 ⇒ id_check 报 ID_FAIL + W61/W62 读回 0xffffffff ⇒ dump_words 报 SNAP_FAIL)。
+#      ⛔ 2026-10-07 Stage C: 上一行原文是 "BID 8 != 9" (那时默认值 = 9); 现默认 = 10,
+#         同理 P7B-WU 二轮位流 (BID 9) 用默认值读也会**响亮失败** (覆盖 EXPECT_BID=0x00000009)。
 #
 # 协议 (源码唯一权威: board/wrapper_p4.v 的 `snap_dout_all` 装配 (逐项带槽号注释);
 #        读法样板 _proj_pcie/p6e_snap_check.sh):
@@ -37,13 +41,22 @@ D=/dev/xdma0_user
 #      (0x200 在 7 位译码下回绕到 word 0 = MAGIC ⇒ 假 FAIL)。
 NW=${NW:-63}
 UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 63 ⇒ 0x11C (61 ⇒ 0x114; 51 ⇒ 0xEC)
-EXPECT_BID=${EXPECT_BID:-0x00000009}
+EXPECT_BID=${EXPECT_BID:-0x0000000A}
+# ⛔ 2026-10-07 Stage C: 原默认值 = 0x00000009 (P7B-WU 二轮 = 9)。
 # ⚠️ 读**旧位流**的口径 (必须显式覆盖, 别指望默认值):
 #    BIZ 61 字: `NW=61 UNIMPL_ADDR=0x114 EXPECT_BID=0x00000008 bash p7b_snap.sh ...`
 #    RATE 51 字: `NW=51 UNIMPL_ADDR=0xEC EXPECT_BID=0x00000007 bash p7b_snap.sh ...`
+#    ⭐ P7B-WU 二轮 63 字 (Build 2; 与现役**同几何不同身份**): `EXPECT_BID=0x00000009 bash p7b_snap.sh ...`
 
 rd(){ $T/reg_rw $D "$1" w 2>/dev/null | tail -1 | sed 's/.*: *//' | grep -oE '^0x[0-9a-fA-F]+'; }
 addr(){ printf '0x%X' $(( 0x20 + 4*$1 )); }
+# ⛔ 2026-10-07 Stage C 板级轮: 十六进制**大小写归一** (只加本函数 + 调用处, 判据语义零改动)。
+#    病灶: `reg_rw` 按小写打印 (`0x0000000a`), 而 判据写的是大写 (`0x0000000A`), 原代码是
+#    **字符串**比较 ⇒ **BID 世代里第一次出现字母 (9→0xA) 时身份门必假红**
+#    (8/9/7 世代全是数字 ⇒ 这条结构性从未暴露; 实测: Stage C 位流上 `id` 报
+#     `ID_FAIL 期望 BID=0x0000000A, 实测 BID=0x0000000a` —— 板子是对的, 是门错)。
+#    修法: 比较前两边都归一到小写; 打印/落档仍用原样 (不许改读数本身)。
+norm(){ printf '%s' "$1" | tr 'A-F' 'a-f'; }
 
 # ⚠️ 非 root 时 /dev/xdma0_user (crw------- root root) 打不开 => 每条读都是**空串**。
 #    空读 != 真 0 (本脚本的 rd 已把非 0x 开头的输出滤掉 => 判据会安全地 FAIL 而不是假通过),
@@ -100,17 +113,19 @@ id_check(){
   echo "ID_BID   $b   (want $EXPECT_BID = 本构建的 BUILD_ID)"
   echo "ID_MARKER $k  (want 0xdeadbeef)"
   echo "ID_UNIMPL $u  (want 0xffffffff: 未实现地址必须走 SLVERR)"
-  if [ "$m" = "0xffffffff" ]; then
+  if [ "$(norm "$m")" = "0xffffffff" ]; then   # ⛔ Stage C: 原 `[ "$m" = "0xffffffff" ]` (大小写敏感)
     echo "ID_FAIL 通道不应答 (0x00 = 0xffffffff)。按序查:"
     echo "  1) 烧录后是否做过 remove+rescan (配方: _proj_10g/notes/P7B_PCIE_RESCAN_RECOVERY.md §3; **不必重启对端机**)"
     echo "  2) lspci 里 LnkSta 是否 x4 (x0 => 场景 A, 只有重启能救)"
     echo "  3) xdma 驱动是否 insmod"
     return 1
   fi
-  [ "$m" = "0x50360001" ] && [ "$b" = "$EXPECT_BID" ] || { echo "ID_FAIL 身份不符 (烧了别的位流? 期望 BID=$EXPECT_BID, 实测 BID=$b)"; return 1; }
+  # ⛔ 2026-10-07 Stage C: 原句 = `[ "$m" = "0x50360001" ] && [ "$b" = "$EXPECT_BID" ] || {...}`
+  #    —— 字符串比较遇 BID 含字母 (≥0xA) 必假红; 现改为 norm() 后比较 (语义不变)。
+  [ "$(norm "$m")" = "0x50360001" ] && [ "$(norm "$b")" = "$(norm "$EXPECT_BID")" ] || { echo "ID_FAIL 身份不符 (烧了别的位流? 期望 BID=$EXPECT_BID, 实测 BID=$b)"; return 1; }
   # ⚠️ 未实现地址必须**当场断言** (不能只 print): 若板上是**更大**的窗口, 这个地址会回**真数据**,
   #    只打印 "(want ...)" 的话往下就看不出读的是哪一代几何 (本工程"判据安静失效"的老坑)。
-  [ "$u" = "0xffffffff" ] || { echo "ID_FAIL 未实现地址 $UNIMPL_ADDR 读出 '$u' (期望 0xffffffff) ⇒ 板上窗口 >= $((NW+1)) 字 (NW=$NW 覆盖值不对), 或译码过宽"; return 1; }
+  [ "$(norm "$u")" = "0xffffffff" ] || { echo "ID_FAIL 未实现地址 $UNIMPL_ADDR 读出 '$u' (期望 0xffffffff) ⇒ 板上窗口 >= $((NW+1)) 字 (NW=$NW 覆盖值不对), 或译码过宽"; return 1; }
   return 0
 }
 
@@ -136,7 +151,8 @@ dump_words(){   # dump_words <tag> [字列表...] (空 = 全部)
   echo "SNAP_BEGIN $tag gen=$G1"
   for i in "${list[@]}"; do
     v=$(rd "$(addr "$i")")
-    [ "$v" = "0xffffffff" ] && nff=$((nff+1))
+    # ⛔ Stage C: SLVERR 判定也走 norm() (原 `[ "$v" = "0xffffffff" ]` —— 大写输出会**静默漏判**)
+    [ "$(norm "$v")" = "0xffffffff" ] && nff=$((nff+1))
     printf 'W%-3s %-6s %-22s %s\n' "$i" "$(addr "$i")" "${NAME[$i]:-?}" "$v"
   done
   echo "SNAP_END $tag nff=$nff"

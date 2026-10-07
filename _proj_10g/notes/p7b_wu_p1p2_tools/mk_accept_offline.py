@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""mk_accept_offline.py -- 造 **63 字 / BUILD_ID=9** 的合成快照与 NIC 文本, 给
+"""mk_accept_offline.py -- 造 **63 字 / BUILD_ID=10** 的合成快照与 NIC 文本, 给
+   ⛔ 2026-10-07 Stage C BID 同步轮: 上一行原写 "BUILD_ID=9" (P7B-WU 二轮) —— 窗口没动,
+      身份 9 → 10; 本夹具的 BID 行必须与 accept 默认 EXPECT_BID 同代 (否则离线正例身份闸假红)。
 `_proj_pcie/p7b_gate4_accept.sh` 的**离线档**当正例 (不碰板子)。
 
 为什么要有它 (本工程"判据必须真跑"):
@@ -51,7 +53,7 @@ def snap_text(which, t0, t1, gen):
             "TLATCH %.3f %.3f\n"
             "GEN %d %d\n"
             "MAGIC 0x50360001\n"
-            "BID 0x00000009\n"
+            "BID 0x0000000A\n"   # ⛔ 2026-10-07 Stage C: 原 0x00000009
             "MARKER 0xdeadbeef\n"
             % (t0, t1, gen, gen + 1)
             ) + "".join("W%d 0x%X\n" % (i, x) for i, x in enumerate(v)) + \

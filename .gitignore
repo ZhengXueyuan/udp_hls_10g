@@ -699,6 +699,26 @@ sim/p7b_stageb_rx8_regress/*
 !sim/p7b_stageb_rx8_regress/*.v
 !sim/p7b_stageb_rx8_regress/*.py
 
+# ============================================================================
+# P7b Stage C (TX 8 路 + 乒乓, 2026-10-07) 的四支工作目录
+# ⚠️ 实测: **不加规则时 `git add` 会收进 1232 个文件**, 其中
+#    `sim/p7b_stagec_tx_regress/mirror/` 是**整棵仓库树快照副本**
+#    (连 `tools/cpp_peer/peer.exe` 都在里面) ⇒ 与"同名 RTL 出现两份"同一族, **必须排**。
+# 口径: 排除**副本树**与**大块产物**; 门驱动 (.bat/.sh) / TB 源码 (.v) / 脚本 (.py)
+#      与**被笔记逐字引用**的文本读数一律保留(本轮 `P7B_STAGEC_TX*` 引用了
+#      `gate_out.txt`/`arm_M*.log`/`runB/xs.log`/`*.pre_a2`) ⇒ **不做整目录白名单**。
+# 位置敏感: 留在末尾。
+# ============================================================================
+sim/p7b_stagec_tx_regress/mirror/
+sim/p7b_stagec_tx_regress/head_root/
+sim/p7b_stagec_tx_regress/extra/
+sim/p7b_stagec_tx_regress/extra_head/
+sim/p7b_stagec_tx_regress/author_gate/
+sim/p7b_stagec_a2/run*/
+sim/p7b_stagec_a2/r_all.txt
+sim/p7b_stagec_a2/_mut_rtl/
+sim/p7b_stagec_tx/_mut_rtl/
+
 # ---- sim/p5wu_p1p2 (P7B-WU 二轮: P1/P2 修复 + 63 字快照门) ------------------
 # 口径同 sim/p5wu (上一段): 只留门驱动 bat / TB 源码 / 脚本; run·runsnap·work_xvlog 是**产物**。
 # ⚠️ `app_ctrl_base.v` 是 `git show 95c9485:rtl/app_ctrl.v` 的**负对照臂**(仅改名), 靠 `*.v` 放行;
@@ -726,3 +746,29 @@ sim/p5wu_p1p2_regress/*
 !sim/p5wu_p1p2_regress/*.v
 !sim/p5wu_p1p2_regress/*.py
 sim/p5wu_p1p2_regress/head_rtl/
+
+# ============================================================================
+# P7b Stage C 构建归档 (2026-10-07): 每次构建 ~150 MB —— **只放行 sha256 清单**
+# ⚠️ 背景: `board/run_build_p7b_ku5p.bat` 的 pre-build archive 块把上一轮产物归档到
+#    `_proj_10g/notes/p7b_build_archive/<yyyyMMdd_HHmmss>/` (19 件/次, **~150 MB/次**, 会一直增长);
+#    未加 ignore 时整目录进 `git status` (出处 `P7B_BUILD_STAGEC.md` §1.2 / §9-8)。
+#    全局 `*.bit` / `*.dcp` / `*.log` 只挡掉 139 MB 大件; 余下的 .rpt/.txt (~13 MB) 一直漏。
+# ⚠️ 同类一件: `_proj_10g/notes/p7b_build_stageC/baseline_archive/` (Build 2 开工前手工归档,
+#    同口径收口; 其 125 MB dcp 靠全局 `*.dcp` 挡)。
+# 口径: 整目录是**可重建的构建产物** ⇒ 排除; **`SHA256SUMS.txt` 是文本证据** (记录该次构建
+#    各产物的 sha256, 重建产物换不出同值) ⇒ 唯一放行件。
+# ⚠️ 结构 = 两级 (`p7b_build_archive/<stamp>/<file>`) ⇒ 三步: ①排深度 1
+#    ②放行 `<stamp>` 目录**本身** —— 整目录排除时 git 根本不下降, 写在后面的 `!` 会**静默无效**
+#    (先例: `p7b_mac_synth/baseline` / `sim/p5c_t3/rev` 的三步法) ③排深度 2 内容再放行清单。
+# ⚠️ 位置敏感: 本节留在 .gitignore 末尾 (含 `!` 行, 最后匹配者胜)。
+# ============================================================================
+_proj_10g/notes/p7b_build_archive/*
+!_proj_10g/notes/p7b_build_archive/*/
+_proj_10g/notes/p7b_build_archive/*/*
+!_proj_10g/notes/p7b_build_archive/*/SHA256SUMS.txt
+
+# ---- P7b Stage C 手工归档 (一级结构, 同口径: 只放行 SHA256SUMS.txt) ----------
+# ⚠️ 目录本身未被任何靠上规则排除 (实测), `!dir/` 一行是纵深防御 (先例同 `p7b_mac_synth/baseline`)。
+!_proj_10g/notes/p7b_build_stageC/baseline_archive/
+_proj_10g/notes/p7b_build_stageC/baseline_archive/*
+!_proj_10g/notes/p7b_build_stageC/baseline_archive/SHA256SUMS.txt

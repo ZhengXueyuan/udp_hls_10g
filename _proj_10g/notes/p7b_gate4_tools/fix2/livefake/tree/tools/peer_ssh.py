@@ -45,7 +45,8 @@ if "SNAP_BEGIN" in remote:                                   # ---- 快照块 --
     else:
         nwm = re.search(r'for i in \$\(seq 0 (\d+)\)', remote)
         nw = int(nwm.group(1)) + 1 if nwm else 63
-    bid = {63: "0x00000009", 61: "0x00000008", 51: "0x00000007"}.get(nw, "0x00000009")
+    # ⛔ 2026-10-07 Stage C: 63 字那一代的身份 9 -> 10 (兜底同改); 61/51 代 (8/7) 是历史值, 不动。
+    bid = {63: "0x0000000A", 61: "0x00000008", 51: "0x00000007"}.get(nw, "0x0000000A")
     out("SNAP_BEGIN"); out("TLATCH %.9f %.9f" % (t0, t1)); out("GEN %d %d" % (g0, g1))
     out("MAGIC 0x50360001"); out("BID %s" % bid); out("MARKER 0xdeadbeef")
     for i in range(nw): out("W%d 0x%X" % (i, W[i]))
