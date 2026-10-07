@@ -129,6 +129,8 @@ module tb_tcp_tx_ovl;
     integer e_f1_delta, e_f1_cyc;           // F1: delta 非负 / 每拍 wrap-safe
     // ⭐ P7B-RETXFIX 判据 (2026-10-07): 重放预算跨度 / 收尾跳写 / 控制预留同拍
     integer e_replay_span, e_replay_jump, e_c2_resv, cov_c2_resv, rep_f0, rep_smax;
+    // ⭐ r6 (L-A, 2026-10-08): ARM_ACKGATE 专项臂 (ack_seen 数据启动门) 计数器
+    integer e_ag_block, e_ag_resume;
     integer cov_jump_ev;   // 跳写事件数 (覆盖见证: 预算被撞到时 replay_jump 拍数)
     reg     rep_full;      // ⭐ r4: 本会话 = RTO 全会话 (replay_full) ⇒ 跨度判据豁免
     reg     stuck_r;                        // 自锁会话去重 (每会话只计一次)
@@ -195,6 +197,7 @@ module tb_tcp_tx_ovl;
         c6_req_win=0; e_c6=0; e_c6_grant=0; win_prev=1'b0; c6_hold=1'b0;
         e_f1_delta=0; e_f1_cyc=0; stuck_r=1'b0;
         e_replay_span=0; e_replay_jump=0; e_c2_resv=0; cov_c2_resv=0;
+        e_ag_block=0; e_ag_resume=0;
         rep_f0=0; rep_smax=0; cov_jump_ev=0; rep_full=1'b0;
         n_frames=0; n_data=0; n_ctrl=0; n_dead_skip=0;
         cov_replay_sessions=0; cov_replay_frames=0; cov_plen0=0; cov_singlebeat=0;
@@ -312,11 +315,23 @@ module tb_tcp_tx_ovl;
     wire [31:0] stat_frames, stat_bytes, stat_ack, stat_ack_drop, stat_eend,
                 stat_drop_len, stat_fin, stat_rst, stat_tlast_in;
 
+    // ⭐ r6 (L-A, 2026-10-08): ack_seen 驱动源 —— 声明必须在 u_dut 例化**之前**
+    //   (坑 24: 例化处先用会隐式声明 1 位网, 与下方显式声明冲突 ⇒ xvlog 硬错)
+`ifdef ARM_ACKGATE
+    reg [15:0] ack_seen_tb;
+    reg  [1:0] ag_st;
+    integer    ag_cyc, ag_wit_sv;
+    reg        ag_seen_sd;
+`else
+    wire [15:0] ack_seen_tb = 16'hFFFF;   // 既有臂: 门恒开 (本刀不动既有判据)
+`endif
+
     tcp_tx_frame u_dut (
         .clk(clk), .rst_n(rst_n),
         .s_axis_tdata(s_tdata), .s_axis_tkeep(s_tkeep), .s_axis_tvalid(s_tvalid),
         .s_axis_tready(s_tready), .s_axis_tlast(s_tlast), .s_axis_tid(s_tid),
         .ack_req(ack_req), .ack_id(ack_id), .ack_val(ack_val), .ack_syn(ack_syn),
+        .ack_seen_i(ack_seen_tb),   // ⭐ r6 (L-A): 宏外恒 FFFF (见下方驱动块)
         .ack_fin(ack_fin), .ack_rst(ack_rst),
         .fin_req(fin_req), .rst_req(rst_req),
         .cfg_up(cfg_up), .cfg_up_id(cfg_up_id),
@@ -884,6 +899,49 @@ module tb_tcp_tx_ovl;
         end
     end
 
+    // ============ ⭐ r6 (L-A, 2026-10-08): ack_seen 数据启动门专项臂 ============
+    //   `-d ARM_ACKGATE` 时启用: 数据流中途抽掉 ack_seen (全 0) 并保持 2000 拍 ——
+    //   判据 (a) 保持窗内 (从 +2 拍起, 避同拍决策竞态) 不得出现任何 start_data 拍
+    //            (有牙: 撤门变异件会在源供数后数拍内启动 ⇒ 红);
+    //   判据 (b) 放回全 1 后 600 拍内必须恢复 start_data (死门 ⇒ 红);
+    //   非空见证: 保持窗内源供数拍数 ≥ 100 (否则 (a) 是空判据) + 触发前已见帧上线
+    //            (否则"抽取"发生在无数据期 = 空判据) —— 二者在 summary 查。
+    //   ⚠️ 抽门期间源侧 opener 会被 64 拍看门狗合法撤帧 (DUT 门关是设计行为),
+    //      源随后换连接继续供数 ⇒ 保持窗内供数见证照常累积。
+`ifdef ARM_ACKGATE
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            ack_seen_tb <= 16'hFFFF; ag_st <= 2'd0; ag_cyc <= 0;
+            ag_wit_sv <= 0; ag_seen_sd <= 1'b0;
+        end else begin
+            if (u_dut.start_data) ag_seen_sd <= 1'b1;
+            case (ag_st)
+            2'd0: if ((cyc > 30000) && ag_seen_sd) begin
+                      ack_seen_tb <= 16'h0; ag_st <= 2'd1;
+                      ag_cyc <= 0; ag_wit_sv <= 0;
+                  end
+            2'd1: begin
+                ag_cyc <= ag_cyc + 1;
+                if (s_tvalid) ag_wit_sv <= ag_wit_sv + 1;
+                if ((ag_cyc >= 2) && u_dut.start_data) e_ag_block <= e_ag_block + 1;
+                if (ag_cyc >= 2000) begin
+                    ack_seen_tb <= 16'hFFFF; ag_st <= 2'd2; ag_cyc <= 0;
+                end
+            end
+            2'd2: begin
+                ag_cyc <= ag_cyc + 1;
+                if (u_dut.start_data) ag_st <= 2'd3;
+                else if (ag_cyc >= 600) begin
+                    e_ag_resume <= e_ag_resume + 1;
+                    ag_st <= 2'd3;
+                end
+            end
+            default: ;          // 2'd3 = 完成 (见证在 summary 查)
+            endcase
+        end
+    end
+`endif
+
     // ===================== OVL-only 判据 =====================
 `ifdef TCP_TX_OVL
     wire        d_upd_wr_data = u_dut.upd_wr_data;
@@ -1177,7 +1235,8 @@ module tb_tcp_tx_ovl;
             tot_red = e_parse + e_csum + e_payload + e_seqcont + e_seqmono + e_ctrl +
                       e_ctrl_to + e_onehot + e_pendbusy + e_replay + e_replay_stuck +
                       e_ovf + e_ackf + e_f1_ring + e_j9 + e_c6 + e_f1_delta + e_f1_cyc +
-                      e_replay_span + e_replay_jump + e_c2_resv;
+                      e_replay_span + e_replay_jump + e_c2_resv +
+                      e_ag_block + e_ag_resume;
             $display("---------------- TB_TCP_TX_OVL SUMMARY ----------------");
             $display("FRAMES recv=%0d data=%0d ctrl=%0d dead_skip=%0d cyc=%0d",
                      n_frames, n_data, n_ctrl, n_dead_skip, cyc);
@@ -1286,6 +1345,19 @@ module tb_tcp_tx_ovl;
                 $display("[FAIL] T8 收发重叠度 %0d%% < 25%% (乒乓退化?)", (ov_n*100)/rx_n); end
             if ((fp1460_min > 220) && (tx1460_n > 100)) begin tot_red = tot_red + 1;
                 $display("[FAIL] T8 满长帧帧周期 min=%0d > 220 (乒乓退化?)", fp1460_min); end
+`ifdef ARM_ACKGATE
+            // ⭐ r6 (L-A): ack_seen 门专项判据 (见驱动块注)
+            $display("ACKGATE block=%0d resume=%0d witness_offer=%0d (expect block=0 resume=0 offer>=100)",
+                     e_ag_block, e_ag_resume, ag_wit_sv);
+            if (e_ag_block > 0) begin tot_red = tot_red + 1;
+                $display("[FAIL] L-A: ack_seen=0 期间仍有帧启动 (=%0d)", e_ag_block); end
+            if (e_ag_resume > 0) begin tot_red = tot_red + 1;
+                $display("[FAIL] L-A: ack_seen 放回后 600 拍未恢复 (=%0d)", e_ag_resume); end
+            if (ag_wit_sv < 100) begin tot_red = tot_red + 1;
+                $display("[FAIL] L-A 空判据: 保持窗内供数拍=%0d < 100", ag_wit_sv); end
+            if (!ag_seen_sd) begin tot_red = tot_red + 1;
+                $display("[FAIL] L-A 空判据: 抽取前从未见帧上线"); end
+`endif
             if (fp_n > 0)
                 $display("PACE fpc_milli=%0d", (fp_n*1000000)/cyc);
 `endif

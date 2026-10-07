@@ -150,6 +150,12 @@ add("mut_k2", [(
      "    wire        upd_wr_rew  = svc_rewind;", 1),
 ], "M-K2 撤跳写 => 会话收尾 snd_nxt<retx_hi => 跳写判据红 (确定性)")
 
+# ---- M-L1 (P7B-RETXFIX r6, L-A 负对照): 撤 ack_seen 数据启动门 (tx_blk_sid 少一项) ----
+add("mut_l1", [(
+    "    wire        tx_blk_sid = tx_blk[start_id] | ~st_ok | ~acks_ok;",
+    "    wire        tx_blk_sid = tx_blk[start_id] | ~st_ok;   // (M-L1: 撤 ack_seen 门)",
+    1)], "M-L1 撤 ack_seen 门 => ARM_ACKGATE 保持窗内帧照常启动 => 判据红 (确定性)")
+
 os.makedirs(OUT, exist_ok=True)
 fail = 0
 for name, subs, note in MUTS:

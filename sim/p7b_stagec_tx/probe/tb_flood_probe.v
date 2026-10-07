@@ -107,6 +107,9 @@ module tb_flood_probe;
         .s_axis_tdata(s_tdata), .s_axis_tkeep(s_tkeep), .s_axis_tvalid(s_tvalid),
         .s_axis_tready(s_tready), .s_axis_tlast(s_tlast), .s_axis_tid(s_tid),
         .ack_req(ack_req), .ack_id(ack_id), .ack_val(ack_val), .ack_syn(ack_syn),
+        // ⭐ r6 (L-A): 本探针不测 ack_seen 门 ⇒ 恒 1 (否则悬空=Z ⇒ tx_blk_sid=X ⇒
+        //   帧结构性起不来 ⇒ NOFLOOD 假绿, mut_f1 的 FLOOD 判据被结构性地打掉)
+        .ack_seen_i(16'hFFFF),
         .ack_fin(ack_fin), .ack_rst(ack_rst),
         .fin_req(fin_req), .rst_req(rst_req),
         .cfg_up(cfg_up), .cfg_up_id(cfg_up_id),

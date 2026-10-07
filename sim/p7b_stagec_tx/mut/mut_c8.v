@@ -36,6 +36,10 @@ module tcp_tx_frame (
     input  wire [3:0]  ack_id,
     input  wire [31:0] ack_val,
     input  wire        ack_syn,        // 1 = SYN+ACK 段 (flags=0x12, 发完 snd_nxt+1)
+    // ⭐ r6 (L-A, 2026-10-08): 每连接"对端 ACK 已观察到"位图 (wrapper 维护;
+    //   置位 = tcp_rx.ack_obs, 清位 = 建连事件)。本模块在宏 `TCP_TX_OVL` 内用
+    //   它拦住 app 数据帧 —— 见 `acks_ok/tx_blk_sid` 处注; 宏外未用 (综合裁掉)。
+    input  wire [15:0] ack_seen_i,
     // ---- P5: FIN/RST 发送通道 ----
     // ack_fin/ack_rst 兄弟 ack_syn (ackq 条目标志): FIN = flags 0x11 (发完
     // snd_nxt+1, 置 fin_sent_r/fin_seq_r), RST = flags 0x14 (发完 snd_nxt+1)。
@@ -167,10 +171,18 @@ module tcp_tx_frame (
 //    与时钟域**无关**; 拿它守卫时间常数 = 把两个无关开关绑成一根线 (一个语义完全
 //    无关的宏控制 UART 波特率/RTO/FIN 超时), 下次有人"要 PCIe 窗口但数据面仍 125MHz"
 //    就会静默拿到 8 个错常数。构建侧: board/build_p6b_ku5p.tcl (+ 被取代的 build_p6e) 定义它。
+    // ⭐ r5 (2026-10-07, 独立验收 + 停摆溯源之后): **RTO 只在 DP_156MHZ 分支 100 ms → 20 ms**。
+    //   依据: 验收实测 ~20 × **100.0 ms** 停摆 = 94% 墙钟 (100.0 ms = 本参数在 156.25MHz
+    //   域的精确量子); 逐帧解剖 (P7B_RETXFIX.md §3.9) 证明 RTO 的**全窗重放每次都修好**,
+    //   唯一代价 = 每孔的等待时长; 而停摆间隙内对端 ACK 直方图 {0:72,1:24,2:5} = 供给枯竭
+    //   ⇒ 阈值/二击类路线全部无输入可吃 ⇒ **唯一活杠杆 = 修复延迟本身**。
+    //   量级: 板侧 RTT ~25 µs ⇒ 20 ms = 400× 余量; 连续流下对端每 2 段即 ACK ⇒
+    //   delayed-ACK 无暴露面 (只余每连收尾孤段 1 次伪 RTO, 有界重放)。
+    //   ⚠️ **125MHz 分支一字不动** (1G 路径行为不变; 矩阵门不定义 DP_156MHZ, 见 §3.9 的覆盖面登记)。
 `ifdef DP_156MHZ
-    parameter integer RTO_LIM  = 61035;    // ≈100ms @156.25MHz (48828 × 1.25)
+    parameter integer RTO_LIM  = 12207;    // ⭐ r5: ≈20ms @156.25MHz (原 61035 ≈ 100ms)
 `else
-    parameter integer RTO_LIM  = 48828;    // ≈100ms @125MHz
+    parameter integer RTO_LIM  = 48828;    // ≈100ms @125MHz (**不动**)
 `endif
     // P4c: 门控帽 0x2FFE -> 0xBFFE (窗口 12KB -> 48KB-2; tcb win 读口内亦硬编码
     // 同值, 两处必须一致)。
@@ -435,7 +447,16 @@ module tcp_tx_frame (
 `endif
     wire        wnd_open  = win_open;
     wire [15:0] tx_blk = fin_req | fin_sent_r | rst_sent_r | rst_req;
-    wire        tx_blk_sid = tx_blk[start_id] | ~st_ok;
+    // ⭐ r6 (L-A, 2026-10-08): 对端首个 ACK 之前不放行 app 数据帧。
+    //   动机 (r5 板级定案, P7B_RETXFIX.md §3.10): SYN-ACK 由慢路径发, 而 tx_arb
+    //   的 TCP 严格优先让快路径突发把 SYN-ACK 饿死 (~14 µs) ⇒ 对端此时在
+    //   SYN_SENT 收到数据即**静默丢弃** ⇒ 建连初始洞 = 滑出量 (r5 实测 8–19 帧/连)
+    //   ⇒ RETX_SPAN=3 补不完 ⇒ 22/30 连各付一次 RTO。
+    //   对端 ACK 只可能在 SYN-ACK 上线之后出现 ⇒ 以它当"SYN-ACK 已出"的见证。
+    //   并入 tx_blk_sid ⇒ start_data/s_axis_tready 逐字同门自动保持 (D2/坑 10)。
+    //   ⚠️ 默认分支 (宏外, 文件后半支) 不生效: acks_ok 恒 1 ⇒ 表达式逐位不变。
+    wire        acks_ok = ack_seen_i[start_id];
+    wire        tx_blk_sid = tx_blk[start_id] | ~st_ok | ~acks_ok;
 
     // ---- 帧启动/服务门 (逐子句对应默认分支; state==S_IDLE → rx_idle) ----
     wire [3:0]  svc_id    = svc_id_r;

@@ -214,6 +214,9 @@ module tb_integ_app_tx;
         .s_axis_tvalid(app_m_tvalid), .s_axis_tready(tx_s_tready),
         .s_axis_tlast(app_m_tlast), .s_axis_tid(app_m_tid),
         .ack_req(ack_req), .ack_id(ack_id), .ack_val(ack_val), .ack_syn(ack_syn),
+        // ⭐ r6 (L-A): 本臂不测 ack_seen 门 ⇒ 恒 1 (门开; 门专项 = tb_tcp_tx_ovl
+        //   ARM_ACKGATE)。宏关时该端口无消费者 (综合裁掉)。
+        .ack_seen_i(16'hFFFF),
         .ack_fin(ack_fin), .ack_rst(ack_rst),
         .fin_req(fin_req), .rst_req(rst_req),
         .cfg_up(cfg_up), .cfg_up_id(cfg_up_id),

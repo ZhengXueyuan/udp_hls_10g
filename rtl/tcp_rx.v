@@ -108,6 +108,11 @@ module tcp_rx (
     output wire [15:0] syn_dport,
     output wire [31:0] syn_seq,
     output wire [15:0] syn_wnd,
+    // ⭐ r6 (L-A, 2026-10-08): 对端 ACK 观测脉冲 (FCS 好 + CAM 命中 + dup/推进 ACK)。
+    //   = wrapper 侧 ack_seen 位图 (tcp_tx_frame 的 app 数据启动门) 的置位源。
+    //   宏 `TCP_TX_OVL` 内才有真逻辑; 宏外恒 0 (默认构建行为逐位不变)。
+    output reg         ack_obs,
+    output reg  [3:0]  ack_obs_id,
     // CAM 查询 (外部 tcp_cam 实例, 与 TX 读回共享同一份连接表;
     // q_* 组合输出在 w4 拍有效, q_hit/q_id 同拍返回)
     output wire [31:0] cam_q_sip,
@@ -181,7 +186,7 @@ module tcp_rx (
     reg         cam_hit_l;
     reg  [3:0]  conn_id_l;
     // w5 拍判读锁存 (w5->w6 沿)
-    reg         acc_l, ackresp_l, ack_adv_l;
+    reg         acc_l, ackresp_l, ack_adv_l, ackok_l;   // ackok_l: r6-fix (L-A)
     reg         w6a_ok_l;               // P4c: 窗口内非边界纯 ACK (w5 锁存)
     reg  [31:0] ack32_l, seq32_l, rcv_nxt_l;
     reg  [15:0] plen_l;                  // 载荷字节数 = IP total_len - 40
@@ -447,7 +452,7 @@ module tcp_rx (
             mac_lo <= 0; mac_hi <= 0;
             syn_l <= 0; drop_syn_r <= 0; syn_wnd_r <= 0; syn_v <= 0;
             cam_hit_l <= 0; conn_id_l <= 0;
-            acc_l <= 0; ackresp_l <= 0; ack_adv_l <= 0; dup_l <= 0;
+            acc_l <= 0; ackresp_l <= 0; ack_adv_l <= 0; dup_l <= 0; ackok_l <= 0;
             w6a_ok_l <= 0;
             ack32_l <= 0; seq32_l <= 0; rcv_nxt_l <= 0; plen_l <= 0; wnd_l <= 0;
             drop_ack <= 0; hold16 <= 0; pcount <= 0;
@@ -458,6 +463,7 @@ module tcp_rx (
             drn <= 0;
             retx_req <= 0; retx_id <= 0; in_retx <= 0;
             for (di = 0; di < 16; di = di + 1) dup_cnt[di] <= 2'd0;
+            ack_obs <= 1'b0; ack_obs_id <= 4'd0;
             stat_pass <= 0; stat_drop_nonmatch <= 0; stat_drop_ipcsum <= 0;
             stat_drop_crc <= 0; stat_drop_seq <= 0; stat_ack <= 0; stat_bytes <= 0;
             stat_drop_trunc <= 0;
@@ -550,6 +556,24 @@ module tcp_rx (
                 if (retx_req && (conn_id_l == retx_id))
                     retx_req <= 1'b0;
             end
+            // ⭐ r6 (L-A, 2026-10-08): 对端 ACK 观测脉冲 (见端口注)。置位源三选一:
+            //   dup_l (有在飞的 dup) / ack_adv_l (推进 APP) / **ackok_l (帧内 ACK 在
+            //   [snd_una, ack_hi] 范围内)**。⚠️ r6 首版只有前两个 ⇒ **板级死锁**
+            //   (实测): 门锁住数据后 snd_nxt==snd_una ⇒ 握手完成 ACK (ack==snd_una,
+            //   零推进) 两个判据都不成立 ⇒ 永不置位 (r5 因数据已在飞而恰好可见 ——
+            //   典型"只在被修复的场景里不可见"的依赖)。ackok_l = ack_ok 锁存, 是
+            //   两者的超集 (dup_ack/ack_adv 都含 ack_ok)。清位在 wrapper 侧
+            //   (建连事件 scfg_ev_up/slot) —— 本模块只管"看到过对端合法 ACK"。
+`ifdef TCP_TX_OVL
+            ack_obs <= 1'b0;                        // 脉冲默认清零 (坑 6)
+            if (fend && s_axis_tcrs && !fend_trunc &&
+                (dup_l || ack_adv_l || ackok_l)) begin
+                ack_obs    <= 1'b1;
+                ack_obs_id <= conn_id_l;
+            end
+`else
+            ack_obs <= 1'b0; ack_obs_id <= 4'd0;
+`endif
             // P4b-7-P6 三站词计数 (第 2 站): 接受拍 +1 (头字与载荷字同一计法)
             if (accept) words_in <= words_in + 32'd1;
             if (ack_req) stat_ack <= stat_ack + 1;
@@ -632,6 +656,12 @@ module tcp_rx (
                                         ackresp_l <= ackresp;
                                         ack_adv_l <= ack_adv;
                                         dup_l <= dup_ack;
+                                        // ⭐ r6-fix (L-A): 帧内 ACK 在 [snd_una, ack_hi]
+                                        // 范围内 (含 ack==snd_una 的零推进 ACK —— 握手
+                                        // 完成 ACK 正是这一形态: 此时 snd_nxt==snd_una,
+                                        // dup_ack 的"有在飞"守卫为假 ⇒ 前两个锁存都
+                                        // 看不见它, 板级实测触发的死锁)。见 ack_obs 置位源。
+                                        ackok_l <= ack_ok;
                                         w6a_ok_l <= w6a_ok;   // P4c: 窗口内非边界纯 ACK
                                         ack32_l <= ack32;
                                         seq32_l <= seq32;

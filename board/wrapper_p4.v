@@ -1748,6 +1748,9 @@ module wrapper_p4 (
     wire [47:0] cam_rd_dmac;
     wire [31:0] cam_rd_sip, cam_rd_dip;
     wire [15:0] cam_rd_sport, cam_rd_dport;
+    // ⭐ r6 (L-A, 2026-10-08): 对端 ACK 观测 (tcp_rx) -> ack_seen 位图 (下方 u_tcp_tx 门)
+    wire        rx_ack_obs;
+    wire [3:0]  rx_ack_obs_id;
 
     tcp_rx u_tcp_rx (
         // P5d H-fix: 接受裕度按 ESTAB 数动态缩 (推导见上面的 H-fix 块)。
@@ -1814,6 +1817,8 @@ module wrapper_p4 (
         .syn_dport      (syn_dport),
         .syn_seq        (syn_seq),
         .syn_wnd        (syn_wnd),
+        .ack_obs        (rx_ack_obs),      // ⭐ r6 (L-A): 见 u_tcp_tx 的 ack_seen 门
+        .ack_obs_id     (rx_ack_obs_id),
         .cam_q_sip      (cam_q_sip),
         .cam_q_dip      (cam_q_dip),
         .cam_q_sport    (cam_q_sport),
@@ -2067,6 +2072,22 @@ module wrapper_p4 (
     assign app_wu_val_t = 32'd0;
 `endif
 
+    // ⭐ r6 (L-A, 2026-10-08): 对端 ACK 观测位图 —— tcp_tx_frame 的 app 数据启动门。
+    //   置位 = tcp_rx.ack_obs (对端 ACK 帧, FCS 好 + CAM 命中); 清位 = 建连事件
+    //   (scfg_ev_up/slot —— 与 D1 的 fin_sent_r 清位同一脉冲族; 同拍时清优先)。
+    //   动机 (P7B_RETXFIX.md §3.10 板级定案): SYN-ACK 由慢路径发, 被 tx_arb 的
+    //   TCP 严格优先饿死 ~14 µs; 期间放出的 app 数据帧被 SYN_SENT 态对端静默
+    //   丢弃 ⇒ 建连初始洞 (r5 实测 8–19 帧/连 ⇒ 22/30 连各付一次 20 ms RTO)。
+    //   对端 ACK 只可能在 SYN-ACK 上线之后出现 ⇒ 用它当"SYN-ACK 已出"的见证。
+    reg  [15:0] ack_seen_w;
+    always @(posedge dp_clk or negedge dp_rst_n) begin
+        if (!dp_rst_n) ack_seen_w <= 16'h0;
+        else begin
+            if (rx_ack_obs)  ack_seen_w[rx_ack_obs_id] <= 1'b1;
+            if (scfg_ev_up)  ack_seen_w[scfg_ev_slot]  <= 1'b0;  // 建连事件清 (清优先)
+        end
+    end
+
     tcp_tx_frame #(.RING_CAP(WIN_CAP_5)) u_tcp_tx (
         .clk            (dp_clk),
         .rst_n          (dp_rst_n),
@@ -2080,6 +2101,7 @@ module wrapper_p4 (
         .ack_id         (tx_ack_id),
         .ack_val        (tx_ack_val),
         .ack_syn        (tx_ack_syn),
+        .ack_seen_i     (ack_seen_w),   // ⭐ r6 (L-A): 对端 ACK 观测位图 (见上)
         // P5: FIN/RST 通道 (APP_MODE 由 app_ctrl 驱动; 默认模式恒 0 =
         // 与 P4 逐位相同)
         .ack_fin        (tx_ack_fin),
@@ -3879,7 +3901,7 @@ module wrapper_p4 (
 
     axi_regs #(
         .MAGIC_V    (32'h50360001),
-        .BUILD_ID_V (32'h0000000F),     // ⚠️ 每次改动自增 (前置闸读这一项认位流)
+        .BUILD_ID_V (32'h00000011),     // ⚠️ 每次改动自增 (前置闸读这一项认位流)
                                         //    1 = 最小版 / 2 = 合体版 8 字 / 3 = 合体版 16 字
                                         //    4 = 合体版 24 字 (+ W16-W23 慢路径健康位)
                                         //    5 = P6b 双时钟域 32 字 (W24-W31 跨域锚点)
@@ -3945,6 +3967,23 @@ module wrapper_p4 (
                                         //        (= 本参数量子) + §3.9 逐帧溯源 (RTO 全窗
                                         //        每次修好, 唯一代价=等待时长)。⚠️ 125MHz 分支
                                         //        逐字不动 ⇒ 1G 构建/矩阵门编译面不变。
+                                        //   16 = **P7B-RETXFIX r6 (L-A)** (2026-10-08):
+                                        //        ack_seen 数据启动门 —— 对端首个 ACK 之前
+                                        //        不放行 app 数据 (tcp_tx_frame OVL 支的
+                                        //        tx_blk_sid 并进 `~acks_ok`; 位图在 wrapper:
+                                        //        置位 = tcp_rx.ack_obs, 清位 = cfg ADD 事件)。
+                                        //        依据 = r5 板级定案: 板在 SYN-ACK 前发数据
+                                        //        (滑出 8–19 帧/连) 被 SYN_SENT 对端静默丢弃
+                                        //        ⇒ 建连初始洞 ⇒ 22/30 连各付一次 20 ms RTO。
+                                        //        ⚠️ 默认分支 (宏外) 本刀不生效。
+                                        //   17 = **P7B-RETXFIX r6-fix** (2026-10-08):
+                                        //        tcp_rx 补第三个 ack_obs 置位源 `ackok_l`
+                                        //        (帧内 ACK ∈ [snd_una, ack_hi] 的锁存)。
+                                        //        ⚠️ BID 0x10 是**已上板的缺陷构建**: 门锁数据
+                                        //        ⇒ snd_nxt==snd_una ⇒ 握手完成 ACK (零推进)
+                                        //        被 dup_ack 的"有在飞"守卫挡掉 ⇒ ack_seen
+                                        //        永不置位 ⇒ 板级实测 30 连零数据死锁
+                                        //        (3 跑确定性)。r5 不可见 = 数据已在飞。
         .SNAP_NW    (SNAP_NW_P6E)       // 63 = 14+22 (snap_seq) + 3+(24-4)+4 (P7b 三束)
                                         //   ⚠️ 算式订正 (2026-10-07 二轮): 旧注 "14+22+3+24+4" = **67** ≠ 63。
                                         //   正确项数 = **24-4**: p7bdp 束有 24 个槽, 但槽 **2..5 不进窗口**

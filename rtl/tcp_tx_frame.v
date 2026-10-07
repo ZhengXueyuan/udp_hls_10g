@@ -36,6 +36,10 @@ module tcp_tx_frame (
     input  wire [3:0]  ack_id,
     input  wire [31:0] ack_val,
     input  wire        ack_syn,        // 1 = SYN+ACK 段 (flags=0x12, 发完 snd_nxt+1)
+    // ⭐ r6 (L-A, 2026-10-08): 每连接"对端 ACK 已观察到"位图 (wrapper 维护;
+    //   置位 = tcp_rx.ack_obs, 清位 = 建连事件)。本模块在宏 `TCP_TX_OVL` 内用
+    //   它拦住 app 数据帧 —— 见 `acks_ok/tx_blk_sid` 处注; 宏外未用 (综合裁掉)。
+    input  wire [15:0] ack_seen_i,
     // ---- P5: FIN/RST 发送通道 ----
     // ack_fin/ack_rst 兄弟 ack_syn (ackq 条目标志): FIN = flags 0x11 (发完
     // snd_nxt+1, 置 fin_sent_r/fin_seq_r), RST = flags 0x14 (发完 snd_nxt+1)。
@@ -443,7 +447,16 @@ module tcp_tx_frame (
 `endif
     wire        wnd_open  = win_open;
     wire [15:0] tx_blk = fin_req | fin_sent_r | rst_sent_r | rst_req;
-    wire        tx_blk_sid = tx_blk[start_id] | ~st_ok;
+    // ⭐ r6 (L-A, 2026-10-08): 对端首个 ACK 之前不放行 app 数据帧。
+    //   动机 (r5 板级定案, P7B_RETXFIX.md §3.10): SYN-ACK 由慢路径发, 而 tx_arb
+    //   的 TCP 严格优先让快路径突发把 SYN-ACK 饿死 (~14 µs) ⇒ 对端此时在
+    //   SYN_SENT 收到数据即**静默丢弃** ⇒ 建连初始洞 = 滑出量 (r5 实测 8–19 帧/连)
+    //   ⇒ RETX_SPAN=3 补不完 ⇒ 22/30 连各付一次 RTO。
+    //   对端 ACK 只可能在 SYN-ACK 上线之后出现 ⇒ 以它当"SYN-ACK 已出"的见证。
+    //   并入 tx_blk_sid ⇒ start_data/s_axis_tready 逐字同门自动保持 (D2/坑 10)。
+    //   ⚠️ 默认分支 (宏外, 文件后半支) 不生效: acks_ok 恒 1 ⇒ 表达式逐位不变。
+    wire        acks_ok = ack_seen_i[start_id];
+    wire        tx_blk_sid = tx_blk[start_id] | ~st_ok | ~acks_ok;
 
     // ---- 帧启动/服务门 (逐子句对应默认分支; state==S_IDLE → rx_idle) ----
     wire [3:0]  svc_id    = svc_id_r;

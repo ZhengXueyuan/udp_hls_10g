@@ -69,6 +69,10 @@ call :run U "%HERE%\mut\mut_k1.v" "-d TCP_TX_OVL"
 set RCU=%errorlevel%
 call :run V "%HERE%\mut\mut_k2.v" "-d TCP_TX_OVL"
 set RCV=%errorlevel%
+call :run W "%RTL%\tcp_tx_frame.v" "-d TCP_TX_OVL -d ARM_ACKGATE"
+set RCW=%errorlevel%
+call :run X "%HERE%\mut\mut_l1.v" "-d TCP_TX_OVL -d ARM_ACKGATE"
+set RCX=%errorlevel%
 call :runp P "%RTL%\tcp_tx_frame.v" "-d TCP_TX_OVL" "FLOODPROBE: NOFLOOD"
 set RCP=%errorlevel%
 call :runp Q "%HERE%\mut\mut_f1.v" "-d TCP_TX_OVL" "FLOODPROBE: FLOOD"
@@ -100,6 +104,8 @@ echo   S integ app to frm RC=%RCS% (expect 0 = OK)
 echo   T integ + M-S0a   RC=%RCT% (expect nonzero)
 echo   U M-K1 retxfx-off RC=%RCU% (expect nonzero; 撤预算+跳写)
 echo   V M-K2 nojump     RC=%RCV% (expect nonzero; 只撤收尾跳写)
+echo   W L-A ack gate    RC=%RCW% (expect 0; ARM_ACKGATE: 抽 ack_seen 期间禁启动)
+echo   X M-L1 gate off   RC=%RCX% (expect nonzero; 撤 ack_seen 门项)
 
 set FAILS=0
 if not "%RCA%"=="0" set /a FAILS+=1
@@ -121,6 +127,8 @@ if not "%RCS%"=="0" set /a FAILS+=1
 if "%RCT%"=="0" set /a FAILS+=1
 if "%RCU%"=="0" set /a FAILS+=1
 if "%RCV%"=="0" set /a FAILS+=1
+if not "%RCW%"=="0" set /a FAILS+=1
+if "%RCX%"=="0" set /a FAILS+=1
 
 echo   ---- B key readings ----
 findstr /C:"FRAMES" /C:"COV " /C:"MINGAP" /C:"CYCRX" /C:"CYCTX" /C:"FRAMEPERIOD" /C:"OVL F1" /C:"OVL C6" /C:"OVL wsrc" /C:"OVL RETXFIX" /C:"REDS" /C:"T8 " /C:"TB_TCP_TX_OVL" "runB\xs.log"
@@ -133,6 +141,11 @@ echo   ---- integration gate (real app_pattern P7B_10G -> real tcp_tx_frame) ---
 for %%M in (S T) do (
   echo   [%%M]:
   findstr /C:"FRAMES" /C:"WIRE" /C:"APP " /C:"T8" /C:"REDS" /C:"TB_INTEG_APP_TX" "run%%M\xs.log"
+)
+echo   ---- L-A ack gate (W fixed / X mut_l1) ----
+for %%M in (W X) do (
+  echo   [%%M]:
+  findstr /C:"ACKGATE" /C:"REDS " /C:"TB_TCP_TX_OVL:" "run%%M\xs.log"
 )
 echo   ---- mutant verdicts (REDS line + verdict + first FAIL lines) ----
 for %%M in (C D E F G H I J K L U V) do (

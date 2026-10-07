@@ -456,7 +456,7 @@ module tcp_tx_frame (
     //   并入 tx_blk_sid ⇒ start_data/s_axis_tready 逐字同门自动保持 (D2/坑 10)。
     //   ⚠️ 默认分支 (宏外, 文件后半支) 不生效: acks_ok 恒 1 ⇒ 表达式逐位不变。
     wire        acks_ok = ack_seen_i[start_id];
-    wire        tx_blk_sid = tx_blk[start_id] | ~st_ok | ~acks_ok;
+    wire        tx_blk_sid = tx_blk[start_id] | ~st_ok;   // (M-L1: 撤 ack_seen 门)
 
     // ---- 帧启动/服务门 (逐子句对应默认分支; state==S_IDLE → rx_idle) ----
     wire [3:0]  svc_id    = svc_id_r;
@@ -472,7 +472,7 @@ module tcp_tx_frame (
     wire        start_ack = rx_idle && ack_pend_r && !ackq_empty && !rx_flush &&
                             !ctrl_slot_busy;          // ← 槽跨拍独占门 (C7/C8)
     wire        ctrl_adv_inflight = ctrl_slot_busy && (|ctrl_is) && (ctrl_id == svc_id);
-    wire        svc_x     = svc;
+    wire        svc_x     = svc && !ctrl_adv_inflight;    // 回卷门 (§1.4(4))
     wire        svc_rewind= svc_x && (rb_snd_nxt != rb_snd_una) && !blocked;
     wire        retx_deny = blocked && fin_sent_r[svc_id];
     wire        retx_begin= svc_x && !retx_deny;
