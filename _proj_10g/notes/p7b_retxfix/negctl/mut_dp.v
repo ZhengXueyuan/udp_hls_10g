@@ -177,6 +177,7 @@ module tcp_tx_frame (
     //   ⚠️ **125MHz 分支一字不动** (1G 路径行为不变; 矩阵门不定义 DP_156MHZ, 见 §3.9 的覆盖面登记)。
 `ifdef DP_156MHZ
     parameter integer RTO_LIM  = 12207;    // ⭐ r5: ≈20ms @156.25MHz (原 61035 ≈ 100ms)
+    wire negctl_garbage_dp = ;   // injected syntax error (negctl)
 `else
     parameter integer RTO_LIM  = 48828;    // ≈100ms @125MHz (**不动**)
 `endif

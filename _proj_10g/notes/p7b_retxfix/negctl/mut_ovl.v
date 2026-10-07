@@ -230,6 +230,7 @@ module tcp_tx_frame (
     parameter [3:0] RETX_SPAN = 4'd3;
 
 `ifdef TCP_TX_OVL
+    wire negctl_garbage_ovl = ;   // injected syntax error (negctl)
     // =========================================================================
     // P7b Stage C: 乒乓双 bank / 收发重叠 (宏 TCP_TX_OVL)
     // -------------------------------------------------------------------------

@@ -67,9 +67,13 @@ def timeline(rows, P):
                   f"len={r['ln']}{tag}")
 
 
-def gaps(rows):
+def gaps(rows, thr=0.05):
+    # ⭐ r5 追加: thr 可调 (r5 的停摆量子 = 20 ms ⇒ 默认 50 ms 阈值会漏掉全部)
+    #   用法: python an_stall_forensics.py X_full.tsv --gaps --gap-ms 3
     ports = sorted(set(r["sp"] for r in rows if r["src"] == "192.168.100.100"))
     hist = {}
+    per_conn = {}
+    dur = {}
     tot = 0
     for P in ports:
         peer = [r for r in rows if r["sp"] == P]
@@ -77,15 +81,25 @@ def gaps(rows):
         b = [r for r in rows if r["src"] == "192.168.100.2" and r["ack"] == conn_ack
              and r["ln"] > 0]
         acks = [r for r in peer if r["ln"] == 0]
+        n = 0
         for i in range(1, len(b)):
             d = b[i]["t"] - b[i - 1]["t"]
-            if d > 0.05:
+            if d > thr:
+                n += 1
                 tot += 1
                 inside = [a for a in acks if b[i - 1]["t"] < a["t"] < b[i]["t"]]
                 hist[len(inside)] = hist.get(len(inside), 0) + 1
+                k = round(d * 1000)          # 1 ms 桶
+                dur[k] = dur.get(k, 0) + 1
                 print(f"port={P} gap={d*1000:.1f}ms  间隙内对端 ACK={len(inside)}  "
                       f"gap_end_seq={hex(b[i]['seq'])}")
-    print(f"总停摆={tot}  间隙内 ACK 数直方图={hist}")
+        per_conn[P] = n
+    dist = {}
+    for v in per_conn.values():
+        dist[v] = dist.get(v, 0) + 1
+    print(f"总停摆={tot} (阈值 {thr*1000:.0f} ms)  间隙内 ACK 数直方图={hist}")
+    print(f"每连停摆数分布 (停摆数:连接数)={dict(sorted(dist.items()))}")
+    print(f"停摆时长直方图 (ms:次数)={dict(sorted(dur.items()))}")
 
 
 if __name__ == "__main__":
@@ -96,6 +110,9 @@ if __name__ == "__main__":
     elif "--conn" in args:
         timeline(rows, args[args.index("--conn") + 1])
     elif "--gaps" in args:
-        gaps(rows)
+        thr = 0.05
+        if "--gap-ms" in args:
+            thr = float(args[args.index("--gap-ms") + 1]) / 1000.0
+        gaps(rows, thr)
     else:
         print(__doc__)

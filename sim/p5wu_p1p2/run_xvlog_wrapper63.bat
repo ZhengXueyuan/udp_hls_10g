@@ -13,11 +13,19 @@ REM   Also NOT covered: port-connection silent truncation (VRFC 10-3091) -- that
 REM   face needs xelab/synth over the full IP set (the round's unified build).
 REM   All comments in this .bat are ASCII on purpose (project rule).
 REM
-REM   4 macro combos, all must compile:
-REM     1  (none)                       K7/P4 default build
-REM     2  P7B_10G
-REM     3  APP_MODE
-REM     4  APP_MODE P7B_10G PCIE_OBS DEV_USP DP_156MHZ UDP_TX_OVL   = P7B-WU real
+REM   6 compile arms, all must compile:
+REM     A) board/wrapper_p4.v under 4 macro sets:
+REM        d0 (none) / d1 P7B_10G / d2 APP_MODE /
+REM        d3 APP_MODE P7B_10G PCIE_OBS DEV_USP DP_156MHZ UDP_TX_OVL  = P7B-WU real
+REM     B) rtl/tcp_tx_frame.v under 2 of those sets -- it is the file the
+REM        DP_156MHZ / TCP_TX_OVL macros actually gate (wrapper_p4.v mentions
+REM        TCP_TX_OVL only in comments => a wrapper arm with TCP_TX_OVL defined
+REM        would be structurally always-pass = dummy arm, deliberately NOT added):
+REM        t3 = d3 defs (DP_156MHZ on, TCP_TX_OVL off)
+REM        t4 = d3 + TCP_TX_OVL                          = board build real config
+REM        (added 2026-10-07 P7B-RETXFIX r5: before these arms NO standing gate
+REM         compiled the board {DP_156MHZ+TCP_TX_OVL} combination --
+REM         run_tx_ovl_gate.bat does not define DP_156MHZ.)
 REM ===========================================================================
 setlocal enabledelayedexpansion
 set XV=C:\AMDDesignTools\2025.2\Vivado\bin
@@ -29,24 +37,31 @@ if not exist "%ROOT%\board\wrapper_p4.v" ( echo [PATHGUARD FAIL] no wrapper_p4.v
 if not exist "%XV%\xvlog.bat" ( echo [TOOL FAIL] no xvlog.bat & exit /b 91 )
 if not exist "%W%" mkdir "%W%"
 set SRCFILE=%ROOT%\board\wrapper_p4.v
+set TXF=%ROOT%\rtl\tcp_tx_frame.v
 findstr /C:"SNAP_NW_P6E = 63" "%SRCFILE%" >NUL || ( echo [FINGERPRINT FAIL] source is not the 63-word version & exit /b 92 )
+if not exist "%TXF%" ( echo [PATHGUARD FAIL] no rtl\tcp_tx_frame.v under %ROOT% & exit /b 93 )
+
+set D3=-d APP_MODE -d P7B_10G -d PCIE_OBS -d DEV_USP -d DP_156MHZ -d UDP_TX_OVL
 
 set NBAD=0
-call :one "d0_default"      ""
-call :one "d1_p7b"          "-d P7B_10G"
-call :one "d2_app"          "-d APP_MODE"
-call :one "d3_wu_full"      "-d APP_MODE -d P7B_10G -d PCIE_OBS -d DEV_USP -d DP_156MHZ -d UDP_TX_OVL"
+call :one "d0_default"      "" "%SRCFILE%"
+call :one "d1_p7b"          "-d P7B_10G" "%SRCFILE%"
+call :one "d2_app"          "-d APP_MODE" "%SRCFILE%"
+call :one "d3_wu_full"      "%D3%" "%SRCFILE%"
+call :one "t3_tx_dp"        "%D3%" "%TXF%"
+call :one "t4_tx_board"     "%D3% -d TCP_TX_OVL" "%TXF%"
 
 echo.
 if %NBAD% NEQ 0 ( echo XVLOG_WRAPPER63_FAIL %NBAD% & exit /b 1 )
-echo XVLOG_WRAPPER63_PASS 4/4
+echo XVLOG_WRAPPER63_PASS 6/6
 exit /b 0
 
 :one
 set TAG=%~1
 set DEFS=%~2
+set SRC=%~3
 set LOG=%W%\xvlog_%TAG%.log
-call "%XV%\xvlog.bat" -work xil_defaultlib %DEFS% "%SRCFILE%" > "%LOG%" 2>&1
+call "%XV%\xvlog.bat" -work xil_defaultlib %DEFS% "%SRC%" > "%LOG%" 2>&1
 set RC=%ERRORLEVEL%
 set HIT=0
 findstr /I /C:"VRFC 10-2989" /C:"not declared" /C:"ERROR:" "%LOG%" >NUL && set HIT=1
