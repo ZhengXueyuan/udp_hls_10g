@@ -37,6 +37,18 @@
 #        只用于打印标签, 取数器仍用自己默认值 ⇒ "文档里的覆盖办法"在本脚本里**是失效的**,
 #        且默认分叉后会**记录错几何而不报错**); ② 开场核 (NW, 板侧 BID) 这一对, 不符 ⇒ exit 3;
 #        ③ 再跑一次 `p7b_snap.sh id` (它自己断言 MAGIC/BID/未实现地址必须 0xffffffff)。
+#
+#   ⛔ 2026-10-07 (P7B StB 判据修正轮) **回卷规则 (下游解析器必须遵守)**:
+#     板侧**所有计数器都是 32 位**; 12 s 跑窗下, **字节类 >2.863 Gbps (2^32 B/12 s) 必回卷**
+#     (实测: `ΔW53_raw = 1,792,146,940` vs 对端 `tx_bytes = 6,087,114,752` —— 出处
+#     P7B_BOARD_STAGEB.md §2.3(a))。**因此**:
+#       ① 本脚本**不变换读数** —— 只搬**原始寄存器值** (pre/t0/t1/post 四段全窗快照逐字落盘),
+#          "原始值必须记录" 这条要求由**这台架的输出格式**保证, 解析器**不许**用打印过的差值顶替;
+#       ② 任何 `ΔWxx` 比较 / 比率 / 速率: **先按 k·2^32 还原** (k 由板外 64 位口径或帧数反推),
+#          并把 `raw` 与 `k` 一起落表 —— mod 只给余数, 不记 raw 就是让"回卷发生了"静默消失
+#          (本工程"判据安静失效"老坑); 解析器清单见 P7B_STAGEB_CRITERIA_FIX.md §①;
+#       ③ 时基 `W5`/`W24` 是 156.25 MHz 自由计数 ⇒ **任何 ≥27.487 s 的窗不可判** (回绕周期);
+#          本脚本 pre→post 窗 ≈ `SECS+10 s` ⇒ `SECS` 必须 < 17 s。
 set -u
 SECS=${1:-6}; PCAP=${2:-/tmp/tcpreg.pcap}; TAG=${3:-J6}
 S=/tmp/p7b_biz/p7b_snap.sh
@@ -73,6 +85,8 @@ echo "J6META_T_START_EPOCH=$T_START J6META_T_START_UTC=$(date -u +%Y-%m-%dT%H:%M
 echo "J6META_HOST=$(hostname) J6META_TAG=$TAG"
 echo "J6META_TARGET=192.168.100.2:8080 J6META_SECS=$SECS J6META_PCAP=$PCAP"
 echo "J6META_NW=$NW J6META_EXPECT_BID=$EXPECT_BID J6META_LEGACY=$LEGACY J6META_T0T1_WORDS=5,53,54${WEXTRA:+,$WEXTRA}"
+# ⛔ 2026-10-07 (P7B StB 判据修正轮): 回卷规则随**每一跑**的 stdout 一起落盘 (下游解析器/复算者必读)
+echo "J6META_WRAP_RULE=all_board_cnt_are_32bit; delta_must_be_mod_2^32_with_k_recorded; raw_reads_are_the_snap_words; byte_cnt_wrap_at_2.863Gbps_per_12s; free_cnt_W5_W24_limit_27.487s; ref=P7B_STAGEB_CRITERIA_FIX.md"
 echo "J6META_SCRIPT=$0 J6META_SCRIPT_MD5=$(md5sum "$0" 2>/dev/null | cut -d' ' -f1)"
 echo "J6META_BIT_SHA=${BIT_SHA:-n/a}"
 echo "PACE_BPS=$PACE"

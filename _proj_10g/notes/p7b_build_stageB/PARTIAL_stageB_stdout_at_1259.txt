@@ -1,0 +1,66 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Wed Oct  7 12:59:10 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source {D:\repo\XCKU5PMini\udp_hls_10g\board\build_p7b_ku5p.tcl}
+# set project_name p7b_ku5p_prj
+# set top_module   wrapper_p4
+# set part_name    xcku5p-ffvb676-1-e
+# set gquad        Quad_X0Y1        
+# set script_dir [file dirname [file normalize [info script]]]
+# set root_dir   [file dirname $script_dir]
+# set hls_dir    ${root_dir}/hls/slowstack_prj/solution1/syn/verilog
+# set mac_dir    ${root_dir}/_proj_10g/p7b_mac/rtl
+# proc sec {s} { puts "\nP7B >>>>>>>>>> $s" }
+# catch {set_param general.maxThreads 8}
+# sec "P7B_ENV"
+
+P7B >>>>>>>>>> P7B_ENV
+# puts "P7B_VIVADO = [version -short]"
+P7B_VIVADO = 2025.2
+# puts "P7B_PART_N = [llength [get_parts $part_name -quiet]]"
+P7B_PART_N = 1
+# sec "P7B_CREATE $project_name"
+
+P7B >>>>>>>>>> P7B_CREATE p7b_ku5p_prj
+# create_project -force $project_name ${root_dir}/vivado_prj -part $part_name
+create_project: Time (s): cpu = 00:00:31 ; elapsed = 00:00:06 . Memory (MB): peak = 550.457 ; gain = 238.191
+# set_property target_language Verilog [current_project]
+# sec "P7B_IP_CREATE"
+
+P7B >>>>>>>>>> P7B_IP_CREATE
+# create_ip -name xxv_ethernet -vendor xilinx.com -library ip -version 5.0 -module_name pcs64
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository 'C:/AMDDesignTools/2025.2/Vivado/data/ip'.
+# set ip [get_ips pcs64]
+# puts "P7B_IS_LOCKED_AT_CREATE = [get_property IS_LOCKED $ip]"
+P7B_IS_LOCKED_AT_CREATE = 0
+# set DESIRED [list \
+#     CONFIG.LINE_RATE            {10} \
+#     CONFIG.CLOCKING             {Asynchronous} \
+#     CONFIG.BASE_R_KR            {BASE-R} \
+#     CONFIG.GT_REF_CLK_FREQ      {156.25} \
+#     CONFIG.GT_TYPE              {GTY} \
+#     CONFIG.INCLUDE_SHARED_LOGIC {1} \
+#     CONFIG.GT_GROUP_SELECT      $gquad \
+#     CONFIG.NUM_OF_CORES         {2} \
+#     CONFIG.LANE1_GT_LOC         {X0Y4} \
+#     CONFIG.LANE2_GT_LOC         {X0Y5} \
+#     CONFIG.CORE                 {Ethernet PCS/PMA 64-bit} ]
+# set conv -1
+# for {set rnd 1} {$rnd <= 8} {incr rnd} {
+#     foreach {k v} $DESIRED { catch {set_property $k $v $ip} e }
+#     set bad 0
+#     foreach {k v} $DESIRED {
+#         set gv "<err>"; catch {set gv [get_property $k $ip]}
+#         if {[string trim $gv] ne [string trim $v]} { incr bad ; puts "P7B_RB_MISMATCH $k want=<$v> got=<$gv>" }
+#     }
+#     puts "P7B_ROUND #$rnd MISMATCH_N = $bad"
+#     if {$bad == 0} { set conv $rnd ; break }
+# }

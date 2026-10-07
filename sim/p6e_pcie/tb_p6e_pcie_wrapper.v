@@ -39,6 +39,9 @@
 //
 // 门里还有: AXI 读通路 (MAGIC/BUILD_ID = 合体版 24 字 = 4)、触发/done 协议、字冻结、
 //   未实现地址 SLVERR、HW_STATUS 的 user_lnk_up。
+//   ⛔ 2026-10-07 订正 (P7B_STAGEB_FIX.md): 本句 "24 字 = 4" 是 24 字时代的叙述 (扩窗时未跟着改);
+//      现役几何 = **63 字 / BUILD_ID = 9 / 未实现地址 0x11C** (源码 = `board/wrapper_p4.v:3125`
+//      `SNAP_NW_P6E = 63` + `:3882` `BUILD_ID_V = 32'h00000009`) —— 见下判据 2 与判据 9 的就地订正。
 // ============================================================================
 // 依赖替身 sim/p6e_pcie/xdma_0_sim_stub.v (IP 的功能模型只在 Vivado 工程里, 见其头注释)
 // 跑法: run_tb_p6e_pcie.bat (编译时须定义 PCIE_OBS + DEV_USP + APP_MODE, 与真实构建一致)
@@ -128,7 +131,13 @@ module tb_p6e_pcie_wrapper;
 
         $display("  --- 判据 1-3: AXI 读通路 (替身主机 → wrapper 内 axi_regs) ---");
         u_dut.u_pcie_xdma.axil_read(32'h00, v); chk("1  MAGIC", v, 32'h50360001);
-        u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("2  BUILD_ID (P7b 五束 51 字=7)", v, 32'h00000007);
+        // 原句 (51 字时代, 逐字保留):
+        //   u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("2  BUILD_ID (P7b 五束 51 字=7)", v, 32'h00000007);
+        // ⛔ 2026-10-07 订正 (P7B_STAGEB_FIX.md; 出处 P7B_STAGEB_RX8_REGRESSION.md §6-③ "BID=7 双硬编码"):
+        //    窗口 51 → 61 (BIZ) → **63** (Stage A / P7B-WU 二轮) ⇒ 源码 `board/wrapper_p4.v:3882`
+        //    的 `BUILD_ID_V = 32'h00000009` (该处注释逐字: "验收脚本/取数器的 NW 与 EXPECT_BID
+        //    必须跟着改") ⇒ 期望值 7 → **9**。判据语义不变 (= BUILD_ID 必须等于本构建的地图版本)。
+        u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("2  BUILD_ID (P7b 63 字=9; 原 51 字=7)", v, 32'h00000009);
         u_dut.u_pcie_xdma.axil_read(32'h14, v); chk("3  MARKER", v, 32'hDEADBEEF);
         // HW_STATUS 字段: [7:5]=msi_vec_w [4]=msi_enable [3]=user_lnk_up [2:0]=0
         u_dut.u_pcie_xdma.axil_read(32'h10, v);
@@ -298,8 +307,16 @@ module tb_p6e_pcie_wrapper;
         //    (随地图扩张挪过: 0x18 -> 0x44 -> 0x60 -> 0x84 -> 0xA0 -> 0xB0 -> 0xEC).
         //    绝不能用 ≥0x100 的地址: `ar_word = araddr[7:2]` 6 位 ⇒ 每 256 字节回绕
         //    (0x100 别名到 MAGIC ⇒ 假 PASS 于"读出的不是 0xffffffff"这类判据)。
-        u_dut.u_pcie_xdma.axil_read(32'hEC, v);
-        chk("9  未实现地址 0xEC ⇒ rresp = SLVERR", {30'd0, u_dut.u_pcie_xdma.last_rresp}, 32'd2);
+        // ⛔ 2026-10-07 订正 (P7B_STAGEB_FIX.md; 出处 P7B_STAGEB_RX8_REGRESSION.md §6-③):
+        //    63 字地图 (0x20..0x118) 下 **0xEC = W51 已是真字** ⇒ 未实现地址 = word 63 = **0x11C**;
+        //    且读侧译码 BIZ 轮起已 6→**7** 位 (`ar_word = araddr[8:2]`) ⇒ 回绕红线从 ≥0x100
+        //    改成 **绝不能挑 ≥0x200** (见 `P7B_BIZ_WINDOW.md` §1 / `board/wrapper_p4.v:3108-3112`)。
+        //    判据语义不变 (未实现地址必须回 rresp=SLVERR), 只换地址常量。
+        // 原句 (51 字时代, 逐字保留):
+        //   u_dut.u_pcie_xdma.axil_read(32'hEC, v);
+        //   chk("9  未实现地址 0xEC ⇒ rresp = SLVERR", {30'd0, u_dut.u_pcie_xdma.last_rresp}, 32'd2);
+        u_dut.u_pcie_xdma.axil_read(32'h11C, v);
+        chk("9  未实现地址 0x11C ⇒ rresp = SLVERR", {30'd0, u_dut.u_pcie_xdma.last_rresp}, 32'd2);
 
         // ⚠️ release 的层次名必须与上面 force 的目标**逐字一致** (坑 22: 名字不一致时
         //    xelab 直接报 "not declared under prefix"; 但漏 release 是**静默**的 —— 后续判据

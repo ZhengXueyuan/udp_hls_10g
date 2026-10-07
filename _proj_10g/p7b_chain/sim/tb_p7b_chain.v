@@ -45,6 +45,9 @@
 //   6d/6e/6f TX 线上前导与内容的 lane 顺序                | 合同 tdata[63:56] + 注入字节
 //   7 W36..W50 = 被 force 的生产者常量                    | force 在生产者节点
 //   7b 0xEC 读 0 且 SLVERR (无回绕)                        | axi_regs 读侧译码; 51 字地图边界
+//       ⛔ 2026-10-07 订正 (P7B_STAGEB_FIX.md): 窗口现 **63 字** (BIZ 61 / Stage A 63) 且
+//          **0xEC = W51 已是真字** ⇒ 本判据地址改 **0x11C** (未实现地址); 判据语义不变
+//          (出处 P7B_STAGEB_RX8_REGRESSION.md §5.6/§6-③; 地图 = P7B_BIZ_WINDOW.md §1)
 //   2f..2i 逐字节 == 注入 (60/1514/63/65B)              | 注入字节数组 (旧判据只查 Σpopc)
 //   2j 逐字节比较器自检 (期望错位 1 字节 ⇒ 必判不一致)   | 反例内建: 证明 2f..2i 非哑判据
 //   G1.0..G1.7 lane4 起点 (内容 60..67 = /T/ 落 lane4..3) 逐字节 | 802.3 合法起点 + 注入数组
@@ -1438,6 +1441,10 @@ module tb_p7b_chain;
         end
 
         // -------- 第 7 组: 快照 51 字逐字读回 ------------------------------
+        //   ⛔ 2026-10-07 订正 (P7B_STAGEB_FIX.md): 窗口现 **63 字** (P7B-WU 二轮起;
+        //      `board/wrapper_p4.v:3125` `SNAP_NW_P6E = 63`) —— 本组逐字读的 W36..W50
+        //      (0xB0..0xE8) 不受影响; 组末那条边界判据的地址已随之订正 (0xEC → 0x11C)。
+        //      ("51 字" = RATE/P7b 时代值; BIZ 61 字 / Stage A 63 字, 出处 P7B_BIZ_WINDOW.md §1)
         // ⚠️ force 打**生产者节点** (P6e 门的教训: 打 wrapper 级线会掩盖"生产者↔线"
         //    的连接错)。非 P7B 的数字信号源存在 (1G MAC 没有这些输出) ⇒ 这条判据
         //    只在 P7B 构建里有意义。
@@ -1485,13 +1492,24 @@ module tb_p7b_chain;
         u_dut.u_pcie_xdma.axil_read(32'hE4, v); chk("7 W49 cls dbg_occ", v === 32'h00000015, "forced producer node");
         u_dut.u_pcie_xdma.axil_read(32'hE8, v); chk("7 W50 tx_clk_act", v === 32'hA5A50050, "forced producer node");
         // 有界性: 51 字占 0x20..0xE8 ⇒ 0xEC 必须读 0 且 SLVERR。
+        //   ⛔ 2026-10-07 订正 (P7B_STAGEB_FIX.md; 出处 P7B_STAGEB_RX8_REGRESSION.md §5.6/§6-③):
+        //      窗口 BIZ 轮起 61 字 / Stage A 起 **63 字** (0x20..0x118) ⇒ **0xEC = W51 已是真字**
+        //      (W51 = app_pattern 发字节, 见 P7B_BIZ_WINDOW.md §1) ⇒ 原地址必红、SLVERR 断言失去判别力;
+        //      **未实现地址 = word 63 = 0x20+4*63 = 0x11C** (读侧译码 BIZ 轮起已 6→7 位 ⇒ 红线
+        //      = 绝不能挑 ≥0x200; `board/wrapper_p4.v:3108-3112` 的预算复算逐字给出 0x11C)。
+        //      判据语义不变 (未实现地址必须回 0 + SLVERR), 只换地址常量。
         //   ⚠️ 这条 + 上面 W50 那一条**一起**才钉死"读侧选字位宽够":
         //      只验前半段的话, `snap_base` 位宽不够造成的**高地址回绕**会逃逸
         //      (高字读回低字的值 = 假 PASS)。
-        u_dut.u_pcie_xdma.axil_read(32'hEC, v);
-        chk("7b 0xEC reads 0 no wrap",
+        // 原句 (51 字时代, 逐字保留):
+        //   u_dut.u_pcie_xdma.axil_read(32'hEC, v);
+        //   chk("7b 0xEC reads 0 no wrap",
+        //       (v === 32'h00000000) && (u_dut.u_pcie_xdma.last_rresp === 2'd2),
+        //       "axi_regs decode; 51-word bound");
+        u_dut.u_pcie_xdma.axil_read(32'h11C, v);
+        chk("7b 0x11C reads 0 no wrap",
             (v === 32'h00000000) && (u_dut.u_pcie_xdma.last_rresp === 2'd2),
-            "axi_regs decode; 51-word bound");
+            "axi_regs decode; 63-word bound (原 51 字/0xEC; 2026-10-07 订正)");
 
         // =============================================================
         // F2X-PATCH: F-2 归因实验 (窗口 = 快照基准, 判据 = 线上逐帧内容)

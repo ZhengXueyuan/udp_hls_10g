@@ -33,12 +33,35 @@ for ln in open(P, encoding="utf-8", errors="replace"):
     if m:
         S.append(tuple(int(x) for x in m.groups()))
 assert len(W["W11"]) == len(S) + 1, "快照数与 UDP_SUM 段数不匹配: %d vs %d" % (len(W["W11"]), len(S))
-d = lambda k, i: W[k][i + 1] - W[k][i]
-print("段   ΔW10      pkts      ①✓  ΔW11            S_i(i=pay_bytes) ①✓")
+
+# ⛔ 2026-10-07 订正 (P7B StB 判据修正轮): 原句 (保留) = `d = lambda k, i: W[k][i+1] - W[k][i]`
+#    —— **裸减法**。W10/W11/W13 都是 32 位 ⇒ 段内 >2.86 Gbps (2^32 B/12 s; 本轮的段窗纪律是
+#    ≤2.5 s ⇒ 门槛 ≈13.7 Gbps, 当时安全) 或**总窗**更长时, 差值会回卷。裸减法在回卷时给出
+#    "负 / 巨小"值 ⇒ 至少是**响亮的假 FAIL**(不是静默), 但仍是错读数。现改为 mod 2^32 +
+#    用对端 64 位口径 (pay_bytes / pkts, 都是板外独立量) 还原 k·2^32; raw 与 k 一并打印。
+M32 = 1 << 32
+
+
+def d32(a, b, ref=None):
+    """32 位差分: 先取 mod 2^32 余数; `ref` 非空 (板外 64 位口径) 时按 k·2^32 还原。
+    返回 (值, k, wrapped_visible)。⚠️ 误选 k 必差 2^32 ≫ 对账容差 (0) ⇒ 判别力不减;
+    盲区 = 真偏差恰 ≈ j·2^32 (原理极限)。"""
+    raw = (b - a) % M32
+    k = 0 if ref is None else max(0, int(round((ref - raw) / float(M32))))
+    return raw + k * M32, k, (b < a)
+
+
+d = lambda k, i: W[k][i + 1] - W[k][i]          # ← 原句保留 (历史口径, 只供逐字对照)
+print("段   ΔW10      pkts      ①✓  ΔW11            S_i(i=pay_bytes) ①✓   [raw/k]")
 for i, (pk, pay, _o0, o1) in enumerate(S):
-    d10, d11 = d("W10", i), d("W11", i)
-    print("%d  %8d  %8d  %s  %12d  %12d  %s" % (i + 1, d10, pk, "OK" if d10 == pk else "BAD", d11, pay, "OK" if d11 == pay else "BAD"))
-tot10, tot11, sumS, off_end = W["W10"][-1] - W["W10"][0], W["W11"][-1] - W["W11"][0], sum(s[1] for s in S), S[-1][3]
-d13 = W["W13"][-1] - W["W13"][0]
+    d10, k10, w10 = d32(W["W10"][i], W["W10"][i + 1], pk)
+    d11, k11, w11 = d32(W["W11"][i], W["W11"][i + 1], pay)
+    print("%d  %8d  %8d  %s  %12d  %12d  %s   [%s/%d,%s%s/%d%s]"
+          % (i + 1, d10, pk, "OK" if d10 == pk else "BAD", d11, pay, "OK" if d11 == pay else "BAD",
+             W["W10"][i], k10, W["W11"][i], "" if not w11 else "!wrap", k11, "" if not w11 else "!"))
+sumS, off_end = sum(s[1] for s in S), S[-1][3]
+tot10 = d32(W["W10"][0], W["W10"][-1], sum(s[0] for s in S))[0]
+tot11 = d32(W["W11"][0], W["W11"][-1], sumS)[0]
+d13 = d32(W["W13"][0], W["W13"][-1])[0]
 print("ΣΔW10=%d ΣΔW11=%d ΣS=%d off_end=%d ⇒ ③%s" % (tot10, tot11, sumS, off_end, "OK" if tot11 == sumS == off_end else "BAD"))
 print("⓸ ΔW13=%d —— %s (ΔW10=%d)" % (d13, "有判别力(真的喂了)" if tot10 > 0 else "空判据(没喂进 app, 不得当正证据)", tot10))
