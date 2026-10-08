@@ -283,7 +283,7 @@ minrtt 取值域 = 0.006–0.008 ⇒ 6–8 µs ；srtt = 0.016–0.027 ⇒ 16–
 
 **必须说清的三条**：
 1. **结构性排除"同族"只能说"不直接"**：本流程的**重排幅度 ±0.4–1.3 ns**（会同一条物理路径在两轮之间移动 `−0.591…+1.302 ns`，
-   `P7B_WU_TIMING_DELTA.md` §4.1；同输入 ⇒ 读数逐字复现 §4.4）⇒ **分析值不能替代构建读数**。
+   `P7B_WU_TIMING_DELTA.md` §4.1；同输入 ⇒ 读数逐字复现 §4.4 —— ⛔ 2026-10-09 已升级为**位级**（`P7B_WU_TIMING_DELTA.md` §8：R0/R1 `cmp -l` 5 字节头差、C1/r6-fix `SW_CRC=da663843` 一致 ⇒ **同输入重跑方差 0**））⇒ **分析值不能替代构建读数**。
 2. **本改动不碰快照窗**（`stat_wu`/`rx_occ_bytes` 是另一路 agent 的活）⇒ **不叠加**那两条已知薄处
    （`async_default` pcie 0.496 / DP 0.743）。
 3. **hold 侧**：`WHS +0.010` 本来就薄；本改动**不新增时钟域、不新增跨域路径** ⇒ 不新增 hold 风险源。
@@ -329,7 +329,7 @@ minrtt 取值域 = 0.006–0.008 ⇒ 6–8 µs ；srtt = 0.016–0.027 ⇒ 16–
 - 窗口四面：`app_ctrl.WIN_POOL/WIN_Q_MAX`（`:222/:242`）、`tcb.WIN_CAP/win_open`（`:13/:142-148`）、`tcp_tx_frame.RING_CAP`（`:184`）、
   `tcp_echo.frame_fifo D=8192`（`:93`）、`wrapper_p4.v:1127-1160` 的 `10550` 与 `ACC_MARGIN` 查表。
 - 面积/时序底数：`P7B_WU_BUILD.md` §4（LUT 71,238 / FF 69,744 / BRAM 348/480，我另在 `board/p7b_ku5p_util.rpt:36,41,109,114` 逐字核对）；
-  `P7B_WU_TIMING_DELTA.md` §1/§5（最差族 20 级 / route 55.5% / 6 条同源 / 重排幅度）。
+  `P7B_WU_TIMING_DELTA.md` §1/§5（最差族 20 级 / route 55.5% / 6 条同源 / 重排幅度）；⛔ **2026-10-09 幅度口径订正 = 该件 §8**（两网表之间 + 同输入位级复现、方差 0）。
 - 工作树状态：`git rev-parse --short HEAD = 95c9485`；`rtl/app_pattern.v`、`rtl/tcp_tx_frame.v` 的 mtime = `2026-09-29 09:45:47`（**未被本 agent 或并发 agent 触碰**）。
 
 **没核（**别当结论读**）**：

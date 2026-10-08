@@ -298,9 +298,17 @@ DUAL_SELFTEST_OK**；其中 D8 的四数 = `check-only 5.125` / `recv-only 43.17
 ⇒ **端到端 11.15 Gbps 已站到 TCP 线上载荷天花板（9.493 Gbps）之上** —— 台架不再是帽子。
 ⚠️ 全部 `first_mismatch=-1` / `mism_bytes=0`，两臂 `check=` 见证与传入值一致。
 
-⭐ **PMU（`sudo perf stat`, 本机 AMD Zen）** —— `stalled-cycles-frontend/backend` 在本 CPU **`<not supported>`**
-（Intel 专有）⇒ 改用 `l1d_pend_miss.pending_cycles` + `l1d.replacement` + IPC 代理。
+⭐ **PMU（`sudo perf stat`，跑在**对端 `192.168.0.38`** = 台架机本体，`hostname a-MS-7850`，
+**Intel Xeon E3-1275 v3 @3.5GHz（Haswell, family 6 model 60, 4C8T）**；原始 `grep vendor_id` =
+`GenuineIntel`）** —— ⛔ **订正**：本段初稿曾把该机写成"AMD Zen"，那是**误读**（只看了 lscpu 的
+`L1d 128 KiB(4)/L2 1 MiB(4)/L3 8 MiB` 与 perf 的 `<not supported>` 就下结论，**没读 vendor_id**）；
+Haswell 正是 4×32 KiB L1d / 4×256 KiB L2 / 8 MiB L3，与实测逐项吻合。
+`stalled-cycles-frontend/backend` 在本机**逐条实试**报 `The stalled-cycles-frontend event is not supported.`
+（本机 perf 7.0.14 / kernel 7.0.0 未暴露这两个别名；**不是**"Intel 没有"）⇒ 改用
+`l1d_pend_miss.pending_cycles` + `l1d.replacement` + `cycle_activity.cycles_l1d_pending`（均可计）+ IPC 作代理。
 **`kernel.perf_event_paranoid` 保持 4（未改）** —— root 绕开它, 所以**没有**运行时改动要做/要还原。
+⚠️ 因为 perf 就跑在**台架机本体**（全部速率读数与上一轮链长律实验的同一条机器）⇒
+下面三行**就是本部署口径**的读数。
 分相（`gen` / `gen+check` 两跑相减, 256 MiB, 逐相精确）：
 
 | 相 | cycles/byte | instr/byte | IPC | L1 loads/byte | loads/cycle | L1 miss 率 | L1-miss 挂起周期占比 |
