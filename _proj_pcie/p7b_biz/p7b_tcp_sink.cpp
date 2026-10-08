@@ -14,7 +14,16 @@
 //
 // 用法见 --help。判据: 每条连接 FIRST_MISMATCH = -1 且 收满 <=1MB+padding 字节。
 //
-// 编译: g++ -O3 -std=c++17 -o p7b_tcp_sink p7b_tcp_sink.cpp
+// ⭐ 2026-10-09 (R1/R2 用户要求落地): socket 一律 **非阻塞 + 电平触发 poll(LT)**。
+//   * 全程序**只有一处 fcntl** (`set_nonblock` 里置 O_NONBLOCK); **没有任何**清 O_NONBLOCK
+//     的路径 (旧版的 `fcntl(fd,F_SETFL,fl)` "回到阻塞模式" 已删除 = 竞态源);
+//   * 一切 recv/connect 都发生在 poll() 之后, 且容忍 EAGAIN (非阻塞语义的正证据);
+//   * poll 超时 = **确定语义**: 计数 + 日志行 → 超过 --stall-n 次即中止该连接并计入 bad_conns
+//     (⇒ 退出码非 0), 不静默吞。旧版无超时护栏, 连接停在中途会**永久挂住**(Stage C 实测踩过)。
+//   * ⛔ **本工具不写盘**: 载荷只在内存里收发, 校验 = 按 p7b_pattern.h 规则**增量复算**
+//     (重生图案逐字节比), 没有 tmp 文件 / 没有 --dump 落盘开关。
+// 编译 (部署口径 = _proj_10g/notes/p7b_affinity/BUILD.md §2; ⛔ 别再用旧头注释里的 -O3 写法):
+//   g++ -O2 -o p7b_tcp_sink p7b_tcp_sink.cpp
 #include "p7b_pattern.h"
 #include "p7b_affinity.h"
 
@@ -40,24 +49,43 @@ static double now_s() {
 
 static void die(const char *m) { perror(m); exit(2); }
 
-static int connect_to(const char *host, int port, int secs) {
+// ------------------------- R1 (2026-10-09): socket 契约 -------------------------
+// 全程序**只有这一处 fcntl** —— 只置 O_NONBLOCK, 从不切回阻塞 (grep 判据:
+// `grep -n "F_SETFL" *.cpp` 只应命中本函数; 出现清 O_NONBLOCK 即违规)。
+static void set_nonblock(int fd) {
+    int fl = fcntl(fd, F_GETFL, 0);
+    if (fl < 0 || fcntl(fd, F_SETFL, fl | O_NONBLOCK) < 0) die("fcntl(O_NONBLOCK)");
+    if (!(fcntl(fd, F_GETFL, 0) & O_NONBLOCK)) { fprintf(stderr, "FATAL: O_NONBLOCK 未生效\n"); exit(2); }
+}
+
+// 非阻塞 connect: EINPROGRESS -> poll(POLLOUT, 电平触发) -> SO_ERROR。
+// 成功 0 / 失败 -1 且 *why = 原因码 (ETIMEDOUT 或 errno / SO_ERROR)。超时**不静默**:
+// 调用者必须把 why 打进日志 (SINK_CONN ... FAIL_CONNECT why=...)。
+static int connect_nb(int fd, const struct sockaddr *sa, socklen_t sl, int timeout_ms, int *why) {
+    int r = connect(fd, sa, sl);
+    if (r < 0 && errno != EINPROGRESS) { *why = errno; return -1; }
+    if (r < 0) {                                  // EINPROGRESS: 等可写 (或出错)
+        struct pollfd p{fd, POLLOUT, 0};
+        int pr;
+        do { pr = poll(&p, 1, timeout_ms); } while (pr < 0 && errno == EINTR);
+        if (pr == 0) { *why = ETIMEDOUT; return -1; }
+        if (pr < 0)  { *why = errno; return -1; }
+    }
+    int err = 0; socklen_t el = sizeof(err);
+    if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &el) < 0) { *why = errno; return -1; }
+    if (err) { *why = err; return -1; }
+    return 0;                                     // ⚠️ 返回后 fd **仍是 O_NONBLOCK**
+}
+
+static int connect_to(const char *host, int port, int secs, int *why) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) die("socket");
+    if (fd < 0) { *why = errno; return -1; }
     struct sockaddr_in a{};
     a.sin_family = AF_INET;
     a.sin_port = htons((uint16_t)port);
-    if (inet_pton(AF_INET, host, &a.sin_addr) != 1) { fprintf(stderr, "bad host\n"); exit(2); }
-    int fl = fcntl(fd, F_GETFL, 0);
-    fcntl(fd, F_SETFL, fl | O_NONBLOCK);
-    int r = connect(fd, (struct sockaddr *)&a, sizeof(a));
-    if (r < 0 && errno != EINPROGRESS) die("connect");
-    struct pollfd p{fd, POLLOUT, 0};
-    r = poll(&p, 1, secs * 1000);
-    if (r <= 0) { close(fd); return -1; }
-    int err = 0; socklen_t el = sizeof(err);
-    getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &el);
-    if (err) { close(fd); return -1; }
-    fcntl(fd, F_SETFL, fl);          // 回到阻塞模式
+    if (inet_pton(AF_INET, host, &a.sin_addr) != 1) { *why = EINVAL; close(fd); return -1; }
+    set_nonblock(fd);                             // ⭐ socket() 之后立刻设, 且**不再切回**
+    if (connect_nb(fd, (struct sockaddr *)&a, sizeof(a), secs * 1000, why) < 0) { close(fd); return -1; }
     return fd;
 }
 
@@ -66,6 +94,8 @@ int main(int argc, char **argv) {
     const char *host = "192.168.100.2";
     int port = 8080, conns = 100, secs = 60, rcvbuf = 8 << 20;
     long maxbytes = 4L << 20;        // 每连接读上限 (1MB 图案 + 余量)
+    int poll_ms = 5000;              // R1: 每次 poll 的等待上限 (ms)
+    int stall_n = 3;                 // R1: 连续 --stall-n 次 poll 超时 = 该连接判 STALL 并中止
     bool selftest = false;
     for (int i = 1; i < argc; i++) {
         std::string k = argv[i];
@@ -76,31 +106,39 @@ int main(int argc, char **argv) {
         else if (k == "--seconds") secs = atoi(nx());
         else if (k == "--rcvbuf") rcvbuf = atoi(nx());
         else if (k == "--maxbytes") maxbytes = atol(nx());
+        else if (k == "--poll-ms") poll_ms = atoi(nx());
+        else if (k == "--stall-n") stall_n = atoi(nx());
         else if (k == "--selftest") selftest = true;
         else if (k == "--help") {
             printf("p7b_tcp_sink --host H --port P [--conns N] [--seconds S] [--rcvbuf B] [--maxbytes B]\n"
-                   "  逐连接: connect -> 收流 -> 逐字节复算图案(偏移0起) -> 报告\n"
+                   "             [--poll-ms 5000] [--stall-n 3]\n"
+                   "  逐连接: connect(非阻塞+poll) -> 收流(poll LT) -> 逐字节复算图案(偏移0起) -> 报告\n"
+                   "  ⛔ 不写盘 (载荷只在内存); 校验 = 按 p7b_pattern.h 规则增量复算\n"
+                   "  --poll-ms/--stall-n: 连续 stall-n 次 poll 超时 => 该连接 STALL 并中止 (计入 bad_conns)\n"
                    "  输出行以 SINK_ 前缀, 便于机器解析; 汇总行 SINK_SUM_*\n"
                    "  --selftest: 只跑图案自检向量\n");
             return 0;
         } else { fprintf(stderr, "unknown arg %s (--help)\n", k.c_str()); return 2; }
     }
     if (selftest) return p7b_pattern_selftest("p7b_tcp_sink");
+    if (poll_ms < 1) poll_ms = 1;
+    if (stall_n < 1) stall_n = 1;
 
     std::vector<uint8_t> buf(1 << 20);
     double t_start = now_s();
     long long tot_bytes = 0, tot_clean = 0, tot_conn = 0, tot_mismatch_bytes = 0;
-    long long bad_conns = 0, fail_conns = 0;
+    long long bad_conns = 0, fail_conns = 0, stall_conns = 0, err_conns = 0, tot_poll_tmo = 0;
     double first_conn_at = 0, last_conn_end = 0;
 
     for (int c = 0; c < conns; c++) {
         if (now_s() - t_start > secs) break;
         double t0 = now_s();
-        int fd = connect_to(host, port, 5);
+        int why = 0;
+        int fd = connect_to(host, port, 5, &why);
         double t1 = now_s();
         if (fd < 0) {
             fail_conns++;
-            printf("SINK_CONN %d FAIL_CONNECT (t=%.6f)\n", c, t1 - t_start);
+            printf("SINK_CONN %d FAIL_CONNECT why=%d (%s) (t=%.6f)\n", c, why, strerror(why), t1 - t_start);
             if (fail_conns > 5) break;
             continue;
         }
@@ -109,11 +147,32 @@ int main(int argc, char **argv) {
         P7bPat pat(0);                       // **每连接** 从偏移 0 起
         long long got = 0, mism_bytes = 0;
         long long first_mis = -1;
-        long long nread_calls = 0;
+        long long nread_calls = 0, conn_tmo = 0;
+        int status = 0;                      // 0=正常(FIN/读满) 1=STALL 2=ERR
         while (got < maxbytes) {
+            // ⭐ R1: 等待一律 poll (电平触发, 默认语义; ⛔ 无 EPOLLET / 无 select)
+            struct pollfd p{fd, POLLIN, 0};
+            int pr;
+            do { pr = poll(&p, 1, poll_ms); } while (pr < 0 && errno == EINTR);
+            if (pr == 0) {                   // ⭐ poll 超时 = 确定语义 (计数 + 日志 + 中止)
+                conn_tmo++;
+                if (conn_tmo >= stall_n) {
+                    printf("SINK_CONN %d POLL_TIMEOUT %lld x %d ms 无数据 (got=%lld) => 中止本连接\n",
+                           c, conn_tmo, poll_ms, got);
+                    status = 1; break;
+                }
+                continue;
+            }
+            if (pr < 0) { printf("SINK_CONN %d POLL_ERR errno=%d\n", c, errno); status = 2; break; }
+            if (p.revents & POLLNVAL) { printf("SINK_CONN %d POLLNVAL (fd 失效)\n", c); status = 2; break; }
             ssize_t n = recv(fd, buf.data(), buf.size(), 0);
-            if (n < 0) { if (errno == EINTR) continue; printf("SINK_CONN %d RECV_ERR %d\n", c, errno); break; }
+            if (n < 0) {
+                if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) continue;  // 非阻塞语义
+                printf("SINK_CONN %d RECV_ERR %d\n", c, errno);
+                status = 2; break;
+            }
             if (n == 0) break;               // 板侧 FIN (AUTO_CLOSE)
+            conn_tmo = 0;
             nread_calls++;
             uint64_t nmis = 0;
             long long f = pat.check(buf.data(), (size_t)n, &nmis);
@@ -128,20 +187,26 @@ int main(int argc, char **argv) {
         last_conn_end = t2;
         tot_conn++;
         tot_bytes += got;
-        if (first_mis < 0) tot_clean++;
+        tot_poll_tmo += conn_tmo;
+        if (status == 0 && first_mis < 0) tot_clean++;
         else bad_conns++;
+        if (status == 1) stall_conns++;
+        if (status == 2) err_conns++;
         tot_mismatch_bytes += mism_bytes;
-        printf("SINK_CONN %d OK bytes=%lld first_mismatch=%lld mism_bytes=%lld "
-               "conn_ms=%.3f dur_ms=%.3f Mbps=%.3f reads=%lld CPU_FREQ_KHZ=%s\n",
-               c, got, first_mis, mism_bytes, (t1 - t0) * 1e3, (t2 - t1) * 1e3,
-               (t2 - t1) > 0 ? got * 8.0 / (t2 - t1) / 1e6 : 0.0, nread_calls,
-               p7baff_cpu_freq_khz().c_str());   // F9: 周期行尾频率轨迹 (追加, 旧字段一字不动)
+        printf("SINK_CONN %d %s bytes=%lld first_mismatch=%lld mism_bytes=%lld "
+               "conn_ms=%.3f dur_ms=%.3f Mbps=%.3f reads=%lld poll_tmo=%lld CPU_FREQ_KHZ=%s\n",
+               c, status == 0 ? "OK" : (status == 1 ? "STALL" : "ERR"),
+               got, first_mis, mism_bytes, (t1 - t0) * 1e3, (t2 - t1) * 1e3,
+               (t2 - t1) > 0 ? got * 8.0 / (t2 - t1) / 1e6 : 0.0, nread_calls, conn_tmo,
+               p7baff_cpu_freq_khz().c_str());   // F9 + R1: 尾部追加 poll_tmo (旧字段一字不动)
         fflush(stdout);
     }
     double t_end = now_s();
     printf("SINK_SUM conns=%lld fail_conns=%lld bytes=%lld clean_conns=%lld bad_conns=%lld "
-           "mismatch_bytes=%lld wall_s=%.3f net_s=%.3f agg_Mbps=%.3f\n",
+           "mismatch_bytes=%lld stall_conns=%lld err_conns=%lld poll_tmo=%lld "
+           "wall_s=%.3f net_s=%.3f agg_Mbps=%.3f\n",
            tot_conn, fail_conns, tot_bytes, tot_clean, bad_conns, tot_mismatch_bytes,
+           stall_conns, err_conns, tot_poll_tmo,
            t_end - t_start, last_conn_end - first_conn_at,
            (last_conn_end - first_conn_at) > 0 ? tot_bytes * 8.0 / (last_conn_end - first_conn_at) / 1e6 : 0.0);
     printf("SINK_DONE\n");

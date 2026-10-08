@@ -14,10 +14,17 @@
 //      但这一条**必须先用本工具的 SRC_EOF_AT 那行验证** (方案 §4.3 步骤 0)。
 //
 // 用法: p7b_tcp_src --host 192.168.100.2 --port 8080 --seconds 30 [--chunk 65536]
-//                    [--pace-bps 0] [--no-verify-down]
+//                    [--pace-bps 0] [--no-verify-down] [--poll-ms 200]
 // 输出行 SRC_* / SRC_SUM_* / SRC_DONE; 退出码 0 = 上行无 send 错且(若开核对)下行逐字节干净。
 //
-// 编译: g++ -O3 -std=c++17 -o p7b_tcp_src p7b_tcp_src.cpp
+// ⭐ 2026-10-09 (R1/R2 用户要求落地): socket 一律 **非阻塞 + 电平触发 poll(LT)**。
+//   * **connect 也是非阻塞的** (旧版是阻塞 connect, 之后才置 O_NONBLOCK);
+//   * 全程序只有一处 fcntl (set_nonblock 里置 O_NONBLOCK), **从不切回阻塞**;
+//   * poll 超时 = 空闲 (确定语义: 计数进 SRC_SUM `poll_tmo=`, 不静默吞); poll 真出错 ⇒ 打行 + 结束
+//   * ⛔ **本工具不写盘**: 上行载荷由 p7b_pattern.h **按规则现场生成**后直接 send (无文件/无 --dump);
+//     下行校验 = 重生图案**增量逐字节复算**, 同样不落盘。
+// 编译 (部署口径 = _proj_10g/notes/p7b_affinity/BUILD.md §2; ⛔ 别再用旧头注释里的 -O3 写法):
+//   g++ -O2 -o p7b_tcp_src p7b_tcp_src.cpp
 #include "p7b_pattern.h"
 #include "p7b_affinity.h"
 
@@ -40,10 +47,37 @@ static double now_s() {
     return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
 
+// ------------------------- R1 (2026-10-09): socket 契约 -------------------------
+// 全程序**只有这一处 fcntl** —— 只置 O_NONBLOCK, 从不切回阻塞
+// (判据: `grep -n "F_SETFL" *.cpp` 只应命中本函数; 出现清 O_NONBLOCK 即违规)。
+static void set_nonblock(int fd) {
+    int fl = fcntl(fd, F_GETFL, 0);
+    if (fl < 0 || fcntl(fd, F_SETFL, fl | O_NONBLOCK) < 0) { perror("fcntl(O_NONBLOCK)"); exit(2); }
+    if (!(fcntl(fd, F_GETFL, 0) & O_NONBLOCK)) { fprintf(stderr, "FATAL: O_NONBLOCK 未生效\n"); exit(2); }
+}
+
+// 非阻塞 connect: EINPROGRESS -> poll(POLLOUT, 电平触发) -> SO_ERROR。
+// 成功 0 / 失败 -1 且 *why = 原因码; 调用者必须把它打进日志 (不许静默)。
+static int connect_nb(int fd, const struct sockaddr *sa, socklen_t sl, int timeout_ms, int *why) {
+    int r = connect(fd, sa, sl);
+    if (r < 0 && errno != EINPROGRESS) { *why = errno; return -1; }
+    if (r < 0) {
+        struct pollfd p{fd, POLLOUT, 0};
+        int pr;
+        do { pr = poll(&p, 1, timeout_ms); } while (pr < 0 && errno == EINTR);
+        if (pr == 0) { *why = ETIMEDOUT; return -1; }
+        if (pr < 0)  { *why = errno; return -1; }
+    }
+    int err = 0; socklen_t el = sizeof(err);
+    if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &el) < 0) { *why = errno; return -1; }
+    if (err) { *why = err; return -1; }
+    return 0;                                     // ⚠️ 返回后 fd **仍是 O_NONBLOCK**
+}
+
 int main(int argc, char **argv) {
     argc = p7b_pin_cpu(argc, argv);      // 启动即绑核 (p7b_affinity.h; 剥离本函数自己的选项)
     const char *host = "192.168.100.2";
-    int port = 8080, secs = 30, chunk = 65536;
+    int port = 8080, secs = 30, chunk = 65536, poll_ms = 200;
     long long pace = 0;
     bool selftest = false, verify_down = true;
     for (int i = 1; i < argc; i++) {
@@ -54,33 +88,40 @@ int main(int argc, char **argv) {
         else if (k == "--seconds") secs = atoi(nx());
         else if (k == "--chunk") chunk = atoi(nx());
         else if (k == "--pace-bps") pace = atoll(nx());
+        else if (k == "--poll-ms") poll_ms = atoi(nx());
         else if (k == "--no-verify-down") verify_down = false;
         else if (k == "--selftest") selftest = true;
         else if (k == "--help") {
-            printf("p7b_tcp_src --host H --port P [--seconds S] [--chunk B] [--pace-bps BPS]\n"
-                   "  上行: 从连接起点偏移 0 起连续图案流, 灌到板子 (板侧 rcvbuf/窗口自然限速)\n"
+            printf("p7b_tcp_src --host H --port P [--seconds S] [--chunk B] [--pace-bps BPS] [--poll-ms 200]\n"
+                   "  上行: 从连接起点偏移 0 起连续图案流 (现场生成), 灌到板子 (板侧 rcvbuf/窗口自然限速)\n"
                    "  下行: 同一连接上核对板子的 1MB 图案流 (可用 --no-verify-down 关)\n"
+                   "  ⛔ 不写盘: 上行按 p7b_pattern.h 规则生成后直接 send; 下行增量复算\n"
                    "  --selftest: 图案自检向量\n");
             return 0;
         } else { fprintf(stderr, "unknown arg %s\n", k.c_str()); return 2; }
     }
     if (selftest) return p7b_pattern_selftest("p7b_tcp_src");
+    if (poll_ms < 1) poll_ms = 1;
 
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) { perror("socket"); return 2; }
     struct sockaddr_in a{};
     a.sin_family = AF_INET; a.sin_port = htons((uint16_t)port);
     if (inet_pton(AF_INET, host, &a.sin_addr) != 1) { fprintf(stderr, "bad host\n"); return 2; }
-    if (connect(fd, (struct sockaddr *)&a, sizeof(a)) < 0) { perror("connect"); return 2; }
+    set_nonblock(fd);                     // ⭐ socket() 之后**立刻**设, 且全程不切回
+    int why = 0;
+    if (connect_nb(fd, (struct sockaddr *)&a, sizeof(a), 5000, &why) < 0) {
+        fprintf(stderr, "SRC_CONNECT_FAIL why=%d (%s) %s:%d\n", why, strerror(why), host, port);
+        return 2;
+    }
     printf("SRC_CONNECTED %s:%d\n", host, port);
     if (pace > 0) setsockopt(fd, SOL_SOCKET, SO_MAX_PACING_RATE, &pace, sizeof(pace));
-    int fl = fcntl(fd, F_GETFL, 0);
-    fcntl(fd, F_SETFL, fl | O_NONBLOCK);
 
     P7bPat tx(0);                 // 上行: 每连接偏移 0 起
     P7bPat rx(0);                 // 下行: 板侧每连接偏移 0 起
     std::vector<uint8_t> sbuf(chunk), rbuf(1 << 20);
     long long tx_bytes = 0, rx_bytes = 0, rx_mism_bytes = 0, rx_first_mis = -1;
+    long long poll_tmo = 0, poll_err = 0;
     double t0 = now_s(), t_eof = 0;
     int eof_seen = 0, send_err = 0;
     double next_report = t0 + 1.0;
@@ -89,8 +130,11 @@ int main(int argc, char **argv) {
         struct pollfd p{fd, 0, 0};
         p.events = POLLIN;
         if (!send_err) p.events |= POLLOUT;
-        int pr = poll(&p, 1, 200);
+        int pr;
+        do { pr = poll(&p, 1, poll_ms); } while (pr < 0 && errno == EINTR);   // ⭐ R1: 电平触发
         double t = now_s();
+        if (pr < 0) { poll_err++; printf("SRC_POLL_ERR errno=%d (poll 失败, 本轮结束)\n", errno); break; }
+        if (pr == 0) poll_tmo++;             // ⭐ poll 超时 = 空闲; 计数进 SRC_SUM (确定语义, 非静默)
         if (pr > 0 && (p.revents & POLLIN)) {
             ssize_t n = recv(fd, rbuf.data(), rbuf.size(), 0);
             if (n == 0) { if (!eof_seen) { eof_seen = 1; t_eof = t; printf("SRC_EOF_AT %.6f rx_bytes=%lld  (板侧 FIN)\n", t - t0, rx_bytes); } }
@@ -125,9 +169,10 @@ int main(int argc, char **argv) {
     double t1 = now_s();
     close(fd);
     printf("SRC_SUM tx_bytes=%lld rx_bytes=%lld dur_s=%.3f tx_Mbps=%.3f rx_Mbps=%.3f "
-           "eof_seen=%d eof_at_s=%.3f send_err=%d rx_first_mismatch=%lld rx_mism_bytes=%lld\n",
+           "eof_seen=%d eof_at_s=%.3f send_err=%d rx_first_mismatch=%lld rx_mism_bytes=%lld "
+           "poll_tmo=%lld poll_err=%lld\n",
            tx_bytes, rx_bytes, t1 - t0, tx_bytes * 8.0 / (t1 - t0) / 1e6, rx_bytes * 8.0 / (t1 - t0) / 1e6,
-           eof_seen, t_eof - t0, send_err, rx_first_mis, rx_mism_bytes);
+           eof_seen, t_eof - t0, send_err, rx_first_mis, rx_mism_bytes, poll_tmo, poll_err);
     printf("SRC_DONE\n");
     return (send_err == 0 && tx_bytes > 0 && (!verify_down || rx_first_mis < 0)) ? 0 : 1;
 }

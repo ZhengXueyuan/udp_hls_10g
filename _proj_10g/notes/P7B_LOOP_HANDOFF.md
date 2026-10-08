@@ -257,7 +257,17 @@ cd /tmp/p7b_biz && CONNS=30 SECS=25 TAG=X1 PCAP_ON=0 bash stc_dl.sh             
 cd /tmp/p7b_biz && CONNS=30 SECS=25 TAG=X2 PCAP_ON=0 BID_EXPECT=0x00000009 bash stc_dl.sh     # Build 2 臂
 ```
 ⚠️ **跑之前先按地雷⑦ `--put` 台架到对端**（`stc_dl.sh` 等；`j6_stagea.sh` 必须换新版）。
-台架测什么：板侧两代全窗快照 + t0/t1 窗读数 + 对端 NIC 前后计数 + `ss` 采样 + sink 逐连接读数 + CPU 见证 + pcap（`stc_dl.sh` 头注逐字）。
+台架测什么：板侧两代全窗快照 + t0/t1 窗读数 + 对端 NIC 前后计数 + `ss` 采样 + sink 逐连接读数 + CPU 见证 + **可选** pcap（`stc_dl.sh` 头注逐字）。
+
+> ⭐ **2026-10-09 订正（R1/R2 轮：主机端非阻塞 + 数据不落盘）** —— 读本节时按此三条：
+> ① **`stc_dl.sh` / `j6_stagec.sh` / `tcpreg_j6.sh` 现在都默认不抓包**（`PCAP_ON` 默认 **0**；
+>    旧 `j6_stagec.sh`/`tcpreg_j6.sh` 是**无条件抓**）。上两条命令里的 `PCAP_ON=0` **仍然有效**（现在是默认值）。
+>    需要 pcap 取证时显式 `PCAP_ON=1`：那一跑会打 **`PCAP_ACTIVE=1 IO_AFFECTING=1`** ⇒
+>    **该跑读数含磁盘 IO，不许与 `PCAP_ON=0` 的读数直接混比**（报告里必须标注）。
+> ② **不抓包也有帧几何口径**：收尾 `GEOM_NOPCAP_*` 行 = 对端 NIC 硬件计数 Δbytes/Δpkts
+>    （J0 口径 1518.0009）+ 板侧 ΔW43/ΔW20（J0 口径 192.999989）+ fps（raw A/B 与 wrap 位一并打印）。
+> ③ **部署清单扩了**：三台架脚本 + `pcap_off_dryrun.sh`（新门：两条臂验"默认不抓/要抓能抓"）
+>    + 重编后的 7 个二进制（指纹 = `_proj_10g/notes/p7b_affinity/BUILD.md` §3/§6）。
 
 **6）分析（本机）**：
 
