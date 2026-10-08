@@ -12,7 +12,7 @@
 | 项 | 值 |
 |---|---|
 | 板侧身份 | `0x00 = 0x50360001` · **`0x04 = 0x0000000e`（r4 / BID 0xE）** · `0x08 = 0x2`（TX_DIS 高）· **carrier = 0（受控停流）** |
-| 对本轮烧过的位流（sha256 现场复核） | Build 2 `1ccbd9cd…6cdd07`（归档 `p7b_build_archive/20261007_163651/wrapper_p4.bit`，BID 读回 9）· Build 3 `1609d6f5…576f3c`（`p7b_build_stageC/stageC_wrapper_p4.bit`，读回 0xA）· **r4 `dfd9ec27…2511f`**（`udp_hls_10g_fix/_proj_10g/notes/p7b_retxfix/retxfix_r4_wrapper_p4.bit`，读回 0xE） |
+| 对本轮烧过的位流（sha256 现场复核） | Build 2 `1ccbd9cd…6cdd07`（归档 `p7b_build_archive/20261007_163651/wrapper_p4.bit`，BID 读回 9）· Build 3 `1609d6f5…576f3c`（`p7b_build_stageC/stageC_wrapper_p4.bit`，读回 0xA）· **r4 `dfd9ec27…2511f`**（`udp_hls_10g_fix/_proj_10g/notes/p7b_retxfix/retxfix_r4_wrapper_p4.bit`，读回 0xE；⛔ **2026-10-09 订正（不静默改）：`udp_hls_10g_fix` 树已删除 ⇒ r4 位流现路径 = `udp_hls_10g\_proj_10g\notes\p7b_retxfix_salvage\bits\dfd9ec27__wrapper_p4.bit`**） |
 | 烧录逐次 | 每臂一次 JTAG 烧 + `End of startup status: HIGH`（6/6 份 burn 日志各有）+ 板侧 BID 现场读回（0xA/0xE/9 与所烧位流一致）+ 设备级 `remove`+`rescan`（`LnkSta x4`）；共 **6 次烧**（B3 → r4 → B2 → r4 → B2 → r4）；烧录日志 = `_accept_scratch/logs/burn_{build3,r4,build2,r4b,build2b,r4c}_stdout.txt` |
 
 ---

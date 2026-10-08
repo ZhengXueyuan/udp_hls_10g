@@ -2,7 +2,7 @@
 
 - 执行者 = **独立验证 + 板级测试 agent**（未参与 `p7b_affinity.h` 的修复、未参与 r6-fix 实施；
   本轮**零 RTL 改动、零构建**，只烧 + 只测 + 自算）
-- 工作仓 = `D:\repo\XCKU5PMini\udp_hls_10g`；位流取自 **`udp_hls_10g_fix`**
+- 工作仓 = `D:\repo\XCKU5PMini\udp_hls_10g`；位流取自 **`udp_hls_10g_fix`** ⛔ **2026-10-09 订正（不静默改）：该树已于 2026-10-09 删除**（删前审计：它是 `origin/master` 的祖先、已跟踪文件零改动），位流唯一副本现保全在 **`udp_hls_10g\_proj_10g\notes\p7b_retxfix_salvage\bits\`**（r6-fix = `8c8b6126__wrapper_p4.bit`；全 7 个都在）
 - 报告范围：**只对我自己跑出来的读数负责**；判据层 PASS/FAIL 的裁定权在判据所有者（用户）
 
 **一句话**：A 段 8 项**全部通过**（含两个"仅声明未验证"的格：topo 退化、F8 可复现性，均自建手段测到）；
@@ -18,7 +18,7 @@ B 段四臂跑完 —— ⭐ **warm-up 今天没有复现**（换烧后第 1 跑
 | `p7b_affinity.h`（**6 份副本**） | 全部 `9b141b50c089b4065145879d642c58fb` | ✅ 6/6 相同，且 == 声称值 |
 | 对端 `/tmp/p7b_biz/` **7 个二进制** | `10906f39…` / `e1261ef4…` / `0be6a66e…` / `754e2dfe…` / `c90808c5…` / `2ab00584…` / `732f1337…` | ✅ 7/7 == `BUILD.md` §3 指纹（逐字节） |
 | 对端 7 个 `.cpp` 源 | 7/7 == `BUILD.md` 输入表 | ✅ |
-| 位流 `retxfix_wrapper_p4.bit` | sha256 `8c8b6126f82c2c45acee1a1c308332e561677cac5cfb27b87d74d03463d5baf5`，15,431,261 B | ✅ == 声称前 8 位 |
+| 位流 `retxfix_wrapper_p4.bit`（⛔ 2026-10-09 起现路径 = `udp_hls_10g\_proj_10g\notes\p7b_retxfix_salvage\bits\8c8b6126__wrapper_p4.bit`） | sha256 `8c8b6126f82c2c45acee1a1c308332e561677cac5cfb27b87d74d03463d5baf5`，15,431,261 B | ✅ == 声称前 8 位 |
 | 板侧 BID / MAGIC / `0x11C` | `0x00000011` / `0x50360001` / `0xffffffff` | ✅ 每跑开跑前后各读一次 |
 
 台架（对端与仓内 md5 逐字相同，现场核过）：
@@ -298,6 +298,10 @@ LD_PRELOAD=/tmp/iverify/mine_deny_sib.so ./p7b_udp_src --host 127.0.0.1 ...     
 
 # B0 烧录（本机，launcher 模式：MSYS_NO_PATHCONV 必须**不存在**才能用 cmd //c）
 cmd //c 'D:\repo\XCKU5PMini\udp_hls_10g_fix\_proj_10g\notes\p7b_retxfix\burn_r6fix.bat'   # 判据 End of startup status: HIGH
+#   ⛔ 2026-10-09 订正：`udp_hls_10g_fix` 树已删除 ⇒ 上面这行按**历史**读（当时可跑）。现役烧法 =
+#   TCPREG_BIT='D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\notes\p7b_retxfix_salvage\bits\8c8b6126__wrapper_p4.bit' \
+#     cmd //c 'D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\notes\p7b_biz_tcpreg\run_program_tcpreg.bat'
+#   （⚠️ 保全件 `…\p7b_retxfix_salvage\burn_r6fix.bat` 按原样保全、内部仍指旧树 ⇒ **直接跑会白跑**）
 PEER_PW=… $PY tools/peer_ssh.py --sudo 'echo 1 > /sys/bus/pci/devices/0000:02:00.0/remove; sleep 2; echo 1 > /sys/bus/pci/rescan'
 
 # B1（对端）  cd /tmp/p7b_biz
@@ -319,9 +323,9 @@ PIN_CORE=1    BIN=./p7b_tcp_src_fix bash j6_r6fix.sh 6 /tmp/iv_ULC3_r1.pcap ULC3
 | `j6_r6fix.sh`（新件） | 仓内 `_proj_10g/notes/p7b_affinity/` + 对端 `/tmp/p7b_biz/` | 见 §0；3 行 diff |
 | `j6_stagea.sh` 覆盖为仓内现版 | 对端 `/tmp/p7b_biz/` | `0158ba1e…` → `c6b27b1b…`（纪律要求） |
 | `mine_deny_sib.c/.so`、`probe_fopen` | 对端 `/tmp/iverify/` | 我的 topo 退化垫片 + 有效性探针（非交付件） |
-| `burn_r6fix.bat` / `burn_r6fix_stdout.log` | `udp_hls_10g_fix/_proj_10g/notes/p7b_retxfix/` | 烧录 launcher（照抄 `program_tcpreg_ku5p.tcl`，`TCPREG_BIT` 指 r6fix） |
+| `burn_r6fix.bat` / `burn_r6fix_stdout.log` | `udp_hls_10g_fix/_proj_10g/notes/p7b_retxfix/`（⛔ 2026-10-09 起：该树已删 ⇒ 现路径 = `udp_hls_10g\_proj_10g\notes\p7b_retxfix_salvage\burn_r6fix.bat`；⚠️ 其内部三条路径仍指旧树，**用前必改**） | 烧录 launcher（照抄 `program_tcpreg_ku5p.tcl`，`TCPREG_BIT` 指 r6fix） |
 | 对端 `/tmp/iverify/*.log`、`/tmp/iv_ULC*.pcap`、`/tmp/sink_*`、`/tmp/ss_*`、`/tmp/cpu_*` | 对端 /tmp | 本轮原始件（**在盘**） |
 | PCIe `remove`+`rescan`（设备级，两次） | 对端 | 每次重烧后恢复端点（`LnkSta x4`） |
 
 ⛔ **未碰**：板载 QSPI、任何 RTL/脚本（`stc_dl.sh`/`p7b_snap.sh`/`j6_stagec.sh` 一行未改）、
-`udp_hls_10g_fix` 的源码树、`/tmp/p7b_biz` 之外的既有证据。
+`udp_hls_10g_fix` 的源码树（⛔ 2026-10-09 订正：**该树已删除** ⇒ 本行按历史读；其位流/取证已保全到 `udp_hls_10g\_proj_10g\notes\p7b_retxfix_salvage\`）、`/tmp/p7b_biz` 之外的既有证据。

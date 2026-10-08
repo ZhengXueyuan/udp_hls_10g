@@ -1,5 +1,5 @@
 # P7B_RETXFIX —— dup-ACK 自持重放环修复 (Stage C 下行退化) · 实施轮
-- 2026-10-07 · 仓库 `udp_hls_10g_fix` · 起点 **HEAD `b30b499`** (工作区干净; 位流已从原树回收, 见 §2 附注)
+- 2026-10-07 · 仓库 `udp_hls_10g_fix` · 起点 **HEAD `b30b499`** (工作区干净; 位流已从原树回收, 见 §2 附注)　⛔ **2026-10-09 订正（不静默改）：`udp_hls_10g_fix` 树已于 2026-10-09 删除**（删前审计：它是 `origin/master` 的祖先、已跟踪文件零改动）⇒ 本件所有指向该树的路径按历史读；**位流与取证现保全在 `udp_hls_10g\_proj_10g\notes\p7b_retxfix_salvage\`**（位流 = `bits\`，7 个；本轮原始件 = `peer_notes\`；构建报告 = `build_reports\`）
 - 入口 = `P7B_LOOP_HANDOFF.md`; 用户指令 = "开始调查核修复" ⇒ 走**路径 B (修重放策略)** 且同时取 C-② 的 RTL 级证据
 - 本件只写实施与设计; 板级读数另立 (待跑)
 
@@ -487,7 +487,7 @@ ACK ⇒ delayed-ACK 无暴露面, 只余**每连接收尾 1 次**孤立段的伪
 三臂 pcap 在盘 (按策略不入库); `an_stall_forensics.py` 本轮增 `--gap-ms` (r5 的 20 ms 量子下,
 旧 50 ms 阈值结构性漏掉全部停摆 —— 判据阈值必须按被测量子设)。
 
-### 5.1 板级命令 (逐字可复跑; PEER_PW 只在环境变量里, 不落盘)
+### 5.1 板级命令 (逐字可复跑; PEER_PW 只在环境变量里, 不落盘)　⛔ **2026-10-09 订正（不静默改）：本节内的 `D:\repo\XCKU5PMini\udp_hls_10g_fix\...` 路径随该树删除而失效（命令按历史读）；位流现路径 = `udp_hls_10g\_proj_10g\notes\p7b_retxfix_salvage\bits\`（r3 = `4e114594__wrapper_p4.bit`），烧录入口 = `udp_hls_10g\_proj_10g\notes\p7b_biz_tcpreg\run_program_tcpreg.bat`（自定位、读 `TCPREG_BIT`）**
 ```bash
 PY=/c/Users/zhxue/anaconda3/python.exe; T=/home/a/xdma_test/dma_ip_drivers-patched/XDMA/linux-kernel/tools
 # 烧 (位流路径经 TCPREG_BIT; 判据 = 'End of startup status: HIGH')

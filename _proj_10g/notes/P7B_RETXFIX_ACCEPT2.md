@@ -3,6 +3,7 @@
 - 2026-10-08 · **独立验收 agent**（未参与 r6/r6-fix 实施；本轮只读 + 只烧 + 只测，**零构建**、未改任何 RTL/脚本）
 - 被测声称 = `_proj_10g/notes/P7B_RETXFIX.md` **§3.11 及其后** + `P7B_LOOP_HANDOFF.md` 置顶块（`8c8b6126…baf5` / BID 0x11 / 3690.5 Mbps / 零重传 / 受控停流）
 - 我工作的仓 = `D:\repo\XCKU5PMini\udp_hls_10g`（HEAD `92cbeee`）；**位流取自 `udp_hls_10g_fix`**（两树同 HEAD、`board/wrapper_p4.v`+`rtl/tcp_rx.v`+`rtl/tcp_tx_frame.v` sha256 **逐字相同**；见 §7-①）
+  ⛔ **2026-10-09 订正（不静默改）：`udp_hls_10g_fix` 树已于 2026-10-09 删除**（删前审计：`HEAD = 92cbeee` 是 `origin/master` 的祖先 ⇒ 无 origin 缺少的提交；已跟踪文件零改动）⇒ **本件内所有指向该树的路径一律按历史读**；**位流唯一副本现保全在 `udp_hls_10g\_proj_10g\notes\p7b_retxfix_salvage\bits\`**（7 个，各 15,431,261 B），**本轮原始件在 `…\p7b_retxfix_salvage\peer_notes\`**、**构建报告在 `…\build_reports\`**（索引 = 同目录 `README.md` + `SHA256SUMS.txt`）
 - 证据原件（我自己的）全在 `D:\repo\XCKU5PMini\_accept2_scratch\`（`logs/` + `*.pcap` + `tools/`），**不在仓内**；本件是唯一写进仓的文件
 - ⛔ 板子终态 = **r6-fix（BID 0x11）+ 受控停流**（`0x08=0x2` ⇒ 对端 carrier=0），与交接件一致；恢复 = `reg_rw /dev/xdma0_user 0x08 w 0x0`
 - ⛔ 纪律：只走 JTAG 易失烧录（**未碰 QSPI**）；每次测量前现核 BID（`0x04`）+ 位流 sha256；所有 ΔW 按 mod 2³² 并记 raw/k
@@ -13,9 +14,13 @@
 
 ```bash
 PY=/c/Users/zhxue/anaconda3/python.exe ; FIX=/d/repo/XCKU5PMini/udp_hls_10g_fix ; S=/d/repo/XCKU5PMini/_accept2_scratch
+# ⛔ 2026-10-09 订正：`FIX` 树已删除 ⇒ 本块按历史读；现用 `FIX=/d/repo/XCKU5PMini/udp_hls_10g`（主树，`tools/` 在其内）
 
 # 0) 烧录（我复制的 .bat/.tcl 副本在 $S，原件 md5 6810548e…；判据 = 'End of startup status: HIGH'）
-TCPREG_BIT='D:\repo\XCKU5PMini\udp_hls_10g_fix\_proj_10g\notes\p7b_retxfix\retxfix_r6fix\retxfix_wrapper_p4.bit' \
+#    ⛔ 2026-10-09 订正：`udp_hls_10g_fix` 树已删除 ⇒ 原 TCPREG_BIT 路径（`…\udp_hls_10g_fix\…\retxfix_r6fix\retxfix_wrapper_p4.bit`）已失效；
+#       现路径 = 下面这行（salvage 保全件，同一 sha256 `8c8b6126…`）。cmd 那行也可改指主树 launcher：
+#       cmd //c 'D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\notes\p7b_biz_tcpreg\run_program_tcpreg.bat'
+TCPREG_BIT='D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\notes\p7b_retxfix_salvage\bits\8c8b6126__wrapper_p4.bit' \
   cmd //c 'D:\repo\XCKU5PMini\_accept2_scratch\run_program_tcpreg.bat'
 
 # 1) 烧后 PCIe 恢复（设备级）+ 身份 + 开流（0x08=0）
@@ -74,9 +79,9 @@ bash acc2_j0.sh · bash acc2_w54.sh · python3 acc2_conc.py 8 3 TAG · python3 a
 
 | 臂 | 位流（磁盘路径） | sha256 | 我烧？ | 回读 BID |
 |---|---|---|---|---|
-| r6-fix | `udp_hls_10g_fix/_proj_10g/notes/p7b_retxfix/retxfix_r6fix/retxfix_wrapper_p4.bit` | `8c8b6126f82c2c45acee1a1c308332e561677cac5cfb27b87d74d03463d5baf5` | ✅ 烧 2 次 | 0x11 |
+| r6-fix | `udp_hls_10g_fix/_proj_10g/notes/p7b_retxfix/retxfix_r6fix/retxfix_wrapper_p4.bit`（⛔ 2026-10-09 起现路径 = `udp_hls_10g\_proj_10g\notes\p7b_retxfix_salvage\bits\8c8b6126__wrapper_p4.bit`） | `8c8b6126f82c2c45acee1a1c308332e561677cac5cfb27b87d74d03463d5baf5` | ✅ 烧 2 次 | 0x11 |
 | Build 2 | `udp_hls_10g/_proj_10g/notes/p7b_build_stageC/baseline_archive/wrapper_p4_Build2.bit` | `1ccbd9cd84292d1a10973a1442f71ca2187e66834be5e09d7eeb22b42c6cdd07` | ✅ 烧 2 次 | 0x9 |
-| r5 | `udp_hls_10g_fix/_proj_10g/notes/p7b_retxfix/retxfix_r5/retxfix_wrapper_p4.bit` | `39afd1276fe3ed8edfd0651a1fdba54dbf82aa59dc8545ec264e78be6b1d26d4` | ✅ 烧 1 次 | 0xF |
+| r5 | `udp_hls_10g_fix/_proj_10g/notes/p7b_retxfix/retxfix_r5/retxfix_wrapper_p4.bit`（⛔ 2026-10-09 起现路径 = `udp_hls_10g\_proj_10g\notes\p7b_retxfix_salvage\bits\39afd127__wrapper_p4.bit`） | `39afd1276fe3ed8edfd0651a1fdba54dbf82aa59dc8545ec264e78be6b1d26d4` | ✅ 烧 1 次 | 0xF |
 
 > AC1–AC4 跑在**对方留下的 r6-fix 烧录**上（读回 BID=0x11、run 首尾 `BID_PRE/BID_END` 都是 0x11）；
 > AC5 起跑在**我自己烧的** r6-fix 上 ⇒ BID↔sha256 的映射由我自己的烧录往返建立；**每一跑**的
@@ -204,7 +209,7 @@ FIN 卡死：我 6 跑 **0/180 连**（sink 全部以 recv=0/FIN 收尾）——
 | `W20 = 21,660 = 21,570 + 90（30×[SYN-ACK+opener+FIN]）` | 计数 ✅；**分解 ❌**（0 个 opener；FIN ≈2/连） | **其分解错了**（pcap 逐帧：88–90 控制帧 = 30 SYN-ACK + 58–60 FIN + 0 opener，且 FIN 时刻/seq 显示 = 快路径 FIN + 慢路径 ISN+1 FIN）。总数对，**来源写错**；"每连 2 FIN" 是**既有登记项**，非本修复引入 |
 | 台架帽 ~3.6–4.0 Gbps = sink 单线程上限 | **证实**（关复算 ⇒ 7.07 Gbps agg / 9.5 Gbps 单连） | 其判断**方向正确**，且我把它做成了**定量实验**；"板子真实天花板仍未被测"这句**过于保守** —— 单连 1 MB 突发已见 ≈9.5 Gbps（真长流仍测不了） |
 | 审计③：WNS +0.014 未登记 | 证实（`board/p7b_ku5p_timing.rpt`，两树同 sha256；DP 域 `g_hw.clk_out0`） | 其 §3.11/§3.12 **确实未记录** r6/r6-fix 两代的时序；r6-fix 与 r6 的差 = +0.014 vs +0.033（同族重排，幅度在流程噪声内）⇒ **登记为"余量 0.22%"纪律** |
-| 审计②：`vivado_prj/.../imports/board/wrapper_p4.v` = BID 0xA 旧版（0 处 `ack_seen`） | **只在 `udp_hls_10g`（老树）成立**（0 处 `ack_seen` / BID 0xA / mtime Oct 7 16:35）；**`udp_hls_10g_fix` 里已是 BID 0x11 / 9 处 `ack_seen`**（mtime Oct 8 02:00） | 陷阱**真实但分树**：在 fix 树用 GUI 重编**不会**踩；在 `udp_hls_10g` 树重编**会**踩。我**零构建**，未受影响。⚠️ 两树 `board/build_p7b_ku5p.tcl` 工作副本 sha 不同 = **纯 CRLF/LF 差**（git blob 两边都是 `3bb40961…`）⇒ 不是内容差 |
+| 审计②：`vivado_prj/.../imports/board/wrapper_p4.v` = BID 0xA 旧版（0 处 `ack_seen`） | **只在 `udp_hls_10g`（老树）成立**（0 处 `ack_seen` / BID 0xA / mtime Oct 7 16:35）；**`udp_hls_10g_fix` 里已是 BID 0x11 / 9 处 `ack_seen`**（mtime Oct 8 02:00） | 陷阱**真实但分树**：在 fix 树用 GUI 重编**不会**踩；在 `udp_hls_10g` 树重编**会**踩。我**零构建**，未受影响。⚠️ 两树 `board/build_p7b_ku5p.tcl` 工作副本 sha 不同 = **纯 CRLF/LF 差**（git blob 两边都是 `3bb40961…`）⇒ 不是内容差。⛔ **2026-10-09 订正（不静默改）：`udp_hls_10g_fix` 树已删除 ⇒ "分树"那半句作废；但"在 `udp_hls_10g` 树重编会踩"这半句仍然有效** —— 2026-10-09 现场复核 `vivado_prj/p7b_ku5p_prj.srcs/sources_1/imports/board/wrapper_p4.v` **仍是 BID 0xA / 0 处 `ack_seen`** ⇒ **"只走 `board/run_build_p7b_ku5p.bat`"的纪律不变** |
 | 审计⑤：按槽门控无板级见证 | 同判 | 我只拿到"按连接"的见证（§1-1b）⇒ **按槽索引 = 未证** |
 
 ---
@@ -223,6 +228,8 @@ FIN 卡死：我 6 跑 **0/180 连**（sink 全部以 recv=0/FIN 收尾）——
 9. **FIN 卡死**：我 0/180；其 1/280 —— 样本不足以判定是否仍存在。
 10. **两树并存风险**（`udp_hls_10g` 与 `udp_hls_10g_fix` 同 HEAD、`vivado_prj/` 一新一旧）：
     本轮以 **fix 树**为准（位流 + 原件都在那里）；老树的 `vivado_prj/` 是**陷阱源**（同"真空门"族）。
+    ⛔ **2026-10-09 订正（不静默改）：`udp_hls_10g_fix` 树已删除 ⇒ "两树并存"这一风险本身消失**（"本轮以 fix 树为准"按历史读；位流/原件已保全到 `udp_hls_10g\_proj_10g\notes\p7b_retxfix_salvage\`）；
+    ⚠️ **但"老树的 `vivado_prj/` 是陷阱源"这条仍然有效** —— 2026-10-09 现场复核 `vivado_prj/p7b_ku5p_prj.srcs/sources_1/imports/board/wrapper_p4.v` **仍是 BID 0xA / 0 处 `ack_seen`** ⇒ 纪律不变：**构建只走 `board/run_build_p7b_ku5p.bat`；要动 `vivado_prj` 先核 `ack_seen`/BID**。
 
 ---
 
