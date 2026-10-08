@@ -25,7 +25,7 @@
 //   * ⛔ **本工具不写盘**: 每个 datagram 的载荷由 p7b_pattern.h **按规则现场生成**后直接发出,
 //     没有任何文件读写 (无 tmp / 无 --dump 落盘开关)。
 // 编译 (部署口径 = _proj_10g/notes/p7b_affinity/BUILD.md §2; ⛔ 别再用旧头注释里的 -O3 写法):
-//   g++ -O2 -o p7b_udp_src p7b_udp_src.cpp
+//   g++ -O3 -pthread -o p7b_udp_src p7b_udp_src.cpp
 #include "p7b_pattern.h"
 #include "p7b_affinity.h"
 

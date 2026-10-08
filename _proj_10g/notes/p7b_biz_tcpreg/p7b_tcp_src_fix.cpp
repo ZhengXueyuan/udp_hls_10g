@@ -21,7 +21,7 @@
 //   connect 也非阻塞; 全程序只有一处 fcntl (set_nonblock); poll 超时 = 计数进 SRC_SUM, 不静默吞;
 //   ⛔ 不写盘 (上行现场生成图案直接 send, 下行增量复算)。
 // 编译 (部署口径 = _proj_10g/notes/p7b_affinity/BUILD.md §2; ⛔ 别再用旧头注释里的 -O3 写法):
-//   g++ -O2 -o p7b_tcp_src_fix p7b_tcp_src_fix.cpp
+//   g++ -O3 -pthread -o p7b_tcp_src_fix p7b_tcp_src_fix.cpp
 #include "p7b_pattern.h"
 #include "p7b_affinity.h"
 

@@ -16,7 +16,7 @@
 //   = 计数 + `SINK_CONN ... STALL` 行 + 计入 bad_conns (确定语义, 不静默吞);
 //   ⛔ 不写盘 (载荷只在内存; --nocheck 只是关掉复算, 同样不落盘)。
 // 编译 (部署口径 = _proj_10g/notes/p7b_affinity/BUILD.md §2; ⛔ 别再用旧头注释里的 -O3 写法):
-//   g++ -O2 -o p7b_tcp_sink_rate p7b_tcp_sink_rate.cpp
+//   g++ -O3 -pthread -o p7b_tcp_sink_rate p7b_tcp_sink_rate.cpp
 #include "p7b_pattern.h"
 #include "p7b_affinity.h"
 

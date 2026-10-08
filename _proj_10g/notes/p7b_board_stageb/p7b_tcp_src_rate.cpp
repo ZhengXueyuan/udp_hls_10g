@@ -21,7 +21,7 @@
 //   connect 也非阻塞; 全程序只有一处 fcntl (set_nonblock); poll 超时 = 计数进 SRC_SUM, 不静默吞;
 //   ⛔ 不写盘 (RATE 变体的上行是 memset 填充, 也不落盘; 下行增量复算)。
 // 编译 (部署口径 = _proj_10g/notes/p7b_affinity/BUILD.md §2; ⛔ 别再用旧头注释里的 -O3 写法):
-//   g++ -O2 -o p7b_tcp_src_rate p7b_tcp_src_rate.cpp
+//   g++ -O3 -pthread -o p7b_tcp_src_rate p7b_tcp_src_rate.cpp
 #include "p7b_pattern.h"
 #include "p7b_affinity.h"
 

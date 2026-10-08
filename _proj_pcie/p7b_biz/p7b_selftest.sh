@@ -36,10 +36,13 @@ ck(){ if [ "$2" = "$3" ]; then echo "  [PASS] $1 = $2"; PASS=$((PASS+1));
 fld(){ awk -v k="$2" -v p="$3" '$0 ~ p { for(i=1;i<=NF;i++) if (index($i, k"=")==1) { print substr($i, length(k)+2); exit } }' "$1"; }
 
 echo "===== T0 编译 ====="
-# ⭐ 2026-10-09: 旗标改成**部署口径** `-O2` (原 `-O3 -std=c++17`) —— 门与部署件必须是同一份
+# ⭐ 2026-10-09: 旗标改成**部署口径** (原 `-O3 -std=c++17`; ⭐⭐ 同日用户裁定 = `-O3`) —— 门与部署件必须是同一份
 #   构建命令 (BUILD.md §2/§4; 旧的三条互相打架的编译行里, 本行是其中一条)。
+# ⭐⭐ 2026-10-09 (双线程样板): 追加 **`-pthread`** —— sink 现在用 pthread_create/join
+#   (glibc 2.39 的 libpthread 已并入 libc, 少了它在本机仍能链上, 但**门与部署件的旗标必须逐字相同**,
+#    否则"门与板跑两个配置"的老坑会以"换台机器就链不上"的形式复发)。BUILD.md §2 同步。
 for t in p7b_tcp_sink p7b_tcp_src p7b_udp_src; do
-  g++ -O2 -Wall -o $t $t.cpp || { echo "  [FAIL] 编译 $t"; FAIL=$((FAIL+1)); }
+  g++ -O3 -pthread -Wall -o $t $t.cpp || { echo "  [FAIL] 编译 $t"; FAIL=$((FAIL+1)); }
 done
 echo "===== T1 图案自检向量 (独立手算常量) ====="
 for t in $BIN_SINK $BIN_SRC ./p7b_udp_src; do

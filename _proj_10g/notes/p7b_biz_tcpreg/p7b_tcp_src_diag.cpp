@@ -20,8 +20,11 @@
 // ⭐ 2026-10-09 (R1/R2 落地, 与 _proj_pcie/p7b_biz/p7b_tcp_src.cpp 同一契约): 非阻塞 + poll(LT);
 //   connect 也非阻塞; 全程序只有一处 fcntl (set_nonblock); poll 超时 = 计数进 SRC_SUM, 不静默吞;
 //   ⛔ 不写盘 (上行现场生成图案直接 send, 下行增量复算)。
-// 编译 (部署口径 = _proj_10g/notes/p7b_affinity/BUILD.md §2; ⛔ 别再用旧头注释里的 -O3 写法):
-//   g++ -O2 -o p7b_tcp_src_diag p7b_tcp_src_diag.cpp
+// 编译 (部署口径 = _proj_10g/notes/p7b_affinity/BUILD.md §2; 2026-10-09 全仓统一为 -O3 -pthread):
+//   g++ -O3 -pthread -o p7b_tcp_src_diag p7b_tcp_src_diag.cpp
+//   ⚠️ 2026-10-09: 上面这两行**只同步了注释** —— 本件代码**一字未动**
+//      (它是「保留旧 send 行为」的**负对照臂**; 见 p7b_tcp_src_fix.cpp 的 send 段对比)。
+//      本次改动前已部署的二进制不受影响。
 #include "p7b_pattern.h"
 #include "p7b_affinity.h"      // F7 (2026-10-08): 补齐接线 —— 此前本件**完全不绑核、无 PIN_* 行**
 

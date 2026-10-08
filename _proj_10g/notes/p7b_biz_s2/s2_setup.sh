@@ -10,9 +10,9 @@ chmod +x /tmp/p7b_biz/*.sh /tmp/p7b_biz/*.py 2>/dev/null
 cd /tmp/p7b_biz || exit 1
 ls -la | head -25
 echo "### COMPILE $(date +%s.%N)"
-g++ -O2 -o p7b_tcp_sink p7b_tcp_sink.cpp 2>&1 | head -5 ; echo "sink_rc=${PIPESTATUS[0]}"
-g++ -O2 -o p7b_tcp_src  p7b_tcp_src.cpp  2>&1 | head -5 ; echo "src_rc=${PIPESTATUS[0]}"
-g++ -O2 -o p7b_udp_src  p7b_udp_src.cpp  2>&1 | head -5 ; echo "udp_rc=${PIPESTATUS[0]}"
+g++ -O3 -pthread -o p7b_tcp_sink p7b_tcp_sink.cpp 2>&1 | head -5 ; echo "sink_rc=${PIPESTATUS[0]}"
+g++ -O3 -pthread -o p7b_tcp_src  p7b_tcp_src.cpp  2>&1 | head -5 ; echo "src_rc=${PIPESTATUS[0]}"
+g++ -O3 -pthread -o p7b_udp_src  p7b_udp_src.cpp  2>&1 | head -5 ; echo "udp_rc=${PIPESTATUS[0]}"
 for b in p7b_tcp_sink p7b_tcp_src p7b_udp_src; do
   [ -x "$b" ] && echo "BIN_OK $b $(stat -c %s $b)" || echo "BIN_MISSING $b"
 done

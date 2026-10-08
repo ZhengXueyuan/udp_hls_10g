@@ -24,7 +24,7 @@
 //   * ⛔ **本工具不写盘**: 上行载荷由 p7b_pattern.h **按规则现场生成**后直接 send (无文件/无 --dump);
 //     下行校验 = 重生图案**增量逐字节复算**, 同样不落盘。
 // 编译 (部署口径 = _proj_10g/notes/p7b_affinity/BUILD.md §2; ⛔ 别再用旧头注释里的 -O3 写法):
-//   g++ -O2 -o p7b_tcp_src p7b_tcp_src.cpp
+//   g++ -O3 -pthread -o p7b_tcp_src p7b_tcp_src.cpp
 #include "p7b_pattern.h"
 #include "p7b_affinity.h"
 
