@@ -115,9 +115,8 @@ int main(int argc, char **argv) {
         }
         t = now_s();
         if (t >= next_report) {
-            printf("SRC_T %.3f tx_MB=%.3f rx_MB=%.3f eof=%d CPU_FREQ_KHZ=%s\n",
-                   t - t0, tx_bytes / 1048576.0, rx_bytes / 1048576.0, eof_seen,
-                   p7baff_cpu_freq_khz().c_str());   // F9: 周期行尾频率轨迹 (追加, 旧字段一字不动)
+            printf("SRC_T %.3f tx_MB=%.3f rx_MB=%.3f eof=%d\n",
+                   t - t0, tx_bytes / 1048576.0, rx_bytes / 1048576.0, eof_seen);
             fflush(stdout);
             next_report = t + 1.0;
         }

@@ -152,9 +152,8 @@ int main(int argc, char **argv) {
         } else { call_errors++; if (call_errors < 5) printf("SEND_ERR errno=%d\n", errno); if (call_errors > 1000) break; }
         t = now_s();
         if (t >= t_next_rep) {
-            printf("UDP_T %.3f pkts=%lld pay_MB=%.3f pps=%.0f Mbps=%.3f (limit=%.1f) CPU_FREQ_KHZ=%s\n",
-                   t - t0, pkts, bytes / 1048576.0, pkts / (t - t0), bytes * 8.0 / (t - t0) / 1e6, lim,
-                   p7baff_cpu_freq_khz().c_str());   // F9: 周期行尾频率轨迹 (追加, 旧字段一字不动)
+            printf("UDP_T %.3f pkts=%lld pay_MB=%.3f pps=%.0f Mbps=%.3f (limit=%.1f)\n",
+                   t - t0, pkts, bytes / 1048576.0, pkts / (t - t0), bytes * 8.0 / (t - t0) / 1e6, lim);
             fflush(stdout);
             t_next_rep = t + 1.0;
         }

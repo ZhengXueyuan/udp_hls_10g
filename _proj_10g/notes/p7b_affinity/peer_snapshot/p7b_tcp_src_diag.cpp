@@ -19,7 +19,6 @@
 //
 // 编译: g++ -O3 -std=c++17 -o p7b_tcp_src p7b_tcp_src.cpp
 #include "p7b_pattern.h"
-#include "p7b_affinity.h"
 
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -41,7 +40,6 @@ static double now_s() {
 }
 
 int main(int argc, char **argv) {
-    argc = p7b_pin_cpu(argc, argv);      // 启动即绑核 (p7b_affinity.h; 剥离本函数自己的选项)
     const char *host = "192.168.100.2";
     int port = 8080, secs = 30, chunk = 65536;
     long long pace = 0;
@@ -81,6 +79,7 @@ int main(int argc, char **argv) {
     P7bPat rx(0);                 // 下行: 板侧每连接偏移 0 起
     std::vector<uint8_t> sbuf(chunk), rbuf(1 << 20);
     long long tx_bytes = 0, rx_bytes = 0, rx_mism_bytes = 0, rx_first_mis = -1;
+    long long partial_sends = 0, skip_bytes = 0, first_partial_at = -1;  // DIAG (WU_LOOP)
     double t0 = now_s(), t_eof = 0;
     int eof_seen = 0, send_err = 0;
     double next_report = t0 + 1.0;
@@ -108,6 +107,9 @@ int main(int argc, char **argv) {
         if (pr > 0 && (p.revents & (POLLOUT | POLLERR | POLLHUP)) && !send_err) {
             tx.fill(sbuf.data(), (size_t)chunk);
             ssize_t n = send(fd, sbuf.data(), (size_t)chunk, MSG_NOSIGNAL);
+            if (n > 0 && n < (ssize_t)chunk) {   // DIAG (WU_LOOP): partial send => pattern SKIP
+                partial_sends++; skip_bytes += (long long)chunk - n;
+                if (first_partial_at < 0) first_partial_at = tx_bytes; }
             if (n > 0) tx_bytes += n;
             else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
                 send_err = errno; printf("SRC_SEND_ERR errno=%d tx_bytes=%lld\n", errno, tx_bytes);
@@ -115,9 +117,8 @@ int main(int argc, char **argv) {
         }
         t = now_s();
         if (t >= next_report) {
-            printf("SRC_T %.3f tx_MB=%.3f rx_MB=%.3f eof=%d CPU_FREQ_KHZ=%s\n",
-                   t - t0, tx_bytes / 1048576.0, rx_bytes / 1048576.0, eof_seen,
-                   p7baff_cpu_freq_khz().c_str());   // F9: 周期行尾频率轨迹 (追加, 旧字段一字不动)
+            printf("SRC_T %.3f tx_MB=%.3f rx_MB=%.3f eof=%d\n",
+                   t - t0, tx_bytes / 1048576.0, rx_bytes / 1048576.0, eof_seen);
             fflush(stdout);
             next_report = t + 1.0;
         }
@@ -125,9 +126,11 @@ int main(int argc, char **argv) {
     double t1 = now_s();
     close(fd);
     printf("SRC_SUM tx_bytes=%lld rx_bytes=%lld dur_s=%.3f tx_Mbps=%.3f rx_Mbps=%.3f "
-           "eof_seen=%d eof_at_s=%.3f send_err=%d rx_first_mismatch=%lld rx_mism_bytes=%lld\n",
+           "eof_seen=%d eof_at_s=%.3f send_err=%d rx_first_mismatch=%lld rx_mism_bytes=%lld "
+           "partial_sends=%lld skip_bytes=%lld first_partial_at=%lld\n",
            tx_bytes, rx_bytes, t1 - t0, tx_bytes * 8.0 / (t1 - t0) / 1e6, rx_bytes * 8.0 / (t1 - t0) / 1e6,
-           eof_seen, t_eof - t0, send_err, rx_first_mis, rx_mism_bytes);
+           eof_seen, t_eof - t0, send_err, rx_first_mis, rx_mism_bytes,
+           partial_sends, skip_bytes, first_partial_at);
     printf("SRC_DONE\n");
     return (send_err == 0 && tx_bytes > 0 && (!verify_down || rx_first_mis < 0)) ? 0 : 1;
 }

@@ -80,6 +80,8 @@ int main(int argc, char **argv) {
     P7bPat tx(0);                 // 上行: 每连接偏移 0 起
     P7bPat rx(0);                 // 下行: 板侧每连接偏移 0 起
     std::vector<uint8_t> sbuf(chunk), rbuf(1 << 20);
+    size_t ppos = (size_t)chunk;   // FIX(WU_LOOP): 上一块**已发出**的字节数 (>=chunk 表示需要重填)
+    long long partial_sends = 0, rewraps = 0;  // FIX(WU_LOOP): 诊断计数
     long long tx_bytes = 0, rx_bytes = 0, rx_mism_bytes = 0, rx_first_mis = -1;
     double t0 = now_s(), t_eof = 0;
     int eof_seen = 0, send_err = 0;
@@ -106,18 +108,17 @@ int main(int argc, char **argv) {
             }
         }
         if (pr > 0 && (p.revents & (POLLOUT | POLLERR | POLLHUP)) && !send_err) {
-            tx.fill(sbuf.data(), (size_t)chunk);
-            ssize_t n = send(fd, sbuf.data(), (size_t)chunk, MSG_NOSIGNAL);
-            if (n > 0) tx_bytes += n;
+            if (ppos >= (size_t)chunk) { tx.fill(sbuf.data(), (size_t)chunk); ppos = 0; rewraps++; }  // FIX: 上一块**发完**才重填 => 图案不跳
+            ssize_t n = send(fd, sbuf.data() + ppos, (size_t)chunk - ppos, MSG_NOSIGNAL);
+            if (n > 0) { if ((size_t)n < (size_t)chunk - ppos) partial_sends++; ppos += (size_t)n; tx_bytes += n; }
             else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
                 send_err = errno; printf("SRC_SEND_ERR errno=%d tx_bytes=%lld\n", errno, tx_bytes);
             }
         }
         t = now_s();
         if (t >= next_report) {
-            printf("SRC_T %.3f tx_MB=%.3f rx_MB=%.3f eof=%d CPU_FREQ_KHZ=%s\n",
-                   t - t0, tx_bytes / 1048576.0, rx_bytes / 1048576.0, eof_seen,
-                   p7baff_cpu_freq_khz().c_str());   // F9: 周期行尾频率轨迹 (追加, 旧字段一字不动)
+            printf("SRC_T %.3f tx_MB=%.3f rx_MB=%.3f eof=%d\n",
+                   t - t0, tx_bytes / 1048576.0, rx_bytes / 1048576.0, eof_seen);
             fflush(stdout);
             next_report = t + 1.0;
         }
@@ -125,9 +126,10 @@ int main(int argc, char **argv) {
     double t1 = now_s();
     close(fd);
     printf("SRC_SUM tx_bytes=%lld rx_bytes=%lld dur_s=%.3f tx_Mbps=%.3f rx_Mbps=%.3f "
-           "eof_seen=%d eof_at_s=%.3f send_err=%d rx_first_mismatch=%lld rx_mism_bytes=%lld\n",
+           "eof_seen=%d eof_at_s=%.3f send_err=%d rx_first_mismatch=%lld rx_mism_bytes=%lld partial_sends=%lld rewraps=%lld\n",
            tx_bytes, rx_bytes, t1 - t0, tx_bytes * 8.0 / (t1 - t0) / 1e6, rx_bytes * 8.0 / (t1 - t0) / 1e6,
-           eof_seen, t_eof - t0, send_err, rx_first_mis, rx_mism_bytes);
+           eof_seen, t_eof - t0, send_err, rx_first_mis, rx_mism_bytes,
+           partial_sends, rewraps);
     printf("SRC_DONE\n");
     return (send_err == 0 && tx_bytes > 0 && (!verify_down || rx_first_mis < 0)) ? 0 : 1;
 }

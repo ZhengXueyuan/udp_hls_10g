@@ -19,6 +19,7 @@
 //
 // 编译: g++ -O3 -std=c++17 -o p7b_tcp_src p7b_tcp_src.cpp
 #include "p7b_pattern.h"
+#include "p7b_affinity.h"      // F7 (2026-10-08): 补齐接线 —— 此前本件**完全不绑核、无 PIN_* 行**
 
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -40,6 +41,7 @@ static double now_s() {
 }
 
 int main(int argc, char **argv) {
+    argc = p7b_pin_cpu(argc, argv);      // F7 (2026-10-08): 启动即绑核 (p7b_affinity.h; 剥离自己的选项)
     const char *host = "192.168.100.2";
     int port = 8080, secs = 30, chunk = 65536;
     long long pace = 0;
@@ -117,8 +119,9 @@ int main(int argc, char **argv) {
         }
         t = now_s();
         if (t >= next_report) {
-            printf("SRC_T %.3f tx_MB=%.3f rx_MB=%.3f eof=%d\n",
-                   t - t0, tx_bytes / 1048576.0, rx_bytes / 1048576.0, eof_seen);
+            printf("SRC_T %.3f tx_MB=%.3f rx_MB=%.3f eof=%d CPU_FREQ_KHZ=%s\n",
+                   t - t0, tx_bytes / 1048576.0, rx_bytes / 1048576.0, eof_seen,
+                   p7baff_cpu_freq_khz().c_str());   // F9: 周期行尾频率轨迹 (追加, 旧字段一字不动)
             fflush(stdout);
             next_report = t + 1.0;
         }

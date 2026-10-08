@@ -132,10 +132,9 @@ int main(int argc, char **argv) {
         else bad_conns++;
         tot_mismatch_bytes += mism_bytes;
         printf("SINK_CONN %d OK bytes=%lld first_mismatch=%lld mism_bytes=%lld "
-               "conn_ms=%.3f dur_ms=%.3f Mbps=%.3f reads=%lld CPU_FREQ_KHZ=%s\n",
+               "conn_ms=%.3f dur_ms=%.3f Mbps=%.3f reads=%lld\n",
                c, got, first_mis, mism_bytes, (t1 - t0) * 1e3, (t2 - t1) * 1e3,
-               (t2 - t1) > 0 ? got * 8.0 / (t2 - t1) / 1e6 : 0.0, nread_calls,
-               p7baff_cpu_freq_khz().c_str());   // F9: 周期行尾频率轨迹 (追加, 旧字段一字不动)
+               (t2 - t1) > 0 ? got * 8.0 / (t2 - t1) / 1e6 : 0.0, nread_calls);
         fflush(stdout);
     }
     double t_end = now_s();
