@@ -374,6 +374,15 @@ module app_pattern #(
     reg         frm_wait;      // P5d-D2: 本帧已交付完, 等 tx_ok 才启动下一帧
     reg         op_pend;       // P5e: 本帧的 0 载荷 opener 尚未呈交
     reg         op_sent;       // P5e: 本帧 opener 已交付给 pipe (帧已"预开")
+    // ---- ⭐ 构建 E (A3): 被吞的 CONN_UP 的**待补**位 ------------------------
+    //   缺陷 (tb_app_cont 的 u_rec1/u_rec2 已复现): ev_up 到达时若 app 正卡在
+    //   closing (等 pipe 交付收尾字, 而帧器 tready=0), 换流判据 `(frm_wait ||
+    //   seg_sent==0)` 为假 ⇒ 事件**被吞**; 而事件是 1 拍脉冲、app 又没有"待处理
+    //   ev_up"寄存器 ⇒ 收尾完直接回 idle, 新连接**静默零数据、无自愈**。
+    //   判别变量是"ev_up 到达时是否仍卡在 closing", **不是间隔 k** (k=40 ≤ tready
+    //   低窗 70 也照样被吞) ⇒ 修法必须是"记住事件 + 补做", 不能靠加延迟。
+    reg         up_pend_r;     // 有未消费的 CONN_UP (当时判据为假)
+    reg  [3:0]  up_pend_id;    // 它的槽号 (补做时用同一个槽)
 
     // ---------------- P5d-D2: "连接不可发"时的 TX 硬化 (D1 曝光的缺陷②) ----
     // 背景 (现象已在 sim/p5sim 的 close 门实测复现, 非推测): app 的呈交口对
@@ -490,8 +499,19 @@ module app_pattern #(
     // ev_up 是脉冲、错过就没了 —— 旧行为 (判据不含 seg_sent==0) 会把 app 收尾完
     // 直接 idle, 新会话一帧都上不去。而呈交口的旧流载荷字已由 drop_pw 撤成 0 载荷,
     // pipe 本拍纵使 s_ready (帧器已收下 opener 在 S_RECV 等) 也只会装到收尾字 ✓。
-    wire        ev_restart = ev_up && (!active || ((ev_slot == act_id) &&
-                             (frm_wait || (seg_sent == 12'd0))));
+    // ⭐ 构建 E (A3): ev_up 的**事件源**换成 `up_ev` —— 被吞过的 ev_up 由
+    //   `up_pend_r` 补做 (见下面 ev_up 块)。判据本身 (下面 `up_ok`) **逐字未动**。
+    wire        up_ev   = ev_up || up_pend_r;
+    wire [3:0]  up_slot = ev_up ? ev_slot : up_pend_id;
+    wire        up_ok   = !active || ((up_slot == act_id) &&
+                                      (frm_wait || (seg_sent == 12'd0)));
+    wire        up_do   = up_ev && up_ok;
+    // ev_restart = "本拍**真的**发生换流" (旧式 = `ev_up && 判据`): 用它做
+    // ①W3 块让位 (closing && !ev_restart) ②rst_close 的撞车帧计数 ③a2_hold 的
+    // 预取抑制。改成 up_do 后这三处的语义不变 —— 补做拍上 closing 恒 0
+    // (closing ⟹ active 是块内不变量: closing 只在 active 时置位、与 active 同拍清),
+    // 且那一拍 asm_go 恒 0 ⇒ ①② 是空操作、③ 与旧行为同值。
+    wire        ev_restart = up_do;
     wire        rst_close  = ev_restart && closing && !op_beat &&
                              (pw_valid || close_send);
     // 本帧"已在飞" (frm_inflight): 把装配分成两段:
@@ -659,6 +679,7 @@ module app_pattern #(
             pw_data <= 64'd0; pw_keep <= 8'h00; pw_n <= 4'd0; pw_last <= 1'b0;
             pw_valid <= 1'b0; bad_frm <= 1'b0; frm_idx <= 16'd0; closing <= 1'b0;
             frm_wait <= 1'b0; op_pend <= 1'b0; op_sent <= 1'b0;
+            up_pend_r <= 1'b0; up_pend_id <= 4'd0;   // 构建 E (A3)
             close_req <= 1'b0; close_id <= 4'd0;
             active <= 1'b0; act_id <= 4'd0; done <= 1'b0;
             stat_tx_bytes <= 32'd0; stat_tx_frames <= 32'd0;
@@ -683,6 +704,13 @@ module app_pattern #(
             if (ev_up) begin
                 rx_lfsr <= SEED;
                 rxs     <= 2'd0;
+                // ⭐ 构建 E (A3): RX 侧副作用留在 **raw ev_up** (与旧式逐位相同):
+                //   图案流按**连接起点**认 (对端从 SEED 起发), 而新连接从 ev_up
+                //   那一刻就开始了 —— 补做换流只影响 TX 侧哪一帧起发, 不该把
+                //   RX 期望序列在补做拍再重置一次 (那会把 raw ev_up 之后收到的
+                //   合法上行字节误判成失配)。TX 换流本体在下面 `if (up_do)` 块。
+            end
+            if (up_do) begin
                 // 新连接: 启动图案发送 (单会话; 其它槽的新事件忽略)
                 // P5d-D2: 同槽 ev_up = **新会话** (对端按连接起点认图案流; 继续旧
                 // 流会让对端整段错位, 见 tools/cpp_peer --expect-pattern), 故旧
@@ -700,10 +728,13 @@ module app_pattern #(
                 //   seg_sent += pw_n), 而 pipe 是 1 深且只在 s_ready 拍装载 ⇒
                 //   seg_sent==0 ⇒ 本帧没有任何载荷字进过 pipe (帧器更不可能有)。
                 //   唯一在呈交口未落地的载荷字 (pw_valid=1) 下面显式撤掉。
-                if (!active || ((ev_slot == act_id) &&
-                                (frm_wait || (seg_sent == 12'd0)))) begin
+                // ⚠️ 构建 E (A3): 判据原文 = `!active || ((ev_slot == act_id) &&
+                //    (frm_wait || seg_sent==0))` —— **一字未改**, 只是把事件源
+                //    从 raw `ev_slot` 抽到 `up_slot` (= 补做事件时用登记的槽号),
+                //    并提到上面的 `up_ok` (同一个表达式, 单一来源)。
+                if (up_ok) begin
                     active   <= 1'b1;
-                    act_id   <= ev_slot;
+                    act_id   <= up_slot;
                     remain   <= TX_BYTES;
                     tx_lfsr  <= SEED;
                     frm_idx  <= 16'd0;
@@ -735,11 +766,28 @@ module app_pattern #(
                     //   会话边界清除点 —— 与本 if 同拍、同条件, 故"清了 carry" ⟺
                     //   "换了流" (ev_down→closing→idle 那条路不清, 但那条路之后
                     //   唯有 ev_up 能让 app 再发, 而 ev_up 一定会清; 见 §wb 论证)。
+                    //   ⚠️ 构建 E (A3): 这条"新会话必清 carry"的理由**依赖 ev_up 一定
+                    //   会被消费** —— 而被吞的 ev_up 现在由 up_pend_r 补做 ⇒ 该前提
+                    //   从"脉冲不丢"变成"事件不丢"(更强), 论证仍成立。
                     wc_buf   <= 64'd0; wc_n <= 4'd0;
                     bad_frm  <= (i_bad_frame == 16'd1);
                 end
-                up_lat <= 1'b1;
             end
+            if (ev_up) up_lat <= 1'b1;
+            // ---- ⭐ 构建 E (A3): 待补事件的登记 / 消费 / 撤销 ----------------
+            //   登记: ev_up 这一拍判据为假 (事件被吞) ⇒ 记住它 (槽号一起记);
+            //   消费: `up_do` 那一拍清掉 (= 上面换流块已执行);
+            //   撤销: 补做目标槽又来了一次 CONN_DOWN (新连接也关了) ⇒ 不再补
+            //         (不撤销的话会把一个已经拆掉的连接当成活的重新发流)。
+            //   ⚠️ 块序即优先级: 这三条都在换流块**之后**, 且互补 (up_do 与
+            //      "ev_up && !up_ok" 结构性互斥) ⇒ up_pend_r 单一写者、无覆盖。
+            if (up_do) up_pend_r <= 1'b0;
+            else if (ev_up) begin
+                up_pend_r  <= 1'b1;
+                up_pend_id <= ev_slot;
+            end
+            if (ev_down && up_pend_r && (ev_slot == up_pend_id) && !ev_up)
+                up_pend_r <= 1'b0;
             // W3 (P5a 复核): 对端关闭不能直接撤 pw_valid (AXIS 违约: 无 tlast、
             // 不等 m_tready 就撤) — 若恰在呈交期间 ev_down, tcp_tx_frame 会停在
             // S_RECV (该态 tready=1) 等下一位, 下一帧首字被当续载荷吞掉 ⇒ 帧边界

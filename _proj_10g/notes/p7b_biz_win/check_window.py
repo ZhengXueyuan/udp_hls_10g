@@ -212,20 +212,80 @@ def main():
     except Exception as e:
         ck(False, "4 旧字未移位 (git HEAD 比对)", "(%s)" % e)
 
-    # ---------- 判据 5: 新增 6 项的槽号 <-> 字号 ----------
-    #   ⚠️ 拼接是 **MSB 端先写** ⇒ 表里**最上面那一项 = 最高字号 W56** (下标最大)。
+    # ---------- 判据 5: 新增项的槽号 <-> 字号 ----------
+    #   ⚠️ 拼接是 **MSB 端先写** ⇒ 表里**最上面那一项 = 最高字号** (下标最大)。
     #      第一版把期望写成升序 (W51..W56) ⇒ 当场 FAIL (本门自己抓的第三处"我写错了期望")。
     #      这条次序正是 wrapper 注释反复警告的"手抄下标最容易错"的地方。
-    nnew = NW - 51            # BIZ 新增字数 (51..NW-1)
-    topN = [code_of(x) for x in items[:nnew]]
-    wantN = ["p7bdp_dout[%d*32 +: 32]" % (NW - 40 - i) for i in range(nnew)]   # W(NW-1)..W51
-    ck(topN == wantN, "5a 最上面 %d 项 = W%d..W51 的槽 (MSB 先写)" % (nnew, NW - 1),
+    #   ⚠️ 2026-10-10 (P7B-A7 构建 D): 新增的 **W65 不在 p7bdp 束里** —— 它在 **tx 束**
+    #      (槽 4 = `txsnap_dout[4*32 +: 32]`), 因为它的源 (`mac_tx_10g.stat_tx_idle`) 在
+    #      `tx_mii_clk` 域 ⇒ 不能进 dp 束。所以判据 5 拆成 5a (顶部 = tx 束槽) /
+    #      5b (紧随其后 = p7bdp 的 W(NW-2)..W51) / 5c (逐槽 p7bdp 映射) / 5d (W65 跨文件)。
+    #   ⭐ 2026-10-10 (构建 E): 顶端次序再变一次 —— 新字 W(NW-1) 这次**在 p7bdp 束里**
+    #      (它的源 `tcp_tx_frame.stat_winstall` 在 dp 域), 所以顶端两项 = p7bdp 的 W(NW-1)
+    #      与 tx 束的 W65; 紧随其后才是历史那 14 项 (W64..W51)。
+    #      ⚠️ "最上面 = tx 束槽" 这条**只对 P7B-A7 那一代成立**, 不是不变量 (就地订正)。
+    ntx = 1                                   # 顶部 tx 束项数 (W65) —— 现在排第 2 项
+    nnew = 14                                 # W64..W51 (槽 25..12) —— 历史段
+    top1 = code_of(items[0])
+    want1 = "p7bdp_dout[%d*32 +: 32]" % (pdp - 1)
+    ck(top1 == want1, "5a 最上面一项 = W%d (p7bdp 束槽 %d; 构建 E)" % (NW - 1, pdp - 1),
+       "(实际 '%s', 期望 '%s')" % (top1, want1))
+    top2 = code_of(items[ntx])
+    want2 = "txsnap_dout[%d*32 +: 32]" % (tx - 1)
+    ck(top2 == want2, "5a' 第二项 = W65 (tx 束槽 %d; P7B-A7)" % (tx - 1),
+       "(实际 '%s', 期望 '%s')" % (top2, want2))
+    topN = [code_of(x) for x in items[ntx + 1:ntx + 1 + nnew]]
+    #   槽号 = 字号 − 39 (W51→12 … W64→25); ⚠️ 第一版把 `64-i` 当槽号写 ⇒ 当场 FAIL
+    #   (本门自己抓的又一处"手抄下标"错 —— 与它注释里警告的是同一类)。
+    wantN = ["p7bdp_dout[%d*32 +: 32]" % (25 - i) for i in range(nnew)]   # W64..W51 (槽 25..12)
+    ck(topN == wantN, "5b 紧随其后 %d 项 = W64..W51 的槽 (MSB 先写; p7bdp)" % nnew,
        "(实际 %s)" % topN)
-    for k in range(51, NW):
-        slot = k - 39
+    for k in list(range(51, 65)) + ([NW - 1] if NW >= 66 else []):
+        slot = (pdp - 1) if k == NW - 1 else (k - 39)
         pat = r"assign\s+p7bdp_din\[%d\*32\s*\+\:\s*32\]\s*=\s*biz_w%d\s*;" % (slot, k)
-        ck(re.search(pat, src0) is not None, "5b 槽号映射 W%d" % k,
+        ck(re.search(pat, src0) is not None, "5c 槽号映射 W%d" % k,
            "(p7bdp_din[%d*32 +: 32] = biz_w%d)" % (slot, k))
+    # 5d: W65 的**跨文件一致性** (端口 ↔ 接线 ↔ 束槽). 防两种半成品:
+    #     "端口加了但没接快照字" (被综合整条优化掉) 与 "只在 wrapper 接、`mac_tx_10g`
+    #     没那个端口" (只有合体构建才报错); 另防"接进了错的槽" (最高槽必须是它)。
+    mt = os.path.join(repo, "_proj_10g", "p7b_mac", "rtl", "mac_tx_10g.v")
+    mts = read(mt) if os.path.exists(mt) else ""
+    ck(re.search(r"output\s+reg\s+\[31:0\]\s+stat_tx_idle", mts) is not None,
+       "5d mac_tx_10g 有 `output reg [31:0] stat_tx_idle` 端口")
+    ck(re.search(r"\.stat_tx_idle\s*\(\s*mtx_stat_tx_idle\s*\)", src0) is not None,
+       "5d wrapper 把它接到 `mtx_stat_tx_idle` (mac_tx_10g 例化点)")
+    ck(re.search(r"wire\s+\[31:0\]\s+mtx_stat_tx_idle", src0) is not None,
+       "5d `mtx_stat_tx_idle` 已声明 (防隐式 1 位网)")
+    m5 = re.search(r"txsnap_din\s*=\s*\{", src0)
+    seg5 = src0[m5.end():m5.end() + 200] if m5 else ""
+    f5 = re.search(r"[A-Za-z_]\w*", seg5)
+    ck(m5 is not None and f5 is not None and f5.group(0) == "mtx_stat_tx_idle",
+       "5d `txsnap_din` 的第一个拼接项 = `mtx_stat_tx_idle` (槽 4 → W65, tx 束最高槽)",
+       "(实际 '%s')" % (f5.group(0) if f5 else None))
+
+    # ---------- 判据 12 (构建 E): W66 的跨文件一致性 ----------
+    #   与判据 9/10/11 同款, 防三种半成品: ①端口加了但没接快照字 (被综合整条优化掉);
+    #   ②只在 wrapper 接、`tcp_tx_frame` 没那个端口 (只有合体构建才报错); ③接进了错的槽。
+    #   另加一条**双分支**断言: 计数器在两个 `ifdef` 分支里都必须**被驱动** ——
+    #   只在 OVL 分支写 ⇒ 默认构建里 `stat_winstall` 是**未赋值的 reg** (仿真 X / 综合警告),
+    #   而 xvlog 对"reg 没被赋值"一个字都不打印 (哑门族) ⇒ 必须静态数。
+    w66_port, w66_wire = "stat_winstall", "tx_stat_winstall"
+    ap5 = os.path.join(repo, "rtl", "tcp_tx_frame.v")
+    a5 = read(ap5) if os.path.exists(ap5) else ""
+    ck(re.search(r"output\s+reg\s+\[31:0\]\s+%s" % re.escape(w66_port), a5) is not None,
+       "12 tcp_tx_frame 有 `output reg [31:0] %s` 端口" % w66_port)
+    n_inc = len(re.findall(r"if \(stat_winstall_ev\) stat_winstall <= stat_winstall \+ 32'd1;", a5))
+    ck(n_inc == 2, "12 `stat_winstall` 在两个 ifdef 分支里都有驱动 (计数块出现 2 次)",
+       "(实测 %d 次)" % n_inc)
+    ck(re.search(r"\.%s\s*\(\s*%s\s*\)" % (re.escape(w66_port), re.escape(w66_wire)), src0) is not None,
+       "12 wrapper 把它接到 `%s` (tcp_tx_frame 例化点)" % w66_wire)
+    ck(re.search(r"wire\s+\[31:0\]\s+%s" % re.escape(w66_wire), src0) is not None,
+       "12 `%s` 已声明 (防隐式 1 位网)" % w66_wire)
+    ck(re.search(r"biz_w%d\s*=\s*%s" % (NW - 1, re.escape(w66_wire)), src0) is not None,
+       "12 `biz_w%d` (= W%d) 由 `%s` 驱动" % (NW - 1, NW - 1, w66_wire))
+    ck(re.search(r"p7bdp_din\[%d\*32\s*\+\:\s*32\]\s*=\s*biz_w%d\s*;" % (pdp - 1, NW - 1), src0) is not None,
+       "12 `p7bdp_din[%d*32 +: 32] = biz_w%d` (槽 ↔ 字)" % (pdp - 1, NW - 1))
+
 
     # ---------- 判据 6: p7bdp_din 驱动项数 ----------
     gen = re.search(r"for\s*\(\s*gi\s*=\s*0\s*;\s*gi\s*<\s*(\d+)\s*;", src0)

@@ -1,0 +1,100 @@
+TB_APP_CONT_SUM errs=0
+TB_APP_CONT: OK
+TB_APP_CONT DONE
+TB_APP_CONT_SUM errs=0
+TB_APP_CONT: OK
+TB_APP_CONT DONE
+TB_APP_CONT_SUM errs=0
+TB_APP_CONT: OK
+TB_APP_CONT DONE
+---- TB FAIL detail [G]: 
+  [FAIL] A13a u_rec1 resumed after same-slot reconnect (k=40, tready low 300)
+  [FAIL] A13b u_rec2 resumed after same-slot reconnect (k=240, tready low 300)
+TB_APP_CONT_SUM errs=2
+TB_APP_CONT: FAIL errs=2
+TB_APP_CONT DONE
+---- TB FAIL detail [M1]: 
+  [FAIL] A1 continuous: close_req == 0
+  [FAIL] A2 continuous: done == 0
+  [FAIL] A1 continuous: close_req == 0
+  [FAIL] A2 continuous: done == 0
+  [FAIL] A1 continuous: close_req == 0
+  [FAIL] A2 continuous: done == 0
+  [FAIL] A1 continuous: close_req == 0 (rec)
+  [FAIL] A2 continuous: done == 0 (rec)
+  [FAIL] A1 continuous: close_req == 0 (rec)
+  [FAIL] A2 continuous: done == 0 (rec)
+  [FAIL] A1 continuous: close_req == 0 (rec)
+  [FAIL] A2 continuous: done == 0 (rec)
+  [FAIL] A3 u_cont frames >= 4 (4 quanta)
+  [FAIL] A3 u_cont_big frames >= 9 (3 quanta x 3 frames)
+  [FAIL] A3 u_cont_one frames >= 4
+  [FAIL] A5 u_cont bytes >= 3xTX_BYTES
+  [FAIL] A5 u_cont_big bytes >= 3xTX_BYTES
+  [FAIL] A5 u_cont_one bytes >= 3xTX_BYTES
+  [FAIL] A4b u_cont_big >= 9 frames (3 quanta x 3 frames)
+  [FAIL] A12b u_cont tlast-to-tlast interval constant across reload boundary
+  [FAIL] A11 u_txok resumed after tx_ok drop (>=3 frames)
+  [FAIL] A11 u_txok bytes >= 3xTX_BYTES
+TB_APP_CONT_SUM errs=22
+TB_APP_CONT: FAIL errs=22
+TB_APP_CONT DONE
+---- TB FAIL detail [M2]: 
+  [FAIL] frame length idx=2 cyc=9242 got=1460 exp=80 frm=5
+  [FAIL] frame length idx=2 cyc=14726 got=1460 exp=80 frm=8
+  [FAIL] frame length idx=2 cyc=20210 got=1460 exp=80 frm=11
+  [FAIL] frame length idx=2 cyc=25694 got=1460 exp=80 frm=14
+  [FAIL] A4 frame length sequence == arithmetic model
+TB_APP_CONT_SUM errs=1
+TB_APP_CONT: FAIL errs=1
+TB_APP_CONT DONE
+---- TB FAIL detail [M3]: 
+  [FAIL] A11 u_txok resumed after tx_ok drop (>=3 frames)
+  [FAIL] A11 u_txok bytes >= 3xTX_BYTES
+TB_APP_CONT_SUM errs=2
+TB_APP_CONT: FAIL errs=2
+TB_APP_CONT DONE
+---- TB FAIL detail [M4]: 
+  [FAIL] A1 continuous: close_req == 0
+  [FAIL] A2 continuous: done == 0
+  [FAIL] A1 continuous: close_req == 0
+  [FAIL] A2 continuous: done == 0
+  [FAIL] A1 continuous: close_req == 0
+  [FAIL] A2 continuous: done == 0
+  [FAIL] A1 continuous: close_req == 0 (rec)
+  [FAIL] A2 continuous: done == 0 (rec)
+  [FAIL] A1 continuous: close_req == 0 (rec)
+  [FAIL] A2 continuous: done == 0 (rec)
+  [FAIL] A1 continuous: close_req == 0 (rec)
+  [FAIL] A2 continuous: done == 0 (rec)
+  [FAIL] A3 u_cont frames >= 4 (4 quanta)
+  [FAIL] A3 u_cont_big frames >= 9 (3 quanta x 3 frames)
+  [FAIL] A3 u_cont_one frames >= 4
+  [FAIL] A5 u_cont bytes >= 3xTX_BYTES
+  [FAIL] A5 u_cont_big bytes >= 3xTX_BYTES
+  [FAIL] A5 u_cont_one bytes >= 3xTX_BYTES
+  [FAIL] A4b u_cont_big >= 9 frames (3 quanta x 3 frames)
+  [FAIL] A12b u_cont tlast-to-tlast interval constant across reload boundary
+  [FAIL] A11 u_txok resumed after tx_ok drop (>=3 frames)
+  [FAIL] A11 u_txok bytes >= 3xTX_BYTES
+TB_APP_CONT_SUM errs=22
+TB_APP_CONT: FAIL errs=22
+TB_APP_CONT DONE
+---- TB FAIL detail [M5]: 
+  [FAIL] A13a u_rec1 resumed after same-slot reconnect (k=40, tready low 300)
+  [FAIL] A13b u_rec2 resumed after same-slot reconnect (k=240, tready low 300)
+TB_APP_CONT_SUM errs=2
+TB_APP_CONT: FAIL errs=2
+TB_APP_CONT DONE
+==================== SUMMARY ====================
+  A default          RC=0   (expect 0)
+  B APP_CONT_ARM     RC=0   (expect 0)
+  C P7B_10G+CONT     RC=0   (expect 0)
+  G frozen anchor    RC=1   (expect nonzero: pre-A3 anchor)
+  M1 CONT_OK=0        RC=1  (expect nonzero)
+  M2 no-txok-reload  RC=1  (expect nonzero; 鏃犲垽鍒姏鍒欏瀹炵櫥璁?
+  M3 miss-frmwait     RC=1  (expect nonzero)
+  M4 term-open        RC=1  (expect nonzero)
+  M5 no-uppend (A3)   RC=1  (expect nonzero; build E)
+  [PASS] equivalence anchor: A vs G byte-identical on the 19 unaffected files
+此时不应有 )。

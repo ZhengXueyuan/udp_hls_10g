@@ -14,7 +14,7 @@ LT=$(cat "/d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_gate4_tools/fix2/la
 freecnt(){ awk -v t="$1" -v f="$2" 'BEGIN{ n=int((t-1700000000)*f)%4294967296; if(n<0) n+=4294967296; printf "0x%08x", n }'; }
 case "$A" in
   0X00) V=0x50360001;;
-  0X04) V=${FAKE_BID:-0x00000017};;   # 构建 C = 0x17 (⛔ 2026-10-10: 原 0x0000000A = Stage C);
+  0X04) V=${FAKE_BID:-0x00000018};;   # 构建 D = 0x18 (⛔ 原 0x00000017 = 构建 C / 0x0000000A = Stage C);
                                        # 必须与被验的 p6e_snap_check.sh 默认 EXPECT_BID **同代**
                                        # (否则 case ① 正对照因判据 1.2 身份不符**假红**); 可覆盖。
   0X08) V=0x00000000;;
@@ -32,7 +32,8 @@ case "$A" in
   0XE8) V=$(freecnt "$LT" 156250000);;                       # W50 toggle (÷1 口径 ⇒ 156.25)
   0X11C) V=0x00000000;;                                       # W63 app_pattern.stat_frmwait_cyc (65 字起)
   0X120) V=0x00000000;;                                       # W64 app_pattern.stat_bp_cyc
-  0X124) V=0xffffffff;;                                       # 未实现地址 (65 字; 0xEC -> 0x114 -> 0x11C -> **0x124**)
+  0X124) V=0x00000000;;                                       # W65 mac_tx_10g.stat_tx_idle (66 字起; 构建 D)
+  0X128) V=0xffffffff;;                                       # 未实现地址 (66 字; 0xEC -> 0x114 -> 0x11C -> 0x124 -> **0x128**)
   *)    V=0x00000000;;
 esac
 echo "Read 32-bit from address $A : $V"

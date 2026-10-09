@@ -50,6 +50,20 @@ module mac_tx_10g (
     output reg  [31:0] stat_tx_words,     // 发出的 XGMII 字数 (速率正证据: ×64bit = 线速)
     output reg  [31:0] stat_tx_ctrl_char, // 发出的控制字符数 (含 /S/ /T/ /I/; IFG 证据)
     output reg  [31:0] stat_tx_short,     // 中止帧数 (= 线上 runt 数)
+    // ⭐ P7B-A7-LINE (2026-10-10): **线占空计数器** —— 纯观测, 不接任何功能路径。
+    //   语义 (逐字, 与下面的计数块逐字对应): rst_n 有效且**本拍执行态** `state == S_IDLE`
+    //   的每一拍 +1。
+    //     · 计: 复位释放后 FIFO 空、FSM 停在 S_IDLE 的那些拍 (线上正发 /I/)。
+    //     · 不计: 复位那一拍 (走 !rst_n 支, 计数清零); 以及 state ∈ {S_PRE, S_DATA,
+    //       S_TAIL0, S_TAIL1, S_IFG, S_ABORT, S_FLUSH} 的拍。
+    //   ⚠️ 与 `stat_tx_words`/`stat_tx_ctrl_char` 的**分工** (别读混): 那两个是"线上
+    //     发了什么"(每拍无条件 +1 / 数控制字符); 本计数器量的是"**帧间 FSM 无事可做**
+    //     的拍数" —— S_IFG/S_FLUSH **也发 /I/** 但它们属于帧的线上占用, **不算空闲**。
+    //   回卷: 32 位 @156.25 MHz ⇒ 每 **27.487 s** 自然回卷 (= 与 stat_tx_words 同域同周期)。
+    //   独立复算 (板级, 同窗同域): Δstat_tx_idle / Δstat_frames = **每帧 S_IDLE 拍数**
+    //     (= `P − 帧内占用拍`, 其中 P = Δstat_tx_words/Δstat_frames);
+    //     两量都按 mod 2³² 读 (窗口 < 27.487 s 时与直接相减等价)。
+    output reg  [31:0] stat_tx_idle,
     output reg  [15:0] dbg_tx_last_clen,  // 最近一帧的**线上内容长度** (含 pad, 不含 FCS)
     output reg  [1:0]  dbg_tx_state       // 0=空闲 1=发帧 2=中止 3=冲刷
 );
@@ -324,11 +338,16 @@ module mac_tx_10g (
             m_idle <= 5'd0; m_clen <= 16'd0; flush_cnt <= 4'd0; flush_tl <= 1'b0;
             stat_frames <= 0; stat_abort <= 0; stat_flush_words <= 0; stat_flush_done <= 0;
             stat_tx_words <= 0; stat_tx_ctrl_char <= 0; stat_tx_short <= 0;
+            stat_tx_idle <= 0;
             dbg_tx_last_clen <= 16'd0; dbg_tx_state <= 2'd0;
         end else begin
             // ---- 观测: 每个时钟发一个 XGMII 字; 控制字符数按 c 的 popcount ----
             stat_tx_words     <= stat_tx_words + 32'd1;
             stat_tx_ctrl_char <= stat_tx_ctrl_char + {28'd0, popc8(tx_c)};
+            // ⭐ P7B-A7-LINE: 线占空计数 —— **本拍执行态**是 S_IDLE 才 +1 (语义逐字见端口
+            //   声明处)。放在 case 之外、但用 state 的**本拍值** ⇒ 与发射 mux 是同一拍
+            //   (S_IDLE 那一拍线上发的就是全 /I/), 无相位歧义。
+            if (state == S_IDLE) stat_tx_idle <= stat_tx_idle + 32'd1;
 
             case (state)
                 // ---------------------------------------------------

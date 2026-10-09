@@ -8,8 +8,9 @@ echo "=== 1. 板侧最终读数 (PCIe 观测窗口**仍然活着**) ==="
 $T/reg_rw $D 0x18 w 0x1 >/dev/null 2>&1
 for i in $(seq 1 400); do s=$(rd 0x1c); [ -n "$s" ] && [ $(( s & 2 )) -ne 0 ] && break; sleep 0.002; done
 BID=$(rd 0x04)
-echo "MAGIC=$(rd 0x00) BID=$BID MARKER=$(rd 0x14) UNIMPL=$(rd 0x124) gen=$(( (s >> 16) & 0xffff ))"
-# ⚠️ UNIMPL 地址跟窗口宽度走: **65 字 (P7B-GAP9-TX, 2026-10-10 起) ⇒ 0x124** (word 73);
+echo "MAGIC=$(rd 0x00) BID=$BID MARKER=$(rd 0x14) UNIMPL=$(rd 0x12c) gen=$(( (s >> 16) & 0xffff ))"
+# ⚠️ UNIMPL 地址跟窗口宽度走: **67 字 (构建 E, 2026-10-10 起) ⇒ 0x12C** (word 75);
+#    66 字 (构建 D) = 0x128 (word 74); 65 字 (P7B-GAP9-TX) = 0x124 (word 73);
 #    63 字 (P7B-WU 二轮) = 0x11C (word 71);
 #    61 字 (P7B-BIZ) ⇒ 0x114; 51 字 (RATE) ⇒ 0xEC。
 #    绝不能用 ≥0x200 —— 读侧 ar_word 7 位, 地址每 512 字节回绕 ⇒ 0x200 别名回 MAGIC。
@@ -36,6 +37,8 @@ fi
 echo "W0=$(rd 0x20) W3=$(rd 0x2c) W8=$(rd 0x40) W10=$(rd 0x48) W13=$(rd 0x54) W14=$(rd 0x58) W20=$(rd 0x70) W34=$(rd 0xa8) W39=$(rd 0xbc) W40=$(rd 0xc0)"
 echo "W51=$(rd 0xec) W52=$(rd 0xf0) W53=$(rd 0xf4) W54=$(rd 0xf8) W55=$(rd 0xfc) W56=$(rd 0x100) W57=$(rd 0x104) W58=$(rd 0x108) W59=$(rd 0x10c) W60=$(rd 0x110)  # P7B-BIZ 十字"
 echo "W61=$(rd 0x114) W62=$(rd 0x118)  # P7B-WU 二轮新增 (stat_wu / rx_occ_bytes)"
+echo "W63=$(rd 0x11c) W64=$(rd 0x120) W65=$(rd 0x124)  # 构建 C: app 停滞计数; 构建 D: W65 = mac_tx_10g.stat_tx_idle"
+echo "W66=$(rd 0x128)  # 构建 E: W66 = tcp_tx_frame.stat_winstall (帧器侧窗口门停顿拍数)"
 echo "=== 2. 对端机 /tmp 里本轮产物清单 (取回后删) ==="
 ls -la /tmp/*.pcap /tmp/*.py /tmp/*.sh 2>/dev/null
 echo "=== 3. 网络配置复原 ==="

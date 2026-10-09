@@ -133,6 +133,30 @@ MUTS = [
     ("M17 (等价变异) 半字字节数写成 t_v ? ra_car4 : 4", "mac_rx_10g.v",
      "                ra_k     <= ra_car4[2:0];",
      "                ra_k     <= t_v ? ra_car4[2:0] : 3'd4;", "not_caught"),
+    # ===================================================================
+    # 2026-10-10: P7B-A7-LINE (线占空计数器 `stat_tx_idle` → 快照 W65) 的新判据验牙。
+    #   判据 = 同一 `run_tb_mac_10g.bat` 的**组 12** (`12.1` / `12.1b` / `12.2` / `12.3`
+    #   / `12.3b` / `12.3c`; 与 398 检查同门)。
+    #   来源 = A7 实现轮的**手工变异** (`_proj_10g/notes/p7b_a7/mut_rtl_{a,b,c}`; 读数 =
+    #   `_proj_10g/notes/p7b_a7/logs/mac_mut_{a,b,c}_stdout.txt`, 三条均 RC=1 / VERDICT FAIL);
+    #   本轮**登记进常驻清单** (此前未登记 —— 原话见 `P7B_A7_BUILD.md` §5.1 行 8; 登记后每轮全跑 +3 臂)。
+    #   ⚠️ 三条的 `expect` 一律 = caught (A7 轮实测); **观测命中条数**记在下方注释里, 不做硬判据
+    #      (既有格式只声明 caught/not_caught; 要按条数硬判需扩 harness, 见派单回复):
+    #      M18 = 2 条 (12.2 / 12.3) · M19 = 4 条 (12.1 / 12.1b / 12.2 / 12.3) ·
+    #      M20 = 3 条 (12.1 / 12.1b / 12.3; 且 M20 的读数细节 delta=619 ≠ ndbg=621)。
+    #   ⚠️ M18/M19/M20 改的是**同一行** (RTL `mac_tx_10g.v` 的 `stat_tx_idle` 自增门), 但三条
+    #      各自从干净副本重放 (`copy_rtl()` 每次重建) ⇒ 互相独立、不叠加。
+    #      锚点唯一性已核: 该串在现役 `p7b_mac/rtl/mac_tx_10g.v` 里出现 **1 次**。
+    # ===================================================================
+    ("M18 线占空计数器拆掉 state==S_IDLE 门 (计数所有拍)", "mac_tx_10g.v",
+     "if (state == S_IDLE) stat_tx_idle <= stat_tx_idle + 32'd1;",
+     "stat_tx_idle <= stat_tx_idle + 32'd1;", "caught"),
+    ("M19 线占空计数器改计 S_IFG (把 IFG 也算空闲)", "mac_tx_10g.v",
+     "if (state == S_IDLE) stat_tx_idle <= stat_tx_idle + 32'd1;",
+     "if (state == S_IFG) stat_tx_idle <= stat_tx_idle + 32'd1;", "caught"),
+    ("M20 线占空计数器跳过首帧前的空闲 (加 stat_frames!=0 门)", "mac_tx_10g.v",
+     "if (state == S_IDLE) stat_tx_idle <= stat_tx_idle + 32'd1;",
+     "if ((state == S_IDLE) && (stat_frames != 32'd0)) stat_tx_idle <= stat_tx_idle + 32'd1;", "caught"),
 ]
 
 

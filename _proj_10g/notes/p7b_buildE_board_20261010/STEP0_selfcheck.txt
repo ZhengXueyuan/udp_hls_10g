@@ -1,0 +1,68 @@
+### STEP0_BEGIN 2026-10-10T06:54:36+0800
+### A) 部署新一代取数器 (仓库 _proj_pcie/p7b_biz/p7b_snap.sh -> 对端 /tmp/p7b_biz/p7b_snap.sh)
+LOCAL_SHA256 5b0f99427fe53d108627241f3d69aa7ac593f283e43607b756c1e32b6c292d7f
+PUT OK D:\repo\XCKU5PMini\udp_hls_10g\_proj_pcie\p7b_biz\p7b_snap.sh -> /tmp/p7b_biz/p7b_snap.sh
+### 部署后对端 md5 与本地 md5 (必须相同):
+ec4e4b252ae30164fd79702de3e1eded  /tmp/p7b_biz/p7b_snap.sh
+ec4e4b252ae30164fd79702de3e1eded */d/repo/XCKU5PMini/udp_hls_10g/_proj_pcie/p7b_biz/p7b_snap.sh
+### 部署后对端文件里的生效默认值 (逐字三行):
+48:NW=${NW:-67}
+49:UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 67 ⇒ 0x12C (65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)
+50:EXPECT_BID=${EXPECT_BID:-0x00000019}
+### 部署后对端文件里的 NAME 表 W63..W66 逐字四行 (旧缺口 = W65 打成 '?'; 本轮应全有名字):
+120: [63]=app_frmwait_cyc      [64]=app_bp_cyc
+124: [65]=mac_tx_idle          [66]=tx_stat_winstall
+### 本地归档部署件 (取证):
+ec4e4b252ae30164fd79702de3e1eded */d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_buildE_board_20261010/_tools/p7b_snap.deployed.sh
+### 对端 lf_dl.sh md5 (本轮回合不变更; 判据 = 与 _tools/lf_dl.deployed.sh 相同):
+8c8301aacc95ae5dc8760ef121def26c  /tmp/p7b_biz/lf_dl.sh
+8c8301aacc95ae5dc8760ef121def26c */d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_buildE_board_20261010/_tools/lf_dl.deployed.sh
+
+### B) 板上现态 (烧 E 之前; 期望 = 构建 D: BID 0x18 / 66 字)
+BID=Read 32-bit value at address 0x4 (0x7145d5645004): 0x00000018
+SCRATCH_0x08=Read 32-bit value at address 0x8 (0x7910f59ed008): 0x00000000
+CARRIER=1
+		LnkSta:	Speed 5GT/s (downgraded), Width x4
+
+### C-a) 默认档 (NW=67 / 0x12C / BID 0x19) —— 对当前 D 位流: 期望 ID_FAIL (身份不符, 且只该因 BID)
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x00000018   (want 0x00000019 = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0xffffffff  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_FAIL 身份不符 (烧了别的位流? 期望 BID=0x00000019, 实测 BID=0x00000018)
+RC=1
+
+### C-b) 显式 66 档 (NW=66 UNIMPL_ADDR=0x128 EXPECT_BID=0x00000018) —— 期望 ID_OK
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x00000018   (want 0x00000018 = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0xffffffff  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_OK 1791586484.541277912
+RC=0
+
+### C-b2) 显式 66 档短取数 (W65 名字打印自检; 期望 'mac_tx_idle' 而不是 '?')
+SNAP_BEGIN STEP0_W65NAME gen=1
+W5   0x34   gmii_free_FE           0xcbf56010
+W63  0x11C  app_frmwait_cyc        0x00000000
+W64  0x120  app_bp_cyc             0x00000000
+W65  0x124  mac_tx_idle            0xcb655dc8
+SNAP_END STEP0_W65NAME nff=0
+RC=0
+
+### C-c) 显式 65 档 (NW=65 UNIMPL_ADDR=0x124 EXPECT_BID=0x00000018) —— 期望 ID_FAIL (0x124 是 D 的真字 W65 ⇒ 未实现地址断言该报)
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x00000018   (want 0x00000018 = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0xcb655dc8  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_FAIL 未实现地址 0x124 读出 '0xcb655dc8' (期望 0xffffffff) ⇒ 板上窗口 >= 66 字 (NW=65 覆盖值不对), 或译码过宽
+RC=1
+
+### C-d) 显式 63 档 (NW=63 UNIMPL_ADDR=0x11C EXPECT_BID=0x00000018) —— 期望 ID_FAIL (0x11C 是 D 的真字 W63 ⇒ 同上)
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x00000018   (want 0x00000018 = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0x00000000  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_FAIL 未实现地址 0x11C 读出 '0x00000000' (期望 0xffffffff) ⇒ 板上窗口 >= 64 字 (NW=63 覆盖值不对), 或译码过宽
+RC=1
+
+### STEP0_END 2026-10-10T06:54:46+0800

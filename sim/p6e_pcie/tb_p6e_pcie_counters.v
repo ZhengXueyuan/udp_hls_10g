@@ -203,7 +203,7 @@ module tb_p6e_pcie_counters;
         //    (= BUILD_ID 必须等于**本构建**的地图版本)。⚠️ 本门与 `tb_p6e_pcie_wrapper.v` 同一
         //    编译集 (都编现役 `%ROOT%\board\wrapper_p4.v`), 两处必须**同批**改 —— 上一轮就漏过一处
         //    (见上面 196-198 行的注: 回归轮只登记了 wrapper 门的 BID 双硬编码)。
-        u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("0b BUILD_ID (构建 C 65-word = 17; 原 63-word=9)", v, 32'h00000017);
+        u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("0b BUILD_ID (构建 E 67-word = 0x19; 原 66-word=0x18 / 65-word=17 / 63-word=9)", v, 32'h00000019);
         // 0c: `hls_rx_tready` 是唯一只能打 wrapper 线的握手信号 ⇒ 先证明它有确定电平。
         //     悬空/被优化掉的线在 xsim 里是 z, 而 force 会让它看起来"正常" ⇒ 专抓这类假 PASS。
         if ((u_dut.hls_rx_tready === 1'b0) || (u_dut.hls_rx_tready === 1'b1))

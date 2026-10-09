@@ -9,6 +9,7 @@
      M2 = 删 tx_ok 臂的重装载         (:688-690 处那一行)
      M3 = 只改 tx_ok 臂、漏改 frm_wait 臂 (§1.5 陷阱的定向反例)
      M4 = 删 :676 的 `&& !CONT_OK`
+     M5 = 删 A3 的"待补登记"(被吞的 ev_up 又变回永久丢失 = 修前行为; 构建 E)
    ⛔ 只读 rtl/app_pattern.v; 不写任何别的文件。
 """
 import io
@@ -64,6 +65,18 @@ add("m3_miss_frmwait", [(
     "                bcnt     <= 4'd0;\n"
     "                op_pend  <= 1'b1; op_sent <= 1'b0;   // M3: 漏改 frm_wait 臂 (§1.5 陷阱)\n",
     1)], "M3 漏改 frm_wait 臂 => 量子末边界遇 tx_ok=0 即静默停滞 (A11/A3 必红)")
+
+# ---- M5 (构建 E): 删掉 A3 的待补登记 ⇒ 回到"被吞的 ev_up 永久丢失" ----
+#   定向反例: tb_app_cont 的 A13a/A13b (u_rec1/u_rec2 换流后新起帧数 >= 1) 必红,
+#   而 A13c (u_rec3 对照臂) 必须**照旧绿** ⇒ 这条变异同时证明判据有牙 + 只咬该咬的。
+add("m5_no_uppend", [(
+    "            if (up_do) up_pend_r <= 1'b0;\n"
+    "            else if (ev_up) begin\n"
+    "                up_pend_r  <= 1'b1;\n"
+    "                up_pend_id <= ev_slot;\n"
+    "            end\n",
+    "            if (up_do) up_pend_r <= 1'b0;   // M5: 删掉待补登记 (修前行为)\n",
+    1)], "M5 无待补登记 => u_rec1/u_rec2 又静默 (A13a/A13b 必红; A13c 仍绿)")
 
 # ---- M4: 删掉终结判据的 !CONT_OK (连续模式仍会"结束") ----
 add("m4_term_open", [(

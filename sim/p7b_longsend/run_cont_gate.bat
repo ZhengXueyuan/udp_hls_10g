@@ -5,11 +5,17 @@ REM run_cont_gate.bat -- P7B-LONGSEND / TX_CONTINUOUS gate (self-locating)
 REM   A = default (no macro)                    expect RC 0
 REM   B = -d APP_CONT_ARM                       expect RC 0
 REM   C = -d P7B_10G -d APP_CONT_ARM            expect RC 0
-REM   G = FROZEN anchor file, no macro           expect RC 0 AND byte-identical to A
-REM   M1..M4 = mutants under APP_CONT_ARM       expect RC != 0
+REM   G = FROZEN anchor file (= A3 修复**之前**), no macro
+REM       expect RC != 0 AND the reds are EXACTLY the A13a/A13b pair
+REM       (2026-10-10 build E: A3 = **unconditional behaviour fix**; the frozen anchor
+REM        is therefore a *negative control for A3*, not an equivalence anchor)
+REM   M1..M5 = mutants under APP_CONT_ARM       expect RC != 0
 REM Criteria:
-REM   1) A/B/C/G RC 0
-REM   2) A vs G: 24 dump/stats/rate files byte-identical (fc /b) = 等价锚 (设计件 §4.3)
+REM   1) A/B/C RC 0; G RC != 0 (with exactly the A13a/A13b reds -- see criterion 2b)
+REM   2) A vs G: (a) the **19 unaffected files** still byte-identical (fc /b);
+REM      (b) the delta must be EXACTLY {d7.hex d8.hex f7.txt f8.txt} (they must DIFFER)
+REM          + stats.txt identical after dropping its I7/I8 lines.
+REM      原判据 = "24 files byte-identical" = 等价锚 (设计件 §4.3) -- 已不成立 (见上)。
 REM   3) zero arm: z_zero_c.txt vs z_zero_d.txt byte-identical (every arm) = A10
 REM   4) M1..M4 RC != 0 (M2 无判别力时如实登记)
 REM   5) compile-source witness: A/B/C must compile <ROOT>\rtl\app_pattern.v (live);
@@ -55,34 +61,59 @@ call :run M3 "%HERE%\mut\m3_miss_frmwait.v" "-d APP_CONT_ARM"
 set "RCM3=%errorlevel%"
 call :run M4 "%HERE%\mut\m4_term_open.v" "-d APP_CONT_ARM"
 set "RCM4=%errorlevel%"
+call :run M5 "%HERE%\mut\m5_no_uppend.v" "-d APP_CONT_ARM"
+set "RCM5=%errorlevel%"
 
 echo ==================== SUMMARY ====================
 echo   A default          RC=%RCA%   (expect 0)
 echo   B APP_CONT_ARM     RC=%RCB%   (expect 0)
 echo   C P7B_10G+CONT     RC=%RCC%   (expect 0)
-echo   G frozen anchor    RC=%RCG%   (expect 0)
+echo   G frozen anchor    RC=%RCG%   (expect nonzero: pre-A3 anchor)
 echo   M1 CONT_OK=0        RC=%RCM1%  (expect nonzero)
 echo   M2 no-txok-reload  RC=%RCM2%  (expect nonzero; 无判别力则如实登记)
 echo   M3 miss-frmwait     RC=%RCM3%  (expect nonzero)
 echo   M4 term-open        RC=%RCM4%  (expect nonzero)
+echo   M5 no-uppend (A3)   RC=%RCM5%  (expect nonzero; build E)
 
 set "FAILS=0"
 if not "%RCA%"=="0"  set /a FAILS+=1
 if not "%RCB%"=="0"  set /a FAILS+=1
 if not "%RCC%"=="0"  set /a FAILS+=1
-if not "%RCG%"=="0"  set /a FAILS+=1
 if "%RCM1%"=="0" set /a FAILS+=1
 if "%RCM2%"=="0" set /a FAILS+=1
 if "%RCM3%"=="0" set /a FAILS+=1
 if "%RCM4%"=="0" set /a FAILS+=1
+if "%RCM5%"=="0" set /a FAILS+=1
 
-REM ---- 2) A vs G: 全部 dump/stats/rate 文件逐字节相同 (等价锚) ----
+REM ---- 2a) A vs G: **19 个未受影响的文件**逐字节相同 ----
+REM   (排除 d7/d8/f7/f8 = u_rec1/u_rec2 两臂 + stats.txt 的 I7/I8 两行; 见下 2b)
 set "EQ=1"
-for %%F in (d0.hex d1.hex d2.hex d3.hex d4.hex d5.hex d6.hex d7.hex d8.hex d9.hex f0.txt f1.txt f2.txt f3.txt f4.txt f5.txt f6.txt f7.txt f8.txt f9.txt stats.txt rate.txt z_zero_c.txt z_zero_d.txt) do (
+for %%F in (d0.hex d1.hex d2.hex d3.hex d4.hex d5.hex d6.hex d9.hex f0.txt f1.txt f2.txt f3.txt f4.txt f5.txt f6.txt f9.txt rate.txt z_zero_c.txt z_zero_d.txt) do (
   fc /b "runA\%%F" "runG\%%F" > NUL
   if errorlevel 1 (echo   [DIFF] %%F & set "EQ=0")
 )
-if "%EQ%"=="1" (echo   [PASS] equivalence anchor: A vs G byte-identical on 24 files) else (echo   [FAIL] A vs G differ & set /a FAILS+=1)
+if "%EQ%"=="1" (echo   [PASS] equivalence anchor: A vs G byte-identical on the 19 unaffected files) else (echo   [FAIL] A vs G differ on a file A3 does NOT explain & set /a FAILS+=1)
+
+REM ---- 2b) A3 登记差异必须**恰好** ----
+set "A3OK=1"
+for %%F in (d7.hex d8.hex f7.txt f8.txt) do (
+  fc /b "runA\%%F" "runG\%%F" > NUL
+  if not errorlevel 1 (echo   [DIFF-MISSING] %%F: A == G -- the registered A3 delta vanished? & set "A3OK=0")
+)
+findstr /V /C:"I7 " /C:"I8 " "runA\stats.txt" > a_stats_norec.txt
+findstr /V /C:"I7 " /C:"I8 " "runG\stats.txt" > g_stats_norec.txt
+fc /b "a_stats_norec.txt" "g_stats_norec.txt" > NUL
+if errorlevel 1 (echo   [DIFF] stats.txt (I7/I8 之外的行) & set "A3OK=0")
+if "%A3OK%"=="1" (echo   [PASS] A3 delta exactly as registered: d7 d8 f7 f8 + stats I7/I8) else (echo   [FAIL] A3 delta is not exactly as registered & set /a FAILS+=1)
+
+REM ---- 2c) 冻结锚的红必须恰好是 A13a/A13b 两条 ----
+if "%RCG%"=="0"  set /a FAILS+=1
+findstr /C:"[FAIL]" "runG\xs.log" > g_reds.txt
+set /a GNF=0
+for /f %%C in (g_reds.txt) do set /a GNF+=1
+if "%GNF%"=="2" (echo   [PASS] arm G reds == 2) else (echo   [FAIL] arm G reds=%GNF% -- expect exactly 2 & set /a FAILS+=1)
+findstr /C:"A13a" /C:"A13b" "runG\xs.log" > NUL
+if errorlevel 1 (echo   [FAIL] arm G: the reds are NOT the A13a/A13b pair & set /a FAILS+=1) else (echo   [PASS] arm G: reds are the A13a/A13b pair)
 
 REM ---- 3) zero arm: z_zero_c vs z_zero_d (每臂都查) ----
 set "ZOK=1"
@@ -113,6 +144,8 @@ echo   [M3] miss-frmwait:
 findstr /C:"[FAIL]" "runM3\xs.log"
 echo   [M4] term-open:
 findstr /C:"[FAIL]" "runM4\xs.log"
+echo   [M5] no-uppend (A3):
+findstr /C:"[FAIL]" "runM5\xs.log"
 
 if "%FAILS%"=="0" (echo CONT-GATE: PASS & exit /b 0)
 echo CONT-GATE: FAIL count=%FAILS%

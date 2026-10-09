@@ -123,6 +123,23 @@ add("mut_c8", [(
     "                            !ctrl_slot_busy;",
     1)], "M-C8 撤 rx_idle => 控制帧在收帧期装载 (混拼)")
 
+# ---- W66-1 (构建 E): 窗口门停顿计数器**永不计数** (哑观测) ----
+#   判据 (tb_tcp_tx_ovl.v 的 W66 段) 逐拍复算同一个判据并要求两者**相等** ⇒
+#   计数器死掉 (恒 0) 而 TB 侧照数 ⇒ 必红。两个分支各一处 (声明命中数 = 2)。
+add("mut_w66_dead", [(
+    "            if (stat_winstall_ev) stat_winstall <= stat_winstall + 32'd1;",
+    "            // M-W66-1: 哑观测 (永不计数)",
+    2)], "M-W66-1 计数器恒 0 (两分支各一处) => 判据必红")
+
+# ---- W66-2 (构建 E): 判据**语义**错 (去掉 `!wnd_open` = 把"想开"当"被窗挡") ----
+#   定向反例: 计数器会**多**数 (把 start_data 拍也算进去) ⇒ 与 TB 复算不等 ⇒ 红。
+add("mut_w66_nownd", [(
+    "                                   !fifo_full && !bank_rdy[rx_bank] &&\n"
+    "                                   !tx_blk_sid && !wnd_open;",
+    "                                   !fifo_full && !bank_rdy[rx_bank] &&\n"
+    "                                   !tx_blk_sid;",
+    1)], "M-W66-2 (OVL) 判据去掉 !wnd_open => 多数 start_data 拍")
+
 # ---- M-C9: 仲裁键改回 ctrl_slot_busy (两处帧边界判定) ----
 add("mut_c9", [(
     "if (ctrl_tx_pend) begin",

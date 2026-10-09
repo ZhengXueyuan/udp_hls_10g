@@ -30,7 +30,7 @@ set SRCFILE=%ROOT%\board\wrapper_p4.v
 REM 2026-10-10 (P7B-GAP9-TX): fingerprint 61 -> 65. NOTE: it had already gone stale at
 REM   63 (P7B-WU round) => this gate was DEAD (exit 92) ever since; kept as a fingerprint,
 REM   only the expected value is bumped.
-findstr /C:"SNAP_NW_P6E = 65" "%SRCFILE%" >NUL || ( echo [FINGERPRINT FAIL] source is not the 65-word version & exit /b 92 )
+findstr /C:"SNAP_NW_P6E = 67" "%SRCFILE%" >NUL || ( echo [FINGERPRINT FAIL] source is not the 67-word version & exit /b 92 )
 
 set NBAD=0
 call :one "d0_default"      ""

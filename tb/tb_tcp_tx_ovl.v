@@ -311,6 +311,23 @@ module tb_tcp_tx_ovl;
     // ===================== DUT =====================
     wire [63:0] m_tdata; wire [7:0] m_tkeep; wire m_tvalid, m_tlast;
     wire [31:0] stat_retx;
+    // ⭐ 构建 E: W66 = tcp_tx_frame.stat_winstall (帧器侧窗口门停顿拍数)
+    wire [31:0] w_stat_winstall;
+    //   定向窗口关闭插曲 (见下方激励块) 的参数与状态
+    localparam integer WC_AT   = 120000;   // 关窗起始拍 (远早于覆盖率目标)
+    localparam integer WC_HOLD = 12000;    // 关窗保持拍 (≈6 个 ACK 周期)
+    localparam [3:0]   WC_CONN = 4'd1;     // 目标连接 (避开 conn0 的 SYN 特例 / conn2·3 的 FIN·RST 臂)
+    reg  [2:0]  wc_st;                     // 0=等触发 1=写关窗中 2=保持 3=写回中 4=完
+                                           //   ⚠️ 必须 3 位: 终态 4 大于 2 位满量程 ⇒
+                                           //   2 位时会被截断回 0 (读数看着像"插曲没跑")
+    reg  [31:0] wc_cyc;                    // 关窗保持计时
+    // ⭐ W66 的 **TB 侧独立复算** (逐拍; 与 RTL 判据同源但**独立实现**):
+    //   ⚠️ 刻意**不引用** `u_dut.stat_winstall_ev` —— 引用它会让判据变成环路恒等式
+    //      (变异体改判据时 oracle 跟着改 ⇒ 永远相等 = 没牙)。这里逐项自写:
+    //      rx_state/recv_first/ack_pend_r/svc/ring_eval/scan_now/rx_flush/fifo_full/
+    //      bank_rdy/tx_blk_sid 全是读 DUT 的**状态线**, 判据表达式由本 TB 写。
+    integer     exp_winstall_cyc;          // TB 复算的窗口门停顿拍数
+    reg         wc_seen;                   // 见证: 窗口确实被观察到关过 (!wnd_open)
     wire [31:0] o_retx_hi; wire o_retx_active; wire [3:0] o_retx_id;
     wire [31:0] stat_frames, stat_bytes, stat_ack, stat_ack_drop, stat_eend,
                 stat_drop_len, stat_fin, stat_rst, stat_tlast_in;
@@ -343,6 +360,7 @@ module tb_tcp_tx_ovl;
         .win_open(win_open), .win_inflight(win_inflight), .win_wnd_eff(win_wnd_eff),
         .retx_req(retx_req), .retx_id(retx_id), .retx_gnt(retx_gnt),
         .stat_retx(stat_retx),
+        .stat_winstall(w_stat_winstall),
         .o_retx_hi(o_retx_hi), .o_retx_active(o_retx_active), .o_retx_id(o_retx_id),
         .upd_wr(tx_upd_wr), .upd_id(tx_upd_id), .upd_sel(tx_upd_sel),
         .upd_val(tx_upd_val),
@@ -665,6 +683,7 @@ module tb_tcp_tx_ovl;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             setup_c <= 4'd0; ack_req <= 1'b0; cfg_up <= 1'b0;
+            wc_st <= 2'd0; wc_cyc <= 32'd0;   // 构建 E: 窗口关闭插曲 FSM
         end else begin
             ack_req <= 1'b0; cfg_up <= 1'b0;
             if (setup_c < NCONN) begin
@@ -775,8 +794,69 @@ module tb_tcp_tx_ovl;
             end
             win_prev <= d_ctrl_win;
 `endif
+            // ---- ⭐ 构建 E: 定向窗口关闭插曲 (给 W66 = stat_winstall 造靶) ----
+            //   动机: 本 TB 的 snd_wnd = 0xC000 (49152) 而 ACK 每 8192 B 一次 ⇒ 在飞
+            //   常年 <10 KB ⇒ `wnd_open` **结构性恒 1**; 不加激励的话新计数器是
+            //   空判据 (永远 0, 变异体也照不出来)。
+            //   做法: 把 conn1 的 snd_wnd 压到 **1 MSS (1460)**, 保持 WC_HOLD 拍,
+            //   再写回 0xC000。在飞一旦 >=1460 ⇒ 帧器启动点的 `wnd_open` 落 0 ⇒
+            //   只要 TB 还在给 conn1 喂帧 (round-robin), 就必然出现"启动点 + 有字 +
+            //   其余门全开 + 只有窗口关着"的拍 = 本字的靶。
+            //   ⚠️ 自恢复 (不靠 ack_lag 那条路 —— snd_wnd=1460 下它够不着):
+            //      本 TB 的 rx ACK 调度含**周期支** (`cyc % 2048 == 0 &&
+            //      peer_rcv > sh_una`) ⇒ 关窗期间 snd_una 照常被推进 ⇒ 窗口自行重开。
+            //   ⚠️ 与 setup FSM 的多写者风险: 出发条件含 `setup_c >= NCONN`, 而 setup
+            //      FSM 整段在 `if (setup_c < NCONN)` 里 ⇒ 两者**结构性互斥**;
+            //      本块又写在同一个 always 块的**最后** ⇒ 顺序上也安全。
+            case (wc_st)
+            //   ⚠️ 出发条件 (2026-10-10 自查订正): 原写 `(setup_c >= NCONN)` —— **结构性恒假**:
+            //      setup FSM 只在 `setup_c < NCONN-1` 时自增 ⇒ 它**停在 NCONN-1 = 3**,
+            //      永远到不了 NCONN=4。第一次跑因此**根本没注入**(213 拍是 TB 自己
+            //      天然关窗挣来的; `wc_st=0` 那个读数就是它在说"插曲没跑", 但当时被
+            //      我读成"无害" —— 记在这里)。现改成 **`phase >= 1` (= 四连均已建连且在
+            //      发流) + `cyc >= WC_AT`** (下界而非相等, 不吃绝对拍号)。
+            3'd0: if ((phase >= 2'd1) && (cyc >= WC_AT)) begin
+                      scfg_upd_wr <= 1'b1; scfg_upd_id <= WC_CONN;
+                      scfg_upd_sel <= 3'd4; scfg_upd_val <= 32'd1460;
+                      wc_st <= 3'd1;
+                  end
+            3'd1: if (tcb_wr && (tcb_sel == 3'd4) && (tcb_id == WC_CONN)) begin
+                      scfg_upd_wr <= 1'b0; wc_cyc <= 32'd0; wc_st <= 3'd2;
+                  end
+            3'd2: begin
+                      wc_cyc <= wc_cyc + 32'd1;
+                      if (wc_cyc == WC_HOLD) begin
+                          scfg_upd_wr <= 1'b1; scfg_upd_id <= WC_CONN;
+                          scfg_upd_sel <= 3'd4; scfg_upd_val <= {16'b0, SND_WND};
+                          wc_st <= 3'd3;
+                      end
+                  end
+            3'd3: if (tcb_wr && (tcb_sel == 3'd4) && (tcb_id == WC_CONN)) begin
+                      scfg_upd_wr <= 1'b0; wc_st <= 3'd4;
+                  end
+            default: ;
+            endcase
         end
     end
+
+    // ===================== ⭐ 构建 E: W66 的 TB 侧逐拍复算 =====================
+    //   判据 (与 rtl/tcp_tx_frame.v 的 stat_winstall_ev **逐项同款**, 但在本 TB 里
+    //   独立写出): 帧器站在数据帧启动点 + 呈交口有字 + 其余门全开 + 只有窗口关着。
+    //   ⚠️ 只在 TCP_TX_OVL 分支有对应实现 (默认/串行分支的启动点是 state==S_IDLE,
+    //      判据不同) ⇒ 本判据包 OVL。
+`ifdef TCP_TX_OVL
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin exp_winstall_cyc <= 0; wc_seen <= 1'b0; end
+        else begin
+            if ((u_dut.rx_state == 2'd0) && u_dut.recv_first && s_tvalid &&
+                !u_dut.ack_pend_r && !u_dut.svc && !u_dut.ring_eval && !u_dut.scan_now &&
+                !u_dut.rx_flush && !u_dut.fifo_full && !u_dut.bank_rdy[u_dut.rx_bank] &&
+                !u_dut.tx_blk_sid && !win_open)
+                exp_winstall_cyc <= exp_winstall_cyc + 1;
+            if (!win_open) wc_seen <= 1'b1;
+        end
+    end
+`endif
 
     // ===================== 影子账本 + 相位 =====================
     always @(posedge clk or negedge rst_n) begin
@@ -1345,6 +1425,18 @@ module tb_tcp_tx_ovl;
                 $display("[FAIL] T8 收发重叠度 %0d%% < 25%% (乒乓退化?)", (ov_n*100)/rx_n); end
             if ((fp1460_min > 220) && (tx1460_n > 100)) begin tot_red = tot_red + 1;
                 $display("[FAIL] T8 满长帧帧周期 min=%0d > 220 (乒乓退化?)", fp1460_min); end
+`ifdef TCP_TX_OVL
+            // ---- ⭐ 构建 E: W66 (stat_winstall = 帧器侧**窗口门**停顿拍数) ------
+            $display("W66 dut=%0d tb=%0d wndclosed_seen=%0d wc_st=%0d",
+                     w_stat_winstall, exp_winstall_cyc, wc_seen, wc_st);
+            if (!wc_seen) begin tot_red = tot_red + 1;
+                $display("[FAIL] W66 空判据: 整个跑窗内 wnd_open 从未观察到 0"); end
+            if (exp_winstall_cyc < 64) begin tot_red = tot_red + 1;
+                $display("[FAIL] W66 空判据: TB 侧窗口门停顿拍=%0d < 64", exp_winstall_cyc); end
+            if (w_stat_winstall !== exp_winstall_cyc) begin tot_red = tot_red + 1;
+                $display("[FAIL] W66 语义不符 (逐拍复算): dut=%0d tb=%0d",
+                         w_stat_winstall, exp_winstall_cyc); end
+`endif
 `ifdef ARM_ACKGATE
             // ⭐ r6 (L-A): ack_seen 门专项判据 (见驱动块注)
             $display("ACKGATE block=%0d resume=%0d witness_offer=%0d (expect block=0 resume=0 offer>=100)",

@@ -146,7 +146,7 @@ module tb_p6e_pcie_wrapper;
         // ⛔ 2026-10-10 订正 (构建 C 门同步轮): 窗口 63 → **65 字** ⇒ `board/wrapper_p4.v` 的
         //    `BUILD_ID_V = 32'h00000017` ⇒ 期望值 9 → **17**。判据语义不变
         //    (= BUILD_ID 必须等于**本构建**的地图版本); 本条与上面判据 9 的地址是同一次订正。
-        u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("2  BUILD_ID (构建 C 65 字=17; 原 63 字=9)", v, 32'h00000017);
+        u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("2  BUILD_ID (构建 E 67 字=0x19; 原 66 字=0x18 / 65 字=17 / 63 字=9)", v, 32'h00000019);
         u_dut.u_pcie_xdma.axil_read(32'h14, v); chk("3  MARKER", v, 32'hDEADBEEF);
         // HW_STATUS 字段: [7:5]=msi_vec_w [4]=msi_enable [3]=user_lnk_up [2:0]=0
         u_dut.u_pcie_xdma.axil_read(32'h10, v);
@@ -333,8 +333,10 @@ module tb_p6e_pcie_wrapper;
         // 原句 (63 字时代, 逐字保留):
         //   u_dut.u_pcie_xdma.axil_read(32'h11C, v);
         //   chk("9  未实现地址 0x11C ⇒ rresp = SLVERR", {30'd0, u_dut.u_pcie_xdma.last_rresp}, 32'd2);
-        u_dut.u_pcie_xdma.axil_read(32'h124, v);
-        chk("9  未实现地址 0x124 ⇒ rresp = SLVERR", {30'd0, u_dut.u_pcie_xdma.last_rresp}, 32'd2);
+        // ⛔ 2026-10-10 (构建 E): 窗口 66 → **67 字** (`SNAP_NW_P6E = 67`) ⇒ 末字 W66 @ 0x128
+        //    ⇒ 未实现地址 = 0x20 + 4*67 = **0x12C** (word 75)。0x128 现在是窗口内的真字。
+        u_dut.u_pcie_xdma.axil_read(32'h12C, v);
+        chk("9  未实现地址 0x12C ⇒ rresp = SLVERR", {30'd0, u_dut.u_pcie_xdma.last_rresp}, 32'd2);
 
         // ⚠️ release 的层次名必须与上面 force 的目标**逐字一致** (坑 22: 名字不一致时
         //    xelab 直接报 "not declared under prefix"; 但漏 release 是**静默**的 —— 后续判据

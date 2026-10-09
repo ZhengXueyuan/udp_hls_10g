@@ -3,15 +3,15 @@
 # SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
 # IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
 # SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
-# Start of session at: Wed Sep 30 11:38:01 2026
-# Process ID         : 25764
+# Start of session at: Sat Oct 10 04:06:29 2026
+# Process ID         : 27424
 # Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac/sim
 # Command line       : xsim.exe -log xsim_m10g.log -mode tcl -source {xsim.dir/tb_mac_10g/xsim_script.tcl}
 # Log file           : D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac/sim/xsim_m10g.log
 # Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac/sim\xsim.jou
 # Running On         : xyz-intel
 # Platform           : Windows Server 2016 or Windows 10
-# Operating System   : 26200
+# Operating System   : 26300
 # Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
 # CPU Frequency      : 3878 MHz
 # CPU Physical cores : 20
@@ -19,7 +19,7 @@
 # Host memory        : 68053 MB
 # Swap memory        : 4294 MB
 # Total Virtual      : 72348 MB
-# Available Virtual  : 45328 MB
+# Available Virtual  : 49595 MB
 #-----------------------------------------------------------
 source xsim.dir/tb_mac_10g/xsim_script.tcl
 # xsim {tb_mac_10g} -autoloadwcfg -runall
@@ -452,8 +452,17 @@ run -all
   [ ok ] TX->RX L=200    RX payload == content+pad bytes
   [ ok ] TX->RX L=200    RX terr==0
   [ ok ] TX->RX L=200    RX payload byte-exact (content + zero pad)
-=== tb_mac_10g done: 391 checks, 0 fail ===
+-- 组 12: stat_tx_idle (line occupancy counter)
+  [ ok ] 12.1 empty-input 64-cycle window: delta == 64
+  [ ok ] 12.1b reading is NONZERO (counter really runs)
+  [ ok ] 12.2 window spans exactly one frame boundary
+  [ ok ] 12.2 saturated window: idle delta == 0 (IFG not idle)
+   [grp12 readings] v_prev=7 v_now=628 delta=621 ndbg=621 frames=3
+  [ ok ] 12.3 per-cycle identity: delta == #dbg-idle cycles
+  [ ok ] 12.3b window contains idle cycles (trailing idle)
+  [ ok ] 12.3c burst (3 frames) completed inside window
+=== tb_mac_10g done: 398 checks, 0 fail ===
 VERDICT = PASS
-$finish called at time : 36407400 ps : File "D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac/sim/tb_mac_10g.v" Line 1324
+$finish called at time : 47353600 ps : File "D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/p7b_mac/sim/tb_mac_10g.v" Line 1389
 exit
-INFO: [Common 17-206] Exiting xsim at Wed Sep 30 11:38:03 2026...
+INFO: [Common 17-206] Exiting xsim at Sat Oct 10 04:06:31 2026...

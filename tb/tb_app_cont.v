@@ -24,6 +24,8 @@
 //   idx7 u_rec1      arm, 1000B  -- ev_down(k=40)  + tready 低 300 拍 (滞留字)
 //   idx8 u_rec2      arm, 1000B  -- ev_down(k=240) + tready 低 300 拍 (滞留字)
 //   idx9 u_rec3      arm, 1000B  -- ev_down(k=240) + tready 低 6 拍 (收尾能完成: 对照)
+//   ⭐ 构建 E (A3): rec1/rec2 由"只记录"升级为**判据** (starts_after_up >= 1);
+//      修前这两臂 = 0 (ev_up 被吞 ⇒ 新连接静默零数据), 修后必须 >= 1。
 // ===========================================================================
 module tb_app_cont;
     reg clk, rst_n;
@@ -496,10 +498,15 @@ module tb_app_cont;
             $display("  I%0d: frames=%0d bytes=%0d done=%0d active=%0d cr=%0d | tb_frames=%0d tb_bytes=%0d orc=%0d ax=%0d ferr=%0d",
                      ii, w_txf[ii], w_txb[ii], w_done[ii], w_act[ii], M_cr[ii],
                      M_nfr[ii], M_nby[ii], M_orc[ii], M_ax[ii], M_fer[ii]);
-        // ⚠️ 重连臂观测 (不是判据, 只有 u_rec3 有断言): starts_after_up>0 = "恢复";
-        //    =0 = "ev_up 被吞 / 静默零数据"。预测 (审查员 ① 的机理): k 落在
-        //    "收尾仍被 m_tready 卡住"的窗口内 (rec1/rec2, tready 低 300 拍) => 0;
-        //    u_rec3 (tready 低 6 拍, 收尾早已完成) => >0。
+        // ⭐ 构建 E (A3): 三个重连臂**全部升级为判据** (原句 = "不是判据, 只有
+        //    u_rec3 有断言")。口径确认 (读 TB 自己的实现): `M_nst` 在 `up_w[gi]`
+        //    那一拍被清 0 (见上面 `if (up_w[gi]) ... M_nst[gi] = 0;`) ⇒ 打印出来的
+        //    `starts_after_up` 字面就是"**最近一次 ev_up 之后**新起的帧数",
+        //    不是总帧数 (本轮先误以为要另立快照寄存器, 核对实现后撤回 —— 记录在此
+        //    免得下一个读的人重犯)。
+        //    修前机理 (审查员 ①): k 落在"收尾仍被 m_tready 卡住"的窗口内
+        //    (rec1 k=40/tw=300, rec2 k=240/tw=300) ⇒ ev_up 被吞 ⇒ 修前 = 0;
+        //    rec3 (tw=6, 收尾早已完成) ⇒ 修前就 >0 (对照臂, 行为不得变)。
         $display("  REC: u_rec1(k=%0d,tw=%0d) frames=%0d starts_after_up=%0d active=%0d => %0s",
                  K1, TW1, w_txf[7], M_nst[7], w_act[7],
                  (M_nst[7] > 0) ? "RESUMED" : "SILENT-ZERO-DATA");
@@ -557,8 +564,24 @@ module tb_app_cont;
         chk(M_tl1[0] == M_tl1[1],     "A12a first tlast cycle: u_base == u_cont");
         chk(M_tl1[1] != 32'd0,        "A12a u_cont really produced a frame");
 
-        // --- u_rec3 (对照臂): 收尾能完成 => 必须恢复 (帧起始拍在 ev_up 之后) ---
-        chk(M_nst[9] >= 32'd1,        "A13 u_rec3 resumed after same-slot reconnect (new frame start)");
+        // --- ⭐ 构建 E (A3): 三个重连臂都断言"换流后确有新帧起始" ----------------
+        //   修前: u_rec1/u_rec2 = 0 (ev_up 被吞 ⇒ 新连接静默零数据、无自愈);
+        //         u_rec3 = 1 (对照臂, 收尾早已完成 ⇒ 修前修后都恢复)。
+        //   判据 = **ev_up 之后新起的帧数 >= 1** (M_nst 已在 up_w 拍清 0 ⇒ 该口径
+        //   天然成立; 见打印块的就地说明)。
+        chk(M_nst[7] >= 32'd1,
+            "A13a u_rec1 resumed after same-slot reconnect (k=40, tready low 300)");
+        chk(M_nst[8] >= 32'd1,
+            "A13b u_rec2 resumed after same-slot reconnect (k=240, tready low 300)");
+        chk(M_nst[9] >= 32'd1,
+            "A13c u_rec3 resumed after same-slot reconnect (k=240, tready low 6; 对照臂)");
+`ifndef APP_CONT_ARM
+        // 对照臂**行为不得变** (只在本 TB 的非连续臂 = ARM A 成立): u_rec3 修前修后
+        //   都是"恰好 1 帧" (1000B 量子; ev_up 落在帧 1 之后 ⇒ 补做换流只发下一帧)。
+        //   ⚠️ 连续臂 (ARM B/C) 里它一直发 ⇒ 本条不适用 (所以包 ifndef)。
+        chk(M_nst[9] == 32'd1,
+            "A13c' u_rec3 resume count == 1 (补做逻辑不给对照臂多发帧; ARM A only)");
+`endif
         chk(tok_seen == 1'b1,         "A11b u_txok really dropped app_tx_ready");
 
 `ifdef APP_CONT_ARM

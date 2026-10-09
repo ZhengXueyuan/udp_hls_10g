@@ -713,7 +713,16 @@ sim/p7b_stagec_tx_regress/mirror/
 sim/p7b_stagec_tx_regress/head_root/
 sim/p7b_stagec_tx_regress/extra/
 sim/p7b_stagec_tx_regress/extra_head/
-sim/p7b_stagec_tx_regress/author_gate/
+# ---- author_gate (Stage C 作者门: run_tx_ovl_gate.bat + mk_mut_tx.py 变异器) ----
+# ⚠️ 本条原为**整目录忽略** —— 已废止 (它违反上一段自声明的口径): 整目录规则把门驱动与脚本
+#    一并挡掉 ⇒ 上一轮修好的变异器 (mk_mut_tx.py / probe_anchors.py) 只能靠 `git add -f`
+#    手工保住, 任何后续改动都会静默丢失。改为**按类排除产物** (实测该目录下的产物类型 = 四类):
+#    ① `mut/`      = mk_mut_tx.py 每次重生成的 9 个变异件 (.v, 1.2 MB);
+#    ② `run[A-K]/` = xsim 工作目录 (每臂 1.5–1.9 MB: xsim.dir/ · *.wdb · *.exe · *.jou …);
+#    ③ `.log` / `.jou` / `.pb` / `.wdb` / `__pycache__/` 由全局段兜 (本行不动也已被挡)。
+# 保留: 门驱动 (.bat) / 脚本 (.py); TB 源码本目录无 (.v 全在 mut/ 里, 属产物)。
+sim/p7b_stagec_tx_regress/author_gate/mut/
+sim/p7b_stagec_tx_regress/author_gate/run*/
 sim/p7b_stagec_a2/run*/
 sim/p7b_stagec_a2/r_all.txt
 sim/p7b_stagec_a2/_mut_rtl/

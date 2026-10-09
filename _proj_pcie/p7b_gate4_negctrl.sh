@@ -28,12 +28,14 @@ DBYTES=$((DGOOD*1518))      # Δbytes
 BGOOD=1375                  # 基线 (背景) 起点
 
 # ---- 造一块**规范**快照文本 ---------------------------------------------------
-# 几何: **63 字 (W0..W62)** —— P7B-WU 二轮 (2026-10-07, BID=9 / 未实现 0x11C);
+# 几何: **67 字 (W0..W66)** —— 构建 E (2026-10-10, BID=0x19 / 未实现 0x12C);
+#       (原句: "66 字 (W0..W65) —— P7B-A7 构建 D (2026-10-10, BID=0x18 / 未实现 0x128)" = 历史代, 逐字保留于下)
+#       (原句: ‘63 字 (W0..W62)’ = 历史代, 逐字保留于下)
 #       ⛔ 2026-10-07 Stage C BID 同步轮: 几何 / 未实现地址不变, **身份 9 → 10**
 #          (上面这句原句保留: 描述的是 P7B-WU 二轮那一代; 本夹具现 = 63 字 / BID 10)。
 #       守恒律 W30==W0+W32 / W31==W1-4·W0+W33 逐字成立;
 #       W39 = PCS 状态束 (gpw/block_lock/rx_status=1); W40 = {evt×3, vcc_cyc} vcc 在涨。
-#       ⚠️ W51..W62 = P7B-BIZ/WU 新增字, 本夹具全填 0 (accept 只要求"窗口齐全且无 0xffffffff");
+#       ⚠️ W51..W66 = P7B-BIZ/WU/构建C/构建D/构建E 新增字, 本夹具全填 0 (accept 只要求"窗口齐全且无 0xffffffff");
 #          若将来判据开始消费某个新字, **这里要跟着造它的真形态** (否则负对照会"打空")。
 gen_snap(){  # gen_snap <文件> <第一块|第二块|洪泛A|洪泛B>
   local f="$1" kind="$2"
@@ -52,12 +54,12 @@ gen_snap(){  # gen_snap <文件> <第一块|第二块|洪泛A|洪泛B>
   { echo SNAP_BEGIN
     echo "TLATCH $tl"
     echo "GEN $gen"
-    echo "MAGIC 0x50360001"; echo "BID 0x0000000A"; echo "MARKER 0xdeadbeef"   # Stage C: 原 0x00000009
+    echo "MAGIC 0x50360001"; echo "BID 0x00000019"; echo "MARKER 0xdeadbeef"   # 构建 D: 原 0x0000000A = Stage C   # Stage C: 原 0x00000009
     local -a V=(1000 1518000 1518 0 0 $w5 998 998 0 0 0 0 0 0 0 0 0 0 0 0
                 $w20 0 0 0 $w24 1 0 0 0 0 1000 1514000 0 0 0 0
                 20000000 151800000 0 0x2000100C $vcc 0 0 0 0 0 0 0 0 0 $w50
-                0 0 0 0 0 0 0 0 0 0 0 0)
-    local i; for (( i = 0; i < 63; i++ )); do printf 'W%d 0x%X\n' "$i" "${V[$i]}"; done
+                0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0)   # W51..W66 (构建 E: W66 = tcp_tx_frame.stat_winstall)
+    local i; for (( i = 0; i < 67; i++ )); do printf 'W%d 0x%X\n' "$i" "${V[$i]}"; done
     echo "UNIMPL 0xffffffff"
     echo SNAP_END
   } > "$f"
@@ -133,7 +135,7 @@ run_case oldwindow 2 "窗口不完整: 缺 W36" "$S/s1.txt,$S/m_36word.txt" "$NI
 # 地址错一位: 每个 W<i> 里装的是 word i+1 的值 (末字回绕成 W0) —— 守恒律必然破
 awk '/^W[0-9]+ /{ split($1,a,"W"); idx=a[2]; val[idx]=$2; n++; next } { print }' "$S/s1.txt" > "$S/m_off_a.txt"
 awk '/^W[0-9]+ /{ split($1,a,"W"); idx=a[2]; val[idx]=$2; n++; next } { print }' "$S/s2.txt" > "$S/m_off_b.txt"
-shift1(){ awk -v NW=63 '/^W[0-9]+ /{ split($1,a,"W"); idx=a[2]+1; if(idx>NW-1) idx=0; printf "W%d %s\n", idx, $2; next } { print }' "$1" > "$2"; }
+shift1(){ awk -v NW=67 '/^W[0-9]+ /{ split($1,a,"W"); idx=a[2]+1; if(idx>NW-1) idx=0; printf "W%d %s\n", idx, $2; next } { print }' "$1" > "$2"; }
 shift1 "$S/s1.txt" "$S/m_off_a.txt"; shift1 "$S/s2.txt" "$S/m_off_b.txt"
 run_case offbyone 1 "B_CONS-a" "$S/m_off_a.txt,$S/m_off_b.txt" "$NIC"
 

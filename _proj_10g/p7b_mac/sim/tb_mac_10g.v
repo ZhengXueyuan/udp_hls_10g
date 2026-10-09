@@ -341,6 +341,7 @@ module tb_mac_10g;
     wire [7:0]  xt_c;
     wire [31:0] tx_stat_frames, tx_stat_abort, tx_stat_flush_words, tx_stat_flush_done;
     wire [31:0] tx_stat_words, tx_stat_ctrl, tx_stat_short;
+    wire [31:0] tx_stat_idle;                 // P7B-A7-LINE: 线占空计数器 (组 12)
     wire [15:0] tx_dbg_clen;
     wire [1:0]  tx_dbg_state;
 
@@ -357,7 +358,8 @@ module tb_mac_10g;
         .stat_frames(tx_stat_frames), .stat_abort(tx_stat_abort),
         .stat_flush_words(tx_stat_flush_words), .stat_flush_done(tx_stat_flush_done),
         .stat_tx_words(tx_stat_words), .stat_tx_ctrl_char(tx_stat_ctrl),
-        .stat_tx_short(tx_stat_short), .dbg_tx_last_clen(tx_dbg_clen),
+        .stat_tx_short(tx_stat_short), .stat_tx_idle(tx_stat_idle),
+        .dbg_tx_last_clen(tx_dbg_clen),
         .dbg_tx_state(tx_dbg_state)
     );
 
@@ -633,6 +635,9 @@ module tb_mac_10g;
     integer sz;                       // 组 11 的每档内容长度
     integer clen_w;                   // 组 11 的线上内容长度 (含 pad)
     reg [8*16-1:0] tagbuf;            // 组 11 的判据名前缀 (ASCII; 8*16 = 16 字符)
+    // ---- 组 12 (P7B-A7-LINE) 的局部量 ----
+    integer g12_i, g12_ndbg;
+    reg [31:0] g12_v0, g12_v1, g12_va, g12_vb, g12_fa, g12_fb, g12_vprev, g12_vnow;
 
     initial begin
         $display("=== tb_mac_10g start ===");
@@ -1317,6 +1322,66 @@ module tb_mac_10g;
                 if (rx_got[rx_fs[0] + i] !== 8'h00) ecnt = ecnt + 1;
             chk(ecnt === 0, {tagbuf, "RX payload byte-exact (content + zero pad)"});
         end
+
+        // =============================================================
+        // 组 12 (2026-10-10, P7B-A7-LINE): stat_tx_idle —— **线占空计数器**
+        //   语义 (与被测 RTL 逐字对齐): 复位无效且**本拍执行态 == S_IDLE** 的每一拍 +1
+        //     (线上正发 /I/ 且 FSM 无事可做; ⛔ **不含** S_IFG/S_FLUSH 的 /I/ 拍)。
+        //   期望来源: 三条判据的期望值全由本 TB 独立算 (不由 DUT 生成):
+        //     12.1 空载窗口 —— 无输入 ⇒ DUT 只能停在 S_IDLE ⇒ Δ == 窗口拍数 (逐拍精确)。
+        //          (造"已知会触发"的激励: "未连接输入被钳 0" 与 "从未触发" 在读数上
+        //           不可区分 ⇒ 本条就是那条正证据。)
+        //     12.2 满流窗口 —— 队列预装 3 帧 ⇒ 第 1 帧与第 2 帧之间 FIFO 不会空、
+        //          S_IFG 直接进下一帧 S_PRE ⇒ Δ == 0 (并把**第 2 帧的 IFG 拍**圈进窗口:
+        //          若把 S_IFG 也算成空闲, 这里必 ≥2 而红 ⇒ 这是"定义"的判别力所在)。
+        //     12.3 逐拍恒等式 (跨整个窗口) —— Δstat_tx_idle == #{拍 : dbg_tx_state == 0}
+        //   12.3 的相位推导 (为什么两个量可以在**同一拍**直接比):
+        //     · 记 state(k) = 第 k 拍 (posedge k → posedge k+1) 的 FSM 态; always 块在
+        //       posedge k+1 求值时的 RHS 全取**沿前值** ⇒ 计数器在 posedge k+1 用的就是
+        //       state(k) ⇒ V(k) - V(k-1) = [state(k-1) == S_IDLE];
+        //     · dbg_tx_state 也在同一条沿上寄存 (RHS 同样取 state(k)) ⇒ 第 k+1 拍读到的
+        //       dbg = f(state(k)), 即在**第 k 拍**读到的是 f(state(k-1)) —— 与计数器
+        //       依赖的是**同一个** state(k-1)。
+        //     ⇒ 在**同一拍的 negedge** 同时采 V 与 dbg: 逐拍对齐, 无 ±1 歧义。
+        // =============================================================
+        $display("-- 组 12: stat_tx_idle (line occupancy counter)");
+        // ---- 12.1 空载窗口: Δ == 窗口拍数 (无输入 ⇒ 只能停在 S_IDLE) ----
+        reset_all;
+        @(negedge clk); g12_v0 = tx_stat_idle;
+        for (g12_i = 0; g12_i < 64; g12_i = g12_i + 1) @(posedge clk);
+        @(negedge clk); g12_v1 = tx_stat_idle;
+        chk((g12_v1 - g12_v0) === 32'd64, "12.1 empty-input 64-cycle window: delta == 64");
+        chk(g12_v1 !== 32'd0,             "12.1b reading is NONZERO (counter really runs)");
+        // ---- 12.2 满流窗口: Δ == 0 (帧间无空闲; 窗口圈进第 2 帧的 IFG) ----
+        reset_all;
+        txq_n = 0; txq_i = 0;
+        tx_load_frame(1514); tx_load_frame(1514); tx_load_frame(1514);
+        g12_i = 0;
+        while (tx_stat_frames < 32'd1 && g12_i < 4000) begin
+            @(posedge clk); g12_i = g12_i + 1; end
+        g12_fa = tx_stat_frames;
+        @(negedge clk); g12_va = tx_stat_idle;
+        while (tx_stat_frames < 32'd2 && g12_i < 4000) begin
+            @(posedge clk); g12_i = g12_i + 1; end
+        @(negedge clk); g12_vb = tx_stat_idle; g12_fb = tx_stat_frames;
+        chk(g12_fa === 32'd1 && g12_fb === 32'd2, "12.2 window spans exactly one frame boundary");
+        chk((g12_vb - g12_va) === 32'd0, "12.2 saturated window: idle delta == 0 (IFG not idle)");
+        // ---- 12.3 逐拍恒等式 (含帧/IFG/空闲三段) ----
+        reset_all;
+        txq_n = 0; txq_i = 0;
+        tx_load_frame(1514); tx_load_frame(1514); tx_load_frame(1514);
+        @(negedge clk); g12_vprev = tx_stat_idle;
+        g12_ndbg = 0;
+        for (g12_i = 0; g12_i < 1200; g12_i = g12_i + 1) begin
+            @(negedge clk);
+            if (tx_dbg_state === 2'd0) g12_ndbg = g12_ndbg + 1;
+        end
+        g12_vnow = tx_stat_idle; g12_fb = tx_stat_frames;
+        $display("   [grp12 readings] v_prev=%0d v_now=%0d delta=%0d ndbg=%0d frames=%0d",
+                 g12_vprev, g12_vnow, g12_vnow - g12_vprev, g12_ndbg, g12_fb);
+        chk((g12_vnow - g12_vprev) === g12_ndbg, "12.3 per-cycle identity: delta == #dbg-idle cycles");
+        chk(g12_ndbg > 0,      "12.3b window contains idle cycles (trailing idle)");
+        chk(g12_fb >= 32'd3,   "12.3c burst (3 frames) completed inside window");
 
         $display("=== tb_mac_10g done: %0d checks, %0d fail ===", nchk, nfail);
         if (nfail !== 0) $display("VERDICT = FAIL");
