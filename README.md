@@ -22,7 +22,8 @@
 | ⭐ **真实业务实测 + 那个"每帧丢 8 B"的真缺陷（BIZ）** | 计划 `P7B_BIZ_PLAN.md` · 业务读数 `P7B_BIZ_S1.md` · **Stage 2 结果 `P7B_BIZ_S2.md`（§10 起；§8 = 恢复清单，已跑完）** · 缺陷 `P7B_W9_{GAP,GAP_VERIFY,FIX}.md` · 潜伏 `P7B_LATENT_FIFO_FIX.md` · 门覆盖 `P7B_GATE_COV_FIX.md` · 观测面 `P7B_BIZ_WINDOW.md` · 构建 `P7B_BIZ_BUILD.md` · 回归 `P7B_BIZ_REGRESSION.md` · 空判据审计 `P7B_W13_AUDIT.md` · **BRAM 报告 `P7B_BRAM_REPORT.md`** |
 | ⭐⭐ **TCP 上行退化归因（`wu` 通告通路 = 已定案的产品级缺陷）** | **`_proj_10g/notes/P7B_BIZ_TCPREG.md`**（A/B 判决 / 机理 / 判据 W·X / 4 组速率对照 / 修法）+ `p7b_biz_tcpreg/` |
 | ⭐⭐ **P7b Stage A（P1/P2 + 快照 63 字 + `wu` 机制观测，2026-10-07）** | **`_proj_10g/notes/P7B_BOARD_STAGEA.md`**（板级原件：身份 / `ΔW61` 机制读数 / 新判据 13 跑 / 负对照臂离线重判）· **`P7B_BUILD_STAGEA.md`**（构建 `+0.100 / 0/0/0`）· `P7B_WU_{F2_F1_FIX,P1P2_SNAP,HARNESS_FIX,P1P2_REVIEW}.md` |
-| ⭐⭐ **P7b-LONGSEND（长时间不停发送 TCP + UDP，2026-10-10 最新）** | **`_proj_10g/notes/P7B_LONGSEND_ACCEPT.md`**（轮级收口：一页式 + 证据地图 + "不许当已收口"清单 + 未来计划）· **`P7B_LONGSEND_HANDOFF.md`**（**新 session 入口**：板上现态 / 位流表 / 重烧与环境恢复 / 下一步）· `p7b_longsend_board/ACCEPT.md`（TCP 连续板级原始件）· `p7b_udp_longrun_20261009/`（UDP 300 s）· `p7b_build_longsend/READINGS.txt`（构建 A）· `P7B_LONGSEND_DESIGN.md`（设计件 + §8 板级追加块） |
+| ⭐⭐ **P7b A7 轮（构建 D + E，2026-10-10 最新）：线空闲首次直接测量 ⇒ 墙是窗口 · R-1 重定时救回 WNS** | **`_proj_10g/notes/P7B_A7_HANDOFF.md`**（**新 session 入口**：板上现态 / 五档位流对照表 / 重烧与环境恢复 / 下一步精确选项）· `P7B_A7_BUILD.md` + `P7B_A7_CSUM_SINK_DESIGN.md`（实现 / 设计）· `p7b_build_a7/READINGS.txt` + `p7b_buildE_build/READINGS.txt`（两档构建）· `p7b_a7_board_20261010/` + `p7b_buildE_board_20261010/`（两轮板级原始件，含 A3 回合）· `p7b_uplink_ceil_20261010/`（上行天花板零构建轮） |
+| ⭐⭐ **P7b-LONGSEND（长时间不停发送 TCP + UDP，2026-10-10，上一轮）** | **`_proj_10g/notes/P7B_LONGSEND_ACCEPT.md`**（轮级收口：一页式 + 证据地图 + "不许当已收口"清单 + 未来计划）· **`P7B_LONGSEND_HANDOFF.md`**（上一代入口：板上现态 / 位流表 / 重烧与环境恢复 / 下一步；⚠️ 其"板上现态/下一步"已由 A7 轮的订正块与 `P7B_A7_HANDOFF.md` 接管）· `p7b_longsend_board/ACCEPT.md`（TCP 连续板级原始件）· `p7b_udp_longrun_20261009/`（UDP 300 s）· `p7b_build_longsend/READINGS.txt`（构建 A）· `P7B_LONGSEND_DESIGN.md`（设计件 + §8 板级追加块） |
 | ⭐⭐ **P7b 长流刀（S3 = 单连接持续下行，2026-10-09 · 现为本轮的负对照臂来源）** | **`_proj_10g/notes/p7b_longflow_board/ACCEPT.md`**（板级原件：10 跑表 + `runs/LF*.txt` 原始 stdout）· `P7B_LONGFLOW_DESIGN.md`（设计件 + 末"板级结果块"）· `p7b_build_longflow/{INDEX.txt,S_LADDER.txt,S3/READINGS.txt}`（常量阶梯 / S3 定档） |
 | P7b 其余笔记 | `_proj_10g/notes/P7B_{XXV_OFFICIAL,MAC_DESIGN,MAC_REVIEW,MAC_GATEFIX,MAC_TIMING,RXCLASSIFY_AUDIT,RXCLASSIFY_DESIGN,IMPLICIT_GATE_FIX,IMPLICIT_GATE_ROLLOUT,U7_AND_PEER}.md` |
 | 施工日志、踩坑、决策、教训 | `PORT_NOTES.md` |
@@ -30,7 +31,42 @@
 
 ## 现在是什么状态
 
-⭐⭐ **最新（2026-10-10）：P7b-LONGSEND —— 「长时间不停发送的 app（TCP + UDP）」已板级收口；并就地证伪一条假结论、把"窗帽收益"如实记为【未判定】**
+⭐⭐ **最新（2026-10-10）：P7b A7 轮（构建 D + E）—— 线空闲首次被**直接测量**：设计件手数 193 精确无误、`P` 的差额 **100% 是 S_IDLE**；而线空闲里 **~88–90% 是窗口门** ⇒ **"墙是窗/BDP"被坐实**。同时 R-1 重定时把 WNS 从 `+0.006` 救回 `+0.099`，并否掉一条路线（尾字 carry 零收益）**
+两档构建 + 两轮板级；**新 session 入口 = `_proj_10g/notes/P7B_A7_HANDOFF.md`**；原件 = `P7B_A7_BUILD.md`（实现）、
+`p7b_build_a7/READINGS.txt`（构建 D）、`p7b_buildE_build/READINGS.txt`（构建 E）、`p7b_a7_board_20261010/` + `p7b_buildE_board_20261010/`（板级原始件）。
+- **① ⭐ 手数 193 精确无误，差额 100% 是线空闲**（构建 D 新增 `mac_tx_10g.stat_tx_idle` → **W65**，口径 = `S_IDLE` 拍数计数器、同窗除以 `ΔW20`）：
+  `ΔWnonidle/ΔW20 ≡ 192.9999`（三次跑 + **每个逐区间**，恒定到 1e-4）⇒ **MAC 服务时间恒 193.000 拍/帧**；
+  `ΔW65/ΔW5` = **3.16% / 21.19% / 23.25%**、`ΔW65/ΔW20` = **6.30 / 51.90 / 58.45 拍/帧**。
+  ⇒ ⛔ **此前"设计件手数少了 ~7.4 拍"的说法作废**（差额是一个从来没人计过的独立量，不是手数错）。空载正对照 =
+  `ΔW43 = ΔW65 = 160,307,432` 逐位相同（比值 1.000000000）。
+- **② ⭐⭐ 线空闲里 ~88–90% 是【窗口】**（构建 E 新增 `tcp_tx_frame.stat_winstall` → **W66** = "帧器站在数据帧启动点、
+  唯一关着的门是 `wnd_open`"的停拍计数）：板级三跑 **`ΔW66/ΔW65` = 0.876 / 0.899 / 0.881**（逐区间中位 0.875/0.913/0.881），
+  跨 **5.7–9.3 Gbps（板内窗口径 = `ΔW51×8/Δt`；逐跑 `app=` 列 = 6371.058 / 9252.388 / 5723.878 Mbps）**、跨空闲占空 **2.1%–39.4%** 都稳定 ⇒ **墙是窗/BDP**。
+  白送负对照 = 无连接 2 s 窗 `ΔW65 = 318,344,982`（自由计数）而 **`ΔW66 ≡ 0`**。⚠️ 约 **12%** 的线空闲**不归窗口门**（不许逐拍归因）；
+  窗口门的**子成因未分离**（对端通告窗 vs 板 `WIN_CAP`=61440 vs RTT/BDP —— 在帧器眼里同形 `wnd_open=0`）。
+- **③ 时序（A7 的 R-1「T+2 重定时」）**：`ctrl_tcpcsum`/`ctrl_ipcsum` 装载**推迟 1 拍、改从已寄存的 `ctrl_*` 复算**（+1 FF）⇒
+  **WNS `+0.006 → +0.099`**、旧锥 `ctrl_tcpcsum_reg[*]/D` **整体退出报告面**（C 档 27 次 → D 档 0 次）。⛔ **不许写"时序问题已解决"**、
+  **不许把改善单独归因给 R-1**（D 捆绑三项改动、无拆刀 A/B）。⚠️ E 档 WNS 宿又换对象（`u_app/stg_reg[4]/D`），新计数器**是否加深该锥 = 未定论**。
+- **④ 五档 WNS 轨迹 / 位流身份**：S3 `+0.052` · A `+0.021` · C `+0.006` · **D `+0.099`** · **E `+0.090`**；**三类失败端点五档全 `0/0/0`**；
+  **五档位流全为 15,431,261 B ⇒ 只有 sha256 与 BID 能分版**。**板子现役 = 构建 E（BID `0x19` / sha256 `b88b2bee…a64f`）+ `0x08 = 0` + `carrier = 1`**。
+- **⑤ ⛔ 一条被否掉的路线（否定结论）**：**尾字 carry**（Gap #9 的 TX 半边）**零收益** —— 高码率档 fps 中位 **784,742 vs 负对照 785,558（−0.104%）**、
+  两臂区间峰值同为 `802.7–802.8k fps`，却把 WNS 从 0.33% 吃到 0.094% ⇒ **构建 D 已退回**（`.TX_TAILCARRY(1'b0)`，一行）。
+  ⭐ 同批**证伪"app 生产节奏是瓶颈"**：该臂把 app 下游的 TX CDC FIFO（`u_txcdc`）喂到满（`W28 = 256`、`W45` 拒写 **≈5.6×10⁷–6.1×10⁷ 拍**）
+  而**帧率一点没涨** ⇒ **约束在下游** ⇒ **"提高 app 产字率"整条路线（含 8 路发生器）关闭**。
+- **⑥ A3 修复 + 板级 5/5**：连续模式"对端关闭 → 同槽重连"吞 `ev_up` ⇒ 新连接静默零数据；修法 = `up_pend_r`/`up_pend_id` 待补登记位（`rtl/app_pattern.v`）。
+  **板级 5/5 重连回合第二条连接照常收数据**（A3E 三回合 `bytes2` = 1.52 / 1.58 / 1.65 GB；A3T 两回合 = 1.03 / 1.48 GB）。
+  ⚠️ **本轮没做同会话负对照**（A3 全部板级回合都跑在 E 位流上，`a3_round*.sh` 无 D 臂）—— ⛔ **文档轮订正**：E 轮脚本里写的理由"（D 档也含 A3 代码）"**与源码不符** —— 构建 D 的 `rtl/app_pattern.v` sha256 `387a7d94…`（与 C 档逐字相同）⇒ **D 不含 A3 修复**（A3 修复 = E 档 `811a84e4…`，`p7b_buildE_build/READINGS.txt` 步骤 0）⇒ 准确说法是"**没做**"而非"做不了"，**D 位流可作 A3 的改动前负对照**。
+  ⚠️ **"pending 补做路径真被触发过"未证**。
+- **⑦ 上行天花板（零构建轮 `p7b_uplink_ceil_20261010/`；口径 = **板内窗**，UP = `ΔW53×8/Δt`、DOWN = `ΔW51×8/Δt`）**：
+  memset 构型把上行稳态推到 **6.16 Gbps**（`an_run_UC_memset.out` 的 `SUM_STEADY` UP = **6159.195 Mbps**），
+  限速级 = **板自己通告的窗**（**对端口径**：`ss -ti` 逐点 `rwnd_limited:100.0%`、`snd_wnd` 47752/49152）
+  ⇒ **Stage B 的 "4,058–4,151 Mbps" 应读作台架（对端发送侧）帽**；
+  **双向单连接**稳态 = **8.876 / 9.045 Gbps = 10 Gbps 的 88.8% / 90.5%（≈89–90%）**。
+- ⚠️ **板上现役 = 构建 E（BID `0x19`）+ `0x08 = 0` + `carrier = 1`**；**新 session 入口 = `_proj_10g/notes/P7B_A7_HANDOFF.md`**
+  （A7 轮的订正块也已加在 `P7B_LONGSEND_HANDOFF.md` 顶部）。未收口逐条 = `_proj_10g/notes/P7B_OPEN_ITEMS.md`（本轮已刷新：
+  窗口子成因 · ~12% 空闲归因 · 窗帽未判定 · `WIN_POOL` · `retx_ram`→URAM · `gen_inputs.py` 代差 …）。
+
+⭐⭐ **（上一轮，2026-10-10）P7b-LONGSEND —— 「长时间不停发送的 app（TCP + UDP）」已板级收口；并就地证伪一条假结论、把"窗帽收益"如实记为【未判定】**
 （派单 = 用户逐字「实现长时间不停发送的 app，实现线速发送，**TCP 和 UDP 各实现一个**」）：
 - **① TCP 连续发送（新实现，构建 A）**：`rtl/app_pattern.v` 新参数 `TX_CONTINUOUS`（**默认 `1'b0`** ⇒ 既有例化逐位不变，
   **实证** = 与冻结锚在 24 个交付文件上 `fc /b` 逐字节相同）；位流 **A = `052c5200…0bc284`**（15,431,261 B · BID **`0x16`** ·
