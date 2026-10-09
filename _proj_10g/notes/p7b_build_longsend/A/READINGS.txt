@@ -1,0 +1,111 @@
+# P7B-LONGSEND 构建 A 读数 (2026-10-09; 构建工程师轮)
+# 输入 = ① `rtl/app_pattern.v` 新增参数 `TX_CONTINUOUS`(默认 1'b0) + `CONT_OK`/`cont_reload`/`remain_nxt`
+#            两处重装载 (:710-711/:759-760) + 终结判据加 `!CONT_OK` (:691) + `remain_nxt` 两处 (:705/:755)
+#        ② `board/wrapper_p4.v`: `.WIN_CAP_5` 16'hBFFE→16'hF000 (:227) / app 例化 `.TX_CONTINUOUS(1'b1)` (:1187)
+#            / `.BUILD_ID_V` 32'h15→32'h16 (:3921)
+# 命令 = MSYS_NO_PATHCONV=1 cmd /c 'D:\repo\XCKU5PMini\udp_hls_10g\board\run_build_p7b_ku5p.bat' (从仓根)
+# 起止 = 2026-10-09 23:04:25 (预构建归档戳 20261009_230425) -> 23:32:47 (Vivado 退出 "Exiting Vivado at Fri Oct 9 23:32:47 2026")
+#        BAT_RC = 0 (bat 尾部 BITSTREAM-OK; SHELL_VISIBLE_BAT_RC=0)
+#        构建窗口时长 ≈ 28 min 22 s;  .bit 头时间 = 2026/10/09 23:31:40 (窗口内)
+# 输入自证 = wrapper_p4.v sha256 a8c6f974e3e5efa7e1ea6df94ef786d8defe1b52d2ad608c1e7c712e78e2120b
+#            (与 S3 状态 7d47beb9... 逐行 diff: 3 处功能行 + 4 处注释块, 见 README 轮级 READINGS.txt)
+#            app_pattern.v sha256 c2de4cbb913fea4a829dfbca73f8a8f84e16a7ea3c214c75969c9e2341242bca
+
+== bat 硬门 (命中即失败; 原始计数逐条为 0 ⇒ 无命中) ==
+  12-4739 = 0 / Synth 8-11241 = 0 / undeclared symbol = 0 / VRFC 10-3091 = 0 / VRFC 10-2989 = 0
+  / implicitly declared = 0 / NSTD-1 = 0 / UCIO-1 = 0 / AVAL-326 = 0 / Opt 31-155 = 0 / Opt 31-67 = 0
+  / Route 35-7 = 0
+  (bat 未打印 DROPPED-CONSTRAINT-FAIL / IMPLICIT-NET-FAIL / DRC-KEY-FAIL 三行 ⇒ 无命中)
+
+== tcl 显式读数 (p7b_ku5p_stdout.txt, 本目录) ==
+P7B_CONVERGED_AT_ROUND = 2      (IP 参数不动点迭代, 与 S1/S2/S3/C1/R 同)
+P7B_IS_LOCKED_POSTGEN = 0       (license 面, 与各臂同)
+P7B_WNS = 0.021
+P7B_WHS = 0.010
+P7B_WPWS = 0.010 0.010 0.010 0.010 0.014 0.018 0.019 0.021 0.022 0.027 0.034 0.045 0.052 0.052 0.059 0.061 0.087 0.092 0.236 0.255 0.345 0.347 0.498 2.379 3.143 3.868 4.701 6.770 6.801 6.819 6.970 7.503 7.908 999.070
+      ⚠️ 这一行 = `get_timing_paths -delay_type min_max -max_paths 1 -sort_by group` 的**分组最差值列表**
+      (34 项; 最小 0.010), 不是全局 WPWS —— 全局 WPWS 见下面 Design Timing Summary 的 +0.000。
+      该格式与 S3 逐字同型 (S3 = 同结构 34 项列表)。
+P7B_BIT_EXISTS = 1
+P7B DONE
+bat 尾 = BITSTREAM-OK
+⚠️ `P7B_VERDICT` **未出现** —— 回源码核实 (`board/build_p7b_ku5p.tcl`): 该行只在两个**失败分支**打印
+   (`P7B_VERDICT = IP_NOT_CONVERGED` / `P7B_VERDICT = SYNTH_FAIL`, 均随 `exit 1`) ⇒ 不出现 = 两个失败
+   分支都未触发; 且非本刀新现象 (S3 的 S3_bat_stdout.txt 同样无此行, 逐行结构相同)。成功证据由
+   `P7B DONE` + `BITSTREAM-OK` + `P7B_BIT_EXISTS = 1` 三条提供。
+
+== 参数绑定自证 (p7b_ku5p_stdout.txt; 逐字抄) ==
+	Parameter TX_BYTES bound to: 268435455 - type: integer          # L392 — app_pattern (u_app), = 0x0FFFFFFF ✓
+	Parameter TX_CONTINUOUS bound to: 1'b1                          # L394 — app_pattern (u_app), = 1 ✓ (本刀开关)
+	Parameter TX_BYTES bound to: 0 - type: integer                  # L1038 — app_udp_pattern/u_app_udp 默认 0 (期望, 未动)
+	Parameter BUILD_ID_V bound to: 22 - type: integer               # L1077 — = 0x16 ✓ (本刀 bump)
+  (原文格式 = 每行前导 `<TAB>` + 行尾 1 个空格; repr 已逐条核: 392/394/410/564/575/1038/1077)
+  ⚠️ `TX_CONTINUOUS` 行**所在上下文** (L389-394): `INFO: [Synth 8-6157] synthesizing module 'app_pattern'
+     [D:/.../rtl/app_pattern.v:26]` → `Parameter TX_BYTES bound to: 268435455` → `Parameter TX_SEGSZ bound to:
+     12'b010110110100` (=1460) → `Parameter TX_CONTINUOUS bound to: 1'b1` ⇒ 三参数同属 u_app 例化 (L1187)。
+
+⭐ WIN_CAP_5 传播的**强于静态 grep** 的自证 (同一 stdout, 三个消费模块全中):
+	Parameter WIN_CAP bound to: 16'b1111000000000000     # L410 — 紧接 "synthesizing module 'app_ctrl'" ✓ (=0xF000=61440)
+	Parameter WIN_CAP bound to: 16'b1111000000000000     # L564 — 紧接 "synthesizing module 'tcb'" ✓
+	Parameter RING_CAP bound to: 16'b1111000000000000    # L575 — 紧接 "synthesizing module 'tcp_tx_frame'" ✓
+静态核对 (base case, 4 行): `grep -n "WIN_CAP_5" board/wrapper_p4.v` =
+   227:    localparam [15:0] WIN_CAP_5 = 16'hF000;
+   1231:    app_ctrl #(.WIN_CAP(WIN_CAP_5)) u_app_ctrl (
+   1944:    tcb #(.WIN_CAP(WIN_CAP_5)) u_tcb (   // = tcp_tx_frame.RING_CAP (同源 localparam)
+   2108:    tcp_tx_frame #(.RING_CAP(WIN_CAP_5)) u_tcp_tx (
+   (另有 1 处纯注释提及在 4032 行)
+
+== check_p6e_timing.py p7b_ku5p_timing.rpt (判据一字未动; RC=0) ==
+  [PASS] setup:       WNS=+0.021 TNS=+0.000 failing=0/247479
+  [PASS] hold:        WHS=+0.010 THS=+0.000 failing=0/247479
+  [PASS] pulse-width: WPWS=+0.000 failing=0/80256
+  [INFO] 报告自述: constraints met
+TIMING-OK
+=> **三类失败端点全 0 —— 判据 PASS**
+⚠️ 全局 WPWS 打印值 +0.000 (0 失败) 与 S1/S2/S3/C1/R 同性质 (各臂共有): 追到 = `pipe_clk`
+   (PCIe 核内部时钟); 不是数据面。如实记录, 非新问题。
+=> 失败族清单 = **无**: `Slack (VIOLATED)` 路径块在 board/p7b_ku5p_timing.rpt 与
+   impl_1/wrapper_p4_timing_summary_routed.rpt 里均为 **0 条** (grep -c 各 = 0);
+   extract_build_readings.py 读数逐字: `[FAILFAM] VIOLATED PATH BLOCKS LISTED: 0`
+
+== 余量归属 (最差 setup 路径块; 从 wrapper_p4_timing_summary_routed.rpt 抠出, 行 13421) ==
+slack = +0.021 (与 Design Timing Summary 的 WNS 逐字一致 ⇒ 确为全局最差 setup)
+  Path Group = g_hw.clk_out0   (Requirement 6.400ns ⇒ **数据面域**)
+  Path Type  = Setup (Max at Slow Process Corner)
+  SRC = u_tcp_tx/FSM_sequential_rx_state_reg[0]/C
+  DST = u_tcp_tx/ctrl_tcpcsum_reg[14]/D
+  Logic Levels = 22  (CARRY8=7 LUT1=1 LUT2=1 LUT3=1 LUT4=2 LUT5=4 LUT6=4 MUXF7=1 MUXF8=1)
+  Data Path Delay = 6.385ns (logic 2.482 (38.872%) / route 3.903 (61.128%))
+⚠️ 与 S3 对照: **同域、同宿族 (ctrl_tcpcsum)、不同源** —
+   S3 最差 = `u_tcp_tx/retx_active_reg/C → ctrl_tcpcsum_reg[14]/D`, 19 级 / logic 2.611ns;
+   本刀 = `u_tcp_tx/FSM_sequential_rx_state_reg[0]/C → ctrl_tcpcsum_reg[14]/D`, 22 级 / logic 2.482ns
+   ⇒ 同名 WNS 是**两条不同锥** (全局 #66 "WNS 是不同对象")。
+setup 侧前 9 条 **全部同源** (`u_tcp_tx/FSM_sequential_rx_state_reg[0]/C`) 且全在 g_hw.clk_out0, 两族:
+  族 A = `ctrl_tcpcsum_reg[*]/D` (22 级): +0.021 [14] / +0.042 [10] / +0.043 [8] / +0.053 [13]
+  族 B = `u_tcb/snd_nxt_r_reg[3][*]/CE` (16 级): +0.047 [9] / +0.047 (state_r_reg[3][3]/CE) / +0.048 [11] / +0.048 [12] / +0.060 [25]
+setup 松弛度分布 = 密集簇 +0.021…+0.060 (7 个不同值), 然后跳到 +0.236 ⇒ 该簇与次族隔离度 ≈ 0.176 ns。
+
+== 位流 ==
+sha256 = 052c52006215a2c3d5f9d59f8c47e620e41eb20f271fbc09dabfff96330bc284
+bytes  = 15431261   (⚠️ 与 S3 **同为** 15431261 B ⇒ 只有 sha256 与 BID 能分两版)
+SW_CRC = 2c237c32  (.bit 头; 并列对照: S3=7eab4107 / C1=da663843 / S1=81dbe1db / S2=bcdcfa1d ⇒ 镜像有区分力)
+.bit 头日期/时间 = 2026/10/09 23:31:40   (构建窗口 23:04:25–23:32:47 内 ✓)
+副本核对: A/wrapper_p4.bit 与 vivado_prj/.../impl_1/wrapper_p4.bit sha256 逐字相同 (均为 052c5200…c284)
+⚠️ 未做位级对照 (输入与前档不同 ⇒ 镜像必然不同, diff 无归因价值)
+
+== 资源对照 (Routed 口径, p7b_ku5p_util.rpt) ==
+| 项 | S3 (2^28 / BID 0x15) | **A (本刀; BID 0x16)** | Δ |
+|---|---|---|---|
+| CLB LUTs | 73121 | **73194** | +73 |
+| CLB Registers | 70677 | **70918** | +241 |
+| Unique Control Sets | 2873 | **2861** | −12 |
+| BUFGCE | 4 | **4** | 0 |
+| FDRE / FDCE | 35209 / 34474 | **35472 / 34462** | +263 / −12 |
+| Block RAM Tile / URAM / DSPs / Bonded IOB | 348 / 0 / 4 / 10 | **348 / 0 / 4 / 10** | 逐数相同 |
+⇒ 与预期一致 (本刀不只有常量: app 侧新增参数/逻辑 + WIN_CAP 常量) ⇒ 资源与 WNS **一定**变;
+  数值只代表**这一档输入**, 不许外推。
+
+== 本档口径 ==
+档位 = **构建 A** (P7B-LONGSEND; 连续发送模式 TX_CONTINUOUS=1 + WIN_CAP_5=0xF000 + BID 0x16)
+位置 = _proj_10g/notes/p7b_build_longsend/A/wrapper_p4.bit
+⚠️ 上板前必须先过 `board/check_p6e_timing.py` 与硬门 (已过); 本目录只做构建收口, **未烧板**。

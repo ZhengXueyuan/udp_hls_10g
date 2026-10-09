@@ -1,0 +1,309 @@
+### HOST a-MS-7850 2026-10-09T14:26:25Z
+### NPROC 8 ONLINE 0-7
+### SIBLINGS 0=0,4 1=1,5 2=2,6 3=3,7 4=0,4 5=1,5 6=2,6 7=3,7 
+### CASE A_help_auto
+### CMD ./p7b_tcp_sink --help
+### RC 0
+--- STDOUT
+PIN_RULE=avoid-nic PIN_DEGRADED=none PIN_CPU=5 PIN_CORES_ONLINE=0-7 PIN_NIC_IFACE=enp1s0f0np0,enp1s0f1np1 PIN_NIC_CPUS=0,1,2,3,4,5 PIN_NIC_EXCLUDED=none PIN_CORE_LOAD=4360 PIN_ALLOWED_MASK=20 PIN_GETCPU_START=5 PIN_FREQ_START_KHZ=3601630 PIN_GOV=schedutil PIN_NIC_IRQLINES=12 PIN_NIC_IFACE_SRC=auto PIN_TUPLE_ORDER=own_sib_t PIN_PAIR_RULE=load-only PIN_PAIR_DEGRADED=nic0-0 PIN_CPU_IO=6 PIN_CPU_WORK=0 PIN_PC_IO=2 PIN_PC_WORK=0 PIN_PAIR_EXCL=1 PIN_PAIR_REQ=want
+p7b_tcp_sink --host H --port P [--conns N] [--seconds S] [--rcvbuf B] [--maxbytes B]
+             [--poll-ms 5000] [--stall-n 3] [--no-thread] [--slots 16] [--slot-bytes 65536]
+  逐连接: connect(非阻塞+poll) -> 收流(poll LT) -> 逐字节复算图案(偏移0起) -> 报告
+  ⛔ 不写盘 (载荷只在内存); 校验 = 按 p7b_pattern.h 规则增量复算
+  --poll-ms/--stall-n: 连续 stall-n 次 poll 超时 => 该连接 STALL 并中止 (计入 bad_conns)
+  ⭐ 默认**双线程**: I/O 线程 (poll+recv 进槽) 与校验线程 (逐字节比) 经两条 SPSC 无锁
+     有界队列交接 (槽池 = --slots x --slot-bytes; 基偏移随元素走 ⇒ first_mismatch
+     仍是**连接内流偏移**); 两线程各绑一颗**不同物理核** (--pin-pair/--no-pin-pair)
+  --no-thread: **旧单线程路径原样** (A/B 的另一只手)
+  --check seq|lane8: 图案复算路径 (**默认 seq** = 已上板验过的逐字节版;
+     lane8 = M^8 8 字节/步, 逐位等价, 见 p7b_pattern.h 头注释)
+  输出行以 SINK_ 前缀, 便于机器解析; 汇总行 SINK_SUM_*; 新字段一律**追加行尾**
+  --selftest: 只跑图案自检向量; --selftest-equiv: 跑 seq/lane8 逐位等价自检
+PIN_GETCPU_END=5 PIN_FREQ_END_KHZ=3601630
+--- STDERR
+### ENDCASE A_help_auto
+### CASE B_selftest_auto
+### CMD ./p7b_tcp_sink --selftest
+### RC 0
+--- STDOUT
+PIN_RULE=avoid-nic PIN_DEGRADED=none PIN_CPU=5 PIN_CORES_ONLINE=0-7 PIN_NIC_IFACE=enp1s0f0np0,enp1s0f1np1 PIN_NIC_CPUS=0,1,2,3,4,5 PIN_NIC_EXCLUDED=none PIN_CORE_LOAD=4360 PIN_ALLOWED_MASK=20 PIN_GETCPU_START=5 PIN_FREQ_START_KHZ=3600650 PIN_GOV=schedutil PIN_NIC_IRQLINES=12 PIN_NIC_IFACE_SRC=auto PIN_TUPLE_ORDER=own_sib_t PIN_PAIR_RULE=load-only PIN_PAIR_DEGRADED=nic0-0 PIN_CPU_IO=6 PIN_CPU_WORK=0 PIN_PC_IO=2 PIN_PC_WORK=0 PIN_PAIR_EXCL=1 PIN_PAIR_REQ=want
+SELFTEST p7b_tcp_sink: OK
+  off0..15   got=7F 0B 02 E5 36 A1 4E D6 1A B0 49 B8 56 AD D6 3F 
+             want=7F 0B 02 E5 36 A1 4E D6 1A B0 49 B8 56 AD D6 3F 
+  off1460..7 got=03 00 42 2D 9B 47 CA C0 
+             want=03 00 42 2D 9B 47 CA C0 
+  state@100  got=0xAB5917A81F0FB2AE want=0xAB5917A81F0FB2AE
+PIN_GETCPU_END=5 PIN_FREQ_END_KHZ=3600650
+--- STDERR
+### ENDCASE B_selftest_auto
+### CASE C_core999
+### CMD ./p7b_tcp_sink --core 999 --help
+### RC 2
+--- STDOUT
+--- STDERR
+PIN_FAIL 目标核不在在线集合内: 999 (online=0-7)
+### ENDCASE C_core999
+### CASE D_core8
+### CMD ./p7b_tcp_sink --core 8 --help
+### RC 2
+--- STDOUT
+--- STDERR
+PIN_FAIL 目标核不在在线集合内: 8 (online=0-7)
+### ENDCASE D_core8
+### CASE E_nopin
+### CMD ./p7b_tcp_sink --no-pin --help
+### RC 0
+--- STDOUT
+PIN_RULE=none PIN_DEGRADED=n/a PIN_CPU=none PIN_CORES_ONLINE=0-7 PIN_NIC_IFACE=n/a PIN_NIC_CPUS=n/a PIN_NIC_EXCLUDED=n/a PIN_CORE_LOAD=n/a PIN_ALLOWED_MASK=ff PIN_GETCPU_START=2 PIN_FREQ_START_KHZ=3499816 PIN_GOV=schedutil UNPINNED=1 PIN_NIC_IRQLINES=n/a PIN_NIC_IFACE_SRC=n/a PIN_TUPLE_ORDER=n/a PIN_PAIR_RULE=none PIN_PAIR_DEGRADED=n/a PIN_CPU_IO=none PIN_CPU_WORK=none PIN_PC_IO=n/a PIN_PC_WORK=n/a PIN_PAIR_EXCL=n/a PIN_PAIR_REQ=none
+p7b_tcp_sink --host H --port P [--conns N] [--seconds S] [--rcvbuf B] [--maxbytes B]
+             [--poll-ms 5000] [--stall-n 3] [--no-thread] [--slots 16] [--slot-bytes 65536]
+  逐连接: connect(非阻塞+poll) -> 收流(poll LT) -> 逐字节复算图案(偏移0起) -> 报告
+  ⛔ 不写盘 (载荷只在内存); 校验 = 按 p7b_pattern.h 规则增量复算
+  --poll-ms/--stall-n: 连续 stall-n 次 poll 超时 => 该连接 STALL 并中止 (计入 bad_conns)
+  ⭐ 默认**双线程**: I/O 线程 (poll+recv 进槽) 与校验线程 (逐字节比) 经两条 SPSC 无锁
+     有界队列交接 (槽池 = --slots x --slot-bytes; 基偏移随元素走 ⇒ first_mismatch
+     仍是**连接内流偏移**); 两线程各绑一颗**不同物理核** (--pin-pair/--no-pin-pair)
+  --no-thread: **旧单线程路径原样** (A/B 的另一只手)
+  --check seq|lane8: 图案复算路径 (**默认 seq** = 已上板验过的逐字节版;
+     lane8 = M^8 8 字节/步, 逐位等价, 见 p7b_pattern.h 头注释)
+  输出行以 SINK_ 前缀, 便于机器解析; 汇总行 SINK_SUM_*; 新字段一律**追加行尾**
+  --selftest: 只跑图案自检向量; --selftest-equiv: 跑 seq/lane8 逐位等价自检
+PIN_GETCPU_END=2 PIN_FREQ_END_KHZ=3499816 UNPINNED=1
+--- STDERR
+### ENDCASE E_nopin
+### CASE F_taskset3
+### CMD taskset -c 3 ./p7b_tcp_sink --help
+### RC 0
+--- STDOUT
+PIN_RULE=inherit PIN_DEGRADED=n/a PIN_CPU=3 PIN_CORES_ONLINE=0-7 PIN_NIC_IFACE=enp1s0f0np0,enp1s0f1np1 PIN_NIC_CPUS=0,1,2,3,4,5 PIN_NIC_EXCLUDED=n/a PIN_CORE_LOAD=n/a PIN_ALLOWED_MASK=8 PIN_GETCPU_START=3 PIN_FREQ_START_KHZ=3515232 PIN_GOV=schedutil PIN_NIC_IRQLINES=12 PIN_NIC_IFACE_SRC=auto PIN_TUPLE_ORDER=n/a PIN_PAIR_RULE=load-only PIN_PAIR_DEGRADED=nic0-0 PIN_CPU_IO=5 PIN_CPU_WORK=6 PIN_PC_IO=1 PIN_PC_WORK=2 PIN_PAIR_EXCL=3 PIN_PAIR_REQ=want
+p7b_tcp_sink --host H --port P [--conns N] [--seconds S] [--rcvbuf B] [--maxbytes B]
+             [--poll-ms 5000] [--stall-n 3] [--no-thread] [--slots 16] [--slot-bytes 65536]
+  逐连接: connect(非阻塞+poll) -> 收流(poll LT) -> 逐字节复算图案(偏移0起) -> 报告
+  ⛔ 不写盘 (载荷只在内存); 校验 = 按 p7b_pattern.h 规则增量复算
+  --poll-ms/--stall-n: 连续 stall-n 次 poll 超时 => 该连接 STALL 并中止 (计入 bad_conns)
+  ⭐ 默认**双线程**: I/O 线程 (poll+recv 进槽) 与校验线程 (逐字节比) 经两条 SPSC 无锁
+     有界队列交接 (槽池 = --slots x --slot-bytes; 基偏移随元素走 ⇒ first_mismatch
+     仍是**连接内流偏移**); 两线程各绑一颗**不同物理核** (--pin-pair/--no-pin-pair)
+  --no-thread: **旧单线程路径原样** (A/B 的另一只手)
+  --check seq|lane8: 图案复算路径 (**默认 seq** = 已上板验过的逐字节版;
+     lane8 = M^8 8 字节/步, 逐位等价, 见 p7b_pattern.h 头注释)
+  输出行以 SINK_ 前缀, 便于机器解析; 汇总行 SINK_SUM_*; 新字段一律**追加行尾**
+  --selftest: 只跑图案自检向量; --selftest-equiv: 跑 seq/lane8 逐位等价自检
+PIN_GETCPU_END=3 PIN_FREQ_END_KHZ=3515232
+--- STDERR
+### ENDCASE F_taskset3
+### CASE G_env_core5
+### CMD env PIN_CORE=5 ./p7b_tcp_sink --help
+### RC 0
+--- STDOUT
+PIN_RULE=core PIN_DEGRADED=n/a PIN_CPU=5 PIN_CORES_ONLINE=0-7 PIN_NIC_IFACE=enp1s0f0np0,enp1s0f1np1 PIN_NIC_CPUS=0,1,2,3,4,5 PIN_NIC_EXCLUDED=n/a PIN_CORE_LOAD=n/a PIN_ALLOWED_MASK=20 PIN_GETCPU_START=5 PIN_FREQ_START_KHZ=3499837 PIN_GOV=schedutil PIN_NIC_IRQLINES=12 PIN_NIC_IFACE_SRC=auto PIN_TUPLE_ORDER=n/a PIN_PAIR_RULE=load-only PIN_PAIR_DEGRADED=nic0-0 PIN_CPU_IO=6 PIN_CPU_WORK=0 PIN_PC_IO=2 PIN_PC_WORK=0 PIN_PAIR_EXCL=1 PIN_PAIR_REQ=want
+p7b_tcp_sink --host H --port P [--conns N] [--seconds S] [--rcvbuf B] [--maxbytes B]
+             [--poll-ms 5000] [--stall-n 3] [--no-thread] [--slots 16] [--slot-bytes 65536]
+  逐连接: connect(非阻塞+poll) -> 收流(poll LT) -> 逐字节复算图案(偏移0起) -> 报告
+  ⛔ 不写盘 (载荷只在内存); 校验 = 按 p7b_pattern.h 规则增量复算
+  --poll-ms/--stall-n: 连续 stall-n 次 poll 超时 => 该连接 STALL 并中止 (计入 bad_conns)
+  ⭐ 默认**双线程**: I/O 线程 (poll+recv 进槽) 与校验线程 (逐字节比) 经两条 SPSC 无锁
+     有界队列交接 (槽池 = --slots x --slot-bytes; 基偏移随元素走 ⇒ first_mismatch
+     仍是**连接内流偏移**); 两线程各绑一颗**不同物理核** (--pin-pair/--no-pin-pair)
+  --no-thread: **旧单线程路径原样** (A/B 的另一只手)
+  --check seq|lane8: 图案复算路径 (**默认 seq** = 已上板验过的逐字节版;
+     lane8 = M^8 8 字节/步, 逐位等价, 见 p7b_pattern.h 头注释)
+  输出行以 SINK_ 前缀, 便于机器解析; 汇总行 SINK_SUM_*; 新字段一律**追加行尾**
+  --selftest: 只跑图案自检向量; --selftest-equiv: 跑 seq/lane8 逐位等价自检
+PIN_GETCPU_END=5 PIN_FREQ_END_KHZ=3499837
+--- STDERR
+### ENDCASE G_env_core5
+### CASE H_env_rule_none
+### CMD env PIN_RULE=none ./p7b_tcp_sink --help
+### RC 0
+--- STDOUT
+PIN_RULE=none PIN_DEGRADED=n/a PIN_CPU=none PIN_CORES_ONLINE=0-7 PIN_NIC_IFACE=n/a PIN_NIC_CPUS=n/a PIN_NIC_EXCLUDED=n/a PIN_CORE_LOAD=n/a PIN_ALLOWED_MASK=ff PIN_GETCPU_START=2 PIN_FREQ_START_KHZ=3499828 PIN_GOV=schedutil UNPINNED=1 PIN_NIC_IRQLINES=n/a PIN_NIC_IFACE_SRC=n/a PIN_TUPLE_ORDER=n/a PIN_PAIR_RULE=none PIN_PAIR_DEGRADED=n/a PIN_CPU_IO=none PIN_CPU_WORK=none PIN_PC_IO=n/a PIN_PC_WORK=n/a PIN_PAIR_EXCL=n/a PIN_PAIR_REQ=none
+p7b_tcp_sink --host H --port P [--conns N] [--seconds S] [--rcvbuf B] [--maxbytes B]
+             [--poll-ms 5000] [--stall-n 3] [--no-thread] [--slots 16] [--slot-bytes 65536]
+  逐连接: connect(非阻塞+poll) -> 收流(poll LT) -> 逐字节复算图案(偏移0起) -> 报告
+  ⛔ 不写盘 (载荷只在内存); 校验 = 按 p7b_pattern.h 规则增量复算
+  --poll-ms/--stall-n: 连续 stall-n 次 poll 超时 => 该连接 STALL 并中止 (计入 bad_conns)
+  ⭐ 默认**双线程**: I/O 线程 (poll+recv 进槽) 与校验线程 (逐字节比) 经两条 SPSC 无锁
+     有界队列交接 (槽池 = --slots x --slot-bytes; 基偏移随元素走 ⇒ first_mismatch
+     仍是**连接内流偏移**); 两线程各绑一颗**不同物理核** (--pin-pair/--no-pin-pair)
+  --no-thread: **旧单线程路径原样** (A/B 的另一只手)
+  --check seq|lane8: 图案复算路径 (**默认 seq** = 已上板验过的逐字节版;
+     lane8 = M^8 8 字节/步, 逐位等价, 见 p7b_pattern.h 头注释)
+  输出行以 SINK_ 前缀, 便于机器解析; 汇总行 SINK_SUM_*; 新字段一律**追加行尾**
+  --selftest: 只跑图案自检向量; --selftest-equiv: 跑 seq/lane8 逐位等价自检
+PIN_GETCPU_END=2 PIN_FREQ_END_KHZ=3499828 UNPINNED=1
+--- STDERR
+### ENDCASE H_env_rule_none
+### CASE I_env_rule_auto
+### CMD env PIN_RULE=auto ./p7b_tcp_sink --help
+### RC 0
+--- STDOUT
+PIN_RULE=avoid-nic PIN_DEGRADED=none PIN_CPU=5 PIN_CORES_ONLINE=0-7 PIN_NIC_IFACE=enp1s0f0np0,enp1s0f1np1 PIN_NIC_CPUS=0,1,2,3,4,5 PIN_NIC_EXCLUDED=none PIN_CORE_LOAD=4360 PIN_ALLOWED_MASK=20 PIN_GETCPU_START=5 PIN_FREQ_START_KHZ=3504084 PIN_GOV=schedutil PIN_NIC_IRQLINES=12 PIN_NIC_IFACE_SRC=auto PIN_TUPLE_ORDER=own_sib_t PIN_PAIR_RULE=load-only PIN_PAIR_DEGRADED=nic0-0 PIN_CPU_IO=6 PIN_CPU_WORK=0 PIN_PC_IO=2 PIN_PC_WORK=0 PIN_PAIR_EXCL=1 PIN_PAIR_REQ=want
+p7b_tcp_sink --host H --port P [--conns N] [--seconds S] [--rcvbuf B] [--maxbytes B]
+             [--poll-ms 5000] [--stall-n 3] [--no-thread] [--slots 16] [--slot-bytes 65536]
+  逐连接: connect(非阻塞+poll) -> 收流(poll LT) -> 逐字节复算图案(偏移0起) -> 报告
+  ⛔ 不写盘 (载荷只在内存); 校验 = 按 p7b_pattern.h 规则增量复算
+  --poll-ms/--stall-n: 连续 stall-n 次 poll 超时 => 该连接 STALL 并中止 (计入 bad_conns)
+  ⭐ 默认**双线程**: I/O 线程 (poll+recv 进槽) 与校验线程 (逐字节比) 经两条 SPSC 无锁
+     有界队列交接 (槽池 = --slots x --slot-bytes; 基偏移随元素走 ⇒ first_mismatch
+     仍是**连接内流偏移**); 两线程各绑一颗**不同物理核** (--pin-pair/--no-pin-pair)
+  --no-thread: **旧单线程路径原样** (A/B 的另一只手)
+  --check seq|lane8: 图案复算路径 (**默认 seq** = 已上板验过的逐字节版;
+     lane8 = M^8 8 字节/步, 逐位等价, 见 p7b_pattern.h 头注释)
+  输出行以 SINK_ 前缀, 便于机器解析; 汇总行 SINK_SUM_*; 新字段一律**追加行尾**
+  --selftest: 只跑图案自检向量; --selftest-equiv: 跑 seq/lane8 逐位等价自检
+PIN_GETCPU_END=5 PIN_FREQ_END_KHZ=3504084
+--- STDERR
+### ENDCASE I_env_rule_auto
+### CASE J_iface_bogus
+### CMD env PIN_NIC_IFACE=bogus0 ./p7b_tcp_sink --help
+### RC 2
+--- STDOUT
+--- STDERR
+PIN_FAIL PIN_NIC_IFACE=bogus0 不在 /sys/class/net 里
+### ENDCASE J_iface_bogus
+### CASE K_rule_bogus
+### CMD env PIN_RULE=bogus ./p7b_tcp_sink --help
+### RC 2
+--- STDOUT
+--- STDERR
+PIN_FAIL PIN_RULE 取值非法: bogus (允许 auto|none)
+### ENDCASE K_rule_bogus
+### CASE L_strip_src
+### CMD ./p7b_tcp_src --no-pin --help
+### RC 0
+--- STDOUT
+PIN_RULE=none PIN_DEGRADED=n/a PIN_CPU=none PIN_CORES_ONLINE=0-7 PIN_NIC_IFACE=n/a PIN_NIC_CPUS=n/a PIN_NIC_EXCLUDED=n/a PIN_CORE_LOAD=n/a PIN_ALLOWED_MASK=ff PIN_GETCPU_START=2 PIN_FREQ_START_KHZ=3883432 PIN_GOV=schedutil UNPINNED=1 PIN_NIC_IRQLINES=n/a PIN_NIC_IFACE_SRC=n/a PIN_TUPLE_ORDER=n/a PIN_PAIR_RULE=n/a PIN_PAIR_DEGRADED=n/a PIN_CPU_IO=n/a PIN_CPU_WORK=n/a PIN_PC_IO=n/a PIN_PC_WORK=n/a PIN_PAIR_EXCL=n/a PIN_PAIR_REQ=n/a
+p7b_tcp_src --host H --port P [--seconds S] [--chunk B] [--pace-bps BPS] [--poll-ms 200]
+  上行: 从连接起点偏移 0 起连续图案流 (现场生成), 灌到板子 (板侧 rcvbuf/窗口自然限速)
+  下行: 同一连接上核对板子的 1MB 图案流 (可用 --no-verify-down 关)
+  ⛔ 不写盘: 上行按 p7b_pattern.h 规则生成后直接 send; 下行增量复算
+  --selftest: 图案自检向量
+PIN_GETCPU_END=2 PIN_FREQ_END_KHZ=3883432 UNPINNED=1
+--- STDERR
+### ENDCASE L_strip_src
+### CASE M_strip_mid
+### CMD ./p7b_udp_src --host 127.0.0.1 --no-pin --port 1 --help
+### RC 0
+--- STDOUT
+PIN_RULE=none PIN_DEGRADED=n/a PIN_CPU=none PIN_CORES_ONLINE=0-7 PIN_NIC_IFACE=n/a PIN_NIC_CPUS=n/a PIN_NIC_EXCLUDED=n/a PIN_CORE_LOAD=n/a PIN_ALLOWED_MASK=ff PIN_GETCPU_START=2 PIN_FREQ_START_KHZ=3702425 PIN_GOV=schedutil UNPINNED=1 PIN_NIC_IRQLINES=n/a PIN_NIC_IFACE_SRC=n/a PIN_TUPLE_ORDER=n/a PIN_PAIR_RULE=n/a PIN_PAIR_DEGRADED=n/a PIN_CPU_IO=n/a PIN_CPU_WORK=n/a PIN_PC_IO=n/a PIN_PC_WORK=n/a PIN_PAIR_EXCL=n/a PIN_PAIR_REQ=n/a
+p7b_udp_src --host H [--port 8081] [--seconds S(可为小数)] [--paylen 1472]
+            [--mbps 0|N(线上Mbps, 可小数)] [--slow-mbps N --slow-secs S]
+            [--batch 32] [--off N] [--skip-at OFF] [--poll-ms 1000]
+            [--skip-at OFF (⭐ 可复算负对照: 在流偏移 OFF 处丢 1 个 datagram)]
+            [--teach (旧负对照: 重发同一段前缀 -> 只给'通用值', 已降级)]
+  --mbps 0 = 满速; 载荷流从 --off 起 (重烧后应为 0)
+PIN_GETCPU_END=2 PIN_FREQ_END_KHZ=3898356 UNPINNED=1
+--- STDERR
+### ENDCASE M_strip_mid
+### CASE N_nopin_and_core
+### CMD ./p7b_tcp_sink --no-pin --core 5 --help
+### RC 2
+--- STDOUT
+--- STDERR
+PIN_FAIL --no-pin 与 --core 同时给出 (显式矛盾, 不静默取其一)
+### ENDCASE N_nopin_and_core
+### CASE O_help_all
+### CMD sh -c for n in p7b_tcp_sink p7b_tcp_src p7b_udp_src p7b_tcp_src_fix p7b_tcp_sink_rate p7b_tcp_src_rate; do ./$n --help >/tmp/aff_selftest/h_$n.txt 2>&1; echo "HELP_RC $n=$?"; grep -oE "PIN_CPU=[0-9]+" /tmp/aff_selftest/h_$n.txt; grep -oE "PIN_GETCPU_END=[0-9]+" /tmp/aff_selftest/h_$n.txt; grep -oE "PIN_RULE=[a-z-]+" /tmp/aff_selftest/h_$n.txt; grep -oE "PIN_ALLOWED_MASK=[0-9a-f]+" /tmp/aff_selftest/h_$n.txt; done
+### RC 0
+--- STDOUT
+HELP_RC p7b_tcp_sink=0
+PIN_CPU=5
+PIN_GETCPU_END=5
+PIN_RULE=avoid-nic
+PIN_ALLOWED_MASK=20
+HELP_RC p7b_tcp_src=0
+PIN_CPU=5
+PIN_GETCPU_END=5
+PIN_RULE=avoid-nic
+PIN_ALLOWED_MASK=20
+HELP_RC p7b_udp_src=0
+PIN_CPU=5
+PIN_GETCPU_END=5
+PIN_RULE=avoid-nic
+PIN_ALLOWED_MASK=20
+HELP_RC p7b_tcp_src_fix=0
+PIN_CPU=5
+PIN_GETCPU_END=5
+PIN_RULE=avoid-nic
+PIN_ALLOWED_MASK=20
+HELP_RC p7b_tcp_sink_rate=0
+PIN_CPU=5
+PIN_GETCPU_END=5
+PIN_RULE=avoid-nic
+PIN_ALLOWED_MASK=20
+HELP_RC p7b_tcp_src_rate=0
+PIN_CPU=5
+PIN_GETCPU_END=5
+PIN_RULE=avoid-nic
+PIN_ALLOWED_MASK=20
+--- STDERR
+### ENDCASE O_help_all
+### CASE P_naive_grep
+### CMD sh -c 
+for n in p7b_tcp_sink p7b_tcp_src p7b_udp_src p7b_tcp_src_fix p7b_tcp_sink_rate p7b_tcp_src_rate; do
+  a=$(./$n --help); b=$(./$n --no-pin --help)
+  echo "NAIVE $n pinned=[$(printf %s "$a" | grep -oE "PIN_CPU=[0-9]+" || echo NO_MATCH)] nopin=[$(printf %s "$b" | grep -oE "PIN_CPU=[0-9]+" || echo NO_MATCH)]"
+  echo "      pinned_start=[$(printf %s "$a" | grep -oE "PIN_GETCPU_START=[0-9]+")] pinned_end=[$(printf %s "$a" | grep -oE "PIN_GETCPU_END=[0-9]+")] nopin_unpinned=[$(printf %s "$b" | grep -oE "UNPINNED=[0-9]+")] nopin_end=[$(printf %s "$b" | grep -oE "PIN_GETCPU_END=[0-9]+")]"
+done
+### RC 0
+--- STDOUT
+NAIVE p7b_tcp_sink pinned=[PIN_CPU=5] nopin=[NO_MATCH]
+      pinned_start=[PIN_GETCPU_START=5] pinned_end=[PIN_GETCPU_END=5] nopin_unpinned=[UNPINNED=1
+UNPINNED=1] nopin_end=[PIN_GETCPU_END=7]
+NAIVE p7b_tcp_src pinned=[PIN_CPU=5] nopin=[NO_MATCH]
+      pinned_start=[PIN_GETCPU_START=5] pinned_end=[PIN_GETCPU_END=5] nopin_unpinned=[UNPINNED=1
+UNPINNED=1] nopin_end=[PIN_GETCPU_END=2]
+NAIVE p7b_udp_src pinned=[PIN_CPU=5] nopin=[NO_MATCH]
+      pinned_start=[PIN_GETCPU_START=5] pinned_end=[PIN_GETCPU_END=5] nopin_unpinned=[UNPINNED=1
+UNPINNED=1] nopin_end=[PIN_GETCPU_END=4]
+NAIVE p7b_tcp_src_fix pinned=[PIN_CPU=5] nopin=[NO_MATCH]
+      pinned_start=[PIN_GETCPU_START=5] pinned_end=[PIN_GETCPU_END=5] nopin_unpinned=[UNPINNED=1
+UNPINNED=1] nopin_end=[PIN_GETCPU_END=4]
+NAIVE p7b_tcp_sink_rate pinned=[PIN_CPU=5] nopin=[NO_MATCH]
+      pinned_start=[PIN_GETCPU_START=5] pinned_end=[PIN_GETCPU_END=5] nopin_unpinned=[UNPINNED=1
+UNPINNED=1] nopin_end=[PIN_GETCPU_END=5]
+NAIVE p7b_tcp_src_rate pinned=[PIN_CPU=5] nopin=[NO_MATCH]
+      pinned_start=[PIN_GETCPU_START=5] pinned_end=[PIN_GETCPU_END=5] nopin_unpinned=[UNPINNED=1
+UNPINNED=1] nopin_end=[PIN_GETCPU_END=6]
+--- STDERR
+### ENDCASE P_naive_grep
+### CASE Q_end_mismatch
+### Q BEFORE_REPIN pid 7832's current affinity list: 5
+pid 7832's current affinity list: 5
+pid 7832's new affinity list: 2
+### Q AFTER_REPIN pid 7832's current affinity list: 2
+### RC_Q 2
+--- STDOUT
+PIN_RULE=avoid-nic PIN_DEGRADED=none PIN_CPU=5 PIN_CORES_ONLINE=0-7 PIN_NIC_IFACE=enp1s0f0np0,enp1s0f1np1 PIN_NIC_CPUS=0,1,2,3,4,5 PIN_NIC_EXCLUDED=none PIN_CORE_LOAD=4363 PIN_ALLOWED_MASK=20 PIN_GETCPU_START=5 PIN_FREQ_START_KHZ=2499859 PIN_GOV=schedutil PIN_NIC_IRQLINES=12 PIN_NIC_IFACE_SRC=auto PIN_TUPLE_ORDER=own_sib_t PIN_PAIR_RULE=load-only PIN_PAIR_DEGRADED=nic0-0 PIN_CPU_IO=6 PIN_CPU_WORK=0 PIN_PC_IO=2 PIN_PC_WORK=0 PIN_PAIR_EXCL=1 PIN_PAIR_REQ=want
+SINK_CHECK check=seq
+PIN_THREAD name=io PIN_TID_IO=7834 PIN_CPU_IO=6 PIN_ALLOWED_MASK_IO=40 PIN_GETCPU_IO=6 CPU_FREQ_IO_KHZ=3100000
+PIN_THREAD name=work PIN_TID_WORK=7835 PIN_CPU_WORK=0 PIN_ALLOWED_MASK_WORK=1 PIN_GETCPU_WORK=0 CPU_FREQ_WORK_KHZ=2501673
+SINK_CONN 0 OK bytes=0 first_mismatch=-1 mism_bytes=0 conn_ms=0.073 dur_ms=6003.682 Mbps=0.000 reads=0 poll_tmo=1 CPU_FREQ_KHZ=3899793 THREADED=on q_full_push=1 q_full_pop=1 q_free_push=17 q_free_pop=1 slot_wait_spins=0 checked_bytes=0
+SINK_SUM conns=1 fail_conns=0 bytes=0 clean_conns=1 bad_conns=0 mismatch_bytes=0 stall_conns=0 err_conns=0 poll_tmo=1 wall_s=6.004 net_s=6.004 agg_Mbps=0.000 THREADED=on full_push=1 full_pop=1 free_push=17 free_pop=1 slot_wait_spins=0 checked_bytes=0 threads=2 check=seq
+SINK_DONE
+PIN_GETCPU_END=2 PIN_FREQ_END_KHZ=3892488
+--- STDERR
+PIN_FAIL END_MISMATCH: PIN_GETCPU_END=2 != PIN_CPU=5 (单核掩码下不可能 => 绑核被外部改过/换过核)
+### ENDCASE Q_end_mismatch
+### F1_CHECKS  --core/PIN_CORE 严格解析 (F1): 6 个反例全 RC=2, 正例 RC=0 且 PIN_CPU=5
+CHECK_F1 --core '4294967296' RC=2 expect=2
+CHECK_F1 --core '2147483648' RC=2 expect=2
+CHECK_F1 --core '+1' RC=2 expect=2
+CHECK_F1 --core '0x5' RC=2 expect=2
+CHECK_F1 --core '5abc' RC=2 expect=2
+CHECK_F1 --core '' RC=2 expect=2
+CHECK_F1 PIN_CORE=4294967296 RC=2 expect=2
+CHECK_F1 --core 5 RC=0 expect=0
+CHECK_F1 --core 999 (不在线) RC=2 expect=2
+### F2_CHECKS  探针退化必须响亮 (F2): PIN_RULE 带后缀 + PIN_DEGRADED 非 none
+CHECK_F2 healthy  PIN_RULE=avoid-nic PIN_DEGRADED=none
+CHECK_F2 nic_deg  PIN_RULE=avoid-nic-degraded PIN_DEGRADED=nic
+CHECK_F2 nopin    PIN_RULE=none PIN_DEGRADED=n
+CHECK_F2 nic_excl_health=PIN_NIC_EXCLUDED=none nic_excl_deg=PIN_NIC_EXCLUDED=n/a
+CHECK_F6 PIN_AVOID 命中数 (期望 0)=0
+### F3_CHECK  own-first: 期望 PIN_TUPLE_ORDER=own_sib_t 且 (本机) PIN_CPU=5
+CHECK_F3 PIN_CPU=5 PIN_CORES_ONLINE=0-7 PIN_NIC_IFACE=enp1s0f0np0,enp1s0f1np1 PIN_NIC_CPUS=0,1,2,3,4,5 PIN_NIC_EXCLUDED=none PIN_CORE_LOAD=4372 PIN_ALLOWED_MASK=20 PIN_GETCPU_START=5 PIN_FREQ_START_KHZ=3731803 PIN_GOV=schedutil PIN_NIC_IRQLINES=12 PIN_NIC_IFACE_SRC=auto PIN_TUPLE_ORDER=own_sib_t
+### F9_CHECK  周期行尾的 CPU_FREQ_KHZ 需要**真跑一次**(--help 出不来周期行)
+### 专用仪器 = /tmp/p7b_afftest/f9_loopback_check.sh (回环口: sink 的 SINK_CONN / src 的 SRC_T / udp_src 的 UDP_T 各打一行, 不碰板子)
+### ALLDONE 2026-10-09T14:26:32Z

@@ -1,0 +1,85 @@
+# P7B-LONGFLOW 换目标轮 S2 读数 (2026-10-09; 实现+构建工程师轮 —— 目标是"最长合格档")
+# 输入 = .TX_BYTES(32'h03FFFFFF) [2^26-1 = 67108863 = 64 MiB-1 B] + .BUILD_ID_V(32'h00000014)
+#        ← 唯一改动面 = 这两个常量 (与 S1 状态逐行 diff = 恰 2 行, 见下"输入自证")
+# 命令 = MSYS_NO_PATHCONV=1 cmd /c 'board\run_build_p7b_ku5p.bat'  (从仓根)
+# 起止 = 2026-10-09 05:32:03 (预构建归档戳 20261009_053203) -> 06:06:59 (bat 退出);  BAT_RC=0
+#        ⇒ 构建窗口时长 = **34 min 56 s** (Vivado exit 06:06:59; .bit 头时间 06:05:53)
+# 输入自证 = wrapper_p4.v sha256 e31c5c7b0884115dbf434a58814cea0e6804b73993a9397dda49107d09da4e56
+#            与 S1 状态 (4e5ae8ed...) 逐行 diff = 恰 2 行:
+#              L1177  .TX_BYTES(32'h00FFFFFF) -> (32'h03FFFFFF)
+#              L3911  .BUILD_ID_V(32'h00000013) -> (32'h00000014)
+#            (S1 状态本身 = 与上一轮"长流值"432f9f56... diff 恰 2 行 —— 链条可追)
+
+== tcl 显式读数 (p7b_ku5p_stdout.txt, 本目录) ==
+Parameter TX_BYTES bound to: 67108863 - type: integer        # 0x03FFFFFF (app_pattern/u_app) ✓
+Parameter TX_BYTES bound to: 0 - type: integer               # app_udp_pattern/u_app_udp 默认 0 (期望, 未动)
+Parameter BUILD_ID_V bound to: 20 - type: integer            # 0x14 = 本档 bump 值 ✓ (输入自证)
+P7B_CONVERGED_AT_ROUND = 2      (IP 参数不动点迭代, 与 S1/C1/R 同)
+P7B_IS_LOCKED_POSTGEN = 0       (license 面, 与各臂同)
+P7B_WNS = 0.052
+P7B_WHS = 0.010
+P7B_BIT_EXISTS = 1
+P7B DONE
+bat 尾 = BITSTREAM-OK (无 DROPPED-CONSTRAINT-FAIL / IMPLICIT-NET-FAIL / DRC-KEY-FAIL)
+
+== check_p6e_timing.py p7b_ku5p_timing.rpt (判据一字未动) ==
+  [PASS] setup:       WNS=+0.052 TNS=+0.000 failing=0/247137
+  [PASS] hold:        WHS=+0.010 THS=+0.000 failing=0/247137
+  [PASS] pulse-width: WPWS=+0.000 failing=0/79927
+  [INFO] 报告自述: All user specified timing constraints are met.
+TIMING-OK
+=> **三类失败端点全 0 —— 按事前准则 = 合格**
+⚠️ 全局 WPWS 打印值 +0.000 (0 失败) 与 S1/C1/R 同性质 (各臂共有): 追到 = `pipe_clk`
+   (PCIe 核内部时钟); 不是数据面。数据面 `g_hw.clk_out0` 见 timing 报告 (WPWS 正值)。
+=> 失败族清单 = **无** (routed 报告里 "Slack (VIOLATED)" 路径块 = 0 条;
+   `extract_build_readings.py` 读数逐字: VIOLATED PATH BLOCKS LISTED: 0)
+
+== 位流 ==
+sha256 = 76a05cc84500e6849850a3c0b2d7d704e91a8d926a49d4c6e693953c0a5a707a
+bytes  = 15431261
+SW_CRC = bcdcfa1d   (.bit 头; C1=da663843 / S1=81dbe1db ⇒ 镜像有区分力)
+.bit 头日期/时间 = 2026/10/09 06:05:53   (构建窗口内)
+⚠️ 未做位级对照 (与前档常量不同 ⇒ 镜像必然不同, diff 无归因价值)
+
+== 资源对照 (Routed 口径, p7b_ku5p_util.rpt) ==
+| 项 | C1 基线 (TX_BYTES=1048576 / BID 0x11) | S1 (0x00FFFFFF) | **S2 (本档 0x03FFFFFF)** |
+|---|---|---|---|
+| CLB LUTs | 73188 | 73175 | **73276** |
+| CLB Registers | 70892 | 70871 | **70589** |
+| Unique Control Sets | 2883 | 2830 | **2852** |
+| BUFGCE | 6 | 4 | **4** |
+| FDRE / FDCE | 35413 / 34485 | 35383 / 34494 | **35113 / 34482** |
+| Block RAM Tile / URAM / DSPs / Bonded IOB | 348 / 0 / 4 / 10 | 348 / 0 / 4 / 10 | **348 / 0 / 4 / 10** |
+⇒ 3 档的 BRAM/URAM/DSP/IOB 逐数相同; LUT/FF/控制集 逐档小幅漂 (常量传播改变 opt/phys_opt 结果,
+   同输入可复现的确定性改变 —— 上一轮已位级证明)。
+
+== 时序阶梯全景 (同机同流程, 同输入可复现、方差 0) ==
+| 档 | TX_BYTES | 流量 | BID | WNS | WHS | 三类失败端点 | 位流前8 |
+|---|---|---|---|---|---|---|---|
+| C1 | 32'd1048576 (2^20) | 1 MiB | 0x11 | +0.014 | +0.010 | 0/0/0 | 4c66d39d |
+| S1 | 32'h00FFFFFF (2^24) | 16 MiB | 0x13 | +0.016 | +0.010 | 0/0/0 | 62ee4991 |
+| **S2** | **32'h03FFFFFF (2^26)** | **64 MiB** | **0x14** | **+0.052** | **+0.010** | **0/0/0** | **76a05cc8** |
+| S3 | 32'h0FFFFFFF (2^28) | 256 MiB | 0x15 | +0.052 | +0.010 | 0/0/0 | 492c3579 |
+| S4 | 32'h7FFFFFFF (2^31) | 2 GiB | 0x12 | -0.035 | +0.010 | 24/0/0 | f29ccbae/d222b731 |
+⭐ 观察 (如实登记; 含 S3 跑完后的就地订正): **S2 与 S3 的 WNS +0.052 并列全体最高**
+   (且最差族不同, 见文末"余量归属") —— 比 S1 (+0.016) 与 C1 (+0.014) 都高 0.036–0.038 ns,
+   而 S4 (2 GiB) 是唯一负的 (**+0.052 → -0.035 跨了 0.087**) ⇒ 本阶梯 **不单调**:
+   常量"越大越坏"**不成立**, 余量由常量传播改变 P&R 结果决定。
+⚠️ 本档与 S1 之间**同时换了两个常量** (TX_BYTES + BID) ⇒ **不可把 +0.036 归因给任一个**
+   (事前登记: 只有出现"同 TX_BYTES 换 BID 就翻正/翻负"才追加分离臂 —— **本档未出现**, 不加跑)。
+   本档 BID 0x13→0x14 后**无任何异常形态**; 结论强度 = "本档无证据", 不是"已证无关"。
+
+== 本档口径 ==
+档位 = S2;  流量 = 64 MiB - 1 B = 67,108,863 B/会话连续流;
+时长 ≈ 56.8 ms @9.456 Gbps / 56.6 ms @9.493 Gbps (几何上限口径)
+位置 = _proj_10g/notes/p7b_build_longflow/S2/wrapper_p4.bit
+
+== 余量归属 (追加: 最差 setup 路径块, 从 wrapper_p4_timing_summary_routed.rpt 抠出) ==
+slack = +0.052 (与 Design Timing Summary 的 WNS 逐字一致 ⇒ 确为全局最差 setup)
+  SRC = u_app_ctrl/c_snd_una_reg[14][8]/C
+  DST = u_app/tx_lfsr_reg[19]/D          (app_pattern 的 TX 数据启动路径)
+  Logic Levels = 14   (同族另两条 +0.058: 同 SRC → u_app/bcnt_reg[*]/CE)
+  ⇒ 属**数据面域 (6.400 ns)**; 不是 pcs64/PCIe 域。
+⚠️ 观察登记: S2 (2^26) 与 S3 (2^28) 的 WNS **逐字相同 (+0.052) 但最差族不同**
+   (S3 的 WNS 族 = u_tcp_tx/retx_active_reg/C → u_tcp_tx/ctrl_tcpcsum_reg[*]/D) ⇒
+   该两档的"同名 WNS"是**两个不同的锥各自落点相同**, 不是同一条路径的稳定性。

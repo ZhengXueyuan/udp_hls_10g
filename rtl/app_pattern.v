@@ -28,7 +28,10 @@ module app_pattern #(
     parameter [11:0] TX_SEGSZ   = 12'd1460,
     parameter [11:0] BAD_LEN    = 12'd2000,     // 注入坏帧长度 (> PLEN_MAX=1500)
     parameter [63:0] SEED       = 64'h9E3779B97F4A7C15,
-    parameter        AUTO_CLOSE = 1'b1          // 发完自动 close_req
+    parameter        AUTO_CLOSE = 1'b1,         // 发完自动 close_req
+    // ⭐ P7B-LONGSEND: 1 = 连续发送模式 (永不结束会话; 见 _proj_10g/notes/P7B_LONGSEND_DESIGN.md)
+    //   默认 1'b0 ⇒ 全部既有例化 (含 sim/ 下 71 个镜像件) 行为逐位不变。
+    parameter        TX_CONTINUOUS = 1'b0
 ) (
     input  wire        clk,
     input  wire        rst_n,
@@ -349,6 +352,18 @@ module app_pattern #(
     //       解除, 下一帧从 remain 续 (不丢字节、不发空帧);
     //     - 连接拆除/DEL (state!=ESTAB): 同上, 且随后 ev_up 会重启会话。
     //  默认协议语义: tx_ok 恢复即可继续 (窗口型), 同槽 ev_up 则换流 (会话型)。
+    // ---- ⭐ P7B-LONGSEND: 连续发送模式 ----
+    // CONT_OK = 连续模式**有效**。这是**常量表达式** (纯参数) ⇒ 综合期常量折叠:
+    //   TX_CONTINUOUS=0 ⇒ CONT_OK ≡ 1'b0 ⇒ 下面所有新增逻辑整条消失 (逐位退化)。
+    //   TX_BYTES=0 视为非法配置 ⇒ CONT_OK=0 ⇒ 退化为今天的"TX_BYTES=0 静默停滞"
+    //   (结构性退化, 不是巧合; 见设计件 §1.3①)。
+    localparam CONT_OK = TX_CONTINUOUS && (TX_BYTES != 32'd0);
+    // 帧边界处 remain 耗尽 ⇒ 重装载一个量子。LFSR **不**重装载 ⇒ 线上图案流无缝。
+    // ⚠️ 复用同一个 `remain == 32'd0` 表达式 (它在 :451/:456/:676 已存在) ⇒ 不新增
+    //    32 输入归约 (全局 #64 的机制点)。
+    wire        cont_reload = CONT_OK && (remain == 32'd0);
+    wire [31:0] remain_nxt  = cont_reload ? TX_BYTES : remain;
+
     wire        tx_ok = app_tx_ready[act_id];   // 16:1 mux, 纯控制路径 (不进 m_* 数据路)
 
     // ---------------- P5e: 每帧首字 = 0 载荷 opener (结构性根除跨会话载荷泄漏) ----
@@ -673,7 +688,7 @@ module app_pattern #(
                     if (bad_frm) stat_bad_frames <= stat_bad_frames + 32'd1;
                     frm_idx <= frm_idx + 16'd1;
                     bad_frm <= 1'b0;
-                    if (remain == 32'd0) begin
+                    if ((remain == 32'd0) && !CONT_OK) begin
                         active <= 1'b0;
                         done   <= 1'b1;
                         op_pend <= 1'b0; op_sent <= 1'b0;
@@ -687,11 +702,13 @@ module app_pattern #(
                                    ((frm_idx + 16'd1) == i_bad_frame);
                         seg_len <= ((i_bad_frame != 16'd0) &&
                                     ((frm_idx + 16'd1) == i_bad_frame)) ? BAD_LEN :
-                                   ((remain > {20'b0, TX_SEGSZ}) ? TX_SEGSZ : remain[11:0]);
+                                   ((remain_nxt > {20'b0, TX_SEGSZ}) ? TX_SEGSZ : remain_nxt[11:0]);
                         seg_sent <= 12'd0;
                         bcnt <= 4'd0;
                         // P5e: 新帧先发 0 载荷 opener (帧首字), 载荷等它落地
                         op_pend <= 1'b1; op_sent <= 1'b0;
+                        // ⭐ 连续模式: 量子耗尽 ⇒ 重装载 (图案 LFSR 不动 ⇒ 线上无缝)
+                        if (cont_reload) remain <= TX_BYTES;
                     end else begin
                         // P5d-D2: 连接不可发 (abort fence / 窗口关 / 拆连) ⇒ 不再
                         // 启动新帧。**本帧已完整交付** (上面 else-if 分支只在
@@ -735,10 +752,12 @@ module app_pattern #(
                             ((frm_idx + 16'd1) == i_bad_frame);
                 seg_len  <= ((i_bad_frame != 16'd0) &&
                              ((frm_idx + 16'd1) == i_bad_frame)) ? BAD_LEN :
-                            ((remain > {20'b0, TX_SEGSZ}) ? TX_SEGSZ : remain[11:0]);
+                            ((remain_nxt > {20'b0, TX_SEGSZ}) ? TX_SEGSZ : remain_nxt[11:0]);
                 seg_sent <= 12'd0;
                 bcnt     <= 4'd0;
                 op_pend  <= 1'b1; op_sent <= 1'b0;   // P5e: 同样以 opener 起帧
+                // ⭐ 连续模式: 量子耗尽 ⇒ 重装载 (与 tx_ok 臂同一件事, 两处都要有)
+                if (cont_reload) remain <= TX_BYTES;
             end
             // ---- P5e: opener 交付 (帧首字落地 = 帧已"预开") ----
             // 交付判据与载荷字同一条 (pw_valid && m_tready 的镜像): m_tready 就是

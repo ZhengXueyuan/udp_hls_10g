@@ -1,0 +1,55 @@
+# P7B-LONGFLOW R1 重跑读数 (2026-10-09)
+# 命令 = MSYS_NO_PATHCONV=1 cmd /c 'board\run_build_p7b_ku5p.bat'  (从仓根)
+# 起止 = 03:39:46 (预构建归档戳) -> 04:18 报告结束;  BUILD_EXIT=0
+
+== tcl 显式读数 (board/p7b_ku5p_stdout.txt) ==
+Parameter BUILD_ID_V bound to: 18 - type: integer            # 0x12 = 长流值 (输入自证)
+Parameter TX_BYTES bound to: 2147483647 - type: integer      # 0x7FFFFFFF = 长流值 (app_pattern/u_app)
+Parameter TX_BYTES bound to: 0 - type: integer               # app_udp_pattern/u_app_udp 默认 0 (未动, 期望)
+P7B_CONVERGED_AT_ROUND = 2
+P7B_IS_LOCKED_POSTGEN = 0
+P7B_WNS = -0.035
+P7B_WHS = 0.010
+P7B_WPWS = -0.035 0.010 0.010 0.010 0.010 0.012 0.012 0.012 0.018 0.019 0.040 0.050 0.052 0.059 0.061 0.066 0.107 0.117 0.131 0.143 0.320 0.324 1.415 2.069 3.278 3.871 4.253 6.762 6.850 6.919 6.974 6.986 7.979 999.177
+P7B_BIT_EXISTS = 1
+P7B DONE
+bat 尾 = BITSTREAM-OK   (无 DROPPED-CONSTRAINT-FAIL / IMPLICIT-NET-FAIL / DRC-KEY-FAIL)
+
+== check_p6e_timing.py board/p7b_ku5p_timing.rpt ==
+  [FAIL] setup:       WNS=-0.035 TNS=-0.208 failing=24/247466
+  [PASS] hold:        WHS=+0.010 THS=+0.000 failing=0/247466
+  [PASS] pulse-width: WPWS=+0.000 failing=0/80169
+  [INFO] 报告自述: 有约束未满足
+TIMING-FAIL
+
+== 位流 ==
+sha256 = d222b731dfb18e2a161531fdf89ce60024b6af296fc8ffdbc8e7ed6713e9ee5c
+bytes  = 15431261
+⭐ vs 长流轮 f29ccbaeccfa1f60d3a760688544bf9957bb0215f649d45379edbce68d9880bf:
+   `cmp -l` = 恰 5 个字节不同, 偏移 117/119/120/122/123 (1-based) —
+   全是 .bit 头 ASCII 时间戳的数字位:  R1 "04:15:48"  vs  长流轮 "03:30:34"
+   => **可编程镜像逐字节相同** ⇒ 本流程同输入重跑 = 位级复现 (不是"报告级"而已)
+
+== 失败端点族 (impl_1/wrapper_p4_timing_summary_routed.rpt, 报告默认只列 10/24 条) ==
+# 与长流轮逐字相同 (源/宿/级数/逻辑构成/slack 全部一致)
+ -0.035  17级  u_tcp_tx/retx_active_reg/C  ->  u_tcb/snd_wnd_r_reg[5][12]/CE
+ -0.035  17级  u_tcp_tx/retx_active_reg/C  ->  u_tcb/snd_wnd_r_reg[5][15]/CE
+ -0.015  17级  u_tcp_tx/recv_first_reg/C   ->  u_app/tx_lfsr_reg[10]/D
+ -0.010  17级  u_tcp_tx/retx_active_reg/C  ->  u_tcb/snd_una_r_reg[4][13]/CE
+ -0.009  17级  u_tcp_tx/recv_first_reg/C   ->  u_app/pw_data_reg[19]/D
+ -0.008  20级  u_tcp_tx/retx_active_reg/C  ->  u_tcp_tx/ctrl_tcpcsum_reg[14]/D
+ -0.008  17级  u_tcp_tx/recv_first_reg/C   ->  u_app/pw_keep_reg[5]/D
+ -0.007  17级  u_tcp_tx/retx_active_reg/C  ->  u_tcb/snd_wnd_r_reg[15][0]/CE
+ -0.007  17级  u_tcp_tx/retx_active_reg/C  ->  u_tcb/snd_wnd_r_reg[15][11]/CE
+ -0.007  17级  u_tcp_tx/retx_active_reg/C  ->  u_tcb/snd_wnd_r_reg[15][12]/CE
+所有端点都在 DP 域 (g_hw.clk_out0, 6.400 ns); r6-fix 的最差族 (bank_rdy_reg[0]/C -> u_app/stg_reg[33]/CE, 23 级) 不在其中 (同长流轮)
+
+== 与长流轮 (R0) 对照 ==
+| 量 | 长流轮 R0 | R1 | 判 |
+|---|---|---|---|
+| WNS | -0.035 | -0.035 | 逐字相同 |
+| TNS | -0.208 | -0.208 | 逐字相同 |
+| setup 失败端点 | 24/247466 | 24/247466 | 逐字相同 |
+| WHS / hold 失败 | +0.010 / 0 | +0.010 / 0 | 逐字相同 |
+| WPWS 34 个分组数 | (见上) | (见上) | 逐字相同 |
+| 位流 | f29ccbae... | d222b731... | 仅头时间戳 5 字节 |

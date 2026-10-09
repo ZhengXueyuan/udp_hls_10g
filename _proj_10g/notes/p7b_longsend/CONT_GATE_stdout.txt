@@ -1,0 +1,148 @@
+TB_APP_CONT_SUM errs=0
+TB_APP_CONT: OK
+TB_APP_CONT DONE
+TB_APP_CONT_SUM errs=0
+TB_APP_CONT: OK
+TB_APP_CONT DONE
+TB_APP_CONT_SUM errs=0
+TB_APP_CONT: OK
+TB_APP_CONT DONE
+TB_APP_CONT_SUM errs=0
+TB_APP_CONT: OK
+TB_APP_CONT DONE
+---- TB FAIL detail [M1]: 
+  [FAIL] A1 continuous: close_req == 0
+  [FAIL] A2 continuous: done == 0
+  [FAIL] A1 continuous: close_req == 0
+  [FAIL] A2 continuous: done == 0
+  [FAIL] A1 continuous: close_req == 0
+  [FAIL] A2 continuous: done == 0
+  [FAIL] A1 continuous: close_req == 0 (rec)
+  [FAIL] A2 continuous: done == 0 (rec)
+  [FAIL] A3 u_cont frames >= 4 (4 quanta)
+  [FAIL] A3 u_cont_big frames >= 9 (3 quanta x 3 frames)
+  [FAIL] A3 u_cont_one frames >= 4
+  [FAIL] A5 u_cont bytes >= 3xTX_BYTES
+  [FAIL] A5 u_cont_big bytes >= 3xTX_BYTES
+  [FAIL] A5 u_cont_one bytes >= 3xTX_BYTES
+  [FAIL] A4b u_cont_big >= 9 frames (3 quanta x 3 frames)
+  [FAIL] A12b u_cont tlast-to-tlast interval constant across reload boundary
+  [FAIL] A11 u_txok resumed after tx_ok drop (>=3 frames)
+  [FAIL] A11 u_txok bytes >= 3xTX_BYTES
+TB_APP_CONT_SUM errs=18
+TB_APP_CONT: FAIL errs=18
+TB_APP_CONT DONE
+---- TB FAIL detail [M2]: 
+  [FAIL] frame length idx=2 cyc=9242 got=1460 exp=80 frm=5
+  [FAIL] frame length idx=2 cyc=14726 got=1460 exp=80 frm=8
+  [FAIL] frame length idx=2 cyc=20210 got=1460 exp=80 frm=11
+  [FAIL] frame length idx=2 cyc=25694 got=1460 exp=80 frm=14
+  [FAIL] A4 frame length sequence == arithmetic model
+TB_APP_CONT_SUM errs=1
+TB_APP_CONT: FAIL errs=1
+TB_APP_CONT DONE
+---- TB FAIL detail [M3]: 
+  [FAIL] A11 u_txok resumed after tx_ok drop (>=3 frames)
+  [FAIL] A11 u_txok bytes >= 3xTX_BYTES
+TB_APP_CONT_SUM errs=2
+TB_APP_CONT: FAIL errs=2
+TB_APP_CONT DONE
+---- TB FAIL detail [M4]: 
+  [FAIL] A1 continuous: close_req == 0
+  [FAIL] A2 continuous: done == 0
+  [FAIL] A1 continuous: close_req == 0
+  [FAIL] A2 continuous: done == 0
+  [FAIL] A1 continuous: close_req == 0
+  [FAIL] A2 continuous: done == 0
+  [FAIL] A1 continuous: close_req == 0 (rec)
+  [FAIL] A2 continuous: done == 0 (rec)
+  [FAIL] A3 u_cont frames >= 4 (4 quanta)
+  [FAIL] A3 u_cont_big frames >= 9 (3 quanta x 3 frames)
+  [FAIL] A3 u_cont_one frames >= 4
+  [FAIL] A5 u_cont bytes >= 3xTX_BYTES
+  [FAIL] A5 u_cont_big bytes >= 3xTX_BYTES
+  [FAIL] A5 u_cont_one bytes >= 3xTX_BYTES
+  [FAIL] A4b u_cont_big >= 9 frames (3 quanta x 3 frames)
+  [FAIL] A12b u_cont tlast-to-tlast interval constant across reload boundary
+  [FAIL] A11 u_txok resumed after tx_ok drop (>=3 frames)
+  [FAIL] A11 u_txok bytes >= 3xTX_BYTES
+TB_APP_CONT_SUM errs=18
+TB_APP_CONT: FAIL errs=18
+TB_APP_CONT DONE
+==================== SUMMARY ====================
+  A default          RC=0   (expect 0)
+  B APP_CONT_ARM     RC=0   (expect 0)
+  C P7B_10G+CONT     RC=0   (expect 0)
+  G frozen anchor    RC=0   (expect 0)
+  M1 CONT_OK=0        RC=1  (expect nonzero)
+  M2 no-txok-reload  RC=1  (expect nonzero; 无判别力则如实登�?
+  M3 miss-frmwait     RC=1  (expect nonzero)
+  M4 term-open        RC=1  (expect nonzero)
+  [PASS] equivalence anchor: A vs G byte-identical on 24 files
+  [PASS] A10 zero arm: z_zero_c == z_zero_d on A/B/C/G
+  [PASS] compile-source witness: A/B/C live rtl, G frozen anchor
+  ---- key readings (runB = APP_CONT_ARM) ----
+  I0: frames=1 bytes=1000 done=1 active=0 cr=1 | tb_frames=1 tb_bytes=1000 orc=0 ax=0 ferr=0
+  I1: frames=31 bytes=31944 done=0 active=1 cr=0 | tb_frames=31 tb_bytes=31944 orc=0 ax=0 ferr=0
+  I2: frames=31 bytes=31924 done=0 active=1 cr=0 | tb_frames=31 tb_bytes=31924 orc=0 ax=0 ferr=0
+  I3: frames=7999 bytes=7999 done=0 active=1 cr=0 | tb_frames=7999 tb_bytes=7999 orc=0 ax=0 ferr=0
+  I4: frames=0 bytes=0 done=0 active=1 cr=0 | tb_frames=0 tb_bytes=0 orc=0 ax=0 ferr=0
+  I5: frames=0 bytes=0 done=0 active=1 cr=0 | tb_frames=0 tb_bytes=0 orc=0 ax=0 ferr=0
+  I6: frames=31 bytes=31872 done=0 active=1 cr=0 | tb_frames=31 tb_bytes=31872 orc=0 ax=0 ferr=0
+  I7: frames=1 bytes=168 done=0 active=0 cr=0 | tb_frames=1 tb_bytes=168 orc=0 ax=0 ferr=0
+  I8: frames=1 bytes=168 done=0 active=0 cr=0 | tb_frames=1 tb_bytes=168 orc=0 ax=0 ferr=0
+  I9: frames=32 bytes=31752 done=0 active=1 cr=0 | tb_frames=32 tb_bytes=31752 orc=0 ax=0 ferr=0
+  REC: u_rec1(k=40,tw=300) frames=1 starts_after_up=0 active=0 => SILENT-ZERO-DATA
+  REC: u_rec2(k=240,tw=300) frames=1 starts_after_up=0 active=0 => SILENT-ZERO-DATA
+  REC: u_rec3(k=240,tw=6) frames=32 starts_after_up=32 active=1 => RESUMED
+  RATE: tl1_base=1252 tl1_cont=1252 | cont d12=1252 d23=1252 d34=1252
+  TOK: frames=31 bytes=31872 done=0 cr=0 | tok_dropped=1
+  ---- mutant reds ----
+  [M1] CONT_OK=0:
+  [FAIL] A1 continuous: close_req == 0
+  [FAIL] A2 continuous: done == 0
+  [FAIL] A1 continuous: close_req == 0
+  [FAIL] A2 continuous: done == 0
+  [FAIL] A1 continuous: close_req == 0
+  [FAIL] A2 continuous: done == 0
+  [FAIL] A1 continuous: close_req == 0 (rec)
+  [FAIL] A2 continuous: done == 0 (rec)
+  [FAIL] A3 u_cont frames >= 4 (4 quanta)
+  [FAIL] A3 u_cont_big frames >= 9 (3 quanta x 3 frames)
+  [FAIL] A3 u_cont_one frames >= 4
+  [FAIL] A5 u_cont bytes >= 3xTX_BYTES
+  [FAIL] A5 u_cont_big bytes >= 3xTX_BYTES
+  [FAIL] A5 u_cont_one bytes >= 3xTX_BYTES
+  [FAIL] A4b u_cont_big >= 9 frames (3 quanta x 3 frames)
+  [FAIL] A12b u_cont tlast-to-tlast interval constant across reload boundary
+  [FAIL] A11 u_txok resumed after tx_ok drop (>=3 frames)
+  [FAIL] A11 u_txok bytes >= 3xTX_BYTES
+  [M2] no-txok-reload:
+  [FAIL] frame length idx=2 cyc=9242 got=1460 exp=80 frm=5
+  [FAIL] frame length idx=2 cyc=14726 got=1460 exp=80 frm=8
+  [FAIL] frame length idx=2 cyc=20210 got=1460 exp=80 frm=11
+  [FAIL] frame length idx=2 cyc=25694 got=1460 exp=80 frm=14
+  [FAIL] A4 frame length sequence == arithmetic model
+  [M3] miss-frmwait:
+  [FAIL] A11 u_txok resumed after tx_ok drop (>=3 frames)
+  [FAIL] A11 u_txok bytes >= 3xTX_BYTES
+  [M4] term-open:
+  [FAIL] A1 continuous: close_req == 0
+  [FAIL] A2 continuous: done == 0
+  [FAIL] A1 continuous: close_req == 0
+  [FAIL] A2 continuous: done == 0
+  [FAIL] A1 continuous: close_req == 0
+  [FAIL] A2 continuous: done == 0
+  [FAIL] A1 continuous: close_req == 0 (rec)
+  [FAIL] A2 continuous: done == 0 (rec)
+  [FAIL] A3 u_cont frames >= 4 (4 quanta)
+  [FAIL] A3 u_cont_big frames >= 9 (3 quanta x 3 frames)
+  [FAIL] A3 u_cont_one frames >= 4
+  [FAIL] A5 u_cont bytes >= 3xTX_BYTES
+  [FAIL] A5 u_cont_big bytes >= 3xTX_BYTES
+  [FAIL] A5 u_cont_one bytes >= 3xTX_BYTES
+  [FAIL] A4b u_cont_big >= 9 frames (3 quanta x 3 frames)
+  [FAIL] A12b u_cont tlast-to-tlast interval constant across reload boundary
+  [FAIL] A11 u_txok resumed after tx_ok drop (>=3 frames)
+  [FAIL] A11 u_txok bytes >= 3xTX_BYTES
+CONT-GATE: PASS 

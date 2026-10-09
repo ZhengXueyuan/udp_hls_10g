@@ -1,0 +1,16 @@
+SUDO_RC=0
+NMCLI_RC=0
+--- ip -br addr ---
+enp1s0f1np1      DOWN           192.168.100.100/32 
+--- carrier ---
+0
+
+--- route get ---
+192.168.100.2 dev enp1s0f1np1 src 192.168.100.100 uid 1000 
+    cache 
+--- nmcli dev ---
+enp1s0f1np1     ethernet  unmanaged               --           
+--- irqbalance ---
+inactive
+--- ip rule/route table for the /32 ---
+192.168.100.2 dev enp1s0f1np1 scope link linkdown 

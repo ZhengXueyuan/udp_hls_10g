@@ -1,0 +1,59 @@
+AFF_RC=0
+--- CASE/RC results ---
+### CASE A_help_auto
+### RC 0
+### CASE B_selftest_auto
+### RC 0
+### CASE C_core999
+### RC 2
+### CASE D_core8
+### RC 2
+### CASE E_nopin
+### RC 0
+### CASE F_taskset3
+### RC 0
+### CASE G_env_core5
+### RC 0
+### CASE H_env_rule_none
+### RC 0
+### CASE I_env_rule_auto
+### RC 0
+### CASE J_iface_bogus
+### RC 2
+### CASE K_rule_bogus
+### RC 2
+### CASE L_strip_src
+### RC 0
+### CASE M_strip_mid
+### RC 0
+### CASE N_nopin_and_core
+### RC 2
+### CASE O_help_all
+### RC 0
+### CASE P_naive_grep
+### RC 0
+### CASE Q_end_mismatch
+### RC_Q 2
+--- FAIL lines ---
+6
+=== lines containing FAIL ===
+44:PIN_FAIL 目标核不在在线集合内: 999 (online=0-7)
+51:PIN_FAIL 目标核不在在线集合内: 8 (online=0-7)
+163:PIN_FAIL PIN_NIC_IFACE=bogus0 不在 /sys/class/net 里
+170:PIN_FAIL PIN_RULE 取值非法: bogus (允许 auto|none)
+204:PIN_FAIL --no-pin 与 --core 同时给出 (显式矛盾, 不静默取其一)
+287:PIN_FAIL END_MISMATCH: PIN_GETCPU_END=2 != PIN_CPU=5 (单核掩码下不可能 => 绑核被外部改过/换过核)
+
+=== tail ===
+CHECK_F1 --core 999 (不在线) RC=2 expect=2
+### F2_CHECKS  探针退化必须响亮 (F2): PIN_RULE 带后缀 + PIN_DEGRADED 非 none
+CHECK_F2 healthy  PIN_RULE=avoid-nic PIN_DEGRADED=none
+CHECK_F2 nic_deg  PIN_RULE=avoid-nic-degraded PIN_DEGRADED=nic
+CHECK_F2 nopin    PIN_RULE=none PIN_DEGRADED=n
+CHECK_F2 nic_excl_health=PIN_NIC_EXCLUDED=none nic_excl_deg=PIN_NIC_EXCLUDED=n/a
+CHECK_F6 PIN_AVOID 命中数 (期望 0)=0
+### F3_CHECK  own-first: 期望 PIN_TUPLE_ORDER=own_sib_t 且 (本机) PIN_CPU=5
+CHECK_F3 PIN_CPU=5 PIN_CORES_ONLINE=0-7 PIN_NIC_IFACE=enp1s0f0np0,enp1s0f1np1 PIN_NIC_CPUS=0,1,2,3,4,5 PIN_NIC_EXCLUDED=none PIN_CORE_LOAD=4372 PIN_ALLOWED_MASK=20 PIN_GETCPU_START=5 PIN_FREQ_START_KHZ=3731803 PIN_GOV=schedutil PIN_NIC_IRQLINES=12 PIN_NIC_IFACE_SRC=auto PIN_TUPLE_ORDER=own_sib_t
+### F9_CHECK  周期行尾的 CPU_FREQ_KHZ 需要**真跑一次**(--help 出不来周期行)
+### 专用仪器 = /tmp/p7b_afftest/f9_loopback_check.sh (回环口: sink 的 SINK_CONN / src 的 SRC_T / udp_src 的 UDP_T 各打一行, 不碰板子)
+### ALLDONE 2026-10-09T14:26:32Z

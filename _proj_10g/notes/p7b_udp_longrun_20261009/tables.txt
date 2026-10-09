@@ -1,0 +1,126 @@
+====================================================================================================
+### log_L1.txt
+POINTS n=301 gen=837..1137  gen_step1=True
+WINDOW(逐点求和) dt=300.0141 s frames=242884757 bytes=357526328512 payload=9.5336 Gbps fps=809577.8 P=192.99998
+SEG dt min/max = 0.9234 / 1.0772 ; payload 速度集 = ['9.5336']
+FIRST/LAST raw: W5 0x84d4baf8->0x6eee12a4  W9 0x84bae690->0xc2f5bb50  W20 126977339->369862096  W43 0x84c91c40->0x6edb9c43
+PRE(gen=835)/POST(gen=1138) 63 字守卫 (raw, mod 2^32):
+   W56  udpapp_tx_ovf          A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W21  tx_stat_abort          A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W41  mtx_stat_flush_words   A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W42  mtx_stat_flush_done    A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W59  stx_stat_fifo_ovf      A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W60  srx_stat_fifo_ovf      A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W13  udpapp_mismatch        A=0x00000000 B=0x00b5d992 Δ(raw)=11917714 ⚠️非0
+   W11  udpapp_rx_bytes        A=0x00b69000 B=0x016d2000 Δ(raw)=11964416 ⚠️非0
+   W45  txcdc_ovf_cnt          A=0x00021ff8 B=0x00063a2f Δ(raw)=268855 ⚠️非0
+   W29  txwire_stall_cycles    A=0x00021ff8 B=0x00063a2f Δ(raw)=268855 ⚠️非0
+   W3   rx_stat_crc_err        A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W4   rx_stat_drop           A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W35  rx_stat_fifo_ovf       A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W38  rxcdc_ovf_cnt          A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W46  cls_dbg_stat_ovf       A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W47  cls_dbg_stat_route_ovf A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W12  ?                      A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W10  ?                      A=0x00001fc0 B=0x00003f80 Δ(raw)=8128 ⚠️非0
+NIC 口径 (pre2 -> post2):
+   COALESCE(pre2)=Adaptive RX: off  TX: n/a rx-usecs:	0 rx-usecs-irq:	0 tx-usecs:	0 tx-usecs-irq:	0 
+   COALESCE(post2)=Adaptive RX: off  TX: n/a rx-usecs:	0 rx-usecs-irq:	0 tx-usecs:	0 tx-usecs-irq:	0 
+   Δt(nic_pre2->nic_post2) = 304.820 s
+   port_rx_1024_to_15xx           21577802 ->      268202284  Δ=246624482
+   port_rx_bad                           1 ->              1  Δ=0
+   port_rx_bytes               32755116530 ->   407131081748  Δ=374375965218
+   port_rx_good_bytes          32755115866 ->   407131082602  Δ=374375966736 ⇒ 9.8255 Gbps (线上字节, 含开销)
+   port_rx_nodesc_drops             245465 ->        4476503  Δ=4231038
+   port_rx_overflow                      0 ->              0  Δ=0
+   port_rx_packets                21577848 ->      268202355  Δ=246624507 ⇒ 809081.4 fps
+   port_tx_bytes                  12367413 ->       24887271  Δ=12519858
+   port_tx_packets                    8266 ->          16705  Δ=8439
+   rx-0.rx_packets                      70 ->             91  Δ=21
+   rx-1.rx_packets                      22 ->             25  Δ=3
+   rx-2.rx_packets                21723694 ->      264272682  Δ=242548988 ⇒ 795711.2 fps (交付到 DMA 环)
+   rx-3.rx_packets                      46 ->             46  Δ=0
+   rx_eth_crc_err                        1 ->              1  Δ=0
+   rx_frm_trunc                          0 ->              0  Δ=0
+   rx_ip_hdr_chksum_err                  0 ->              0  Δ=0
+   rx_nodesc_trunc                       0 ->              0  Δ=0
+   rx_noskb_drops                        0 ->              0  Δ=0
+   rx_overlength                         0 ->              0  Δ=0
+   rx_tcp_udp_chksum_err                 0 ->              0  Δ=0
+   Δbytes/Δpackets = 1517.9999
+逐点 NICQ (前后各 3 + 中间 1):
+   i=0 rx-0.rx_packets:=70 rx-1.rx_packets:=22 rx-2.rx_packets:=23148184 rx-3.rx_packets:=46 
+   i=1 rx-0.rx_packets:=70 rx-1.rx_packets:=22 rx-2.rx_packets:=23937347 rx-3.rx_packets:=46 
+   i=2 rx-0.rx_packets:=70 rx-1.rx_packets:=22 rx-2.rx_packets:=24783524 rx-3.rx_packets:=46 
+   i=150 rx-0.rx_packets:=79 rx-1.rx_packets:=23 rx-2.rx_packets:=142404151 rx-3.rx_packets:=46 
+   i=298 rx-0.rx_packets:=88 rx-1.rx_packets:=25 rx-2.rx_packets:=260201516 rx-3.rx_packets:=46 
+   i=299 rx-0.rx_packets:=89 rx-1.rx_packets:=25 rx-2.rx_packets:=261003030 rx-3.rx_packets:=46 
+   i=300 rx-0.rx_packets:=90 rx-1.rx_packets:=25 rx-2.rx_packets:=261838906 rx-3.rx_packets:=46 
+PHASE ctrl0_ping_nocflood   : --- 192.168.100.2 ping statistics --- | 5 packets transmitted, 5 received, 0% packet loss, time 1218ms | rtt min/avg/max/mdev = 0.072/0.077/0.091/0.006 ms | CTRL0_NC_RC=0
+PHASE ping_while_flood      : --- 192.168.100.2 ping statistics --- | 5 packets transmitted, 5 received, 0% packet loss, time 1219ms | rtt min/avg/max/mdev = 0.076/0.094/0.126/0.017 ms | PINGF_NC_RC=0
+PHASE ping_after_stop       : --- 192.168.100.2 ping statistics --- | 5 packets transmitted, 0 received, +5 errors, 100% packet loss, time 1218ms | PINGS_NC_RC=1
+PHASE content               : CONTENT_PCAP_ACTIVE=1 IO_AFFECTING=1 nfr=3000 (⚠️ 只有本小段写盘, 速率窗已结束) | TCPDUMP_RC=0 | 3000 packets captured | 3219 packets received by filter | 0 packets dropped by kernel
+BOARD_END BID=0x00000015 0x08=0x00000002
+====================================================================================================
+### log_L2.txt
+POINTS n=61 gen=3..63  gen_step1=True
+WINDOW(逐点求和) dt=60.0309 s frames=48599666 bytes=71538701992 payload=9.5336 Gbps fps=809577.9 P=192.99998
+SEG dt min/max = 0.9500 / 1.0500 ; payload 速度集 = ['9.5336']
+FIRST/LAST raw: W5 0xacc89646->0xdbdd5496  W9 0x5f08cb80->0x712c228  W20 1083186->49682852  W43 0xacc1f460->0xdbd5593d
+PRE(gen=1)/POST(gen=64) 63 字守卫 (raw, mod 2^32):
+   W56  udpapp_tx_ovf          A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W21  tx_stat_abort          A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W41  mtx_stat_flush_words   A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W42  mtx_stat_flush_done    A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W59  stx_stat_fifo_ovf      A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W60  srx_stat_fifo_ovf      A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W13  udpapp_mismatch        A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W11  udpapp_rx_bytes        A=0x00000000 B=0x00b5d800 Δ(raw)=11917312 ⚠️非0
+   W45  txcdc_ovf_cnt          A=0x00000000 B=0x0000d5ca Δ(raw)=54730 ⚠️非0
+   W29  txwire_stall_cycles    A=0x00000000 B=0x0000d5ca Δ(raw)=54730 ⚠️非0
+   W3   rx_stat_crc_err        A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W4   rx_stat_drop           A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W35  rx_stat_fifo_ovf       A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W38  rxcdc_ovf_cnt          A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W46  cls_dbg_stat_ovf       A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W47  cls_dbg_stat_route_ovf A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W12  ?                      A=0x00000000 B=0x00000000 Δ(raw)=0 ✅0
+   W10  ?                      A=0x00000000 B=0x00001fa0 Δ(raw)=8096 ⚠️非0
+NIC 口径 (pre2 -> post2):
+   COALESCE(pre2)=Adaptive RX: off  TX: n/a rx-usecs:	0 rx-usecs-irq:	0 tx-usecs:	0 tx-usecs-irq:	0 
+   COALESCE(post2)=Adaptive RX: off  TX: n/a rx-usecs:	0 rx-usecs-irq:	0 tx-usecs:	0 tx-usecs-irq:	0 
+   Δt(nic_pre2->nic_post2) = 64.495 s
+   port_rx_1024_to_15xx          281274775 ->      332738606  Δ=51463831
+   port_rx_bad                           2 ->              2  Δ=0
+   port_rx_bytes              426975121218 ->   505097224522  Δ=78122103304
+   port_rx_good_bytes         426975119538 ->   505097222842  Δ=78122103304 ⇒ 9.6903 Gbps (线上字节, 含开销)
+   port_rx_nodesc_drops            4502802 ->        5411249  Δ=908447
+   port_rx_overflow                      0 ->              0  Δ=0
+   port_rx_packets               281274889 ->      332738720  Δ=51463831 ⇒ 797950.2 fps
+   port_tx_bytes                  24900630 ->       37231408  Δ=12330778
+   port_tx_packets                   16774 ->          24940  Δ=8166
+   rx-0.rx_packets                     111 ->            115  Δ=4
+   rx-1.rx_packets                      41 ->             41  Δ=0
+   rx-2.rx_packets               276771843 ->      327878702  Δ=51106859 ⇒ 792415.3 fps (交付到 DMA 环)
+   rx-3.rx_packets                      90 ->             90  Δ=0
+   rx_eth_crc_err                        2 ->              2  Δ=0
+   rx_frm_trunc                          0 ->              0  Δ=0
+   rx_ip_hdr_chksum_err                  0 ->              0  Δ=0
+   rx_nodesc_trunc                       0 ->              0  Δ=0
+   rx_noskb_drops                        0 ->              0  Δ=0
+   rx_overlength                         0 ->              0  Δ=0
+   rx_tcp_udp_chksum_err                 0 ->              0  Δ=0
+   Δbytes/Δpackets = 1518.0002
+逐点 NICQ (前后各 3 + 中间 1):
+   i=0 rx-0.rx_packets:=111 rx-1.rx_packets:=41 rx-2.rx_packets:=277830277 rx-3.rx_packets:=90 
+   i=1 rx-0.rx_packets:=111 rx-1.rx_packets:=41 rx-2.rx_packets:=278703275 rx-3.rx_packets:=90 
+   i=2 rx-0.rx_packets:=111 rx-1.rx_packets:=41 rx-2.rx_packets:=279462159 rx-3.rx_packets:=90 
+   i=30 rx-0.rx_packets:=114 rx-1.rx_packets:=41 rx-2.rx_packets:=301708586 rx-3.rx_packets:=90 
+   i=58 rx-0.rx_packets:=115 rx-1.rx_packets:=41 rx-2.rx_packets:=324001466 rx-3.rx_packets:=90 
+   i=59 rx-0.rx_packets:=115 rx-1.rx_packets:=41 rx-2.rx_packets:=324801935 rx-3.rx_packets:=90 
+   i=60 rx-0.rx_packets:=115 rx-1.rx_packets:=41 rx-2.rx_packets:=325621829 rx-3.rx_packets:=90 
+PHASE ctrl0_ping_nocflood   : --- 192.168.100.2 ping statistics --- | 5 packets transmitted, 5 received, 0% packet loss, time 1216ms | rtt min/avg/max/mdev = 0.099/0.109/0.136/0.013 ms | CTRL0_NC_RC=1
+PHASE ping_while_flood      : --- 192.168.100.2 ping statistics --- | 5 packets transmitted, 5 received, 0% packet loss, time 1217ms | rtt min/avg/max/mdev = 0.077/0.090/0.100/0.008 ms | PINGF_NC_RC=0
+PHASE ping_after_stop       : --- 192.168.100.2 ping statistics --- | 5 packets transmitted, 0 received, +5 errors, 100% packet loss, time 1216ms | PINGS_NC_RC=1
+PHASE content               : CONTENT_PCAP_ACTIVE=1 IO_AFFECTING=1 nfr=3000 (⚠️ 只有本小段写盘, 速率窗已结束) | TCPDUMP_RC=0 | 3000 packets captured | 3176 packets received by filter | 0 packets dropped by kernel
+BOARD_END BID=0x00000015 0x08=0x00000002

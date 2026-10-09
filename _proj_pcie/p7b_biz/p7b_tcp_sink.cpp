@@ -265,6 +265,13 @@ int main(int argc, char **argv) {
     printf("SINK_CHECK check=%s\n", p7b_check_mode_name());
     fflush(stdout);
 
+    // ⭐ P7B-LONGSEND 见证: 长流的**每连接终止条件**是判据的前提 (--maxbytes 忘传 ⇒ 只测
+    //   4 MiB ≈ 3.4 ms; --seconds 只挡新连接、不终止在跑的连接) ⇒ 生效值必须落盘可核。
+    //   新行/新前缀 ⇒ 下游解析器零影响 (既有 SINK_CONN/SINK_SUM 字段名与顺序一字未动)。
+    printf("SINK_LIMITS maxbytes=%ld poll_ms=%d stall_n=%d rcvbuf=%d conns=%d secs=%d\n",
+           maxbytes, poll_ms, stall_n, rcvbuf, conns, secs);
+    fflush(stdout);
+
     // 槽池: **跨连接复用** (只分配一次); 队列每连接新建 ⇒ 队列统计天然按连接 (无清零动作)
     std::vector<std::vector<uint8_t> > slots;
     if (threaded) {

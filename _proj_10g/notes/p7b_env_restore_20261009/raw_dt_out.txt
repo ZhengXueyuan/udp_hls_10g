@@ -1,0 +1,75 @@
+===== D1 干净流: 双线程 vs --no-thread 逐字节等价 =====
+  [PASS] D1 SINK_SUM bytes (双线程 == 单线程) = 2097152
+  [PASS] D1 SINK_SUM mismatch_bytes (双线程 == 单线程) = 0
+  [PASS] D1 SINK_SUM clean_conns (双线程 == 单线程) = 2
+  [PASS] D1 SINK_SUM bad_conns (双线程 == 单线程) = 0
+  [PASS] D1 SINK_CONN0 bytes (双线程 == 单线程) = 1048576
+  [PASS] D1 SINK_CONN0 first_mismatch (双线程 == 单线程) = -1
+  [PASS] D1 SINK_CONN0 mism_bytes (双线程 == 单线程) = 0
+  [PASS] D1 双线程 checked_bytes == bytes = 1048576
+  [PASS] D1 单线程 checked_bytes = -1 (n/a 哨兵) = -1
+  [PASS] D1 收满 2 x 1 MiB = 2097152
+  [PASS] D1 双线程 RC = 0
+  [PASS] D1 单线程 RC = 0
+  [PASS] D1 THREADED 标记 = on
+===== D2 偏移语义定点牙 (注入 K, 两臂 first_mismatch 必须都 == K) =====
+  [PASS] D2 K=500000 双线程 first_mismatch = 500000
+  [PASS] D2 K=500000 单线程 first_mismatch = 500000
+  [PASS] D2 K=500000 双线程 mism_bytes = 1
+  [PASS] D2 K=500000 双线程 RC (失配必须非 0) = 1
+  [PASS] D2 K=500000 单线程 RC = 1
+  [PASS] D2 K=65536 双线程 first_mismatch = 65536
+  [PASS] D2 K=65536 单线程 first_mismatch = 65536
+  [PASS] D2 K=65536 双线程 mism_bytes = 1
+  [PASS] D2 K=65536 双线程 RC (失配必须非 0) = 1
+  [PASS] D2 K=65536 单线程 RC = 1
+  [PASS] D2 K=65535 双线程 first_mismatch = 65535
+  [PASS] D2 K=65535 单线程 first_mismatch = 65535
+  [PASS] D2 K=65535 双线程 mism_bytes = 1
+  [PASS] D2 K=65535 双线程 RC (失配必须非 0) = 1
+  [PASS] D2 K=65535 单线程 RC = 1
+  [PASS] D2 K=1000000 双线程 first_mismatch = 1000000
+  [PASS] D2 K=1000000 单线程 first_mismatch = 1000000
+  [PASS] D2 K=1000000 双线程 mism_bytes = 1
+  [PASS] D2 K=1000000 双线程 RC (失配必须非 0) = 1
+  [PASS] D2 K=1000000 单线程 RC = 1
+===== D3 D2 的负对照: 去掉基偏移的突变件必须报不出 K =====
+  [INFO] 突变件已注入 (base 恒 0)
+  [INFO] 突变件 first_mismatch=41248 (期望 != 500000; 本机 = 500000 - 7*65536 = 41248)
+  [PASS] D3 突变件报不出真偏移 500000 = RED
+===== D4 队列不丢不漏 (推入数 == 弹出数; 槽借用数 - 回收数 == slots) =====
+  [PASS] D4 full_push == full_pop = 36
+  [PASS] D4 full_push == free_pop (每件一件槽) = 36
+  [PASS] D4 free_push - free_pop == 16 slots x 2 conns = 32
+  [PASS] D4 checked_bytes == bytes (校验线程真的全消费完) = 2097152
+===== D5 TSan (有则跑; 无则打 SKIP 醒目行) =====
+  [PASS] D5 TSan 告警数 = 0
+  [PASS] D5 TSan 跑退出码 = 0
+  [PASS] D5 TSan 跑 clean_conns = 3
+===== D6 绑核: 两颗不同物理核 + 掩码独立复算 + /proc 交叉核 =====
+--- /proc/7232/task/*/status 的 Cpus_allowed_list ---
+  7232 Cpus_allowed_list:	2
+  7234 Cpus_allowed_list:	4
+  7235 Cpus_allowed_list:	5
+  [INFO] PIN_CPU_IO=4 mask=10 / PIN_CPU_WORK=5 mask=20
+  [PASS] D6 IO/WORK 是两颗不同的逻辑核 = yes
+  [INFO] siblings(io)=0,4 siblings(work)=1,5
+  [PASS] D6 两者不在同一物理核 = yes
+  [PASS] D6 mask_io == 1<<cpu_io (独立复算) = 10
+  [PASS] D6 mask_work == 1<<cpu_work (独立复算) = 20
+===== D7 end-expect 硬门未误杀 (双线程正常跑不得 END_MISMATCH / exit 2) =====
+  [PASS] D7 干净跑无 END_MISMATCH = 0
+  [PASS] D7 干净跑 RC=0 (不是 _exit(2)) = 0
+  [PASS] D7 绑核跑出现 PIN_GETCPU_END (收尾见证在) = 1
+===== D8 两个天花板 (现测; 本机回环口径) =====
+--- check-only
+  BENCH check-only bytes=268435456 sec=0.419077 Gbps=5.1243 Mbps=5124.32 first_mismatch=-1 mism_bytes=0 check=seq CPU_FREQ_KHZ=3899780
+--- recv-only
+  BENCH recv-only bytes_sent=268435456 bytes_recv=268435456 sec=0.049586 Gbps=43.3085 Mbps=43308.53 checked=-1 first_mismatch=-1 mism_bytes=0 slot_wait_spins=0 send_err=0 slots=16 slot_bytes=65536 core_send=4 core_io=2 core_work=3 CPU_FREQ_KHZ=3899796 check=seq
+--- recv-check
+  BENCH recv-check bytes_sent=268435456 bytes_recv=268435456 sec=0.451414 Gbps=4.7572 Mbps=4757.24 checked=268435456 first_mismatch=-1 mism_bytes=0 slot_wait_spins=0 send_err=0 slots=16 slot_bytes=65536 core_send=4 core_io=2 core_work=3 CPU_FREQ_KHZ=3899773 check=seq
+--- recv-check-split
+  BENCH recv-check-split bytes_sent=268435456 bytes_recv=268435456 sec=0.432538 Gbps=4.9648 Mbps=4964.84 checked=268435456 first_mismatch=-1 mism_bytes=0 slot_wait_spins=734330 send_err=0 slots=16 slot_bytes=65536 core_send=4 core_io=2 core_work=3 CPU_FREQ_KHZ=3885407 check=seq
+
+DUAL_SELFTEST_SUMMARY PASS=48 FAIL=0
+DUAL_SELFTEST_OK

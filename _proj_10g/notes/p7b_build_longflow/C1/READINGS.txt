@@ -1,0 +1,54 @@
+# P7B-LONGFLOW C1 对照构建读数 (2026-10-09)
+# 输入 = r6-fix 常量 (.TX_BYTES(32'd1048576) / .BUILD_ID_V(32'h00000011))
+#        = 与 HEAD (e20b5bf) 逐字节相同, 除 16 行 `//` 注释 (对抗审查轮加)
+# 命令 = MSYS_NO_PATHCONV=1 cmd /c 'board\run_build_p7b_ku5p.bat'  (从仓根)
+# 起止 = 04:18:55 (预构建归档戳) -> 04:52;  BUILD_EXIT=0
+
+== tcl 显式读数 (board/p7b_ku5p_stdout.txt) ==
+Parameter BUILD_ID_V bound to: 17 - type: integer            # 0x11 = r6-fix 值 (输入自证)
+Parameter TX_BYTES bound to: 1048576 - type: integer         # r6-fix 值 (app_pattern/u_app)
+Parameter TX_BYTES bound to: 0 - type: integer               # app_udp_pattern/u_app_udp 默认 0 (期望)
+P7B_WNS = 0.014
+P7B_WHS = 0.010
+P7B_BIT_EXISTS = 1
+P7B DONE
+bat 尾 = BITSTREAM-OK (无 DRC/隐式网/丢约束 FAIL)
+
+== check_p6e_timing.py board/p7b_ku5p_timing.rpt ==
+  [PASS] setup:       WNS=+0.014 TNS=+0.000 failing=0/247476
+  [PASS] hold:        WHS=+0.010 THS=+0.000 failing=0/247476
+  [PASS] pulse-width: WPWS=+0.000 failing=0/80230
+  [INFO] 报告自述: All user specified timing constraints are met.
+TIMING-OK   => **失败端点族清单 = 无**
+
+== 位流 ==
+sha256 = 4c66d39de36cebb5c03e7c59c0e769fb24d5a29f221ad84fc0aaae3fadea9e23
+bytes  = 15431261
+⭐ vs 归档 r6-fix 位流 (p7b_retxfix_salvage/bits/8c8b6126__wrapper_p4.bit, sha256 8c8b6126f82c2c45acee1a1c308332e561677cac5cfb27b87d74d03463d5baf5):
+   `cmp -l` = 6 字节不同, 全在 .bit 头:
+     偏移 111 : 日期 '8' -> '9'      (2026/10/08 -> 2026/10/09)
+     偏移 117,119,120,122,123 : 时间 02:29:20 -> 04:46:04
+   `SW_CRC=da663843` **两边逐字相同**
+   => **C1 = r6-fix 构建的位级复现** (可编程镜像逐字节相同; 差异仅日期/时间戳)
+   => 同时证明: 2026-10-09 新加的 16 行 `//` 注释是**位级惰性**的
+
+== 与 r6-fix 历史读数对照 ==
+| 量 | r6-fix (2026-10-08, 已删树) | C1 (2026-10-09, 本树) | 判 |
+|---|---|---|---|
+| WNS | +0.014 | +0.014 | 逐字相同 |
+| setup 失败端点 | 0/247476 | 0/247476 | 逐字相同 |
+| WHS | +0.010 | +0.010 | 逐字相同 |
+| 位流 | 8c8b6126...baf5 | 4c66d39d...ea9e23 | 仅日期/时间戳 6 字节 |
+来源: r6-fix 读数 = _proj_10g/notes/P7B_RETXFIX_ACCEPT2.md 第 7 条 (独立验收, 两树 sha256 3a3f5eef... 相同)
+
+== 资源对照 (Routed 口径, board/p7b_ku5p_util.rpt) ==
+| 项 | R0/R1 长流 (BID 0x12) | C1 (BID 0x11) | 差 |
+|---|---|---|---|
+| CLB LUTs | 72974 | 73188 | -214 |
+| CLB Registers | 70831 | 70892 | -61 |
+| Unique Control Sets | 2844 | 2883 | -39 |
+| FDRE / FDCE | 35331 / 34506 | 35413 / 34485 | -82 / +21 |
+| BUFGCE | 4 | 6 | -2 |
+| Block RAM Tile / URAM / DSPs / Bonded IOB | 348 / 0 / 4 / 10 | 348 / 0 / 4 / 10 | 逐数相同 |
+=> 2 个"数据常量"的改动**确实改变了网表** (不是只改 LUT INIT 那么轻) —— 但**是同输入可复现的确定性改变**
+   (R0 -> R1 位级复现) ⇒ 差异归因于常量 (经常量传播改变 opt/phys_opt 结果), 不是物理阶段随机

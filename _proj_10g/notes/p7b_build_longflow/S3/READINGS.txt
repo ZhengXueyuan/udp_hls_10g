@@ -1,0 +1,69 @@
+# P7B-LONGFLOW 换目标轮 S3 读数 (2026-10-09; 实现+构建工程师轮 —— 目标是"最长合格档")
+# 输入 = .TX_BYTES(32'h0FFFFFFF) [2^28-1 = 268435455 = 256 MiB-1 B] + .BUILD_ID_V(32'h00000015)
+#        ← 唯一改动面 = 这两个常量 (与 S2 状态逐行 diff = 恰 2 行, 见下"输入自证")
+# 命令 = MSYS_NO_PATHCONV=1 cmd /c 'board\run_build_p7b_ku5p.bat'  (从仓根)
+# 起止 = 2026-10-09 06:10:24 (预构建归档戳 20261009_061024) -> 06:36:22 (bat 退出);  BAT_RC=0
+#        ⇒ 构建窗口时长 = **25 min 58 s** (Vivado exit 06:36:22; .bit 头时间 06:35:18)
+# 输入自证 = wrapper_p4.v sha256 7d47beb99ee701891bf5d149d2131ae3fd88c2f4296d1be7bb923806885b4b36
+#            与 S2 状态 (e31c5c7b...) 逐行 diff = 恰 2 行:
+#              L1177  .TX_BYTES(32'h03FFFFFF) -> (32'h0FFFFFFF)
+#              L3911  .BUILD_ID_V(32'h00000014) -> (32'h00000015)
+
+== tcl 显式读数 (p7b_ku5p_stdout.txt, 本目录) ==
+Parameter TX_BYTES bound to: 268435455 - type: integer       # 0x0FFFFFFF (app_pattern/u_app) ✓
+Parameter TX_BYTES bound to: 0 - type: integer               # app_udp_pattern/u_app_udp 默认 0 (期望, 未动)
+Parameter BUILD_ID_V bound to: 21 - type: integer            # 0x15 = 本档 bump 值 ✓ (输入自证)
+P7B_CONVERGED_AT_ROUND = 2      (IP 参数不动点迭代, 与 S1/S2/C1/R 同)
+P7B_IS_LOCKED_POSTGEN = 0       (license 面, 与各臂同)
+P7B_WNS = 0.052
+P7B_WHS = 0.010
+P7B_BIT_EXISTS = 1
+P7B DONE
+bat 尾 = BITSTREAM-OK (无 DROPPED-CONSTRAINT-FAIL / IMPLICIT-NET-FAIL / DRC-KEY-FAIL)
+
+== check_p6e_timing.py p7b_ku5p_timing.rpt (判据一字未动; 抢救副本上复跑逐字相同) ==
+  [PASS] setup:       WNS=+0.052 TNS=+0.000 failing=0/247049
+  [PASS] hold:        WHS=+0.010 THS=+0.000 failing=0/247049
+  [PASS] pulse-width: WPWS=+0.000 failing=0/80015
+  [INFO] 报告自述: All user specified timing constraints are met.
+TIMING-OK
+=> **三类失败端点全 0 —— 按事前准则 = 合格 (本阶梯最长合格档)**
+⚠️ 全局 WPWS 打印值 +0.000 (0 失败) 与 S1/S2/C1/R 同性质 (各臂共有): 追到 = `pipe_clk`
+   (PCIe 核内部时钟); 不是数据面。
+=> 失败族清单 = **无** (routed 报告里 "Slack (VIOLATED)" 路径块 = 0 条;
+   `extract_build_readings.py` 读数逐字: VIOLATED PATH BLOCKS LISTED: 0)
+
+== 位流 ==
+sha256 = 492c35797eabed33e9ba8d529a622c287aa7d164daebeff5eb2d29655a0dc42c
+bytes  = 15431261
+SW_CRC = 7eab4107   (.bit 头; C1=da663843 / S1=81dbe1db / S2=bcdcfa1d ⇒ 镜像有区分力)
+.bit 头日期/时间 = 2026/10/09 06:35:18   (构建窗口内)
+⚠️ 未做位级对照 (与前档常量不同 ⇒ 镜像必然不同, diff 无归因价值)
+
+== 资源对照 (Routed 口径, p7b_ku5p_util.rpt) ==
+| 项 | C1 基线 (2^20 / BID 0x11) | S1 (2^24) | S2 (2^26) | **S3 (本档 2^28)** |
+|---|---|---|---|---|
+| CLB LUTs | 73188 | 73175 | 73276 | **73121** |
+| CLB Registers | 70892 | 70871 | 70589 | **70677** |
+| Unique Control Sets | 2883 | 2830 | 2852 | **2873** |
+| BUFGCE | 6 | 4 | 4 | **4** |
+| FDRE / FDCE | 35413 / 34485 | 35383 / 34494 | 35113 / 34482 | **35209 / 34474** |
+| Block RAM Tile / URAM / DSPs / Bonded IOB | 348 / 0 / 4 / 10 | 逐数相同 | 逐数相同 | **348 / 0 / 4 / 10** |
+⇒ 四档的 BRAM/URAM/DSP/IOB 逐数相同; LUT/FF/控制集 逐档小幅漂 (常量传播改变 opt/phys_opt 结果)。
+
+== 本档口径 (选定档 = 最长合格) ==
+档位 = **S3** (本轮阶梯最长合格档);  流量 = 256 MiB - 1 B = 268,435,455 B/会话连续流;
+时长 ≈ 227.1 ms @9.456 Gbps / 226.2 ms @9.493 Gbps (几何上限口径)
+位置 = _proj_10g/notes/p7b_build_longflow/S3/wrapper_p4.bit
+⇒ 覆盖测量需求: 227 ms ≫ 快照往返 ~9 ms (内窗可取数) 且 ≫ RTO 全窗重放周期 ~20 ms。
+
+== 余量归属 (追加: 最差 setup 路径块, 从 wrapper_p4_timing_summary_routed.rpt 抠出) ==
+slack = +0.052 (与 Design Timing Summary 的 WNS 逐字一致 ⇒ 确为全局最差 setup)
+  SRC = u_tcp_tx/retx_active_reg/C
+  DST = u_tcp_tx/ctrl_tcpcsum_reg[14]/D
+  Logic Levels = 19   (同族另两条 +0.060 / +0.074: 同 SRC → ctrl_tcpcsum_reg[10]/[13]/D)
+  ⇒ 属**数据面域 (6.400 ns)**; 即 **Stage C 对抗审查点名的那条新锥族**
+    (当时 22 级 / logic 2.611 ns, `P7B_STAGEC_TX.md` / 项目 CLAUDE.md 置顶段)
+⚠️ 观察登记: S3 (2^28) 与 S2 (2^26) 的 WNS **逐字相同 (+0.052) 但最差族不同**
+   (S2 的 WNS 族 = u_app_ctrl/c_snd_una_reg[14][8]/C → u_app/tx_lfsr_reg[19]/D) ⇒
+   该两档的"同名 WNS"是**两个不同的锥各自落点相同**, 不是同一条路径的稳定性。

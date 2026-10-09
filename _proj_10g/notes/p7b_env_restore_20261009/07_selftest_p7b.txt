@@ -1,0 +1,58 @@
+SELFTEST_RC=0
+===== T0 编译 =====
+In file included from p7b_tcp_src.cpp:29:
+p7b_affinity.h:851:13: warning: ‘void p7baff_pin_self_thread(const char*, int, bool)’ defined but not used [-Wunused-function]
+  851 | static void p7baff_pin_self_thread(const char *name, int cpu, bool print) {
+      |             ^~~~~~~~~~~~~~~~~~~~~~
+In file included from p7b_udp_src.cpp:30:
+p7b_affinity.h:851:13: warning: ‘void p7baff_pin_self_thread(const char*, int, bool)’ defined but not used [-Wunused-function]
+  851 | static void p7baff_pin_self_thread(const char *name, int cpu, bool print) {
+      |             ^~~~~~~~~~~~~~~~~~~~~~
+===== T1 图案自检向量 (独立手算常量) =====
+  [PASS] ./p7b_tcp_sink --selftest = OK
+  [PASS] ./p7b_tcp_src --selftest = OK
+  [PASS] ./p7b_udp_src --selftest = OK
+===== T2 干净流 (假板 = 满 1MB 图案 + FIN) =====
+  [PASS] T2 干净流 first_mismatch = -1
+  [PASS] T2 sink 退出码 = 0
+  [PASS] T2 收满 2 连接 x 1MB = 2097152
+===== T3 翻 1 个 bit @500000 (判据必须有牙) =====
+  [PASS] T3 首个失配偏移 = 500000
+  [PASS] T3 sink 退出码 (必须非 0) = 1
+  [PASS] T3 失配字节数 = 1 (只翻了一 bit) = 1
+===== T4 短流 (量程判据有牙: 收到 < 声明) =====
+  [PASS] T4 收到的字节数 = 300000
+===== T5 上行 (src -> 假板; 假板侧独立复算) =====
+  [PASS] T5 src send_err = 0
+  [PASS] T5 src 下行逐字节 (假板的干净流) = -1
+  [PASS] T5 **假板侧**独立复算上行 = -1
+  [INFO] 3 s 内上行被假板侧复算到的字节数 = 8454582 (环回, 仅作有流量证据)
+===== T6 stall 语义 (假板 --silent: 只连不发; poll 超时必须有确定语义) =====
+  [PASS] T6 poll 超时日志行 = 有
+  [PASS] T6 SINK_CONN STALL 行 = 有
+  [PASS] T6 stall_conns = 1
+  [PASS] T6 clean_conns (STALL 不许算 clean) = 0
+  [PASS] T6 sink 退出码 (STALL 必须非 0) = 1
+===== T7 非阻塞实测 (strace: connect=EINPROGRESS 且 I/O 单次耗时 < 5 ms) =====
+  [INFO] strace: EINPROGRESS=1  I/O 调用数=18 (单次最大 0.000063s)  poll 次数=18 (单次最大 0.446495s)
+  [PASS] T7 connect 走 EINPROGRESS (非阻塞) = yes
+  [PASS] T7 无一次阻塞式 I/O (max < 5 ms) = yes
+  [PASS] T7 poll 确实在等 (LT 语义: max >= 0.1 s) = yes
+  [INFO] 本跑没有 EAGAIN (poll 命中率高时不奇怪; 不设判据)
+----- T7b 负对照: 同一判据在一个**阻塞**程序上必须翻红 (没有它 T7 只是空话) -----
+  [INFO] 阻塞对照件: I/O 调用数=1 单次最大 0.999724s (期望 ≈1.0 s = 它就是被 recv 卡住的)
+  [PASS] T7b 负对照: 阻塞程序上'无阻塞 I/O'判据必须翻红 = no
+===== T8 udp_src 载荷 (回环 UDP 收豆机: 内存里增量复算图案流, 不落盘) =====
+  [PASS] T8 收豆机出结果行 = 1
+  [PASS] T8 逐字节失配 (图案流连续) = 0
+  [PASS] T8 收到 datagram (非零正证据) = yes
+  [PASS] T8 udp_src 退出码 = 0
+  [PASS] T8 udp_src send_err=0 且 poll_tmo=0 = 00
+  [INFO] UDPCHECK pkts=1984 bytes=2920448 mism_bytes=0 first_mismatch=-1 covered=yes
+===== T8b 注入 EAGAIN ⇒ udp_src 必须走 poll(POLLOUT) (注入过 = 真测到) =====
+  [PASS] T8b 注入的 EAGAIN 确实发生 (INJECTED 1 次) = 1
+  [PASS] T8b EAGAIN 之后紧跟 poll(fd, POLLOUT) = yes
+  [PASS] T8b 注入后工具继续工作 (call_errors=0 且 pkts>0) = yes
+
+SELFTEST_SUMMARY PASS=30 FAIL=0
+SELFTEST_OK

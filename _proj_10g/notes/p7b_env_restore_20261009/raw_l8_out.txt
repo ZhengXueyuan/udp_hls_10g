@@ -1,0 +1,93 @@
+===== L1/L2/L3/L4/L5/L6 seq vs lane8 逐位等价自检 (两件工具各跑一遍) =====
+--- bench 自检原文
+  PIN_RULE=avoid-nic PIN_DEGRADED=none PIN_CPU=5 PIN_CORES_ONLINE=0-7 PIN_NIC_IFACE=enp1s0f0np0,enp1s0f1np1 PIN_NIC_CPUS=0,1,2,3,4,5 PIN_NIC_EXCLUDED=none PIN_CORE_LOAD=4256 PIN_ALLOWED_MASK=20 PIN_GETCPU_START=5 PIN_FREQ_START_KHZ=3698642 PIN_GOV=schedutil PIN_NIC_IRQLINES=12 PIN_NIC_IFACE_SRC=auto PIN_TUPLE_ORDER=own_sib_t PIN_PAIR_RULE=n/a PIN_PAIR_DEGRADED=n/a PIN_CPU_IO=n/a PIN_CPU_WORK=n/a PIN_PC_IO=n/a PIN_PC_WORK=n/a PIN_PAIR_EXCL=n/a PIN_PAIR_REQ=n/a
+  EQUIV p7b_rate2_bench: begin (seq vs lane8; 进程默认模式 = seq)
+  EQUIV p7b_rate2_bench: table_rebuild bad=0/4096 want=0 MATCH
+  EQUIV p7b_rate2_bench: long n=8388613 seq=(-1,0,0x19CFF6A4002170D8) lane8=(-1,0,0x19CFF6A4002170D8) ctor_oracle=0x19CFF6A4002170D8 MATCH
+  EQUIV p7b_rate2_bench: inj[0] 首字节 off=0 cnt=1 seq=(0,1) lane8=(0,1) state_eq=1 MATCH
+  EQUIV p7b_rate2_bench: inj[1] 非 8 对齐单 bit off=12345 cnt=1 seq=(12345,1) lane8=(12345,1) state_eq=1 MATCH
+  EQUIV p7b_rate2_bench: inj[2] 8 对齐块首整字节 off=65536 cnt=1 seq=(65536,1) lane8=(65536,1) state_eq=1 MATCH
+  EQUIV p7b_rate2_bench: inj[3] 块尾 (i+7) off=65543 cnt=1 seq=(65543,1) lane8=(65543,1) state_eq=1 MATCH
+  EQUIV p7b_rate2_bench: inj[4] 尾段最后一个字节 off=8388612 cnt=1 seq=(8388612,1) lane8=(8388612,1) state_eq=1 MATCH
+  EQUIV p7b_rate2_bench: inj[5] 3 个相邻字节 off=100 cnt=3 seq=(100,3) lane8=(100,3) state_eq=1 MATCH
+  EQUIV p7b_rate2_bench: xblk L=1048579 blocks=11 states=12/12 seq=(-1,0,0x13C199A4F551A1A4) lane8=(-1,0,0x13C199A4F551A1A4) MATCH
+  EQUIV p7b_rate2_bench: dispatch seq=(-1,0) lane8=(-1,0) mode_name=lane8 direct_lane8=-1 MATCH
+  EQUIV p7b_rate2_bench: PASS (checks=10 fail=0)
+  PIN_GETCPU_END=5 PIN_FREQ_END_KHZ=3899788
+  [PASS] L1 bench --selftest-equiv 末行 PASS = 1
+  [PASS] L1 bench --selftest-equiv RC = 0
+  [PASS] L2 sink --selftest-equiv 末行 PASS = 1
+  [PASS] L2 sink --selftest-equiv RC = 0
+  [INFO] L3 原始行: EQUIV p7b_rate2_bench: long n=8388613 seq=(-1,0,0x19CFF6A4002170D8) lane8=(-1,0,0x19CFF6A4002170D8) ctor_oracle=0x19CFF6A4002170D8 MATCH
+  [PASS] L3 长序列行 MATCH = 1
+  [PASS] L3 无失配 (first=-1, mism=0) = 1
+  [PASS] L3 三个末态 (seq / lane8 / ctor oracle) 逐字相同 = 1
+  [PASS] L3 全表无 MISMATCH (两件工具) = 0
+  [PASS] L4 注入失配 6 点全 MATCH = 6
+  [PASS] L4 注入点都报出真偏移 (首字节=0) = 1
+  [PASS] L5 跨块 12/12 中间态 == 独立快进 oracle = 1
+  [PASS] L6 表复核 bad=0/4096 = 1
+===== L7/L8 负对照: 突变件上这条自检**必须翻红** (没有它 L1–L6 只是空话) =====
+  [INFO] M1 已注入 (尾段循环被砍)
+  [INFO] M2 已注入 (Tj[3][200] 翻 1 位)
+  [INFO] M1 突变件: RC=1 MISMATCH 行=8
+    EQUIV p7b_rate2_bench: long n=8388613 seq=(-1,0,0x19CFF6A4002170D8) lane8=(-1,0,0x64AC927B37DE429E) ctor_oracle=0x19CFF6A4002170D8 MISMATCH
+    EQUIV p7b_rate2_bench: inj[0] 首字节 off=0 cnt=1 seq=(0,1) lane8=(0,1) state_eq=0 MISMATCH
+    EQUIV p7b_rate2_bench: inj[1] 非 8 对齐单 bit off=12345 cnt=1 seq=(12345,1) lane8=(12345,1) state_eq=0 MISMATCH
+    EQUIV p7b_rate2_bench: inj[2] 8 对齐块首整字节 off=65536 cnt=1 seq=(65536,1) lane8=(65536,1) state_eq=0 MISMATCH
+    EQUIV p7b_rate2_bench: inj[3] 块尾 (i+7) off=65543 cnt=1 seq=(65543,1) lane8=(65543,1) state_eq=0 MISMATCH
+    EQUIV p7b_rate2_bench: inj[4] 尾段最后一个字节 off=8388612 cnt=1 seq=(8388612,1) lane8=(-1,0) state_eq=0 MISMATCH
+    EQUIV p7b_rate2_bench: inj[5] 3 个相邻字节 off=100 cnt=3 seq=(100,3) lane8=(100,3) state_eq=0 MISMATCH
+    EQUIV p7b_rate2_bench: xblk L=1048579 blocks=11 states=1/12 seq=(-1,0,0x13C199A4F551A1A4) lane8=(8,1044405,0x2FB63D18966A7F47) MISMATCH
+  [INFO] M2 突变件: RC=1 MISMATCH 行=10
+    EQUIV p7b_rate2_bench: table_rebuild bad=1/4096 want=0 MISMATCH
+    EQUIV p7b_rate2_bench: long n=8388613 seq=(-1,0,0x19CFF6A4002170D8) lane8=(1713,8353933,0x43A67EB87990E4B4) ctor_oracle=0x19CFF6A4002170D8 MISMATCH
+    EQUIV p7b_rate2_bench: inj[0] 首字节 off=0 cnt=1 seq=(0,1) lane8=(0,8353934) state_eq=0 MISMATCH
+    EQUIV p7b_rate2_bench: inj[1] 非 8 对齐单 bit off=12345 cnt=1 seq=(12345,1) lane8=(1713,8353933) state_eq=0 MISMATCH
+    EQUIV p7b_rate2_bench: inj[2] 8 对齐块首整字节 off=65536 cnt=1 seq=(65536,1) lane8=(1713,8353933) state_eq=0 MISMATCH
+    EQUIV p7b_rate2_bench: inj[3] 块尾 (i+7) off=65543 cnt=1 seq=(65543,1) lane8=(1713,8353933) state_eq=0 MISMATCH
+    EQUIV p7b_rate2_bench: inj[4] 尾段最后一个字节 off=8388612 cnt=1 seq=(8388612,1) lane8=(1713,8353933) state_eq=0 MISMATCH
+    EQUIV p7b_rate2_bench: inj[5] 3 个相邻字节 off=100 cnt=3 seq=(100,3) lane8=(100,8353936) state_eq=0 MISMATCH
+    EQUIV p7b_rate2_bench: xblk L=1048579 blocks=11 states=6/12 seq=(-1,0,0x13C199A4F551A1A4) lane8=(5018,1039469,0xDCA2EF058F71343E) MISMATCH
+    EQUIV p7b_rate2_bench: dispatch seq=(-1,0) lane8=(1713,8259) mode_name=lane8 direct_lane8=1713 MISMATCH
+  [PASS] L7 M1 (砍尾段) 自检必须翻红 = RED
+  [PASS] L8 M2 (表翻 1 位) 自检必须翻红 = RED
+===== L9/L10/L11/L12/L13 开关端到端 (回环假板; 真 socket 读 => 真跨块) =====
+  [PASS] L9 干净流 SINK_CONN0 bytes (seq == lane8) = 1048576
+  [PASS] L9 干净流 SINK_CONN0 first_mismatch (seq == lane8) = -1
+  [PASS] L9 干净流 SINK_CONN0 mism_bytes (seq == lane8) = 0
+  [PASS] L9 干净流 SINK_SUM bytes (seq == lane8) = 2097152
+  [PASS] L9 干净流 SINK_SUM clean_conns (seq == lane8) = 2
+  [PASS] L9 干净流 SINK_SUM bad_conns (seq == lane8) = 0
+  [PASS] L9 干净流 SINK_SUM mismatch_bytes (seq == lane8) = 0
+  [PASS] L9 seq 臂 RC = 0
+  [PASS] L9 lane8 臂 RC = 0
+  [PASS] L10 翻 1 bit 臂 seq first_mismatch = 500000
+  [PASS] L10 翻 1 bit 臂 seq mism_bytes = 1
+  [PASS] L10 翻 1 bit 臂 seq RC (必须非 0) = 1
+  [PASS] L11 臂 seq 见证 check= 字段 = seq
+  [PASS] L10 翻 1 bit 臂 lane8 first_mismatch = 500000
+  [PASS] L10 翻 1 bit 臂 lane8 mism_bytes = 1
+  [PASS] L10 翻 1 bit 臂 lane8 RC (必须非 0) = 1
+  [PASS] L11 臂 lane8 见证 check= 字段 = lane8
+  [PASS] L12 不带 --check 时默认 = seq (已上板验过的路径) = seq
+  [PASS] L13 未知 --check 值必须响亮退出 (RC=2) = 2
+  [PASS] L13 未知值不许静默回落 (输出里没有 SINK_SUM) = 0
+===== L14 加速正证据: check-only 两臂 (同一台机同会话) =====
+  BENCH check-only bytes=536870912 sec=0.837946 Gbps=5.1256 Mbps=5125.59 first_mismatch=-1 mism_bytes=0 check=seq CPU_FREQ_KHZ=3899781
+  BENCH check-only bytes=536870912 sec=0.381215 Gbps=11.2665 Mbps=11266.52 first_mismatch=-1 mism_bytes=0 check=lane8 CPU_FREQ_KHZ=3899809
+  [INFO] 加速比 = 2.198x
+  [PASS] L14 check-only seq first_mismatch=-1 / mism=0 = -10
+  [PASS] L14 check-only lane8 first_mismatch=-1 / mism=0 = -10
+  [PASS] L14 两臂 check= 见证 = seqlane8
+  [PASS] L14 lane8 > 1.5 x seq (加速是**非零正证据**) = yes
+===== L15/L16 R2: 报告频率必须来自**干活的线程** (LD_PRELOAD 把指定核换成常数) =====
+  BENCH recv-check-split bytes_sent=268435456 bytes_recv=268435456 sec=0.203786 Gbps=10.5379 Mbps=10537.93 checked=268435456 first_mismatch=-1 mism_bytes=0 slot_wait_spins=290867 send_err=0 slots=16 slot_bytes=65536 core_send=4 core_io=2 core_work=3 CPU_FREQ_KHZ=8888000 check=lane8
+  [PASS] L15 注入了 job核 (cpu3) 的假频率 = 1
+  [PASS] L15 报告 CPU_FREQ_KHZ == 工作核的假值 8888000 = 8888000
+  BENCH recv-check-split bytes_sent=268435456 bytes_recv=268435456 sec=0.202709 Gbps=10.5939 Mbps=10593.93 checked=268435456 first_mismatch=-1 mism_bytes=0 slot_wait_spins=292288 send_err=0 slots=16 slot_bytes=65536 core_send=4 core_io=2 core_work=3 CPU_FREQ_KHZ=3897878 check=lane8
+  [PASS] L16 注入确实生效 (主线程 PIN_FREQ_START_KHZ == 8888000) = 8888000
+  [PASS] L16 报告**不是**主线程核的值 (旧语义已消除) = not_idle_core
+
+LANE8_SELFTEST_SUMMARY PASS=42 FAIL=0 SKIP=0
+LANE8_SELFTEST_OK
