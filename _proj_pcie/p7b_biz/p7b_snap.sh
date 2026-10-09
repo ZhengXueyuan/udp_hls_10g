@@ -1,5 +1,9 @@
 #!/bin/bash
 # p7b_snap.sh -- 板侧 **63** 字快照窗口的取数器 (P7b Stage C: BID=10 / SNAP_NW=63)
+#   ⛔ 2026-10-10 订正 (构建 C 门同步轮): 上面这句的标题**已过时** —— 默认几何现 = **65 字 /
+#      BID 0x17** (构建 C: 快照 63→65, 新增 W63/W64 = `app_pattern` 的两个停滞计数);
+#      原句保留 (它描述的是 Stage C 那一代)。⚠️ 与 `NW` 一样, `EXPECT_BID` 默认值**必须与
+#      默认 `NW` 同代** —— 不同代的组合会让身份闸 `ID_FAIL` 直接红 (看着像板子错, 其实是门错)。
 #   ⛔ 2026-10-07 Stage C BID 同步轮: 原句 = "(P7B-WU 二轮: BID=9 / SNAP_NW=63)" ——
 #      窗口没动, 只有身份 9 → 10; 读 P7B-WU 二轮 (Build 2) 位流加 EXPECT_BID=0x00000009。
 #   ⚠️ 旧位流: RATE 轮 51 字 `NW=51 UNIMPL_ADDR=0xEC`; BIZ 轮 61 字 `NW=61 UNIMPL_ADDR=0x114
@@ -39,14 +43,18 @@ D=/dev/xdma0_user
 #   ⚠️ **NW 上限 = 119** (读侧译码 7 位 ⇒ 字 0..127; 快照从字 8 起; 负对照需留 1 个空字)。
 #      红线随之从"≥ 0x100 回绕" 改成 **"绝不能挑 ≥ 0x200"**
 #      (0x200 在 7 位译码下回绕到 word 0 = MAGIC ⇒ 假 FAIL)。
-NW=${NW:-63}
-UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 63 ⇒ 0x11C (61 ⇒ 0x114; 51 ⇒ 0xEC)
-EXPECT_BID=${EXPECT_BID:-0x0000000A}
+NW=${NW:-65}
+UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 65 ⇒ 0x124 (63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)
+EXPECT_BID=${EXPECT_BID:-0x00000017}
 # ⛔ 2026-10-07 Stage C: 原默认值 = 0x00000009 (P7B-WU 二轮 = 9)。
+# ⛔ 2026-10-10 (构建 C 门同步轮): 再上一代的默认 = **0x0000000A** (Stage C 63 字) ——
+#    现役 = **0x00000017** (65 字; 源码 `board/wrapper_p4.v` 的 `BUILD_ID_V = 32'h00000017`)。
+#    ⚠️ 默认 BID 与默认 NW **必须同代**: 配错 ⇒ `id` 直接 ID_FAIL (假红)。
 # ⚠️ 读**旧位流**的口径 (必须显式覆盖, 别指望默认值):
+#    P7b Stage C 63 字: `NW=63 EXPECT_BID=0x0000000A bash p7b_snap.sh ...`
 #    BIZ 61 字: `NW=61 UNIMPL_ADDR=0x114 EXPECT_BID=0x00000008 bash p7b_snap.sh ...`
 #    RATE 51 字: `NW=51 UNIMPL_ADDR=0xEC EXPECT_BID=0x00000007 bash p7b_snap.sh ...`
-#    ⭐ P7B-WU 二轮 63 字 (Build 2; 与现役**同几何不同身份**): `EXPECT_BID=0x00000009 bash p7b_snap.sh ...`
+#    ⭐ P7B-WU 二轮 63 字 (Build 2; 与长度同但**身份不同**): `NW=63 EXPECT_BID=0x00000009 bash p7b_snap.sh ...`
 
 rd(){ $T/reg_rw $D "$1" w 2>/dev/null | tail -1 | sed 's/.*: *//' | grep -oE '^0x[0-9a-fA-F]+'; }
 addr(){ printf '0x%X' $(( 0x20 + 4*$1 )); }
@@ -96,14 +104,18 @@ declare -A NAME=(
  #       ③ 尾部曾有一行重复键 `[56]=udpapp_tx_ovf_stat_tx_ovf` 覆盖掉 `[56]=udpapp_tx_ovf`
  #          ⇒ W56 打出的是**拼错的名字**。已删。
  #    W61/W62 = **P7B-WU 二轮**新增 (stat_wu / rx_occ_bytes)。
- #    地址由 NW 派生: UNIMPL_ADDR = 0x20+4*63 = **0x11C**。逐字归属见
- #    `board/wrapper_p4.v` 的装配段 (源码是唯一权威) 与
+ #    地址由 NW 派生: UNIMPL_ADDR = 0x20+4*63 = **0x11C** (⛔ 2026-10-10: 现役 NW=65 ⇒ **0x124**)。
+ #    逐字归属见 `board/wrapper_p4.v` 的装配段 (源码是唯一权威) 与
  #    `_proj_10g/notes/P7B_BIZ_WINDOW.md` §1 (现役槽位表)。
  [51]=app_tx_bytes         [52]=app_tx_frames       [53]=app_rx_bytes
  [54]=app_mismatch         [55]=tx_stat_retx        [56]=udpapp_tx_ovf
  [57]=tx_retx_hi           [58]=tx_retx_active      [59]=stx_stat_fifo_ovf
  [60]=srx_stat_fifo_ovf
  [61]=app_ctrl_stat_wu     [62]=app_ctrl_rx_occ_bytes
+ # ⭐ W63/W64 = **构建 C (2026-10-10)** 新增两个字 (app_pattern 的两个停滞计数器;
+ #    真值源 = `board/wrapper_p4.v` 装配段 / `_proj_10g/notes/p7b_biz_win/check_window.py` 判据 11 的映射)。
+ #    ⚠️ 不漏这两行的话 `full` 会把它们打成 `?` (名字表缺口, 不是数据错)。
+ [63]=app_frmwait_cyc      [64]=app_bp_cyc
 )
 
 id_check(){

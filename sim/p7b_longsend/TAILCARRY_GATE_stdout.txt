@@ -1,0 +1,66 @@
+---- TB FAIL detail [M1]: 
+  [FAIL] G13 carry arm: 1460B frame period == 186 (design predict)
+TB_APP_TAILCARRY: FAIL errs=1
+TB_APP_TAILCARRY DONE
+---- TB FAIL detail [M2]: 
+  [FAIL] G1 pattern mismatch idx=1 cyc=815 got=c7 exp=cf
+  [FAIL] G1 pattern mismatch idx=1 cyc=815 got=a9 exp=a6
+  [FAIL] G1 pattern mismatch idx=1 cyc=815 got=8e exp=c9
+  [FAIL] G1 pattern mismatch idx=1 cyc=815 got=5b exp=1e
+  [FAIL] G1 oracle: payload byte stream == TB xorshift64 model (cross-frame)
+TB_APP_TAILCARRY: FAIL errs=1
+TB_APP_TAILCARRY DONE
+---- TB FAIL detail [M3]: 
+  [FAIL] G1 pattern mismatch idx=2 cyc=441 got=50 exp=7f
+  [FAIL] G1 pattern mismatch idx=2 cyc=441 got=f7 exp=0b
+  [FAIL] G1 pattern mismatch idx=2 cyc=441 got=76 exp=02
+  [FAIL] G1 pattern mismatch idx=2 cyc=441 got=07 exp=e5
+  [FAIL] G1 oracle: payload byte stream == TB xorshift64 model (cross-frame)
+TB_APP_TAILCARRY: FAIL errs=1
+TB_APP_TAILCARRY DONE
+==================== SUMMARY ====================
+  A default            RC=0   (expect 0)
+  B P7B_10G            RC=0   (expect 0)
+  C P7B_10G+TCARM      RC=0   (expect 0)
+  D TCARM (no P7B10G)  RC=0   (expect 0)
+  M1 TAILC_OK=0        RC=1  (expect nonzero)
+  M2 bad-frame update  RC=1  (expect nonzero)
+  M3 no ev_up clear    RC=1  (expect nonzero)
+  [PASS] mutant arms ran and produced in-TB [FAIL] reds
+  [PASS] carry byte-equivalence: B vs C byte-identical on 6 finite-session files
+  [PASS] param gate inert without P7B_10G: A vs D byte-identical on 22 files
+  [PASS] compile-source witness: A/B/C/D all compile the LIVE rtl\app_pattern.v
+  ---- key readings: RATE (u_cont idx4) ----
+  [B] (A2, carry off):
+  RATE: tl1=190 d12=190 d23=190 d34=13 (u_cont idx4)
+  [C] (A2, carry ON):
+  RATE: tl1=186 d12=186 d23=186 d34=8 (u_cont idx4)
+  ---- counters (C arm): ----
+  FW : low_cycles=200 recount=200 dut=200
+  BP : low_cycles=120 recount=120 dut=120
+  NST: fw=0 bp=0 (u_nostall)
+  ---- TB verdicts ----
+TB_APP_TAILCARRY: OK
+TB_APP_TAILCARRY DONE
+TB_APP_TAILCARRY: OK
+TB_APP_TAILCARRY DONE
+TB_APP_TAILCARRY: OK
+TB_APP_TAILCARRY DONE
+TB_APP_TAILCARRY: OK
+TB_APP_TAILCARRY DONE
+  ---- mutant reds (expect [FAIL] lines) ----
+  [M1] TAILC_OK=0:
+  [FAIL] G13 carry arm: 1460B frame period == 186 (design predict)
+  [M2] bad-frame carry update:
+  [FAIL] G1 pattern mismatch idx=1 cyc=815 got=c7 exp=cf
+  [FAIL] G1 pattern mismatch idx=1 cyc=815 got=a9 exp=a6
+  [FAIL] G1 pattern mismatch idx=1 cyc=815 got=8e exp=c9
+  [FAIL] G1 pattern mismatch idx=1 cyc=815 got=5b exp=1e
+  [FAIL] G1 oracle: payload byte stream == TB xorshift64 model (cross-frame)
+  [M3] no carry clear on ev_up:
+  [FAIL] G1 pattern mismatch idx=2 cyc=441 got=50 exp=7f
+  [FAIL] G1 pattern mismatch idx=2 cyc=441 got=f7 exp=0b
+  [FAIL] G1 pattern mismatch idx=2 cyc=441 got=76 exp=02
+  [FAIL] G1 pattern mismatch idx=2 cyc=441 got=07 exp=e5
+  [FAIL] G1 oracle: payload byte stream == TB xorshift64 model (cross-frame)
+TAILCARRY-GATE: PASS 

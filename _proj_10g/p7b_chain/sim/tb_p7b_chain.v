@@ -1492,6 +1492,12 @@ module tb_p7b_chain;
         u_dut.u_pcie_xdma.axil_read(32'hE4, v); chk("7 W49 cls dbg_occ", v === 32'h00000015, "forced producer node");
         u_dut.u_pcie_xdma.axil_read(32'hE8, v); chk("7 W50 tx_clk_act", v === 32'hA5A50050, "forced producer node");
         // 有界性: 51 字占 0x20..0xE8 ⇒ 0xEC 必须读 0 且 SLVERR。
+        //   ⛔ 2026-10-10 订正 (构建 C 门同步轮): 窗口 63 → **65 字** (新增 W63/W64 =
+        //      `app_pattern.stat_frmwait_cyc` / `stat_bp_cyc`; `board/wrapper_p4.v` 的
+        //      `SNAP_NW_P6E = 65`) ⇒ 末字 W64 @ 0x120 ⇒ **未实现地址 = 0x20 + 4*65 = 0x124**
+        //      (word 73)。`0x11C` 现在是**窗口内的真字 W63** ⇒ 原地址上的 SLVERR 断言
+        //      已失去判别力 (必然红) ⇒ 只换地址常量。红线不变 (读侧译码 7 位 ⇒ 绝不能挑
+        //      ≥0x200); 判据语义不变 (未实现地址必须回 0 + SLVERR)。原句 (63 字时代) 保留在下方。
         //   ⛔ 2026-10-07 订正 (P7B_STAGEB_FIX.md; 出处 P7B_STAGEB_RX8_REGRESSION.md §5.6/§6-③):
         //      窗口 BIZ 轮起 61 字 / Stage A 起 **63 字** (0x20..0x118) ⇒ **0xEC = W51 已是真字**
         //      (W51 = app_pattern 发字节, 见 P7B_BIZ_WINDOW.md §1) ⇒ 原地址必红、SLVERR 断言失去判别力;
@@ -1506,10 +1512,15 @@ module tb_p7b_chain;
         //   chk("7b 0xEC reads 0 no wrap",
         //       (v === 32'h00000000) && (u_dut.u_pcie_xdma.last_rresp === 2'd2),
         //       "axi_regs decode; 51-word bound");
-        u_dut.u_pcie_xdma.axil_read(32'h11C, v);
-        chk("7b 0x11C reads 0 no wrap",
+        // 原句 (63 字时代, 逐字保留):
+        //   u_dut.u_pcie_xdma.axil_read(32'h11C, v);
+        //   chk("7b 0x11C reads 0 no wrap",
+        //       (v === 32'h00000000) && (u_dut.u_pcie_xdma.last_rresp === 2'd2),
+        //       "axi_regs decode; 63-word bound (原 51 字/0xEC; 2026-10-07 订正)");
+        u_dut.u_pcie_xdma.axil_read(32'h124, v);
+        chk("7b 0x124 reads 0 no wrap",
             (v === 32'h00000000) && (u_dut.u_pcie_xdma.last_rresp === 2'd2),
-            "axi_regs decode; 63-word bound (原 51 字/0xEC; 2026-10-07 订正)");
+            "axi_regs decode; 65-word bound (原 63 字/0x11C; 2026-10-10 订正)");
 
         // =============================================================
         // F2X-PATCH: F-2 归因实验 (窗口 = 快照基准, 判据 = 线上逐帧内容)

@@ -196,7 +196,14 @@ module tb_p6e_pcie_counters;
         //    BID=7 双硬编码, 本门与它同一编译集、同读 `wrapper_p4.v`, BID=6 是 36 字时代残留):
         //    窗口 36 → 51 → 61 → **63** ⇒ `board/wrapper_p4.v:3882` 的 `BUILD_ID_V = 32'h00000009`
         //    ⇒ 期望值 6 → **9**。判据语义不变 (= BUILD_ID 必须等于本构建的地图版本)。
-        u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("0b BUILD_ID (63-word P7B-WU = 9; 原 36-word=6)", v, 32'h00000009);
+        // 原句 (63 字 / P7B-WU 二轮时代, 逐字保留):
+        //   u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("0b BUILD_ID (63-word P7B-WU = 9; 原 36-word=6)", v, 32'h00000009);
+        // ⛔ 2026-10-10 订正 (构建 C 门同步轮): 窗口 63 → **65 字** ⇒ `board/wrapper_p4.v` 的
+        //    `BUILD_ID_V = 32'h00000017` ⇒ 期望值 9 → **17**。判据语义不变
+        //    (= BUILD_ID 必须等于**本构建**的地图版本)。⚠️ 本门与 `tb_p6e_pcie_wrapper.v` 同一
+        //    编译集 (都编现役 `%ROOT%\board\wrapper_p4.v`), 两处必须**同批**改 —— 上一轮就漏过一处
+        //    (见上面 196-198 行的注: 回归轮只登记了 wrapper 门的 BID 双硬编码)。
+        u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("0b BUILD_ID (构建 C 65-word = 17; 原 63-word=9)", v, 32'h00000017);
         // 0c: `hls_rx_tready` 是唯一只能打 wrapper 线的握手信号 ⇒ 先证明它有确定电平。
         //     悬空/被优化掉的线在 xsim 里是 z, 而 force 会让它看起来"正常" ⇒ 专抓这类假 PASS。
         if ((u_dut.hls_rx_tready === 1'b0) || (u_dut.hls_rx_tready === 1'b1))

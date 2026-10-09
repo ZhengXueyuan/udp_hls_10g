@@ -27,7 +27,10 @@ if not exist "%ROOT%\board\wrapper_p4.v" ( echo [PATHGUARD FAIL] no wrapper_p4.v
 if not exist "%XV%\xvlog.bat" ( echo [TOOL FAIL] no xvlog.bat & exit /b 91 )
 if not exist "%W%" mkdir "%W%"
 set SRCFILE=%ROOT%\board\wrapper_p4.v
-findstr /C:"SNAP_NW_P6E = 61" "%SRCFILE%" >NUL || ( echo [FINGERPRINT FAIL] source is not the 61-word version & exit /b 92 )
+REM 2026-10-10 (P7B-GAP9-TX): fingerprint 61 -> 65. NOTE: it had already gone stale at
+REM   63 (P7B-WU round) => this gate was DEAD (exit 92) ever since; kept as a fingerprint,
+REM   only the expected value is bumped.
+findstr /C:"SNAP_NW_P6E = 65" "%SRCFILE%" >NUL || ( echo [FINGERPRINT FAIL] source is not the 65-word version & exit /b 92 )
 
 set NBAD=0
 call :one "d0_default"      ""

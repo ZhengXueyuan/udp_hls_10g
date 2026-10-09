@@ -12,6 +12,11 @@
 #         ⇒ 默认 `EXPECT_BID` 已改 **0x0000000A**; 读 **P7B-WU 二轮 / Build 2 位流**
 #         (`1ccbd9cd84292d1a10973a1442f71ca2187e66834be5e09d7eeb22b42c6cdd07`) 需显式
 #         `EXPECT_BID=0x00000009` (几何参数不用动: 仍 63 字 / 0x11C)。
+#      ⛔ 2026-10-10 订正 (构建 C 门同步轮): 上面整段 (含标题里的 "63 字") **已过时** ——
+#         现役 = **65 字 / 未实现 0x124 / BID 17** (源码 `board/wrapper_p4.v`: `SNAP_NW_P6E = 65` /
+#         `BUILD_ID_V = 32'h00000017`; 新增 W63/W64 = `app_pattern` 两个停滞计数)。
+#         原句保留 (它们描述的是 P7B-WU 二轮 / Stage C 那两代)。读旧位流一律**同时**覆盖几何与身份:
+#         Stage C 63 字 = `SNAP_WORDS=63 EXPECT_BID=0x0000000A`; WU 二轮 / Build 2 = `SNAP_WORDS=63 EXPECT_BID=0x00000009`。
 #      p6e_snap_check.sh 是 36 字口径
 #      ⭐ **P7B-BIZ 的 6 个新字** (RTL 真值源 = `board/wrapper_p4.v` 的 `snap_dout_all`,
 #         装配项逐条带槽号注释; 全是 dp 域寄存器输出, 与 W39/W45..W50 同一束):
@@ -58,6 +63,9 @@
 #            UNIMPL_ADDR=0x114`; RATE 51 字: `SNAP_WORDS=51 EXPECT_BID=0x00000007 UNIMPL_ADDR=0xEC`.
 #            ⛔ 2026-10-07 (Stage C): 默认身份 = **0x0000000A**; 读 P7B-WU 二轮 (Build 2, 63 字)
 #               位流只需覆盖 `EXPECT_BID=0x00000009` (窗口 / 未实现地址都不用动)。
+#            ⛔ 2026-10-10 (构建 C 门同步轮): 上面整段**已过时** —— 现役默认 = `SNAP_WORDS=65`
+#               (0x20..0x120, 未实现 **0x124**) + `EXPECT_BID=0x00000017`。读旧位流要**同时**覆盖几何与身份
+#               (Stage C 63 字 = `SNAP_WORDS=63 EXPECT_BID=0x0000000A`)。原句保留。
 #         G4_TRAFFIC_CMD=<激励命令> · NIC_GOOD_MIN / NIC_MBPS_MIN (阈值)
 #         W5_NOM_MHZ=156.25 (前端域标称; P6b 位流取 125) · TRAFFIC_TIMEOUT=180
 #         G4_LIB_ONLY=1 (只加载函数; 负对照脚本 source 用)
@@ -119,10 +127,14 @@ BOARD_IP=192.168.100.2
 MYIP=192.168.100.100
 DEV=/dev/xdma0_user
 TOOLS=/home/a/xdma_test/dma_ip_drivers-patched/XDMA/linux-kernel/tools
-EXPECT_BID=${EXPECT_BID:-0x0000000A}      # P7b Stage C = 10 (源码 board/wrapper_p4.v 的 BUILD_ID_V)
+EXPECT_BID=${EXPECT_BID:-0x00000017}      # 构建 C = 17 (源码 board/wrapper_p4.v 的 BUILD_ID_V)
 # ⛔ 2026-10-07 Stage C 同步轮: 原句 = "P7B-WU 二轮 = 9"; 读 Build 2 (63 字 / BID 9) 覆盖 EXPECT_BID=0x00000009
-SNAP_WORDS=${SNAP_WORDS:-63}
-UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 63 ⇒ 0x11C (61 ⇒ 0x114; 51 ⇒ 0xEC)
+# ⛔ 2026-10-10 订正 (构建 C 门同步轮): 原默认 0x0000000A (P7b Stage C 63 字) ⇒ 现役 = **17 / 65 字**。
+#    ⚠️ 默认 `EXPECT_BID` 与默认 `SNAP_WORDS` **必须同代** (后者本轮已 = 65): 不同代 ⇒ G1 身份红 +
+#    B_WIN "窗口不完整" 红 (假红)。读旧位流: Stage C 63 字 = `EXPECT_BID=0x0000000A SNAP_WORDS=63`;
+#    WU 二轮 / Build 2 = `EXPECT_BID=0x00000009 SNAP_WORDS=63`。
+SNAP_WORDS=${SNAP_WORDS:-65}
+UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 65 ⇒ 0x124 (63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)
 # ⚠️ 未实现地址 = 0x20 + 4*SNAP_WORDS 这条公式本轮**重新成立**: 读侧译码已加宽到 7 位
 #    (araddr[8:2]) ⇒ 地址每 **512** 字节才回绕, 而 `0x20+4*63 = 0x11C` 真正未实现 ⇒
 #    仍回 0xffffffff。红线随之改成"**绝不能挑 ≥0x200**" (旧红线是 ≥0x100)。

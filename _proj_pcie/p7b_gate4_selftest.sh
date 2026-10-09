@@ -34,9 +34,9 @@ rm -rf "$W"; mkdir -p "$BIN"
 #   默认 63 = P7B-WU 二轮 (`board/wrapper_p4.v` 的 `SNAP_NW_P6E`); 跑 61 字旧位流: SNAP_WORDS=61。
 #   ⚠️ 上一版把 51 / 0xE8 / 0xEC **全写死在断言里** ⇒ 扩窗时"判据自己先红", 看着像
 #      "扩窗弄坏了工具"而不是"判据没跟上" (同族教训见 P7B_GATE4_CRITERIA_CLOSEOUT.md)。
-SW=${SNAP_WORDS:-63}
-LAST_A=$(printf '0X%X' $(( 0x20 + 4*(SW-1) )))   # 末字地址  (63 ⇒ 0X118)
-UNIMPL_A=$(printf '0X%X' $(( 0x20 + 4*SW )))      # 未实现地址 (63 ⇒ 0X11C)
+SW=${SNAP_WORDS:-65}
+LAST_A=$(printf '0X%X' $(( 0x20 + 4*(SW-1) )))   # 末字地址  (65 ⇒ 0X120)
+UNIMPL_A=$(printf '0X%X' $(( 0x20 + 4*SW )))      # 未实现地址 (65 ⇒ 0X124)
 N_OK=0; N_BAD=0
 ck(){ if [ "$2" = "$3" ]; then N_OK=$((N_OK+1)); printf "  [OK  ] %-28s %s\n" "$1" "$2"
       else N_BAD=$((N_BAD+1)); printf "  [BAD ] %-28s got='%s' want='%s'\n" "$1" "$2" "$3"; fi; }
@@ -54,15 +54,23 @@ ckre(){ if grep -qE -- "$2" "$3"; then N_OK=$((N_OK+1)); printf "  [OK  ] %-28s 
 VCLK=$W/vclk; echo 1000 > "$VCLK"
 GENC=$W/gen; echo 7 > "$GENC"
 
-# ⚠️ 假字表的**尾段随几何走** (W61/W62 与"未实现地址"的坑位):
-#   SW ≥ 63 ⇒ 0x114/0x118 是**窗口内的真字**, `FAKE_UNIMPL` 挪到 0x11C;
+# ⚠️ 假字表的**尾段随几何走** (W61/W62/W63/W64 与"未实现地址"的坑位):
+#   SW ≥ 65 (2026-10-10 P7B-GAP9-TX 起) ⇒ 0x11C/0x120 也是**窗口内的真字**,
+#     `FAKE_UNIMPL` 挪到 **0x124**;
+#   SW = 63 (P7B-WU 二轮) ⇒ `FAKE_UNIMPL` 在 0x11C;
 #   SW = 61 (历史口径) ⇒ 0x114 就是未实现地址 ⇒ `FAKE_UNIMPL` 必须留在那里, 否则负对照打空。
 #   ⚠️ 单引号是**故意的**: 要让 `${FAKE_UNIMPL:-…}` 原样落进生成的假 reg_rw (由它运行时展开),
 #      在这里展开会把负对照冻成常量 0xffffffff。
 #   ⚠️⚠️ **变量内容不参与 heredoc 的转义处理** (实测): 这里**不能**写 `\${...}` —— 那个反斜杠
 #      会原样落进生成的脚本, 假 reg_rw 把字面串当值打印出来 ⇒ 判据 6.1 读到空串报假 FAIL
 #      (看着像"板子不对", 实际是夹具自己坏了)。直接写 `${...}` 即可。
-if [ "$SW" -ge 63 ]; then
+if [ "$SW" -ge 65 ]; then
+  FAKE_TAIL='  0X114) V=1234;;  # W61 app_ctrl.stat_wu (次数; 非 0 才像真板)
+  0X118) V=0;;     # W62 app_ctrl.rx_occ_bytes (17 位 ⇒ 高位恒 0)
+  0X11C) V=0;;     # W63 app_pattern.stat_frmwait_cyc (停滞拍数; 0 = 无停顿)
+  0X120) V=0;;     # W64 app_pattern.stat_bp_cyc (背压拍数)
+  0X124) V=${FAKE_UNIMPL:-0xffffffff};;   # 未实现地址 (65 字)'
+elif [ "$SW" -ge 63 ]; then
   FAKE_TAIL='  0X114) V=1234;;  # W61 app_ctrl.stat_wu (次数; 非 0 才像真板)
   0X118) V=0;;     # W62 app_ctrl.rx_occ_bytes (17 位 ⇒ 高位恒 0)
   0X11C) V=${FAKE_UNIMPL:-0xffffffff};;   # 未实现地址 (63 字)'
@@ -92,11 +100,12 @@ V=0xffffffff
 case "\$A" in
   0X00) V=0x50360001;;
   # ⚠️ 假板子的 BID 必须与 p6e_snap_check.sh 的 EXPECT_BID **同代** (否则正例的判据 1.2 假 FAIL,
-  #    而"正例必须 0 FAIL"是本脚本的断言⑤)。现役 = 10 (P7b Stage C —— ⛔ 2026-10-07 同步轮: 原句 = 现役 9 (P7B-WU 二轮));
-  #    跑旧口径时 FAKE_BID=0x00000008; 读 P7B-WU 二轮 (BID 9) 位流则用 FAKE_BID=0x00000009。
+  #    而"正例必须 0 FAIL"是本脚本的断言⑤)。现役 = **17** (构建 C 65 字 —— ⛔ 2026-10-10 同步轮:
+  #    原句 = 现役 10 (P7b Stage C) / 更早 9 (P7B-WU 二轮)); 跑旧口径时 FAKE_BID=0x00000008 / 0x00000009 /
+  #    0x0000000A (Stage C 63 字, 与 SNAP_WORDS=63 一起用)。
   #    ⚠️ 注释里**不许出现反引号/$( )** —— 这是**无引号 heredoc**, 它们会被当场求值
   #       (实测: 反引号里的 EXPECT_BID 被当命令执行, 报 "command not found")。
-  0X04) V=\${FAKE_BID:-0x0000000A};;
+  0X04) V=\${FAKE_BID:-0x00000017};;
   0X08) V=0x00000000;;
   0X0C) V=\$(awk -v t="\$T" 'BEGIN{printf "0x%08x", int(t*250000000)%4294967296}');;
   0X10) V=0x00000018;;

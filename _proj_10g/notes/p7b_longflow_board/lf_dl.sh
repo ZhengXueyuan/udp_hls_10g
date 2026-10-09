@@ -17,6 +17,10 @@
 #   ⚠️ 回卷规则 (下游解析器必须遵守): 板侧计数器全 32 位; 任何 ΔW 一律 mod 2^32 且记 raw 与 k;
 #      W51/W15 在 9.4 Gbps 下 3.63 s 回卷一次 (本档单会话 256 MiB < 2^32 ⇒ 结构性不回卷);
 #      时基 W5/W43 回绕 27.487 s (> 全场时长)。
+#   ⛔ 2026-10-10 口径订正 (注释; 行为零改动): W43 = mac_tx_10g.stat_tx_words = **每拍无条件 +1 的
+#      tx 域拍钟** (mac_tx_10g.v:330, 在 case(state) 之外) ⇒ 它**只能当时基**(本文件就是这么用的),
+#      **不许**把 ΔW43/ΔW20 的倒数式 (193/P) 当"线占空测量" —— P ≡ 156.25e6/fps 是恒等式,
+#      板侧没有线占空计数器。口径全文 = P7B_LONGSEND_ACCEPT.md §4-① / P7B_RESIDUAL_ANALYSIS.md §6。
 set -u
 CONNS=${CONNS:-1}; SECS=${SECS:-30}; TAG=${TAG:-LF1}; RCVBUF=${RCVBUF:-8388608}
 PCAP_ON=${PCAP_ON:-0}

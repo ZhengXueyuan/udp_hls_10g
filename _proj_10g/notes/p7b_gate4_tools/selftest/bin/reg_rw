@@ -11,11 +11,12 @@ V=0xffffffff
 case "$A" in
   0X00) V=0x50360001;;
   # ⚠️ 假板子的 BID 必须与 p6e_snap_check.sh 的 EXPECT_BID **同代** (否则正例的判据 1.2 假 FAIL,
-  #    而"正例必须 0 FAIL"是本脚本的断言⑤)。现役 = 10 (P7b Stage C —— ⛔ 2026-10-07 同步轮: 原句 = 现役 9 (P7B-WU 二轮));
-  #    跑旧口径时 FAKE_BID=0x00000008; 读 P7B-WU 二轮 (BID 9) 位流则用 FAKE_BID=0x00000009。
+  #    而"正例必须 0 FAIL"是本脚本的断言⑤)。现役 = **17** (构建 C 65 字 —— ⛔ 2026-10-10 同步轮:
+  #    原句 = 现役 10 (P7b Stage C) / 更早 9 (P7B-WU 二轮)); 跑旧口径时 FAKE_BID=0x00000008 / 0x00000009 /
+  #    0x0000000A (Stage C 63 字, 与 SNAP_WORDS=63 一起用)。
   #    ⚠️ 注释里**不许出现反引号/** —— 这是**无引号 heredoc**, 它们会被当场求值
   #       (实测: 反引号里的 EXPECT_BID 被当命令执行, 报 "command not found")。
-  0X04) V=${FAKE_BID:-0x0000000A};;
+  0X04) V=${FAKE_BID:-0x00000017};;
   0X08) V=0x00000000;;
   0X0C) V=$(awk -v t="$T" 'BEGIN{printf "0x%08x", int(t*250000000)%4294967296}');;
   0X10) V=0x00000018;;
@@ -53,7 +54,9 @@ case "$A" in
   #      否则正例的 5.0 假 FAIL + 负对照打不中真正的未实现地址 (判据成了真空门)。
   0X114) V=1234;;  # W61 app_ctrl.stat_wu (次数; 非 0 才像真板)
   0X118) V=0;;     # W62 app_ctrl.rx_occ_bytes (17 位 ⇒ 高位恒 0)
-  0X11C) V=${FAKE_UNIMPL:-0xffffffff};;   # 未实现地址 (63 字)
+  0X11C) V=0;;     # W63 app_pattern.stat_frmwait_cyc (停滞拍数; 0 = 无停顿)
+  0X120) V=0;;     # W64 app_pattern.stat_bp_cyc (背压拍数)
+  0X124) V=${FAKE_UNIMPL:-0xffffffff};;   # 未实现地址 (65 字)
   *)    V=0xffffffff;;
 esac
 echo "Read 32-bit from address $A : $V"

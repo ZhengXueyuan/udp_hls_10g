@@ -1,0 +1,76 @@
+TB_APP_RX8_EQUIV: OK
+TB_APP_RX8_EQUIV: OK
+---- TB FAIL detail [C]: 
+  [FAIL] RX0 zero mismatch
+  [FAIL] RX1 zero mismatch
+  [FAIL] I0 mismatch exactly 4 (lane1 + lane7 + two lanes)
+  [FAIL] I1 mismatch exactly 11 (valid lanes caught, invalid lanes not)
+  [FAIL] EV zero mismatch (reset beat behaves same as serial path)
+  [FAIL] RATE zero mismatch (continuous segments)
+TB_APP_RX8_EQUIV: FAIL errs=6
+---- TB FAIL detail [D]: 
+  [FAIL] I0 mismatch exactly 4 (lane1 + lane7 + two lanes)
+  [FAIL] I1 mismatch exactly 11 (valid lanes caught, invalid lanes not)
+TB_APP_RX8_EQUIV: FAIL errs=2
+---- TB FAIL detail [E]: 
+  [FAIL] RX0 rx bytes 7875 (0/1/5/8/9/1460/1472/2000 boundaries)
+  [FAIL] RX0 zero mismatch
+  [FAIL] RX1 rx bytes 7875 (zero-gap)
+  [FAIL] RX1 zero mismatch
+  [FAIL] I1 rx bytes 26 (3+3+3+1+8+0+8)
+  [FAIL] I1 mismatch exactly 11 (valid lanes caught, invalid lanes not)
+  [FAIL] EV rx bytes 36 (ev_up reset did take effect at the 4th word)
+  [FAIL] EV zero mismatch (reset beat behaves same as serial path)
+  [FAIL] RATE zero mismatch (continuous segments)
+  [FAIL] RATE stat_rx_bytes == TB byte count
+  [FAIL] cycles/segment: wide 187 (182 full x1 + 4B tail 5)
+TB_APP_RX8_EQUIV: FAIL errs=11
+---- TB FAIL detail [F]: 
+  [FAIL] EV zero mismatch (reset beat behaves same as serial path)
+TB_APP_RX8_EQUIV: FAIL errs=1
+==================== SUMMARY ====================
+  A default        RC=0   (expect 0)
+  B P7B_10G        RC=0   (expect 0)
+  C M8-to-M         RC=1   (expect nonzero)
+  D lane0-only      RC=1   (expect nonzero)
+  E no-tail-fallback RC=1  (expect nonzero)
+  F no-ev-up-yield  RC=1   (expect nonzero; only the EV judge may go red)
+  [PASS] byte-equivalence: A vs B identical on 8 dump/stats files
+  [PASS] mutants are RX-scoped: TX dump identical to A on all 4
+  [PASS] negctl-F: exactly 1 red
+  [PASS] negctl-F: the red is the EV judge
+  [PASS] python oracle agrees with runB
+  ---- key readings (runB = P7B_10G) ----
+  TX : frames=21 bytes=30000 done=1 | dump=12000 frm_rec=9
+  RX0: rxb=7875 mm=0 acc=989/989
+  RX1: rxb=7875 mm=0 acc=989/989
+  I0 : rxb=48 mm=4 acc=6/6
+  I1 : rxb=26 mm=11 acc=7/7
+  EV : rxb=36 mm=0 acc=5/5 ev_n=5
+  RATE: words=3844 bytes=30668 rxb=30668 mm=0 | dcyc=3740 over 20 segs = 187.000 cyc/seg
+  ---- negative-control reds ----
+  [C] M8-to-M:
+  [FAIL] RX0 zero mismatch
+  [FAIL] RX1 zero mismatch
+  [FAIL] I0 mismatch exactly 4 (lane1 + lane7 + two lanes)
+  [FAIL] I1 mismatch exactly 11 (valid lanes caught, invalid lanes not)
+  [FAIL] EV zero mismatch (reset beat behaves same as serial path)
+  [FAIL] RATE zero mismatch (continuous segments)
+  [D] lane0-only:
+  [FAIL] I0 mismatch exactly 4 (lane1 + lane7 + two lanes)
+  [FAIL] I1 mismatch exactly 11 (valid lanes caught, invalid lanes not)
+  [E] no-tail-fallback:
+  [FAIL] RX0 rx bytes 7875 (0/1/5/8/9/1460/1472/2000 boundaries)
+  [FAIL] RX0 zero mismatch
+  [FAIL] RX1 rx bytes 7875 (zero-gap)
+  [FAIL] RX1 zero mismatch
+  [FAIL] I1 rx bytes 26 (3+3+3+1+8+0+8)
+  [FAIL] I1 mismatch exactly 11 (valid lanes caught, invalid lanes not)
+  [FAIL] EV rx bytes 36 (ev_up reset did take effect at the 4th word)
+  [FAIL] EV zero mismatch (reset beat behaves same as serial path)
+  [FAIL] RATE zero mismatch (continuous segments)
+  [FAIL] RATE stat_rx_bytes == TB byte count
+  [FAIL] cycles/segment: wide 187 (182 full x1 + 4B tail 5)
+  [F] no-ev-up-yield (only the EV judge should be red):
+  [FAIL] EV zero mismatch (reset beat behaves same as serial path)
+RX8-GATE: PASS 

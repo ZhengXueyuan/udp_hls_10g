@@ -8,8 +8,9 @@ echo "=== 1. 板侧最终读数 (PCIe 观测窗口**仍然活着**) ==="
 $T/reg_rw $D 0x18 w 0x1 >/dev/null 2>&1
 for i in $(seq 1 400); do s=$(rd 0x1c); [ -n "$s" ] && [ $(( s & 2 )) -ne 0 ] && break; sleep 0.002; done
 BID=$(rd 0x04)
-echo "MAGIC=$(rd 0x00) BID=$BID MARKER=$(rd 0x14) UNIMPL=$(rd 0x11C) gen=$(( (s >> 16) & 0xffff ))"
-# ⚠️ UNIMPL 地址跟窗口宽度走: **63 字 (P7B-WU 二轮起) ⇒ 0x11C** (word 71);
+echo "MAGIC=$(rd 0x00) BID=$BID MARKER=$(rd 0x14) UNIMPL=$(rd 0x124) gen=$(( (s >> 16) & 0xffff ))"
+# ⚠️ UNIMPL 地址跟窗口宽度走: **65 字 (P7B-GAP9-TX, 2026-10-10 起) ⇒ 0x124** (word 73);
+#    63 字 (P7B-WU 二轮) = 0x11C (word 71);
 #    61 字 (P7B-BIZ) ⇒ 0x114; 51 字 (RATE) ⇒ 0xEC。
 #    绝不能用 ≥0x200 —— 读侧 ar_word 7 位, 地址每 512 字节回绕 ⇒ 0x200 别名回 MAGIC。
 # ⚠️ **前置闸 (本脚本原先没有)**: 上面这行与下面两行都**不判断**读数对不对 —— 拿新口径读旧位流
@@ -19,8 +20,15 @@ echo "MAGIC=$(rd 0x00) BID=$BID MARKER=$(rd 0x14) UNIMPL=$(rd 0x11C) gen=$(( (s 
 #    ⛔ 同轮二次订正: 比较必须**大小写无关** —— reg_rw 打小写 (`0x0000000a`) 而期望值写大写
 #       ⇒ 原字符串比较在 BID 含字母的世代 (≥0xA) **必假 ABORT** (实测踩到; 板子是对的)。
 BID_N=$(printf '%s' "$BID" | tr 'A-F' 'a-f')
-if [ "$BID_N" != "0x0000000a" ]; then
-  echo "  [ABORT] BID=$BID != 0x0000000A (大小写归一后 $BID_N) ⇒ **板上不是 Build 3 (Stage C) 位流**; 下面 W61/W62 若为 0xffffffff 是 SLVERR(读失败) 不是数据"
+# ⛔ 2026-10-10 订正 (构建 C 门同步轮): 期望 BID 从**硬编码**改成**可覆盖** —— 原句是
+#    `[ "$BID_N" != "0x0000000a" ]` (连覆盖入口都没有) ⇒ 换一代位流就得改脚本 (上一代已踩一次)。
+#    现默认 = **0x17** (构建 C 65 字; 源码 `board/wrapper_p4.v` 的 `BUILD_ID_V = 32'h00000017`);
+#    读旧位流: `EXPECT_BID=0x0000000a bash final_state.sh` (Stage C 63 字) / `0x00000009` (Build 2)。
+#    判据语义不变 (仍是"读回值必须 == 期望值"), 只是期望值可注入。
+EXPECT_BID=${EXPECT_BID:-0x00000017}
+EXPECT_BID_N=$(printf '%s' "$EXPECT_BID" | tr 'A-F' 'a-f')
+if [ "$BID_N" != "$EXPECT_BID_N" ]; then
+  echo "  [ABORT] BID=$BID != $EXPECT_BID (大小写归一后 $BID_N) ⇒ **板上不是本脚本期望的位流** (构建 C = 0x17 / 65 字); 下面 W61/W62 若为 0xffffffff 是 SLVERR(读失败) 不是数据"
   GATE_BAD=1
 else
   GATE_BAD=0
@@ -38,6 +46,7 @@ echo "AFTER_CLEANUP addr: $(ip -br addr show $IF)"
 echo "AFTER_CLEANUP route: $(ip route get 192.168.100.2 2>&1 | head -1)"
 echo "AFTER_CLEANUP /tmp: $(ls /tmp/*.pcap 2>&1 | head -2)"
 echo "hw_server=$(systemctl is-active hw_server) ; uptime=$(uptime -p)"
-# 前置闸没过 ⇒ 出声 (本脚本的读数只在 BID=0xA 的板上才算数; 2026-10-07 订正: 原写 "BID=9")
-if [ "${GATE_BAD:-0}" != "0" ]; then echo "FINAL_STATE_INVALID (前置闸未过: BID != 0xA ⇒ 窗口口径不符)"; exit 3; fi
+# 前置闸没过 ⇒ 出声 (本脚本的读数只在 **EXPECT_BID 那一代**的板上才算数; 2026-10-07 订正: 原写 "BID=9";
+#   ⛔ 2026-10-10: "BID != 0xA" 也过时了 —— 现默认 = 0x17 / 65 字, 且可由 EXPECT_BID 覆盖)
+if [ "${GATE_BAD:-0}" != "0" ]; then echo "FINAL_STATE_INVALID (前置闸未过: BID != ${EXPECT_BID:-0x00000017} ⇒ 窗口口径不符)"; exit 3; fi
 echo "FINAL_DONE"

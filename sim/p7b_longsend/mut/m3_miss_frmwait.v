@@ -31,7 +31,16 @@ module app_pattern #(
     parameter        AUTO_CLOSE = 1'b1,         // 发完自动 close_req
     // ⭐ P7B-LONGSEND: 1 = 连续发送模式 (永不结束会话; 见 _proj_10g/notes/P7B_LONGSEND_DESIGN.md)
     //   默认 1'b0 ⇒ 全部既有例化 (含 sim/ 下 71 个镜像件) 行为逐位不变。
-    parameter        TX_CONTINUOUS = 1'b0
+    parameter        TX_CONTINUOUS = 1'b0,
+    // ⭐ P7B-GAP9-TX: 1 = **尾字 carry** (尾字用整字网 1 拍出, 未用字节跨帧续用)。
+    //   动机 = 现役尾字走逐字节路 (3 拍填充 + 1 拍装载 = 4 拍/帧), 是 app 190 拍/帧里
+    //   唯一可压的大头; 目标 186 拍/帧 (进链后帧器 RX 占用 193 → 189)。
+    //   依据 = _proj_10g/notes/P7B_GAP9_TX_RECALC.md §B.2 (含仓外原型实测)。
+    //   默认 1'b0 ⇒ **既有例化逐位不变** (等价锚 = sim/p7b_stagec_tx_regress/
+    //   frozen/app_pattern_rev0e804099.v, 见 P7B_BIZ_WINDOW.md/run_cont_gate.bat 的同款手法)。
+    //   ⚠️ 只在 `P7B_10G` (A2 整字路) 下有意义 —— 逐字节构建的尾字本来就是 1 B/拍;
+    //      未定义 P7B_10G 时本参数**结构性无效** (TAILC_OK 恒 0, 与默认逐位等价)。
+    parameter        TX_TAILCARRY = 1'b0
 ) (
     input  wire        clk,
     input  wire        rst_n,
@@ -71,7 +80,14 @@ module app_pattern #(
     output reg  [3:0]  act_id,
     output reg         done,
     output reg  [31:0] dbg_lfsr,
-    output wire [3:0]  led
+    output wire [3:0]  led,
+    // ---- ⭐ P7B-GAP9-TX: 两个停滞计数器 (判别器; 语义逐字见下面计数块) ----------
+    //   ⚠️ 纯观测: 它们**不驱动任何控制**, 只是把两条"停顿条件"的拍数记下来
+    //      ⇒ 默认构建的数据行为逐位不变 (等价锚仍成立)。
+    //   ⚠️ 未连接时 (既有 TB/镜像件不接这两个口) 功能 zero-cost: 综合会保留寄存器
+    //      (它们要出现在板级快照里), 但**不改变任何数据通路**。
+    output reg  [31:0] stat_frmwait_cyc,   // `frm_wait && active` 拍数 = 窗口/信用停顿
+    output reg  [31:0] stat_bp_cyc         // `pw_valid && !m_tready && !closing` 拍数 = 帧器背压
 );
     // ---------------- LFSR (xorshift64) ----------------
     function [63:0] xs_next;
@@ -240,6 +256,30 @@ module app_pattern #(
             xs_word8[ 0] = s[0] ^ s[2] ^ s[4] ^ s[5] ^ s[6] ^ s[7] ^ s[9] ^ s[12] ^ s[13] ^ s[14] ^ s[15] ^ s[16] ^ s[19] ^ s[20] ^ s[22] ^ s[24] ^ s[26] ^ s[28] ^ s[29] ^ s[30] ^ s[31] ^ s[32] ^ s[34] ^ s[35] ^ s[36] ^ s[38] ^ s[39] ^ s[42] ^ s[43] ^ s[45] ^ s[46] ^ s[52] ^ s[53] ^ s[59] ^ s[60];
         end
     endfunction
+
+    // ---- ⭐ P7B-GAP9-TX: 64 位字节掩码 (高 n 字节保持, 其余清 0) ----------------
+    //   与 `ljust8` 的"未用字节 = 0"是**同一约定** (接收方只看 tkeep, 但约定必须一致)。
+    //   ⚠️ 必须用这个, 不能 `{8{kmask8(n)}}`: 后者复制的是**字节内的位模式**
+    //      (`kmask8(4)=8'hF0` 复制 8 次 ⇒ 每个字节的高半留下) —— 仓外原型第一版
+    //      就死在这里 (症状 = 只有低 1 字节有效 + 尾字首字节被 &F0 啃掉, 见
+    //      P7B_GAP9_TX_RECALC.md §F-3 坑 1)。放在 `P7B_10G` 段内 ⇒ 默认构建
+    //      (逐字节路) 的源码面逐字不变。
+    function [63:0] bmask64;
+        input [3:0] n;
+        begin
+            case (n)
+                4'd0: bmask64 = 64'h0000000000000000;
+                4'd1: bmask64 = 64'hFF00000000000000;
+                4'd2: bmask64 = 64'hFFFF000000000000;
+                4'd3: bmask64 = 64'hFFFFFF0000000000;
+                4'd4: bmask64 = 64'hFFFFFFFF00000000;
+                4'd5: bmask64 = 64'hFFFFFFFFFF000000;
+                4'd6: bmask64 = 64'hFFFFFFFFFFFF0000;
+                4'd7: bmask64 = 64'hFFFFFFFFFFFFFF00;
+                default: bmask64 = 64'hFFFFFFFFFFFFFFFF;
+            endcase
+        end
+    endfunction
 `endif
 
     // 左对齐: stg 低 n 字节 -> 高 n 字节 (显式 case, 禁变移位量)
@@ -314,6 +354,15 @@ module app_pattern #(
     reg  [11:0] seg_sent;      // 当前帧已呈交字节
     reg  [3:0]  bcnt;          // 当前字已凑字节数
     reg  [63:0] stg;           // 当前字累积 (低 bcnt 字节)
+    // ---- ⭐ P7B-GAP9-TX: 尾字 carry 缓冲 (只被 TAILC_OK=1 的整字路读写) ----------
+    //   ⚠️ 声明在这里是**无条件**的 (而不是包在 `P7B_10G` 里): 这样复位/换流的清 0
+    //      也是无条件的 —— 非 `P7B_10G` 构建里它们**只被写 0、从不被读** ⇒ 综合直接
+    //      优化掉 (零代价), 且仿真里绝不会留 X。真正的行为逻辑全在 `P7B_10G` 段内的
+    //      `wc_go` 分支里 (见那里的注释)。
+    //   MSB 对齐: 首字节在 [63:56]; `wc_n` = 有效字节数 (0..7, 不含 8)。
+    //   不变量: wc_buf 的**其余字节恒 0** (合并用 `|`)。
+    reg  [63:0] wc_buf;
+    reg  [3:0]  wc_n;
     reg  [63:0] pw_data;       // 已呈交字 (tready 期间保持)
     reg  [7:0]  pw_keep;
     reg  [3:0]  pw_n;
@@ -452,6 +501,13 @@ module app_pattern #(
     // 两段拼接即"启动门 + 强制收尾", 且交付给 app 的计数只在**确实交付**时推进
     // (pw_valid && m_tready) ⇒ pipe 里的字与 stat_tx_bytes 天然不会差 8。
 `ifdef P7B_10G
+    // ---- ⭐ P7B-GAP9-TX: 尾字 carry 的总开关 (纯常量表达式) --------------------
+    //   TAILC_OK=1 ⟺ 新参数 TX_TAILCARRY 打开 **且** 本构建有 A2 整字路 (本 ifdef)。
+    //   ⚠️ 它是 `parameter` 派生的 localparam ⇒ 综合期常量折叠:
+    //      TAILC_OK=0 ⇒ `wc_go` 恒 0 ⇒ 新增的 carry 路整条消失 (**默认构建逐位退化**)。
+    //   ⚠️ 未定义 `P7B_10G` 时本 localparam **不存在** (整段不在编译里) ⇒ 传了
+    //      `.TX_TAILCARRY(1'b1)` 也只是"参数无人消费" = 与默认逐位等价 (结构性无效)。
+    localparam  TAILC_OK = (TX_TAILCARRY != 1'b0);
     // ---- A2: 帧拆除拍让位 + 唯一放宽 ("消费拍同拍预取") ---------------------
     // a2_hold = 本拍帧正在被拆除 (ev_down 将置 closing / ev_up 换流; 判据与那两个
     //   事件块逐字同款)。这些拍上默认构建因 `!pw_valid` 而**不装配**; 预取若不让
@@ -466,6 +522,41 @@ module app_pattern #(
                           (frm_inflight || tx_ok || (remain == 32'd0));
     // 整字预取分支命中 (分支条件与"装载赢 pw_valid"用的是**同一个线网**, 防写歪)
     wire        a2_ldw  = asm_go && (need_a == 4'd8) && !a2_hold;
+    // =====================================================================
+    // ⭐ P7B-GAP9-TX: **尾字 carry** —— 让**尾字也走整字网**, 1 拍出字
+    // =====================================================================
+    // 背景 (实测, 见 P7B_GAP9_TX_RECALC.md §A.2): 现役尾字 (need_a<8) 结构性回落
+    //   逐字节路 ⇒ 一帧多花 4 拍 (3 拍填充 + 1 拍装载)。而这 4 拍是 app 190 拍/帧里
+    //   唯一可压的大头 (首装载 1 拍/收帧 1 拍是结构性必须)。
+    // 原理: 尾字用整字网 (xs_word8, M^0..M^7 的字节行) **1 拍**产出; 多产出的
+    //   (8 - need_a) 个字节**不丢**, 存进 wc_buf/wc_n 给下一个字/下一帧续用 ⇒
+    //   LFSR **恒按 8 步走** (不需要 M^k 网 = 不需要为每个 k 生成常量网),
+    //   且**跨帧**图案流**逐字节连续**(这是等价改造的判据, 不是功能改造)。
+    // 不变量 (= 下面所有算式的正确性依据, 逐条可查):
+    //   (i)  流位置 = wc_buf 的前 wc_n 字节 (wc_n>0) 接着 tx_lfsr 当前位置的输出;
+    //   (ii) wc_buf 的**其余字节恒 0** (合并用 `|`, 非 0 会污染 → 下面两条写入
+    //        (`<<` 移位) 都把低位补 0 ⇒ 归纳成立; 复位/换流写全 0 = 基例);
+    //   (iii) 0 ≤ wc_n ≤ 7 (case B 写 8-wc_gap ≤ 7; case A 写 wc_n-need_a ≤ 7)。
+    wire [3:0]  wc_gap  = need_a - wc_n;                    // case B 需新字节数 (1..8)
+    wire [63:0] wc_new  = xs_word8(tx_lfsr);                // 一拍 8 个连续字节
+    wire [63:0] wc_spl  = wc_buf | (wc_new >> {wc_n, 3'b000});// carry 在前, 新字接在后
+    wire        wc_b    = (wc_n < need_a);                  // 1 = carry 不够 ⇒ 推进 LFSR
+    wire [63:0] wc_emit = wc_b ? wc_spl : wc_buf;           // case A: 只用 carry, LFSR 不动
+    wire [63:0] wc_nxt  = wc_b ? (wc_new << {wc_gap, 3'b000})   // 新字剩下的成为新 carry
+                              : (wc_buf << {need_a, 3'b000});   // carry 取走 need_a 后上移
+    wire [3:0]  wc_nnxt = wc_b ? (4'd8 - wc_gap) : (wc_n - need_a);
+    // 坏帧 (bad_frm): 载荷恒 0xA5 (**与逐字节路的 `gen_byte` 常填同款**), 且 carry 与
+    //   LFSR **都不动** —— "坏帧对图案流不可见"这条语义必须**同时**覆盖 carry:
+    //   仓外原型第一版只清 wc_n (不碰 wc_buf), 于是坏帧稳态在 wc_buf 里留下
+    //   {0xA5 × wc_n}, 而 wc_n 被清 0 后不再遮住它们 ⇒ **下一好帧首字节 = 0xA5**
+    //   (图案流从此错位)。本轮用"坏帧期间整体 hold + emit 取常数"替换那个清法
+    //   (专项负对照见 tb_app_tailcarry 的 bad_frm 臂)。
+    wire [63:0] wc_pwv  = bad_frm ? 64'hA5A5A5A5A5A5A5A5 : wc_emit;
+    wire [63:0] wc_pw   = wc_pwv & bmask64(need_a);         // 未用字节清 0 (= ljust8 约定)
+    // 命中条件: 与 a2_ldw 同门 (`asm_go` 已含 `!closing/!frm_wait/!op_pend` 等;
+    //   `!a2_hold` 让换流/收尾拍**回落逐字节路** = 与默认构建逐位同行为, 理由见 a2_hold
+    //   那段注释; `need!=0` ⇒ 收帧拍走上面的分支; `need_a!=0` ⇒ 帧已发满时不再装配)。
+    wire        wc_go   = TAILC_OK && asm_go && (need != 4'd0) && (need_a != 4'd0) && !a2_hold;
 `else
     wire        asm_go   = active && !pw_valid && !closing && !frm_wait && !op_pend &&
                            (frm_inflight || tx_ok || (remain == 32'd0));
@@ -564,6 +655,7 @@ module app_pattern #(
         if (!rst_n) begin
             tx_lfsr <= SEED; remain <= 32'd0; seg_len <= 12'd0; seg_sent <= 12'd0;
             bcnt <= 4'd0; stg <= 64'd0;
+            wc_buf <= 64'd0; wc_n <= 4'd0;
             pw_data <= 64'd0; pw_keep <= 8'h00; pw_n <= 4'd0; pw_last <= 1'b0;
             pw_valid <= 1'b0; bad_frm <= 1'b0; frm_idx <= 16'd0; closing <= 1'b0;
             frm_wait <= 1'b0; op_pend <= 1'b0; op_sent <= 1'b0;
@@ -571,6 +663,7 @@ module app_pattern #(
             active <= 1'b0; act_id <= 4'd0; done <= 1'b0;
             stat_tx_bytes <= 32'd0; stat_tx_frames <= 32'd0;
             stat_bad_frames <= 32'd0;
+            stat_frmwait_cyc <= 32'd0; stat_bp_cyc <= 32'd0;
             rxs <= 2'd0; rx_lfsr <= SEED; rw_data <= 64'd0; rw_keep <= 8'h00;
             rw_n <= 4'd0; rw_i <= 4'd0;
             stat_rx_bytes <= 32'd0; stat_mismatch <= 32'd0;
@@ -636,6 +729,13 @@ module app_pattern #(
                     seg_sent <= 12'd0;
                     bcnt     <= 4'd0;
                     stg      <= 64'd0;
+                    // ⭐ P7B-GAP9-TX: 新会话 = **新图案流** (tx_lfsr 已回 SEED) ⇒ carry
+                    //   必须一起清: 否则新流开头的 (8-k) 字节会是**旧会话**的残留
+                    //   (与 pipe 残余字同族的那类"跨会话泄漏")。它是 carry 唯一的
+                    //   会话边界清除点 —— 与本 if 同拍、同条件, 故"清了 carry" ⟺
+                    //   "换了流" (ev_down→closing→idle 那条路不清, 但那条路之后
+                    //   唯有 ev_up 能让 app 再发, 而 ev_up 一定会清; 见 §wb 论证)。
+                    wc_buf   <= 64'd0; wc_n <= 4'd0;
                     bad_frm  <= (i_bad_frame == 16'd1);
                 end
                 up_lat <= 1'b1;
@@ -719,11 +819,36 @@ module app_pattern #(
                         frm_wait <= 1'b1;
                     end
 `ifdef P7B_10G
-                end else if (a2_ldw) begin
+                end else if (wc_go) begin
+                    // ⭐ P7B-GAP9-TX: **1 拍发射 need_a (1..8) 字节** (尾字不再走逐字节路)。
+                    //   `wc_pw` 已是"左对齐 + 未用字节清 0"的字 (与 `ljust8(stg,need)`
+                    //   同约定) ⇒ `pw_n = need_a` / `pw_keep = kmask8(need_a)` 与默认构建
+                    //   在**同一个字**上逐位相同 (need_a ≡ 该字实际字节数)。
+                    //   `pw_last` 用**前瞻** sent_a (与 a2 路同基准; 非前瞻会差一个字的
+                    //   偏移 ⇒ 帧长恰为 8 倍数时末字丢 tlast)。
+                    //   ⚠️ carry 与 LFSR 的写只在 `!bad_frm` 生效 (坏帧对图案流不可见);
+                    //      case A (只吃 carry) **不推进 LFSR** (它一个字节都没从 LFSR 取)。
+                    pw_data  <= wc_pw;
+                    pw_keep  <= kmask8(need_a);
+                    pw_n     <= need_a;
+                    pw_last  <= ((sent_a + {8'b0, need_a}) >= seg_len);
+                    pw_valid <= 1'b1;
+                    bcnt     <= 4'd0;
+                    stg      <= 64'd0;
+                    if (!bad_frm) begin
+                        wc_buf <= wc_nxt;
+                        wc_n   <= wc_nnxt;
+                        if (wc_b) tx_lfsr <= xs_next8(tx_lfsr);
+                    end
+                end else if (a2_ldw && !TAILC_OK) begin
                     // A2: **整字 1 拍装载** —— 8 个连续字节由常量 XOR 网 (xs_word8)
                     // 一拍产出, 与逐字节路径是**同一组映射** (M^0..M^7 的字节行);
                     // LFSR 同拍推进 8 步 (xs_next8 = M^8)。只在 need_a==8 时走 ⇒
                     // 尾字 (need_a<8) 结构性回落下面的逐字节路径。
+                    // ⚠️ P7B-GAP9-TX: `&& !TAILC_OK` 是本轮**新增的常量门** ——
+                    //    TAILC_OK=1 时这一支整条死掉 (need_a==8 ⟹ wc_go=1, 上面的
+                    //    wc 路已接管整字; 常量 0 ⇒ 综合直接删掉这一段, 不付面积);
+                    //    TAILC_OK=0 时它**逐字就是改动前的条件** (a2_ldw), 行为不变。
                     // pw_last 基准 = **前瞻 sent_a** (非前瞻会差一个字的偏移 ⇒ 帧
                     // 长度恰为 8 倍数时最后一个满字丢 tlast)。
                     pw_data  <= bad_frm ? 64'hA5A5A5A5A5A5A5A5 : xs_word8(tx_lfsr);
@@ -795,7 +920,9 @@ module app_pattern #(
             // `pw_valid <= 1'b0` 会把**本拍刚预取的字**丢掉 (每字丢一个字 ⇒ 字节流
             // 整段错位) ⇒ 必须在它之后把 pw_valid 写回 1 (只有真装载了才写;
             // a2_ldw 已含 !a2_hold ⇒ 换流/收尾拍不复活)。
-            if (a2_ldw) pw_valid <= 1'b1;
+            // ⭐ P7B-GAP9-TX: TAILC_OK=1 时装载者是 `wc_go` (整字/尾字同一条路);
+            //    TAILC_OK=0 时**逐字就是改动前的 `if (a2_ldw)`** (常量短路已证)。
+            if (wc_go || (a2_ldw && !TAILC_OK)) pw_valid <= 1'b1;
 `endif
 
             // ---- RX 取值/比对 ----
@@ -830,6 +957,37 @@ module app_pattern #(
                 if (rw_i + 4'd1 >= rw_n) rxs <= 2'd0;
                 else                      rw_i <= rw_i + 4'd1;
             end
+
+            // ---- ⭐ P7B-GAP9-TX: 两个停滞计数器 (**判别器**, 语义逐字如下) --------
+            // 动机 (设计件 §D): 板级 `P ≈ 199.7` 拍/帧 相对线几何 193 多出的 ~6.7 拍
+            //   到底是"窗口/信用停顿"、"帧器背压"还是 app 自身的残余开销 —— 纸面算不出
+            //   来 (预算里没有对端模型)。这两个计数器与 `ΔW43/ΔW20` 同窗采样即可**分离**。
+            // 两条语义 (拍数, 不是事件数; 按**当拍寄存器态**判, 与其它 stat_* 同口径):
+            //   stat_frmwait_cyc: 计数 ⟺ `frm_wait == 1 && active == 1 && !bad_frm`
+            //     = "本帧**已完整交付**, 但在等 app_ctrl 的 tx_ok 门 (app_tx_ready)"。
+            //     · 置位拍**不算** (那拍 frm_wait 仍是 0): 置位发生在收帧拍 (need==0) 且
+            //       tx_ok==0 时, 即 `frm_wait <= 1` 的那个沿; 计数从**下一拍**开始。
+            //     · 解除拍**算**: `frm_wait && tx_ok` 那拍 frm_wait 仍是 1 (它在沿后才落 0)。
+            //     · `active == 0` **不算**: 会话已拆 (ev_down) 后 frm_wait 可能残留 1
+            //       (W3 收尾不清它) —— 那是空闲态, 不是信用停顿, 混进来会把这个量变成
+            //       "挂住时长"而失去判别力。
+            //     · `bad_frm` **不算** (显式写出): 注入的超长帧不是业务帧。实测二者
+            //       结构性互斥 (收帧拍 `bad_frm <= 1'b0` 与 `frm_wait <= 1'b1` 同拍写
+            //       ⇒ frm_wait=1 期间 bad_frm 恒 0), 这里显式保留该项是**防将来改动**
+            //       破坏该性质 (不让它静默变成"混进注入帧的拍数")。
+            //     · 复位态 frm_wait=0 ⇒ 结构性不算。
+            //   stat_bp_cyc: 计数 ⟺ `pw_valid == 1 && m_tready == 0 && !closing && !bad_frm`
+            //     = "app 有字要交给帧器, 但帧器 (经 axis_pipe) 不收"。
+            //     · 复位态 pw_valid=0 ⇒ 不算; `closing` 期间的呈交口归 W3 收尾独占,
+            //       那类停顿**既不是窗口停顿也不是帧器背压** ⇒ 两个计数器都不计
+            //       (这是**登记过的盲区**, 判读时不许把它算进任一侧)。
+            //     · `bad_frm` 同上显式排除 (板级 `i_bad_frame ≡ 0` ⇒ 与字面定义逐位等价)。
+            //   ⚠️ 两个都是 32 位**自然回卷**计数器 (与 stat_tx_bytes 同族): 156.25 MHz 下
+            //      2^32 拍 = **27.487 s** ⇒ 判据必须 mod 2^32 **且同时记原始值** (全局 #55)。
+            if (frm_wait && active && !bad_frm)
+                stat_frmwait_cyc <= stat_frmwait_cyc + 32'd1;
+            if (pw_valid && !m_tready && !closing && !bad_frm)
+                stat_bp_cyc <= stat_bp_cyc + 32'd1;
 
             // ---- 活动/指示灯 ----
             if ((rx_tvalid && rx_tready) || (pw_valid && m_tready) || asm_go)

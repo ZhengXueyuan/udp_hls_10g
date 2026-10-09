@@ -22,6 +22,8 @@ check_window.py -- P7B-BIZ 快照窗口的**静态结构核对** (不需要 IP, 
   6  `p7bdp_din` 的驱动项数 = SNAP_P7BDP_NW (generate 12 项 + 显式 assign 6 项)
   7  * 装配里出现的**每个标识符都已声明且声明在使用之前** (xvlog 对隐式网沉默)
   8  译码位宽 vs 回绕红线: `ar_word` 装得下 `(0x20+4*NW)>>2`; `snap_base` 装得下 `(NW-1)<<5`
+  9/10 跨文件一致性 (W56 / 两个 slow_*_adp 的 stat_fifo_ovf)
+  11 (2026-10-10) W63/W64 = app_pattern 两个停滞计数器: 端口 <-> 接线 <-> 快照字 三者齐
 
 用法:  python check_window.py [--repo <repo>] [--mutate none|drop|swap|declpatho]
 退出码: 0 = 全过 / 1 = 有判据 FAIL
@@ -38,6 +40,16 @@ def ck(cond, name, detail=""):
     tag = "[PASS]" if cond else "[FAIL]"
     (PASSES if cond else FAILS).append(name)
     print("  %s %s %s" % (tag, name, detail))
+
+
+def info(name, detail=""):
+    """非判据的说明行 —— **不计入 PASS/FAIL 计数**。
+
+    为什么要有它 (2026-10-10): 原先这里有一行占位说明写成 `ck(True, "...")`, 于是它
+    **恒 PASS 且被计进 `PASS=` 总数** ⇒ 报告里的 PASS 数里混着"恒真"的行 —— 本工程最忌
+    "空判据被当判据"(全局经验 §六 同族: 判据总数里不许有无判别力的行)。"""
+    INFO.append(name)
+    print("  [INFO] %s %s" % (name, detail))
 
 
 def read(p):
@@ -133,7 +145,9 @@ def main():
         print("       [mutate=swap] 交换最上面两项 (模拟'新增字错位')")
     elif mut == "declpatho":
         pass    # 已在上面 (提取之前) 做过
-    ck(True, "1x (下一条按'总字数'判, 不按项数)", "")
+    # 原句 (恒 PASS 的占位行, 会被计进 PASS= 总数 ⇒ 2026-10-10 改 INFO, 判据语义零改动):
+    #   ck(True, "1x (下一条按'总字数'判, 不按项数)", "")
+    info("1x 下一条按'总字数'判, 不按项数 (说明行, 非判据; 不计入 PASS/FAIL)")
     # ⚠️⚠️ **项数 ≠ 字数**: `snap_dout` 一项就是 36 个字 (FE14+DP22 两束); 而
     #    `p7bdp_dout[k*32 +: 32]` 这类**切片**一项才是 1 个字。所以真正要核的是
     #    **总位数 == NW*32** (少一位 => 高位悬空 X; 多一位 => 被截断) —— 这也是
@@ -295,8 +309,25 @@ def main():
         ck(re.search(r"biz_w%d\s*=\s*%s" % (word, wire), src0) is not None,
            "10 `biz_w%d` (= W%d) 由 `%s` 驱动" % (word, word, wire))
 
+    # ---------- 判据 11 (2026-10-10, P7B-GAP9-TX): W63/W64 的**跨文件一致性** ----------
+    #   与判据 9/10 同款: 防 "端口加了但没接快照字" / "只在 wrapper 接, app_pattern 没那个端口"
+    #   这两种半成品状态 (xvlog 只看 wrapper 时看不见 app_pattern 的端口表)。
+    for mod, port, wire, word in (("app_pattern", "stat_frmwait_cyc", "app_frmwait_cyc", 63),
+                                  ("app_pattern", "stat_bp_cyc", "app_bp_cyc", 64)):
+        ap3 = os.path.join(repo, "rtl", mod + ".v")
+        a3 = read(ap3) if os.path.exists(ap3) else ""
+        ck(re.search(r"output\s+reg\s+\[31:0\]\s+%s" % re.escape(port), a3) is not None,
+           "11 %s 有 `output reg [31:0] %s` 端口" % (mod, port))
+        ck(re.search(r"\.%s\s*\(\s*%s\s*\)" % (re.escape(port), re.escape(wire)), src0) is not None,
+           "11 wrapper 把 %s 接到 `%s` (app_pattern 例化点)" % (port, wire))
+        ck(re.search(r"wire\s+\[31:0\]\s+%s" % re.escape(wire), src0) is not None,
+           "11 `%s` 已声明 (防隐式 1 位网)" % wire)
+        ck(re.search(r"biz_w%d\s*=\s*%s" % (word, re.escape(wire)), src0) is not None,
+           "11 `biz_w%d` (= W%d) 由 `%s` 驱动" % (word, word, wire))
+
     print("----------------------------------------------------------")
-    print("PASS=%d FAIL=%d" % (len(PASSES), len(FAILS)))
+    # ⚠️ INFO 单列: 恒真说明行**不进 PASS 计数** (原 `ck(True, ...)` 那行曾虚增 PASS 1 个)
+    print("PASS=%d FAIL=%d INFO=%d" % (len(PASSES), len(FAILS), len(INFO)))
     if FAILS:
         print("FAILED: " + ", ".join(FAILS))
         return 1

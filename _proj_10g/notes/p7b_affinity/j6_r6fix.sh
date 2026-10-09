@@ -12,6 +12,10 @@
 #   ⚠️ 几何: 默认 = **63 字 / BID 0xA** (P7b Stage C, 现役; ⛔ 种子原写 '63 字 / BID 9')。读**旧位流** (BIZ 61 字 / BID 8)
 #      必须显式声明 `J6_LEGACY_GEOM=1 NW=61 EXPECT_BID=0x00000008` —— 那一档**读不到 W61/W62**
 #      (字表自动退回 5 53 54), 且日志里有 J6_GEOM_LEGACY 醒目行。缺省档下 NW/BID 不符**当场红**。
+#   ⛔ 2026-10-10 订正 (构建 C 门同步轮): 上面这句的"默认 = 63 字 / BID 0xA"**已过时** ——
+#      现役 = **65 字 / BID 0x17** (构建 C: 快照 63→65, W63/W64 = app_pattern 两个停滞计数)。
+#      几何档现在单一来源 = 下方 `GEOM_TIERS` 档表 (旧档全部保留), 失败提示由档表**生成**;
+#      原句保留 (它描述的是 Stage C 那一代)。
 #   ⚠️ 本脚本**同时**是 J6 (对端口径) 与 J15 (板内时基新预测带) 的台架:
 #      J15 的板内时基 = 同一份 pre/post 全窗快照的 ΔW 系列 (ΔW0/ΔW53/ΔW22, 速率用 ΔW5 时基)。
 #
@@ -37,7 +41,7 @@
 #        **结构性不读** `W61 app_ctrl.stat_wu` / `W62 app_ctrl.rx_occ_bytes`, ΔW61/ΔW62 只剩
 #        run 前后的两个 full 点 (与传输窗错开) ⇒ "机理落不到传输窗上" (审查 F3 §10.2)。
 #        现在 63 字档的字表 = `5 53 54 61 62`; 61 字旧档 (W61/W62 不存在) 自动退回 `5 53 54`。
-#     ⑦ **几何门 (硬断言)**: ① `NW=${NW:-63}` 且 **export** (原先那个 `NW=${NW:-61}` **没 export**,
+#     ⑦ **几何门 (硬断言)**: ① `NW=${NW:-65}` (P7B-GAP9-TX; 原 63) 且 **export** (原先那个 `NW=${NW:-61}` **没 export**,
 #        只用于打印标签, 取数器仍用自己默认值 ⇒ "文档里的覆盖办法"在本脚本里**是失效的**,
 #        且默认分叉后会**记录错几何而不报错**); ② 开场核 (NW, 板侧 BID) 这一对, 不符 ⇒ exit 3;
 #        ③ 再跑一次 `p7b_snap.sh id` (它自己断言 MAGIC/BID/未实现地址必须 0xffffffff)。
@@ -60,22 +64,47 @@ T=${P7B_TOOLS:-/home/a/xdma_test/dma_ip_drivers-patched/XDMA/linux-kernel/tools}
 D=/dev/xdma0_user
 cd /tmp/p7b_biz || exit 9
 
-# ---- 几何门 (⑦): 只认两套**显式**几何, 其余一律拒绝 -------------------------------
-#   默认 = 63 字 / BID 9 (P7B-WU 二轮, 现役)  ⇒ t0/t1 读 5 53 54 61 62
-#   旧档 = 61 字 / BID 8 (BIZ) 需 `J6_LEGACY_GEOM=1` ⇒ t0/t1 读 5 53 54 (无 W61/W62 可读)
-NW=${NW:-63}
-EXPECT_BID=${EXPECT_BID:-0x00000011}   # 2026-10-08 i-verify: r6-fix BID 0x11 (原 0x0000000A = Stage C)
+# ---- 几何门 (⑦): 只认**显式**几何档, 其余一律拒绝 -------------------------------
+#   档表 = 下面 `GEOM_TIERS` (**单一来源**); 新增一代 = 加一行; **旧档一律保留** ⇒ 旧位流仍可测。
+#   ⛔ 判据语义 = "声明的几何必须与板侧身份**成对**" —— 档表之外的组合照样 exit 3。
+#      加档 ≠ 放闸: 65 字档**不接受** BID 0x11, 63 字档**不接受** BID 0x17 (配错对 ⇒ 读数不可归因)。
+#   ⛔ 2026-10-10 (构建 C 门同步轮): 本轮之前门里只列了 61/8 与 63/0x11 两档, 而 `NW` 默认早已
+#      随构建抬到 65 ⇒ **默认跑必然 J6_GEOM_FAIL + exit 3** (新位流测不了); 且失败提示里打的
+#      是 "要求 NW=63 + EXPECT_BID=0x0000000A" (与实际默认 0x11 自相矛盾 —— 一句话两处过时)。
+#      现在: 档表是唯一来源, 失败提示与档位元数据都由它派生。
+NW=${NW:-65}
+EXPECT_BID=${EXPECT_BID:-0x00000017}   # 2026-10-10 构建 C (65 字; 原 0x00000011 = r6-fix / 更早 0x0000000A = Stage C)
 export NW EXPECT_BID        # ⚠️ 必须 export: 取数器 p7b_snap.sh 读的是**它自己的环境**
+# 十六进制**大小写归一** (只用于比较, 打印仍用原样; 判据语义零改动 —— 先例 = 下面 geom_gate 块)
+norm(){ printf "%s" "$1" | tr "A-F" "a-f"; }
+# 档表格式: "NW|BID|WEXTRA|说明"  (WEXTRA 空 = t0/t1 字表退回 5 53 54)
+GEOM_TIERS=(
+  "65|0x00000017|61 62|构建 C (2026-10-10) 65 字 / BID 0x17"
+  "63|0x00000011|61 62|r6-fix (2026-10-08) 63 字 / BID 0x11"
+  "61|0x00000008||P7B-BIZ 61 字 / BID 8 (必须同时 J6_LEGACY_GEOM=1; W61/W62 结构性不可读)"
+)
+geom_tiers_echo(){ local _t; for _t in "${GEOM_TIERS[@]}"; do
+    IFS='|' read -r _a _b _c _d <<< "$_t"; echo "   档: NW=$_a + EXPECT_BID=$_b  ($_d)"; done; }
 LEGACY=${J6_LEGACY_GEOM:-0}
+GEOM_HIT=""; WEXTRA=""
+for _t in "${GEOM_TIERS[@]}"; do
+  IFS='|' read -r _nw _bid _we _desc <<< "$_t"
+  if [ "$NW" = "$_nw" ] && [ "$(norm "$EXPECT_BID")" = "$(norm "$_bid")" ]; then
+    GEOM_HIT="$_desc"; WEXTRA="$_we"; break
+  fi
+done
+if [ -z "$GEOM_HIT" ]; then
+  echo "J6_GEOM_FAIL 声明的几何不在本台架认的档表里 (实测 NW=$NW EXPECT_BID=$EXPECT_BID):"
+  geom_tiers_echo
+  echo "             ⇒ 板上不是本台架认的位流 (几何/身份不符) ⇒ 拒绝继续 (读数不可归因)"
+  exit 3
+fi
 if [ "$LEGACY" = "1" ]; then
-  WEXTRA=""
-  { [ "$NW" = "61" ] && [ "$EXPECT_BID" = "0x00000008" ]; } || {
-    echo "J6_GEOM_FAIL legacy 档要求 NW=61 + EXPECT_BID=0x00000008 (实测 NW=$NW EXPECT_BID=$EXPECT_BID)"; exit 3; }
+  [ "$NW" = "61" ] || {
+    echo "J6_GEOM_FAIL legacy 档只认 61 字 (实测 NW=$NW EXPECT_BID=$EXPECT_BID)"; geom_tiers_echo; exit 3; }
 else
-  { [ "$NW" = "63" ] && [ "$EXPECT_BID" = "0x00000011" ]; } || {
-    echo "J6_GEOM_FAIL 默认档要求 NW=63 + EXPECT_BID=0x0000000A (实测 NW=$NW EXPECT_BID=$EXPECT_BID);"
-    echo "             读 BIZ 61 字旧位流请显式 J6_LEGACY_GEOM=1 NW=61 EXPECT_BID=0x00000008"; exit 3; }
-  WEXTRA="61 62"
+  [ "$NW" != "61" ] || {
+    echo "J6_GEOM_FAIL 61 字旧档必须显式声明 J6_LEGACY_GEOM=1 (W61/W62 结构性不可读); 档表:"; geom_tiers_echo; exit 3; }
 fi
 
 BIN=${BIN:-./p7b_tcp_src}
@@ -110,10 +139,13 @@ BID0=$(brd 0x04)
 # ⛔ 2026-10-07 Stage C 二次订正: reg_rw 打**小写** (0x0000000a) 而 EXPECT_BID 写大写
 #    ⇒ 原句 `[ "$BID0" != "$EXPECT_BID" ]` 在 BID 含字母的世代**必假红** (板子是对的);
 #    比较前两边归一到小写, 判据语义零改动 (打印仍用原样)。
-norm(){ printf "%s" "$1" | tr "A-F" "a-f"; }
+#    ⚠️ 2026-10-10 (构建 C 门同步轮): `norm()` 的**定义**已上移到前面的几何档块 (那里也要用它比
+#       档), 这里不再重复定义; 下面第二行原写 "(现役 = 0x00000011 r6-fix)" —— 那是**写死的现役
+#       值**, 每换一代就过时一次 ⇒ 改成由档表派生。
 if [ "$(norm "$BID0")" != "$(norm "$EXPECT_BID")" ]; then
   echo "J6_GEOM_FAIL 板侧 BID=$BID0 != 声明值 $EXPECT_BID ⇒ 板上不是本台架认的位流 (几何不符) ⇒ 拒绝继续"
-  echo "              (现役 = 0x00000011 r6-fix)"
+  echo "             声明档 = ${GEOM_HIT:-?}; 本台架认的档表 (旧位流按档显式声明 NW/EXPECT_BID):"
+  geom_tiers_echo
   exit 3
 fi
 bash "$S" id || { echo "J6_GEOM_FAIL 取数器身份闸未过 (MAGIC/BID/未实现地址必须 0xffffffff) ⇒ 拒绝继续"; exit 3; }

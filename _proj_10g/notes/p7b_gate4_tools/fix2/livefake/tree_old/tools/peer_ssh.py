@@ -31,7 +31,10 @@ if "SNAP_BEGIN" in remote:                                   # ---- 快照块 --
     vcc = 0x66 if blk == 0 else min(0xFF, 0x99 + blk)
     W = [100, 151800, 1518, 0, 0, freecnt(lat), 100, 4] + [0] * 12 + [0, 0, 0, 0, freecnt(lat), 1, 0, 0, 0, 0, 100, 151400, 0, 0, 0, 0] \
         + [20000000, 151800000, 0, 0x2000100C, vcc, 0, 0, 0, 0, 0, 0, 0, 0, 0, freecnt(lat)] \
-        + [0] * 12          # W51..W62 = P7B-BIZ/WU 新增字 (accept 只要求窗口齐全 + 无 0xffffffff)
+        + [0] * 14          # W51..W64 = P7B-BIZ/WU/构建C 新增字 (accept 只要求窗口齐全 + 无 0xffffffff)
+    #   ⛔ 2026-10-10 (构建 C): 12 -> **14** —— 构建 C 的远端请求是 65 字 (`for i in seq 0 64`),
+    #      而 `W[i]` 只到 W62 ⇒ 若不同步, `for i in range(nw)` 读到 W63/W64 会 **IndexError**
+    #      (假对端直接崩, 表现为"整台安静"—— 本工程最恨的一类失效); 同步后为 W63/W64 = 0 (健康值)。
     # ⚠️ 几何**自适配**: 老版 accept (pre_fix2) 的远端文本是 `for i in $(seq 0 50)` (51 字),
     #    新版是 `for i in $(seq 0 $(( 63 - 1 )))` (63 字, 占位符已在发送前替换)。假板子必须
     #    **按请求方那一代的几何**回, 否则老版那一路会因"字数不符/身份不符"提前 ABORT,
@@ -46,7 +49,11 @@ if "SNAP_BEGIN" in remote:                                   # ---- 快照块 --
         nwm = re.search(r'for i in \$\(seq 0 (\d+)\)', remote)
         nw = int(nwm.group(1)) + 1 if nwm else 63
     # ⛔ 2026-10-07 Stage C: 63 字那一代的身份 9 -> 10 (兜底同改); 61/51 代 (8/7) 是历史值, 不动。
-    bid = {63: "0x0000000A", 61: "0x00000008", 51: "0x00000007"}.get(nw, "0x0000000A")
+    # ⛔ 2026-10-10 (构建 C 门同步轮): 加 **65 字那一代 = 17** (构建 C; `p7b_gate4_accept.sh`
+    #    的默认 EXPECT_BID 同批改成 0x00000017 —— 本假板子必须跟着, 否则整台 case 在 G1 身份上假红)。
+    #    ⚠️ 兜底值也已从 "0x0000000A" (Stage C 63 字) 改成 **"0x00000017"** (现役代) ——
+    #    兜底只在 nw 不在表里时用, 取"现役那一代"比取历史代更不容易静默假红。
+    bid = {65: "0x00000017", 63: "0x0000000A", 61: "0x00000008", 51: "0x00000007"}.get(nw, "0x00000017")
     out("SNAP_BEGIN"); out("TLATCH %.9f %.9f" % (t0, t1)); out("GEN %d %d" % (g0, g1))
     out("MAGIC 0x50360001"); out("BID %s" % bid); out("MARKER 0xdeadbeef")
     for i in range(nw): out("W%d 0x%X" % (i, W[i]))

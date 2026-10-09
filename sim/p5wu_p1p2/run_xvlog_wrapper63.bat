@@ -4,6 +4,18 @@ REM run_xvlog_wrapper63.bat -- P7B-WU compile-face gate for board/wrapper_p4.v
 REM   (same shape as _proj_10g\notes\p7b_biz_win\run_xvlog_wrapper.bat, whose
 REM    fingerprint check pins SNAP_NW_P6E = 61 => it would refuse this version;
 REM    this copy pins 63 and writes into sim\p5wu_p1p2\work_xvlog.)
+REM   ⛔ 2026-10-10 (构建 C 门同步轮): fingerprint 63 -> 65.  It had already gone
+REM      DEAD at the 63->65 transition (exit 92 [FINGERPRINT FAIL] on every run:
+REM      the live wrapper reports SNAP_NW_P6E = 65, this gate still looked for 63).
+REM      Choice (recorded): keep the gate LIVE and re-pin, exactly like its two
+REM      siblings already re-pinned by the GAP9-TX round
+REM      (_proj_10g\notes\p7b_biz_win\run_xvlog_wrapper.bat:33  and
+REM       _proj_10g\notes\p7b_biz_win\run_tb_biz_win.bat:20, both = "SNAP_NW_P6E = 65");
+REM      NOT frozen, because this gate's whole job is the compile face (VRFC 10-2989
+REM      "declared before use") of the LIVE wrapper -- freezing it onto a 63-word copy
+REM      would turn a live lint guard into a check of an obsolete file.  The filename
+REM      keeps the historical "63" (no caller depends on the name; the PASS marker
+REM      XVLOG_WRAPPER63_PASS is quoted by notes, so it is left unchanged on purpose).
 REM
 REM   Scope: syntax + "declared before use" (VRFC 10-2989 expression form).
 REM   NOT covered: undeclared nets in expression form are LEGAL Verilog (a typo in
@@ -38,7 +50,7 @@ if not exist "%XV%\xvlog.bat" ( echo [TOOL FAIL] no xvlog.bat & exit /b 91 )
 if not exist "%W%" mkdir "%W%"
 set SRCFILE=%ROOT%\board\wrapper_p4.v
 set TXF=%ROOT%\rtl\tcp_tx_frame.v
-findstr /C:"SNAP_NW_P6E = 63" "%SRCFILE%" >NUL || ( echo [FINGERPRINT FAIL] source is not the 63-word version & exit /b 92 )
+findstr /C:"SNAP_NW_P6E = 65" "%SRCFILE%" >NUL || ( echo [FINGERPRINT FAIL] source is not the 65-word version & exit /b 92 )
 if not exist "%TXF%" ( echo [PATHGUARD FAIL] no rtl\tcp_tx_frame.v under %ROOT% & exit /b 93 )
 
 set D3=-d APP_MODE -d P7B_10G -d PCIE_OBS -d DEV_USP -d DP_156MHZ -d UDP_TX_OVL

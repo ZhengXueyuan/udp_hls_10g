@@ -1,0 +1,16 @@
+### md5 of deployed reader
+996eb9932e5a098b0613974ece91b689  /tmp/p7b_biz/p7b_snap.sh
+### A: explicit NW=63 EXPECT_BID=0x00000016 (正确档)
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x00000016   (want 0x00000016 = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0xffffffff  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_OK 1791572212.107223577
+RC=0
+### A: DEFAULTS (NW=65 / EXPECT_BID=0x17) -> 期望 ID_FAIL (证明必须显式传)
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x00000016   (want 0x00000017 = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0xffffffff  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_FAIL 身份不符 (烧了别的位流? 期望 BID=0x00000017, 实测 BID=0x00000016)
+RC=1

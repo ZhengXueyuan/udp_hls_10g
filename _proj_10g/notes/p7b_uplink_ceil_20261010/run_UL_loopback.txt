@@ -1,0 +1,14 @@
+=== send-discard (纯 socket 发送, 预生成缓冲) ===
+BENCH_GEN bytes=268435456 gen_s=0.457 gen_GBs=0.587
+PIN_THREAD name=send PIN_TID_SEND=291266 PIN_CPU_SEND=4 PIN_ALLOWED_MASK_SEND=10 PIN_GETCPU_SEND=4 CPU_FREQ_SEND_KHZ=2400000
+BENCH send-discard bytes_sent=268435456 bytes_recv=268435456 sec=0.050140 Gbps=42.8298 Mbps=42829.82 checked=-1 first_mismatch=-1 mism_bytes=0 slot_wait_spins=0 send_err=0 slots=16 slot_bytes=65536 core_send=4 core_io=2 core_work=3 CPU_FREQ_KHZ=3899777 check=seq
+PIN_GETCPU_END=7 PIN_FREQ_END_KHZ=3897554
+=== check-only lane8 (纯校验) ===
+BENCH_GEN bytes=268435456 gen_s=0.457 gen_GBs=0.587
+BENCH check-only bytes=268435456 sec=0.191439 Gbps=11.2176 Mbps=11217.56 first_mismatch=-1 mism_bytes=0 check=lane8 CPU_FREQ_KHZ=3899776
+PIN_GETCPU_END=7 PIN_FREQ_END_KHZ=3899758
+=== recv-check-split lane8 (双线程新台架) ===
+PIN_THREAD name=io PIN_TID_IO=291272 PIN_CPU_IO=2 PIN_ALLOWED_MASK_IO=4 PIN_GETCPU_IO=2 CPU_FREQ_IO_KHZ=800000
+PIN_THREAD name=work PIN_TID_WORK=291273 PIN_CPU_WORK=3 PIN_ALLOWED_MASK_WORK=8 PIN_GETCPU_WORK=3 CPU_FREQ_WORK_KHZ=800000
+BENCH recv-check-split bytes_sent=268435456 bytes_recv=268435456 sec=0.200002 Gbps=10.7373 Mbps=10737.29 checked=268435456 first_mismatch=-1 mism_bytes=0 slot_wait_spins=293161 send_err=0 slots=16 slot_bytes=65536 core_send=4 core_io=2 core_work=3 CPU_FREQ_KHZ=3799521 check=lane8
+PIN_GETCPU_END=7 PIN_FREQ_END_KHZ=3895835

@@ -19,6 +19,10 @@
 #      ① 对端 NIC 硬件计数 `Δport_rx_good_bytes/Δport_rx_packets` (J0 口径 = 1518.0009)
 #      ② 板侧 `ΔW43/ΔW20` (拍/帧, J0 口径 = 192.999989) + `ΔW20/(ΔW5/156.25e6)` = fps
 #      ⚠️ 两者都是**原始读数现算**且 raw A/B 一并落盘 (回卷规则照旧)。
+#   ⛔ 2026-10-10 口径订正 (注释; 行为零改动): W43 = mac_tx_10g.stat_tx_words = **每拍无条件 +1 的
+#      tx 域拍钟** (mac_tx_10g.v:330, 在 case(state) 之外) ⇒ `ΔW43/ΔW20 ≡ 156.25e6/fps` (恒等式)
+#      ⇒ 本行只能当**帧周期/帧率的换算**, **不是**"线占空/线忙度"测量 (板侧没有线占空计数器);
+#      本构型下它易被读成 193 几何 (错 ~5.5×) 的老警告仍然成立 (见 p7b_bench/ACCEPT_FIRST_RUN.md §81)。
 set -u
 CONNS=${CONNS:-300}; SECS=${SECS:-30}; TAG=${TAG:-STC_DL}; RCVBUF=${RCVBUF:-8388608}
 PCAP_ON=${PCAP_ON:-0}; SINK=${SINK:-./p7b_tcp_sink}; SINK_EXTRA=${SINK_EXTRA:-}

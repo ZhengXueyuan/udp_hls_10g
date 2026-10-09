@@ -4,8 +4,10 @@
 #   前置: (1) FPGA 已烧上**本轮的**位流, 且 BUILD_ID == EXPECT_BID:
 #              6 = P6b+F4 双域 **36 字** (历史)   |   7 = **P7b 51 字** (RATE 位流, 历史)
 #              8 = P7B-BIZ **61 字** (历史)      |   9 = P7B-WU 二轮 63 字 (历史, Build 2)
-#              **10 = P7b Stage C 63 字 (RTL 当前值)** —— ⛔ 2026-10-07 Stage C BID 同步轮:
+#              **10 = P7b Stage C 63 字 (历史)** —— ⛔ 2026-10-07 Stage C BID 同步轮:
 #              窗口仍 63 字 (0x20..0x118 / 未实现 0x11C), 只有身份 9 → 10;
+#              ⛔ 2026-10-10 订正 (构建 C 门同步轮): **RTL 当前值 = 17 (65 字 / 未实现 0x124)**
+#                 —— 本行原写 "10 = ... (RTL 当前值)" 已过时 (原句保留)。
 #              读 P7B-WU 二轮 (Build 2) 位流覆盖 EXPECT_BID=0x00000009 (几何不用动)。
 #              ⚠️ 读**旧位流**必须显式覆盖: `SNAP_WORDS=61 EXPECT_BID=0x00000008 UNIMPL_ADDR=0x114`
 #                 (否则**响亮失败**: 身份闸 1.2 红 + 5.0 窗口内出现 2 个 0xffffffff)。
@@ -43,11 +45,18 @@ TOOLS=/d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_gate4_tools/fix2/bin
 DEV=/d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_gate4_tools/fix2/xdma0_user
 LOG=/d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_gate4_tools/fix2/fake_run_new_fake.log
 # 位流身份 (前置闸); 1=最小 2=合体8字 3=16字 4=24字 5=P6b 双域32字 6=P6b+F4 双域36字
-#   **7=P7b 51字 · 8=P7B-BIZ 61字 · 9=P7B-WU 二轮 63字 (历史) · 10=P7b Stage C 63字 (现役)**
+#   **7=P7b 51字 · 8=P7B-BIZ 61字 · 9=P7B-WU 二轮 63字 (历史) · 10=P7b Stage C 63字 (历史)
+#     · 17=构建 C (2026-10-10) 65字 (现役)**
 #   ⛔ 2026-10-07 Stage C: 上一行原写 "9=P7B-WU 二轮 63字 (现役)"; 现役改为 10 (窗口不变)。
+#   ⛔ 2026-10-10 订正 (构建 C 门同步轮): 上面那句的 "10 = 现役" **已过时** —— 现役 = **17**
+#      (源码 `board/wrapper_p4.v` 的 `BUILD_ID_V = 32'h00000017`; 同批窗口 63 → **65 字**)。
+#      原句保留 (它描述的是 Stage C 那一代)。⚠️ 默认 BID 与默认 SNAP_WORDS **必须同代**,
+#      否则本脚本以"身份闸 1.2 红 + 窗口内出现 0xffffffff"的形态**假红**。
+#      读旧位流: Stage C 63 字 = `EXPECT_BID=0x0000000A SNAP_WORDS=63`; WU 二轮/Build 2 = `0x00000009 SNAP_WORDS=63`;
+#      BIZ 61 字 = `EXPECT_BID=0x00000008 SNAP_WORDS=61 UNIMPL_ADDR=0x114`。
 # ⚠️ 期望值按 **board/wrapper_p4.v 的 `.BUILD_ID_V`** 填 (源码是唯一权威); 以现场 0x04 读数为准,
 #    若与源码不符 ⇒ 先查是不是烧了别人的位流, 别改这里的数去"迁就"读数。
-EXPECT_BID=${EXPECT_BID:-0x0000000A}       # ⛔ 2026-10-07 Stage C: 原默认 0x00000009 (P7B-WU 二轮 = 9)
+EXPECT_BID=${EXPECT_BID:-0x00000017}       # ⛔ 2026-10-10 构建 C: 原默认 0x0000000A (P7b Stage C 63 字)
 
 # ---- 快照窗口几何 (**单一来源**: 只写"字数", 其他全部由它派生) -------------------------
 # ⚠️ 旧版把 44 个地址**手抄**成一行 ⇒ 只到 0xAC (漏 W36..W50) **且尾部 8 项重复** (36 字时代的笔误)。
@@ -58,8 +67,8 @@ EXPECT_BID=${EXPECT_BID:-0x0000000A}       # ⛔ 2026-10-07 Stage C: 原默认 0
 #    ⚠️ **未实现地址必须存在**: 它撑起读侧 SLVERR 负对照 (判据 6)。译码 7 位
 #       (`_proj_pcie/rtl/axi_regs.v`) ⇒ 地址每 512 字节才回绕,
 #       `0x11C` (word 71) 真正未实现 ✓ (上限 119 字); 红线 = **绝不能挑 ≥0x200**。
-SNAP_WORDS=${SNAP_WORDS:-63}
-UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 63 ⇒ 0x11C (61 ⇒ 0x114; 51 ⇒ 0xEC)
+SNAP_WORDS=${SNAP_WORDS:-65}
+UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 65 ⇒ 0x124 (63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)
 snap_addr(){ printf '0x%X' $(( 0x20 + 4*$1 )); }                          # word 号 → 字节地址
 # W5 (前端域自由计数) 的**标称频率随构建而变** —— 它是判据的"期望值", 不跟上就是假 FAIL:
 #   · **P7B_10G 构建** (本脚本默认几何 63 字 / EXPECT_BID=10 —— ⛔ Stage C: 原句 = 9): 前端域 = PCS 的 CDR **恢复钟**
@@ -324,7 +333,10 @@ WLABEL=(
  "srx_stat_fifo_ovf  (slow_rx_adp o_ovf 拒写; 恒 0 = 无静默丢失)"
  # ---- P7B-WU 二轮新增 2 字 (63 字窗口; dp 域) ----
  "app_ctrl_stat_wu   (窗口重开通告入 ackq 次数; 不是'已上线')"
- "app_ctrl_rx_occ_bytes(app RX 可读字节, 17 位 ⇒ 高位恒 0)" )
+ "app_ctrl_rx_occ_bytes(app RX 可读字节, 17 位 ⇒ 高位恒 0)"
+ # ---- 构建 C (2026-10-10) 新增 2 字 (65 字窗口; dp 域) ----
+ "app_frmwait_cyc    (app_pattern 帧等待/停滞拍数)"
+ "app_bp_cyc         (app_pattern 背压拍数)" )
 for (( i = 0; i < SNAP_WORDS; i++ )); do
   v=$(rd "$(snap_addr $i)")
   W[$i]=$v
