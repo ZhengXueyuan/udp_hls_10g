@@ -1167,7 +1167,14 @@ module wrapper_p4 (
         else           acc_margin_eff <= acc_margin_of(acc_margin_n);
     end
 
-    app_pattern #(.TX_BYTES(32'd1048576), .TX_SEGSZ(12'd1460)) u_app (
+    // ⛔<< 警告 (对抗审查轮加, 2026-10-09 P7B-LONGFLOW): **TX_BYTES 必须保持无符号** >>
+    //   `rtl/app_pattern.v:619` 的 `seg_len <= (TX_BYTES > {20'b0, TX_SEGSZ}) ? TX_SEGSZ : TX_BYTES[11:0]`
+    //   依赖它是**无符号** 32 位参数 (`parameter [31:0] TX_BYTES`, app_pattern.v:27)。
+    //   若日后有人把它声明成 `integer` / 加 `$signed()` / 改用 `-sv` 带符号参数 ⇒ 高频值
+    //   (如长流臂的 `32'hFFFFFFFF`) 会被当 **−1** ⇒ 比较失败 ⇒ `seg_len <= TX_BYTES[11:0] = 12'hFFF = 4095`
+    //   ⇒ 首帧超 `PLEN_MAX(1500)` 被**整帧中止** + 载荷图案整段偏移 4095 B (线上失配)。
+    //   ⇒ 本参数改值可以, **改符号性不行** (要改先读这条)。
+    app_pattern #(.TX_BYTES(32'h0FFFFFFF), .TX_SEGSZ(12'd1460)) u_app (
         .clk            (dp_clk),
         .rst_n          (dp_rst_n),
         .ev_up          (app_ev_up),
@@ -3901,7 +3908,7 @@ module wrapper_p4 (
 
     axi_regs #(
         .MAGIC_V    (32'h50360001),
-        .BUILD_ID_V (32'h00000011),     // ⚠️ 每次改动自增 (前置闸读这一项认位流)
+        .BUILD_ID_V (32'h00000015),     // ⚠️ 每次改动自增 (前置闸读这一项认位流)
                                         //    1 = 最小版 / 2 = 合体版 8 字 / 3 = 合体版 16 字
                                         //    4 = 合体版 24 字 (+ W16-W23 慢路径健康位)
                                         //    5 = P6b 双时钟域 32 字 (W24-W31 跨域锚点)
@@ -3984,6 +3991,15 @@ module wrapper_p4 (
                                         //        被 dup_ack 的"有在飞"守卫挡掉 ⇒ ack_seen
                                         //        永不置位 ⇒ 板级实测 30 连零数据死锁
                                         //        (3 跑确定性)。r5 不可见 = 数据已在飞。
+                                        //   18 = **P7B-LONGFLOW** (2026-10-09): 63 字**不变**,
+                                        //        仅身份自增 + `app_pattern` 例化点的 `.TX_BYTES`
+                                        //        `32'd1048576` → `32'h7FFFFFFF` (L1 臂 = ≈1.82 s
+                                        //        连续流; **零逻辑改动** —— 该参数只进常量装载与
+                                        //        常量比较, 依据见 `P7B_LONGFLOW_DESIGN.md`
+                                        //        §2.1/§7.2-4)。⚠️ 本 wrapper 也被
+                                        //        `build_p6b_*`/`build_p6e_*` 复用 (它们同样定义
+                                        //        `APP_MODE`) ⇒ 用旧脚本重建会拿到长流参数
+                                        //        (本刀**唯一的外溢面**; 设计件 §7.1 已登记)。
         .SNAP_NW    (SNAP_NW_P6E)       // 63 = 14+22 (snap_seq) + 3+(24-4)+4 (P7b 三束)
                                         //   ⚠️ 算式订正 (2026-10-07 二轮): 旧注 "14+22+3+24+4" = **67** ≠ 63。
                                         //   正确项数 = **24-4**: p7bdp 束有 24 个槽, 但槽 **2..5 不进窗口**
