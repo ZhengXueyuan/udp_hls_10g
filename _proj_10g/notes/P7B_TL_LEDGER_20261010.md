@@ -67,6 +67,7 @@
    ⚠️ 这也是本会话**第三次**同类错（① `MUTFAIL` 标记当缺陷 → #84 ② `--stat` 改动量当新增行数 → #89 ③ 工作树体积当提交体积 → 本条）。
 2. 文档面把 queue §3-5..§3-8 逐条落进 `P7B_OPEN_ITEMS.md` / 相关件（**行号订正**优先，它会让下游改错地方）。
 3. `P7B_OPEN_ITEMS.md` 目前**尚未**收录：微窗 stall 家族（判定 + 未定位项）· `snd_wnd` 无守卫 · 别名门与 `#19` 结项 · mdio 两潜伏项结项 · 两个新门（`sim/aliasgate/` · 矩阵第 17 门）。
+4. ⛔ **本台账 §5 曾误记 `p7b_readside_harden_20261010/REPORT.md` 存在** —— 2026-10-10 由 **persist 设计件现核揭出**：**该文件从未落盘**（该 agent 侧 harness 拒写 `.md`，与本轮 sinkfix 支**同一故障**）。现核：盘上证据齐全；**引用它的 4 处**（`CLAUDE.md:28` · `PORT_NOTES.md:5938` · `P7B_OPEN_ITEMS.md:429,453,455,517`）**全部指向具体证据文件，无一指向该 `.md`** ⇒ **只有本台账这一处错**，已就地订正。⇒ **教训（TL 第 4 次同类错）**：**写"某文件存在"之前必须 `ls`** —— 同族于 #84（标记存在 ≠ 行为存在）。**待办**：读侧轮的**叙述件**要不要从盘上证据补写 = 低优先（证据未缺，缺的只是叙事）。
 
 ---
 
@@ -82,7 +83,7 @@
 | `_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md` | Build G 设计件（776 行；**待 v2**） |
 | `_proj_10g/notes/p7b_p5wrapper_diag_20261010/REPORT.md` | `#8` 定位：五行反向别名 = **真缺陷** · 引入点 `f08fc6a` · 三门同根因 · 板配置实测清白 |
 | `_proj_10g/notes/p7b_aliasgate_20261010/REPORT.md` | 五行修复 + `#19` 矩阵 16→17 + **别名方向常驻门**（假阳性 0）+ 工具面三条 |
-| `_proj_10g/notes/p7b_readside_harden_20261010/REPORT.md` + `FULL_TABLE.tsv` | 读侧加固：穷举 771 条/149 文件 · **三条断言** · 负对照 4 条全红 |
+| `_proj_10g/notes/p7b_readside_harden_20261010/`（⛔ **该目录里没有 `REPORT.md`** —— 见 §4-4） | 读侧加固：穷举 771 条/149 文件 · **三条断言** · 负对照 4 条全红。证据 = `FULL_TABLE.tsv`(771 行/149 文件) · `assert_run1/2.txt` · `check_mode.txt` · `negctl_{table,bid,face,oldkey}.txt` · `face_table.txt` · `mktable.py`；权威叙述 = `udp_hls_10g/CLAUDE.md` 构建 F 块 ⑦ |
 | `_proj_10g/notes/p7b_tool_debt_20261010/REPORT.md` | 变异器地雷**纯核实**（0713a13 已修）+ mdio 两潜伏项改造（2×2 判据） |
 | `_proj_10g/notes/P7B_OPEN_ITEMS.md` | ⭐ 用户的**未解决项汇总表**（本轮订正 13 格 + 新增 6） |
 | `~/.claude/fpga_net_dev.md` §六 **#84–#89** | 本轮新知识：标记≠行为 · 既存红养 11 天 · 恒等式新形态 · 表尾第三次 · 回卷展开数两次 · 转述二手数字 |
