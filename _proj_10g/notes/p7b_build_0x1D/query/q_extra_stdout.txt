@@ -1,0 +1,116 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Sun Oct 11 02:39:54 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source {_proj_10g\notes\p7b_build_0x1D\query\q_0x1D_extra.tcl}
+# set dcp [lindex $argv 0]
+# set out [lindex $argv 1]
+# open_checkpoint $dcp
+Command: open_checkpoint {_proj_10g\notes\p7b_build_0x1D\query\out\wrapper_p4_routed.dcp}
+
+Starting open_checkpoint Task
+
+Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.025 . Memory (MB): peak = 326.137 ; gain = 5.695
+INFO: [Device 21-403] Loading part xcku5p-ffvb676-1-e
+Netlist sorting complete. Time (s): cpu = 00:00:01 ; elapsed = 00:00:00.823 . Memory (MB): peak = 1677.879 ; gain = 0.000
+INFO: [Netlist 29-17] Analyzing 7547 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 1 CPU seconds
+INFO: [Project 1-479] Netlist was created with Vivado 2025.2
+INFO: [Project 1-570] Preparing netlist for logic optimization
+Read ShapeDB Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.175 . Memory (MB): peak = 1885.734 ; gain = 33.848
+INFO: [Timing 38-478] Restoring timing data from binary archive.
+INFO: [Timing 38-479] Binary timing data restore complete.
+INFO: [Project 1-856] Restoring constraints from binary archive.
+INFO: [Constraints 18-5170] The checkpoint was created with non-default parameter values which do not match the current Vivado settings.  Mismatching parameters are:
+  general.maxThreads
+INFO: [Project 1-853] Binary constraint restore complete.
+INFO: [Designutils 20-5722] Start Reading Physical Databases.
+Reading placement.
+Read Netlist Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.121 . Memory (MB): peak = 4128.617 ; gain = 0.000
+Reading placer database...
+Read Device Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.023 . Memory (MB): peak = 4128.617 ; gain = 0.000
+Read PlaceDB: Time (s): cpu = 00:00:04 ; elapsed = 00:00:03 . Memory (MB): peak = 4128.617 ; gain = 0.000
+Read PulsedLatchDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 4128.617 ; gain = 0.000
+Reading routing.
+Read RouteStorage: Time (s): cpu = 00:00:02 ; elapsed = 00:00:01 . Memory (MB): peak = 4128.617 ; gain = 0.000
+Read Physdb Files: Time (s): cpu = 00:00:06 ; elapsed = 00:00:05 . Memory (MB): peak = 4128.617 ; gain = 0.000
+Restored from archive | CPU: 6.000000 secs | Memory: 0.000000 MB |
+Finished XDEF File Restore: Time (s): cpu = 00:00:06 ; elapsed = 00:00:05 . Memory (MB): peak = 4128.617 ; gain = 0.000
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.045 . Memory (MB): peak = 4128.617 ; gain = 0.000
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 1353 instances were transformed.
+  DSP48E2 => DSP48E2 (DSP_ALU, DSP_A_B_DATA, DSP_C_DATA, DSP_MULTIPLIER, DSP_M_DATA, DSP_OUTPUT, DSP_PREADD, DSP_PREADD_DATA): 4 instances
+  IBUF => IBUF (IBUFCTRL, INBUF): 1 instance 
+  IBUFDS => IBUFDS (DIFFINBUF, IBUFCTRL): 1 instance 
+  RAM16X1D => RAM32X1D (RAMD32(x2)): 20 instances
+  RAM16X1S => RAM32X1S (RAMS32): 224 instances
+  RAM256X1S => RAM256X1S (MUXF7(x2), MUXF8, RAMS64E(x4)): 8 instances
+  RAM32M => RAM32M (RAMD32(x6), RAMS32(x2)): 40 instances
+  RAM32M16 => RAM32M16 (RAMD32(x14), RAMS32(x2)): 154 instances
+  RAM32X1D => RAM32X1D (RAMD32(x2)): 14 instances
+  RAM64M => RAM64M (RAMD64E(x4)): 241 instances
+  RAM64M8 => RAM64M8 (RAMD64E(x8)): 518 instances
+  RAM64X1D => RAM64X1D (RAMD64E(x2)): 128 instances
+
+INFO: [Project 1-604] Checkpoint was created with Vivado v2025.2 (64-bit) build 6299465
+WARNING: [Vivado 12-23575] Critical violations of the methodology design rules detected. Critical violations may contribute to timing failures or cause functional issues in hardware. Run report_methodology for more information.
+open_checkpoint: Time (s): cpu = 00:01:04 ; elapsed = 00:00:54 . Memory (MB): peak = 4128.617 ; gain = 3817.320
+# foreach pat {*probe* *ps_stage* *ps_rd_d*} {
+#   set cells [get_cells -hier -quiet -filter "NAME =~ $pat"]
+#   puts "E pat=$pat ncell=[llength $cells]"
+#   set k 0
+#   foreach c $cells {
+#     incr k
+#     if {$k <= 25} { puts "E   cell=[get_property NAME $c] ref=[get_property REF_NAME $c]" }
+#   }
+# }
+E pat=*probe* ncell=2
+E   cell=u_tcp_tx/tx_is_probe_i_1 ref=LUT2
+E   cell=u_tcp_tx/tx_is_probe_reg ref=FDCE
+E pat=*ps_stage* ncell=42
+E   cell=u_tcb/ps_stage_conn[3]_i_10 ref=LUT4
+E   cell=u_tcb/ps_stage_conn[3]_i_11 ref=LUT4
+E   cell=u_tcb/ps_stage_conn[3]_i_12 ref=LUT4
+E   cell=u_tcb/ps_stage_conn[3]_i_13 ref=LUT4
+E   cell=u_tcb/ps_stage_conn[3]_i_4 ref=LUT6
+E   cell=u_tcb/ps_stage_estab_i_2 ref=LUT6
+E   cell=u_tcb/ps_stage_estab_i_5 ref=LUT6
+E   cell=u_tcb/ps_stage_estab_i_6 ref=LUT6
+E   cell=u_tcb/ps_stage_estab_i_7 ref=LUT6
+E   cell=u_tcb/ps_stage_estab_i_8 ref=LUT6
+E   cell=u_tcb/ps_stage_estab_reg_i_3 ref=MUXF7
+E   cell=u_tcb/ps_stage_estab_reg_i_4 ref=MUXF7
+E   cell=u_tcp_tx/ps_stage_byte_reg[0] ref=FDCE
+E   cell=u_tcp_tx/ps_stage_byte_reg[1] ref=FDCE
+E   cell=u_tcp_tx/ps_stage_byte_reg[2] ref=FDCE
+E   cell=u_tcp_tx/ps_stage_byte_reg[3] ref=FDCE
+E   cell=u_tcp_tx/ps_stage_byte_reg[4] ref=FDCE
+E   cell=u_tcp_tx/ps_stage_byte_reg[5] ref=FDCE
+E   cell=u_tcp_tx/ps_stage_byte_reg[6] ref=FDCE
+E   cell=u_tcp_tx/ps_stage_byte_reg[7] ref=FDCE
+E   cell=u_tcp_tx/ps_stage_conn[3]_i_1 ref=LUT6
+E   cell=u_tcp_tx/ps_stage_conn_reg[0] ref=FDCE
+E   cell=u_tcp_tx/ps_stage_conn_reg[1] ref=FDCE
+E   cell=u_tcp_tx/ps_stage_conn_reg[2] ref=FDCE
+E   cell=u_tcp_tx/ps_stage_conn_reg[3] ref=FDCE
+E pat=*ps_rd_d* ncell=6
+E   cell=u_slow_cfg/ps_rd_d2_i_2 ref=LUT5
+E   cell=u_slow_cfg/ps_rd_d2_i_3 ref=LUT5
+E   cell=u_tcp_tx/ps_rd_d1_i_1 ref=LUT3
+E   cell=u_tcp_tx/ps_rd_d1_reg ref=FDCE
+E   cell=u_tcp_tx/ps_rd_d2_i_1 ref=LUT2
+E   cell=u_tcp_tx/ps_rd_d2_reg ref=FDCE
+# set ps [get_cells -hier -quiet -filter {NAME =~ *ps_timer_reg*}]
+# puts "E ps_timer ncell=[llength $ps]"
+E ps_timer ncell=420
+# set ph [get_cells -hier -quiet -filter {NAME =~ *ps_phase_reg*}]
+# puts "E ps_phase ncell=[llength $ph]"
+E ps_phase ncell=48
+# puts "N_DONE"
+N_DONE
+INFO: [Common 17-206] Exiting Vivado at Sun Oct 11 02:40:55 2026...

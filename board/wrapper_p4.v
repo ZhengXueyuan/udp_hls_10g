@@ -2141,18 +2141,22 @@ module wrapper_p4 (
         end
     end
 
-    // ⭐ 本轮构建配置 (2026-10-10 · BID **0x1C**): `.PERSIST_EN(1'b0)` = persist **关** (下一版才开)。
-    //   · persist 刀的 RTL 在本版**可证惰性** (设计件 `_proj_10g/notes/P7B_PERSIST_DESIGN.md`
-    //     v3 §2.5-⑩ / §7.1), 两条腿:
-    //     ① 静态检查**零例外** —— `p7b_persist_impl/ev/static_check_formal.txt` (S1: 22 信号 /
-    //        26 写点, 每点 = 字面零或 PERSIST_EN/ps_arm/ps_fire/ps_rd_d2 守卫下;
-    //        同目录 `static_check_selfcheck.txt` 三个负对照都有牙);
-    //     ② arm B (OVL 支) 读数**逐字相同** —— `ev/xs_runB_after.log` 对 `base/xs_runB_baseline.log`:
-    //        17 条判据行逐字同 + `$finish` 时间逐位同 (`2279132800 ps`); 文件级只差时间戳/PID/
-    //        内存/TB 行号等元信息。
-    //   · ⇒ **本版归因 = 缺陷刀 + 构建 F 基线**; **persist 留给下一版 (`0x1D`)**。
-    //   · 回退点 = 这一处改回 `1'b1` (参数默认值 = `1'b0`, 见 `rtl/tcp_tx_frame.v:299`)。
-    tcp_tx_frame #(.RING_CAP(WIN_CAP_5), .PERSIST_EN(1'b0)) u_tcp_tx (
+    // ⭐ 本轮构建配置 (2026-10-11 · BID **0x1D**): `.PERSIST_EN(1'b1)` = persist **开**
+    //   (发送侧**零窗探询** —— RFC 1122 §4.2.2.17 **MUST-36**; 设计件
+    //    `_proj_10g/notes/P7B_PERSIST_DESIGN.md` v3 §1.1 候选 A)。
+    //   · 内容 = **persist 刀** (含 **P-1 修复**): 机制 = 每连接一条独立 persist 计时器
+    //     (与 `rto_timer` 分离), 窗锁 0 且 `snd_nxt != snd_una` 时武装; 探询段**不进重放机**。
+    //     ⚠️ 同节 SHOULD ("retransmit the old data normally") **未字面采纳** —— 用 MUST-36 +
+    //     一条**有界**的旧数据探询段满足意图 (设计件 §1.2 / §9-⑤)。
+    //   · P-1 修复 (2026-10-11 已入库 `6b7d00e`; 证据 = `_proj_10g/notes/
+    //     p7b_persist_impl_review_20261011/`, 见其 `P1_FIX_INDEX.txt`):
+    //     ① T+2 捕获块**前移**到 `cfg_up` 块**之前** (同拍冲突 = 清位路径赢);
+    //     ② `cfg_up` 同 id 支同时清 `ps_rd_d1/ps_rd_d2` ⇒ 「待发期间 cfg_up ⇒ 0」在
+    //     **同拍**与**在飞**两个意义上都闭合 (实测臂 D7A: `rdy` 存活 7 拍 → **0**)。
+    //   · 0x1C 版此处为 `1'b0` 的"可证惰性"论证 (静态检查零例外 + arm B 逐字同) 见
+    //     `_proj_10g/notes/p7b_build_0x1C/REPORT.md` (历史)。
+    //   · 回退点 = 这一处改回 `1'b0` (参数默认值 = `1'b0`, 见 `rtl/tcp_tx_frame.v:299`)。
+    tcp_tx_frame #(.RING_CAP(WIN_CAP_5), .PERSIST_EN(1'b1)) u_tcp_tx (
         .clk            (dp_clk),
         .rst_n          (dp_rst_n),
         .s_axis_tdata   (txin_tdata),
@@ -4060,8 +4064,20 @@ module wrapper_p4 (
 
     axi_regs #(
         .MAGIC_V    (32'h50360001),
-        .BUILD_ID_V (32'h0000001C),     // ⚠️ 每次改动自增 (前置闸读这一项认位流; 构建 F = 0x1A)
-                                        //   ⭐ 本轮构建 (2026-10-10 深夜): **0x1A → 0x1C** (改判)。
+        .BUILD_ID_V (32'h0000001D),     // ⚠️ 每次改动自增 (前置闸读这一项认位流; 构建 F = 0x1A)
+                                        //   ⭐ 本轮构建 (2026-10-11): **0x1C → 0x1D**。
+                                        //      0x1D 内容 = **persist 刀** (发送侧零窗探询; RFC 1122
+                                        //      §4.2.2.17 MUST-36): 唯一功能改动 = 上面 `u_tcp_tx`
+                                        //      例化的 `.PERSIST_EN(1'b0) → 1'b1` (0x1C 版为"可证惰性"
+                                        //      的关态) + 已入库的 **P-1 修复** (`rtl/tcp_tx_frame.v`;
+                                        //      证据 = `_proj_10g/notes/p7b_persist_impl_review_20261011/`)。
+                                        //      ⚠️ 窗口字长/未实现地址**不变** (仍 70 字 / `0x138`)
+                                        //      ⇒ 读侧只需 `EXPECT_BID` **0x1C → 0x1D** (本轮**不做**,
+                                        //      TL 另派; 本刀未触碰任何读侧文件)。
+                                        //      历史链: 0x1C = 缺陷刀 (RETXHI-GHOST 修复) / 0x1B =
+                                        //      已分配、从未构建 (原定 persist) / 0x1A = 构建 F (70 字窗口)。
+                                        //   ---- (以下为历史, 逐字保留) ----
+                                        //   ⭐ 上一版 (2026-10-10 深夜): **0x1A → 0x1C** (改判)。
                                         //      改判理由: `0x1B` 是 persist 实施阶段 1 (`fd671b6`)
                                         //      分配**给 persist 刀**的 (其内容 = 把上面 u_tcp_tx
                                         //      的 `.PERSIST_EN` 打开成 `1'b1`) ⇒ 本版 (persist **关**
