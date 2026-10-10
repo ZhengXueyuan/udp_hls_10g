@@ -1,0 +1,69 @@
+### STEP0_BEGIN 2026-10-11T01:00:21+0800
+
+### A) 归档 F 位流 (派单指定源 = _proj_10g/notes/p7b_build_archive/20261011_002044/wrapper_p4.bit)
+--- SHA256SUMS.txt 里 wrapper_p4.bit 那一行 (逐字) ---
+89e89f31efb5f1450a1c39acfce587bb4e4b6347c5fdc2f470c91ff0d4400f45 *wrapper_p4.bit
+--- 按其中值核归档副本 ---
+89e89f31efb5f1450a1c39acfce587bb4e4b6347c5fdc2f470c91ff0d4400f45 */d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_build_archive/20261011_002044/wrapper_p4.bit
+ARCH_BIT /d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_build_archive/20261011_002044/wrapper_p4.bit size=15431261 mtime=2026-10-10 10:04:48.537407800 +0800
+WANT=89e89f31efb5f1450a1c39acfce587bb4e4b6347c5fdc2f470c91ff0d4400f45
+
+### B) 对端可达 + 工具名册 (md5; 只读, 不动 /tmp/p7b_biz)
+PEER_OK
+a-MS-7850
+Sun Oct 11 01:00:22 AM CST 2026
+ 01:00:22 up 1 day,  3:22,  4 users,  load average: 0.01, 0.03, 0.01
+--- 现役工具 md5 (对端) ---
+c6b624205d64f1f4bd723d8fd5cc6414  /tmp/p7b_biz/p7b_tcp_sink
+ba2faf79f409302d1e542450db402975  /tmp/p7b_biz/p7b_snap.sh
+8c8301aacc95ae5dc8760ef121def26c  /tmp/p7b_biz/lf_dl.sh
+--- 仓库侧对照 md5 (现核) ---
+ba2faf79f409302d1e542450db402975 */d/repo/XCKU5PMini/udp_hls_10g/_proj_pcie/p7b_biz/p7b_snap.sh
+--- 部署的 sink 是否支持 sinkfix 开关 (strings 探测; 空 = 旧件 = after_connect 落点) ---
+0
+0
+--- 对端 python3 / g++ 可用性 (只在需要新编译时才用; 本轮不覆盖 /tmp/p7b_biz) ---
+Python 3.12.3
+/usr/bin/g++
+
+### C) 网络面 (每次测量前现取): /32 路由 + NetworkManager 托管位 + link 状态
+netlink error: Operation not permitted
+4: enp1s0f1np1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
+    inet 192.168.100.100/32 scope global enp1s0f1np1
+---
+GENERAL.STATE:                          10 (unmanaged)
+GENERAL.CONNECTION:                     --
+---
+192.168.100.2 dev enp1s0f1np1 src 192.168.100.100 uid 1000 
+    cache 
+---
+	Speed: 10000Mb/s
+	Link detected: yes
+---
+Coalesce parameters for enp1s0f1np1:
+Adaptive RX: off  TX: n/a
+rx-usecs:	0
+rx-usecs-irq:	0
+
+### D) 板上现态 (烧 F 之前) —— 派单要求先核: 0x04 BID / 0x138 未实现地址 / LnkSta x4 / 2 BARs
+BID_0x04=Read 32-bit value at address 0x4 (0x7852d56ff004): 0x0000001a
+MARSHAL_0x00=Read 32-bit value at address 0x0 (0x722829dc0000): 0x50360001
+SCRATCH_0x08=Read 32-bit value at address 0x8 (0x7db423d92008): 0x00000000
+UNIMPL_0x138=Read 32-bit value at address 0x138 (0x740c9427a138): 0xffffffff
+W61_0x114=Read 32-bit value at address 0x114 (0x767e5006b114): 0x00000000
+CARRIER=1
+ABORTCNT_0x94=Read 32-bit value at address 0x94 (0x7d9ca4641094): 0x00000000
+STATES_0x0A=Read 32-bit value at address 0xa (0x7831cdf3300a): 0x6ffb0000
+	Region 0: Memory at df200000 (32-bit, non-prefetchable) [size=1M]
+	Region 1: Memory at df300000 (32-bit, non-prefetchable) [size=64K]
+		LnkSta:	Speed 5GT/s (downgraded), Width x4
+
+### E) 身份档 (默认 NW=70 / 0x138 / BID 0x1A) —— 现核是否与构建 F 一致
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x0000001a   (want 0x0000001A = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0xffffffff  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_OK 1791651627.925609553
+RC=0
+
+### STEP0_END 2026-10-11T01:00:27+0800

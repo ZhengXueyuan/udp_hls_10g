@@ -1,5 +1,7 @@
-AUTHORITY board/wrapper_p4.v: SNAP_NW_P6E = 70 / BUILD_ID_V = 0x0000001C / 未实现地址 = 0x138
-MODE DRY-RUN (只报命中数, 不落盘) (edit 清单 24 条)
+TARGET BID = 0x0000001C (缺省值; 阶段链 0x0000001C; 本阶段 24 处 edit)
+AUTHORITY board/wrapper_p4.v: SNAP_NW_P6E = 70 / BUILD_ID_V = 0x0000001D / 未实现地址 = 0x138
+⚠️ 现读 wrapper 的 BUILD_ID_V (= 0x0000001D) != 目标 (= 0x0000001C) —— 目标值按【显式/缺省给定】钉死, **不**从漂移中的权威源推导; ⚠️ 某构建 agent 可能正在改该文件 ⇒ 待其构建完成后**复读复核**一次。
+MODE DRY-RUN (只报命中数, 不落盘) (target 0x0000001C; 本阶段 edit 清单 24 条; 全链 1 阶段)
 OK   _proj_10g/notes/p7b_affinity/j6_r6fix.sh                 hits=1/1  EXPECT_BID=${EXPECT_BID:-0x0000001A}   # 202
 OK   _proj_10g/notes/p7b_biz_tcpreg/tcpreg_j6.sh              hits=1/1  EXPECT_BID=${EXPECT_BID:-0x0000001A}   # 202
 OK   _proj_10g/notes/p7b_affinity/j6_r6fix.sh                 hits=1/1  "70|0x0000001A|61 62|构建 F (2026-10-10) 70 字 
@@ -25,7 +27,7 @@ OK   sim/p6e_pcie/tb_p6e_pcie_wrapper.v                       hits=1/1  chk("2  
 OK   _proj_10g/notes/p7b_a3_negctl_20261010/step0_selfcheck.sh hits=1/1  #     (i)  缺省档 (NW=70 / 0x138 / BID 0x1A) 对 
 OK   _proj_10g/notes/p7b_a3_negctl_20261010/step0_selfcheck.sh hits=1/1  echo "### C-a) 默认档 (NW=70 / 0x138 / BID 0x1A
 
-⚠️ 读法: A/B/C 跑在**未 apply 的现状**上 —— C 的红 = **待改处**(apply 后必须逐条转绿); A/B 的红才是真问题。
+⚠️ 读法: A/B/C/D 跑在**未 apply 的现状**上 —— C 的红 = **待改处**(apply 后必须逐条转绿); A/B 的红才是真问题。
 ---- A. 表长断言 (每张表的项数必须 == NW) ----
 OK   _proj_pcie/p6e_snap_check.sh                               表长 = 70 / 期望 NW = 70   WLABEL (逐字打印的名字表; F 轮补到 70 —— 再短一项 ⇒ 该字打成 <无标签>)
 OK   _proj_pcie/p7b_biz/p7b_snap.sh                             键集合 = {0..69} 共 70 项 / 期望 {0..69} 共 70 项   NAME[] (板侧取数器的名字表)
@@ -33,12 +35,12 @@ OK   _proj_pcie/p7b_gate4_livefake.sh                           表长 = 70 / �
 OK   _proj_pcie/p7b_gate4_negctrl.sh                            表长 = 70 / 期望 NW = 70   合成夹具的 V 字表 (长度 < NW ⇒ 尾部字打 0 = 假数据)
 OK   _proj_pcie/p7b_gate4_selftest.sh                           地址条数 = 10 / 期望 10 (末条 0x138)   假板子的 FAKE_TAIL 地址表 (地址条数必须 == NW-60=W60..W(NW-1), 末条 = 未实现地址)
 ---- B. 搜索面全扫 (旧值字面值 + 三个命名族; 未登记即红) ----
----- 搜索面 [bid-oldvalue]: 命中 37 文件 (已登记 37 / 未登记 0)
+---- 搜索面 [bid-oldvalue[0x0000001A]]: 命中 37 文件 (已登记 37 / 未登记 0)
 ---- 搜索面 [identity-BID]: 命中 89 文件 (已登记 89 / 未登记 0)
 ---- 搜索面 [geometry-NW]: 命中 87 文件 (已登记 87 / 未登记 0)
 ---- 搜索面 [unimpl-addr]: 命中 33 文件 (已登记 33 / 未登记 0)
 SEARCH_FACE OK (4 族 / 246 命中文件)
----- C. 默认值一致性 (读侧默认值 == 权威源现读值) ----
+---- C. 默认值一致性 (读侧默认值 == 目标 BID 0x0000001C) ----
 OK   _proj_pcie/p6e_snap_check.sh                         NW             = 70                     期望 70   SNAP_WORDS=\$\{SNAP_WORDS:-(\d
 FAIL _proj_pcie/p6e_snap_check.sh                         BID            = 0x0000001A             期望 0x0000001C   EXPECT_BID=\$\{EXPECT_BID:-(0x
 OK   _proj_pcie/p7b_biz/p7b_snap.sh                       NW             = 70                     期望 70   NW=\$\{NW:-(\d+)\}
@@ -84,5 +86,5 @@ FAIL _proj_10g/notes/p7b_a3_negctl_20261010/step0_selfcheck.sh BID            = 
 FAIL _proj_10g/notes/p7b_a3_negctl_20261010/step0_selfcheck.sh BID            = 0x1A                   期望 0x0000001C   默认档 \(NW=70 / 0x138 / BID (0x[
 OK   _proj_10g/notes/p7b_biz_win/check_window.py          派生式             {'nnew_top': 4, 'ntx': 1, 'nnew': 14}   nnew_top + ntx + nnew == NW - 51 (W51..W(NW-1) 的分解; 70-51=19)
 ---- D. 清单-断言覆盖 (每个 EDITS 目标必须自带断言) ----
-OK   EDIT_COVERAGE (EDITS 文件 14 / 有对应断言 14)
-APPLY_READSIDE_BID1C FAIL (24 edits, 24 fail)
+OK   EDIT_COVERAGE (本阶段 EDITS 文件 14 / 有对应断言 14)
+APPLY_READSIDE_BID FAIL (target 0x0000001C, 24 edits, 24 fail)

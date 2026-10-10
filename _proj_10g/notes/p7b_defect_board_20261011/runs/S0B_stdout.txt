@@ -1,0 +1,60 @@
+### S0_BEGIN tag=S0B rcvbuf=2920 conns=1 secs=60 maxbytes=200000000 pcap_full=1 1791652501.297368827
+### SNAP_MD5 ba2faf79f409302d1e542450db402975
+### SINK_MD5 c6b624205d64f1f4bd723d8fd5cc6414
+### SNAP_KW 5 20 43 51 14 15 55 57 58
+--- 板侧身份闸 (跑前) ---
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x0000001a   (want 0x0000001A = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0xffffffff  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_OK 1791652501.316368838
+ID_RC=0
+BID=Read 32-bit value at address 0x4 (0x7d04fbaaf004): 0x0000001a
+SCRATCH_0x08=Read 32-bit value at address 0x8 (0x7bd1929b7008): 0x00000000
+CARRIER=1
+NETADDR=inet 192.168.100.100/32
+--- 抓包 ①: 控制帧普查 (FIN/RST, 全窗) ---
+CTL_PID=3776855
+--- 抓包 ②: 环形全帧 (板->对端, 200MB x 6) ---
+FULL_PID=3776861
+--- 板侧快照环 (后台; 每 0.15s 一点) ---
+SNAP_PID=3776862
+--- 对端内核计数 (跑前) ---
+TcpInSegs                       2511326709         0.0
+TcpOutSegs                      730759870          0.0
+TcpRetransSegs                  5772               0.0
+TcpExtTCPFastRetrans            3752               0.0
+TcpExtTCPOFOQueue               16689              0.0
+TcpExtTCPACKSkippedSeq          25081              0.0
+--- 主跑: sink (现役部署件) ---
+### SINK_RC=1 T0=1791652502.335063670 T1=1791652517.578486179
+--- 对端内核计数 (跑后) ---
+TcpInSegs                       2511326974         0.0
+TcpOutSegs                      730760137          0.0
+TcpRetransSegs                  5772               0.0
+TcpExtTCPFastRetrans            3752               0.0
+TcpExtTCPOFOQueue               16689              0.0
+TcpExtTCPACKSkippedSeq          25081              0.0
+--- 收尾: 停快照环 + 抓包 ---
+--- 抓包统计 (由 tcpdump 自报; 丢包 = 判据污染的见证) ---
+[ctl]
+0 packets captured
+2 packets received by filter
+0 packets dropped by kernel
+[full]
+207 packets captured
+207 packets received by filter
+0 packets dropped by kernel
+-rw-r--r-- 1 tcpdump tcpdump     24 Oct 11 01:15 /tmp/ghost_S0B_ctl.pcap
+-rw-r--r-- 1 tcpdump tcpdump 316734 Oct 11 01:15 /tmp/ghost_S0B_full.pcap0
+--- sink 摘要 (逐字) ---
+SINK_LIMITS maxbytes=200000000 poll_ms=5000 stall_n=3 rcvbuf=2920 conns=1 secs=60
+SINK_CONN 0 POLL_TIMEOUT 3 x 5000 ms 无数据 (got=32120) => 中止本连接
+SINK_CONN 0 STALL bytes=32120 first_mismatch=-1 mism_bytes=0 conn_ms=0.122 dur_ms=15236.459 Mbps=0.017 reads=21 poll_tmo=3 CPU_FREQ_KHZ=3780105 THREADED=on q_full_push=21 q_full_pop=21 q_free_push=37 q_free_pop=21 slot_wait_spins=0 checked_bytes=32120
+SINK_SUM conns=1 fail_conns=0 bytes=32120 clean_conns=0 bad_conns=1 mismatch_bytes=0 stall_conns=1 err_conns=0 poll_tmo=3 wall_s=15.237 net_s=15.236 agg_Mbps=0.017 THREADED=on full_push=21 full_pop=21 free_push=37 free_pop=21 slot_wait_spins=0 checked_bytes=32120 threads=2 check=lane8
+--- 板侧态 (跑后) ---
+BID=Read 32-bit value at address 0x4 (0x789cf8f8b004): 0x0000001a
+SCRATCH_0x08=Read 32-bit value at address 0x8 (0x7df232c85008): 0x00000000
+CARRIER=1
+(空=无残留进程)
+### S0_END tag=S0B 1791652520.946476447

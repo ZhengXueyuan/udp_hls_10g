@@ -405,3 +405,28 @@
 - **0x1C 取证目录已落盘**：`_proj_10g/notes/p7b_build_0x1C/`（14 件：bit + routed dcp + `query/` 8 件 + F 开工清单 + SHA256SUMS）；`REPORT.md` 由 **TL 代落盘**（构建 agent 的写被平台拒 = harness 第 4/5 例；本会话已两次由 TL 代落盘：`p7b_build_0x1C/REPORT.md` 与 `p7b_sndwnd_review_20261011/FINDINGS.md`）。
 - **PCIe 设计件 v2 完成**（872 行；v1 逐字保留 + v2 修订块 232 行）：S1–S13 全处置（S1 具名 localparam + 六条双向门断言；S2 取 (a) `K%4==0` 前置；S10 加第三宏 `DP_156MHZ`；⑩ enable/clear 纳入 M1）。**实施前清单** = 4 建（`tb_app_rx_mirror.v` 单元门 / p6e wrapper 门新断言组 + 两条几何常量 / `tb_fifo_async` 第 5 case / 读侧重生成）+ 6 定（地址五件套含 `MIR_CTRL` ⇒ 未实现地址 **0x148** / 控制位语义 / STATUS 32 位拼法 / drop_bytes 语义 / 发端工具规格 / tie-off 常量表 / clear 实现）。⭐ 它另立两条：**⑤ mmap/pread 读法必须先定再选 K**（否则带宽掉三个数量级）· ⑥ `cleared_sticky` 位（可选，登记 N4）。
 - **snd_wnd 审查落盘**（`p7b_sndwnd_review_20261011/FINDINGS.md`，TL 代落盘）：真实缺陷成立（RFC 支逐字+页码一手复核）；修法零窗恢复**未找到反例**；⭐ **阻断项 F3**（腿 B2 照字面必假红）· F2（PCWND1K 被 gate4096 用）· F1（`tcp_synp.v:85` 第二上游写者）· F9（"必须同批改模型"论证倒置）等。
+
+---
+
+## §10-8 2026-10-11 01:50：⭐ **S-0 板级轮 = 重量级否定结果**（abort RST 板不可达）+ 处置决定
+
+### §10-8-1 S-0 结果（`p7b_defect_board_20261011/REPORT.md`，271 行）
+- **烧录/身份**：只烧归档件（`89e89f31…` / 15,431,261 B / `End of startup status: HIGH`）；板侧 `ID_BID 0x0000001a` / 70 字 / `0x138` 回 `0xffffffff` / `LnkSta 5GT/s x4` / 2 BARs / 设备级 remove+rescan 一次成功。⚠️ 登记：`TCPREG_PROG_DONE` 的"牙"弱（tcl 回显也会命中，实由 HIGH+无 ABORT+mtime 兜住）。
+- ⭐ **abort 通路不存在（本轮最重要的发现）**：CMD 寄存器在（`rtl/app_ctrl.v:41` 逐字 `0x06 W: CMD = {cmd[3:0], id[3:0]}: … 2 = abort (rst_req[id])`；写路径 `:1352-1359`），**但总线没接** —— `board/wrapper_p4.v:1319-1322` 逐字注释"P5 寄存器总线默认静止 (板级无 CPU/AXI;**将来接 AXI-Lite 桥**)" + `assign app_reg_addr = 8'h00; assign app_reg_wr = 1'b0; assign app_reg_wdata = 32'd0;`（**TL 现核：全文件仅此三处赋值**）⇒ 宿主写不到 `0x06`。另一条 `rst_req` 源（G2 关闭超时）要求 framer 真发过 FIN，而构建 F 是 `TX_CONTINUOUS=1`（`wrapper_p4.v:1186-1191`）⇒ 永不 close ⇒ `rst_req ≡ 0`。
+- **板级观测印证**：S0A 全窗控制帧普查（`tcpdump FIN|RST`，53 s，自报 0 丢包）21 包**全是对端→板**；6 连接逐连分类 **`fin=0 rst=0`**。
+- ⇒ **幽灵必要条件结构性缺席 ⇒ 形态① 板级【未观测到】**（⛔ 不写"不存在"；可见性清单见 REPORT §5）。附带：**整场跑板侧 FIN/RST=0**；**相位校正后 400 MB 逐字节零断点**（`align_check2`：`K0=37960 / breaks=0`）+ 同 seq 内容 0 变化 + 无洞 + 无上一圈周期性（`replay_audit`）。
+- ⚠️ **相位错根因（新登记形态）**：`TX_CONTINUOUS=1` 下 `app_pattern.v:742` 一带的换流门 `up_ok` 只在帧间隙成立 ⇒ 多连接长跑对端看到图案**另一段**（S0A 3/6 条、S0C 整条 `K0=37960`）⇒ **连续模式位流上 `mism_bytes` 不再是内容判据**（A3/A7「ev_up 被吞」家族新形态；只登记不修）。TL 已按微窗报告 §⑤-1 拦下"相位错当幽灵"的误判（S0C 的 `first_mismatch=0`）。
+- 诚实口径：`mism_bytes=0` **不能反证**幽灵不存在（触发条件缺席 ⇒ 空判据）；`W58` 在 0.15 s 采样下恒 0 = **无读数**；`wrhi` 不可直读（build F 无 `whi_r`）。
+
+### §10-8-2 ⭐ TL 处置（据此改序）
+1. **跳过高潮重烧 0x1C 的 S-1 臂**（触发不可达 ⇒ 同构型必同结论）⇒ **不再烧 0x1C**（省一整轮板级）；缺陷刀的板级口径 = **"必要条件结构性缺席（未观测到）"**，xsim 侧证据（S/T 臂 + 三幽灵红清 0）为内容面主判据。
+2. **读侧同步改为链式应用**（0x1A→0x1C→0x1D 一次落盘，脚本已支持 `--bid 0x1D --rehearse` 两步演练全绿 + 前置门"0x1C 未落盘 ⇒ 响亮 FAIL 不半落"），**在 0x1D 位流收口后 apply**（避免盘上默认值与现役位流脱节）。
+3. ⭐ **未来风险登记（新）**：注释"**将来接 AXI-Lite 桥**"+ 新里程碑 M1（PCIe user BAR 通路）**若把 app 寄存器总线接上 ⇒ abort RST 变可达 ⇒ 幽灵重新板级可达** ⇒ **0x1C 的修复正是那道防线**（M1 实施时须复核这一点，并考虑把 abort 也算进 M1 的验证面）。
+4. S-0 的 `runs/` 原件与 `REPORT.md` 全部入库；`_tools/` 与 `burn/` 一并收。
+
+### §10-8-3 此刻在飞
+| # | 任务 | 状态 |
+|---|---|---|
+| 1 | **persist 构建 0x1D**（矩阵 → 构建 → 归档 `p7b_build_0x1D/`） | 矩阵跑动中（chain/burst200/trunc50/trunc100 已 EXIT=0） |
+| 2 | **snd_wnd 守卫实施**（worktree `agent-adbace7bf67a3753c`） | 在飞 |
+| 3 | 读侧同步 | ✅ 就绪（两步演练全绿 + 8 负对照 + 负彩排；**待 0x1D 收口后链式 apply**） |

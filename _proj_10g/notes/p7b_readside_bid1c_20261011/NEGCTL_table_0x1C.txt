@@ -1,0 +1,9 @@
+NEGCTL 破坏件 (临时副本, 仓内原件不动): C:\Users\zhxue\AppData\Local\Temp\readside_readside_negctl_tfzvnvy7\p6e_snap_check.sh
+NEGCTL 做法: 把 _proj_pcie/p6e_snap_check.sh 的 WLABEL 末项删掉 (表长 70 → 69)
+FAIL _proj_pcie/p6e_snap_check.sh                               表长 = 69 / 期望 NW = 70   WLABEL (逐字打印的名字表; F 轮补到 70 —— 再短一项 ⇒ 该字打成 <无标签>)
+OK   _proj_pcie/p7b_biz/p7b_snap.sh                             键集合 = {0..69} 共 70 项 / 期望 {0..69} 共 70 项   NAME[] (板侧取数器的名字表)
+OK   _proj_pcie/p7b_gate4_livefake.sh                           表长 = 70 / 期望 NW = 70   假对端的 W 字表 (长度 < NW ⇒ for i in range(nw) 直接 IndexError = '整台安静')
+OK   _proj_pcie/p7b_gate4_negctrl.sh                            表长 = 70 / 期望 NW = 70   合成夹具的 V 字表 (长度 < NW ⇒ 尾部字打 0 = 假数据)
+OK   _proj_pcie/p7b_gate4_selftest.sh                           地址条数 = 10 / 期望 10 (末条 0x138)   假板子的 FAKE_TAIL 地址表 (地址条数必须 == NW-60=W60..W(NW-1), 末条 = 未实现地址)
+NEGCTL_VERDICT 有牙 (断言确实变红 (共 1 条 FAIL)) ⇒ 真实运行会 FAIL 并非零退出
+NEGCTL_EXIT=1

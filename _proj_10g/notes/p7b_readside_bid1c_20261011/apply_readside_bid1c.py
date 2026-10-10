@@ -1,21 +1,29 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""P7B **缺陷刀** 构建 (BID 0x1C) —— **读侧 BID 默认值同步** 0x1A → 0x1C。
+"""P7B 读侧 **BID 默认值同步器**（参数化; 目标 = 阶段链的末代）。
 
-  本轮 = **BID-only**（与 F 轮不同: 本刀**不加字**）:
+  `--bid 0x1C`（缺省）: 阶段 ①  **0x1A → 0x1C**（缺陷刀 / RETXHI-GHOST 重放越界修复）
+  `--bid 0x1D`        : 阶段 ②  **0x1C → 0x1D**（persist 刀）—— old 侧 = 阶段 ① 的 new 侧,
+                        必须**链式**应用（`--rehearse` 会在内存里自动把前置阶段一起做掉）。
+
+  两个阶段都是 **BID-only**（与 F 轮不同: 这两刀**都不加字**）:
     · 快照字长      **不变** = 70  (`SNAP_NW_P6E`, 权威源现读)
     · 未实现地址    **不变** = 0x138 (= 0x20 + 4*70)
-    · 唯一变化      `BUILD_ID_V` 0x1A → **0x1C**（`board/wrapper_p4.v:4063`, 源码侧已由构建 agent 落好）
+    · 唯一变化      `BUILD_ID_V`（`board/wrapper_p4.v`）0x1A → 0x1C → 0x1D
                     ⇒ 所有"读侧默认身份"（EXPECT_BID / FAKE_BID / BID_FIX / 假板子 / 假对端 / 档表 /
                        sim TB 期望值）必须同批跟上; 字长/地址**一律不动**。
-    · 档表特例: **70 字那一代现在有两行**（`70|0x0000001C` = 缺陷刀[现役] / `70|0x0000001A` = 构建 F[历史]）
-      ⇒ 加一行, 旧行**逐字保留**（同几何、不同身份的第二档）。
+    · 档表特例: **70 字那一代现在能有多行**（`70|0x0000001D` persist / `70|0x0000001C` 缺陷刀 /
+      `70|0x0000001A` 构建 F）⇒ 每代**加一行**, 旧行**逐字保留**（同几何、不同身份的并列档）。
 
-  形状照 `_proj_10g/notes/p7b_buildF/apply_readside.py`（F 轮: 67→70 字 / BID 0x19→0x1A）。
-  ⚠️ **模式与 F 轮正好相反**: 本脚本 **默认 = dry-run**（只报"命中数 vs 断言值"）;
-     要真正落盘必须**显式** `--apply`。
+  ⚠️ 目标值**不从权威源推导**: `board/wrapper_p4.v` 会被构建 agent 改（读到"改前/改中/改后"都可能）⇒
+     `--bid` **显式钉死**（缺省 0x1C = 2026-10-11 现状兼容）; 权威源只用来读 **NW / 未实现地址**,
+     并在与目标不一致时打**警告行**（不是 FAIL）。
+  ⚠️ 模式与 F 轮相反: **默认 = dry-run**（只报"命中数 vs 断言值"）; 要落盘必须**显式** `--apply`,
+     且 `--apply --bid 0x1D` 要求阶段 ① **已经落盘**（脚本只落最后一阶段）。
   ⚠️ 历史教训（F 轮自述"五处只改三处"）: 清单**逐处列出**、每条带**命中数断言**, 不做任何通配替换。
      引用行号一律**现读**（本文件不写死行号, 只在注释里给"现读行号"供人核对）。
+
+  用法:  [--bid 0x1C|0x1D] [--dry-run(默认)|--apply] [--assert] [--rehearse] [--face] [--negctl=名]
 """
 import io
 import os
@@ -30,11 +38,42 @@ def rd(p):
     return b, (b"\r\n" if b.count(b"\r\n") else b"\n")
 
 
-EDITS = []
+EDITS_1C = []          # 阶段 ①: 0x1A 树 -> 0x1C 树 (缺陷刀)
+EDITS_1D = []          # 阶段 ②: 0x1C 树 -> 0x1D 树 (persist 刀); old 侧 = 阶段 ① 的 new 侧
 
 
-def E(rel, old, new, n=1):
-    EDITS.append((rel, old, new, n))
+def E1(rel, old, new, n=1):
+    EDITS_1C.append((rel, old, new, n))
+
+
+def E2(rel, old, new, n=1):
+    EDITS_1D.append((rel, old, new, n))
+
+
+# 目标 BID ⇒ 阶段链 (链上每阶段的 old 侧 = 上一阶段的 new 侧)。
+# ⚠️ 列表对象身份共享 ⇒ 这里的引用能看见后面的 append (定义顺序无关)。
+STAGES = [("0x0000001C", EDITS_1C, "缺陷刀 (2026-10-11)"),
+          ("0x0000001D", EDITS_1D, "persist 刀 (2026-10-11)")]
+ALL_BIDS = [b for b, _e, _n in STAGES]
+
+# 已登记的历史身份 (含**不在链上**的上一代: 0x1A 是 F 轮的值, 只作为"旧值扫描/上一代"锚点)
+HISTORY_BIDS = ["0x0000001A"] + ALL_BIDS
+
+
+def chain_for(target):
+    """返回到 target 为止的阶段链 [(bid, edits, name), ...]。"""
+    out = []
+    for bid, edits, name in STAGES:
+        out.append((bid, edits, name))
+        if bid == target:
+            return out
+    raise SystemExit("不支持的 --bid: %s (支持: %s)" % (target, " / ".join(ALL_BIDS)))
+
+
+def predecessor_bid(target):
+    """target 的上一代 (负对照/搜索面用)。⚠️ 对链上第一代 (0x1C) 要回到 0x1A ⇒ 用 HISTORY_BIDS。"""
+    olds = [b for b in HISTORY_BIDS if int(b, 16) < int(target, 16)]
+    return olds[-1] if olds else None
 
 
 # ===========================================================================
@@ -42,17 +81,17 @@ def E(rel, old, new, n=1):
 #    ⚠️ 锚点按**整行**写（含行尾注释）—— 光锚 `EXPECT_BID=${EXPECT_BID:-0x0000001A}` 也能中,
 #       但带上注释可以顺带把"这是哪一代"写死, 且防住未来在别处出现同名裸行。
 # ===========================================================================
-E("_proj_10g/notes/p7b_affinity/j6_r6fix.sh",                      # 现读 :76
+E1("_proj_10g/notes/p7b_affinity/j6_r6fix.sh",                      # 现读 :76
   "EXPECT_BID=${EXPECT_BID:-0x0000001A}   # 2026-10-10 构建 F (70 字; 原 0x00000019 = 构建 E / 0x18 = 构建 D / 0x17 = 构建 C)",
   "EXPECT_BID=${EXPECT_BID:-0x0000001C}   # 2026-10-11 缺陷刀 (70 字; 原 0x0000001A = 构建 F / 0x19 = 构建 E / 0x18 = 构建 D)", 1)
-E("_proj_10g/notes/p7b_biz_tcpreg/tcpreg_j6.sh",                   # 现读 :70
+E1("_proj_10g/notes/p7b_biz_tcpreg/tcpreg_j6.sh",                   # 现读 :70
   "EXPECT_BID=${EXPECT_BID:-0x0000001A}   # 2026-10-10 构建 F (70 字; 原 0x00000019 = 构建 E / 0x18 = 构建 D / 0x09 = WU 二轮)",
   "EXPECT_BID=${EXPECT_BID:-0x0000001C}   # 2026-10-11 缺陷刀 (70 字; 原 0x0000001A = 构建 F / 0x19 = 构建 E / 0x18 = 构建 D)", 1)
 # GEOM_TIERS: 在最上面插**现役**那一行（格式照 F 轮该行: `"NW|BID|WEXTRA|label"`）;
 # 旧行（同 70 字 / 0x1A）逐字保留 = 历史档, 台架仍可按档显式声明读 F 归档位流。
 for f in ("_proj_10g/notes/p7b_affinity/j6_r6fix.sh",              # 现读 :82
           "_proj_10g/notes/p7b_biz_tcpreg/tcpreg_j6.sh"):          # 现读 :77
-    E(f,
+    E1(f,
       '  "70|0x0000001A|61 62|构建 F (2026-10-10) 70 字 / BID 0x1A (W67/W68/W69 = 三个纯观测仪器)"',
       '  "70|0x0000001C|61 62|缺陷刀 (2026-10-11) 70 字 / BID 0x1C (RETXHI-GHOST 重放越界修复; 字长/未实现地址不变)"\n'
       '  "70|0x0000001A|61 62|构建 F (2026-10-10) 70 字 / BID 0x1A (W67/W68/W69 = 三个纯观测仪器)"', 1)
@@ -61,10 +100,10 @@ for f in ("_proj_10g/notes/p7b_affinity/j6_r6fix.sh",              # 现读 :82
 # ② 取数器 p7b_snap.sh (EXPECT_BID 裸行 + 头部"现役"行 + 逐代订正块)
 #    ⚠️ `EXPECT_BID=${EXPECT_BID:-0x0000001A}` 无行尾注释、全文唯一（现读 :51）。
 # ===========================================================================
-E("_proj_pcie/p7b_biz/p7b_snap.sh",
+E1("_proj_pcie/p7b_biz/p7b_snap.sh",
   "EXPECT_BID=${EXPECT_BID:-0x0000001A}",
   "EXPECT_BID=${EXPECT_BID:-0x0000001C}", 1)
-E("_proj_pcie/p7b_biz/p7b_snap.sh",                                # 现读 :2-:4
+E1("_proj_pcie/p7b_biz/p7b_snap.sh",                                # 现读 :2-:4
   "# p7b_snap.sh -- 板侧快照窗口取数器 (**现役 = 70 字 / BID 0x1A**; 标题原文 = \"板侧 **63** 字\n"
   "#   快照窗口的取数器 (P7b Stage C: BID=10 / SNAP_NW=63)\" —— 那一代已过时, 见下逐代订正)\n"
   "#   ⭐ 构建 F (2026-10-10): 67 → **70** (W67/W68/W69 = 三个纯观测仪器; 未实现地址 0x12C → **0x138**)。\n",
@@ -77,56 +116,56 @@ E("_proj_pcie/p7b_biz/p7b_snap.sh",                                # 现读 :2-:
 # ===========================================================================
 # ③ _proj_pcie 三个读侧验收脚本 (只动 EXPECT_BID; SNAP_WORDS/UNIMPL_ADDR 本轮**不动**)
 # ===========================================================================
-E("_proj_pcie/p6e_snap_check.sh",                                  # 现读 :60
+E1("_proj_pcie/p6e_snap_check.sh",                                  # 现读 :60
   "EXPECT_BID=${EXPECT_BID:-0x0000001A}       # ⛔ 2026-10-10 构建 F: 原默认 0x00000019 (构建 E 67 字) / 0x18 (构建 D) / 0x0A (Stage C)",
   "EXPECT_BID=${EXPECT_BID:-0x0000001C}       # ⛔ 2026-10-11 缺陷刀: 原默认 0x0000001A (构建 F 70 字) / 0x19 (构建 E) / 0x0A (Stage C)", 1)
-E("_proj_pcie/p7b_gate4_accept.sh",                                # 现读 :131
+E1("_proj_pcie/p7b_gate4_accept.sh",                                # 现读 :131
   "EXPECT_BID=${EXPECT_BID:-0x0000001A}      # 构建 F = 0x1A (源码 board/wrapper_p4.v 的 BUILD_ID_V; 原 0x19 = 构建 E / 0x18 = 构建 D)",
   "EXPECT_BID=${EXPECT_BID:-0x0000001C}      # 缺陷刀 = 0x1C (源码 board/wrapper_p4.v 的 BUILD_ID_V; 原 0x1A = 构建 F / 0x19 = 构建 E)", 1)
 
 # ---- p7b_gate4_selftest.sh (假板子: FAKE_BID + "现役"注释块) ----
-E("_proj_pcie/p7b_gate4_selftest.sh",                              # 现读 :132-:134
+E1("_proj_pcie/p7b_gate4_selftest.sh",                              # 现读 :132-:134
   "  #    而\"正例必须 0 FAIL\"是本脚本的断言⑤)。现役 = **0x1A** (构建 F 70 字 —— ⛔ 2026-10-10 同步轮: 原 0x19 = 构建 E 67 字 /\n"
   "  #    原句 = 现役 17 (构建 C 65 字) / 10 (P7b Stage C) / 更早 9 (P7B-WU 二轮)); 跑旧口径时 FAKE_BID=0x00000017 /\n"
   "  #    0x0000000A / 0x00000009 / 0x00000008 (与 SNAP_WORDS=65/63 一起用)。\n",
   "  #    而\"正例必须 0 FAIL\"是本脚本的断言⑤)。现役 = **0x1C** (缺陷刀 70 字 —— ⛔ 2026-10-11 同步轮: 原 0x1A = 构建 F /\n"
   "  #    0x19 = 构建 E 67 字 / 原句 = 现役 17 (构建 C 65 字) / 10 (P7b Stage C) / 更早 9 (P7B-WU 二轮)); 跑旧口径时\n"
   "  #    FAKE_BID=0x0000001A (构建 F; SNAP_WORDS=70) / 0x00000017 / 0x0000000A / 0x00000009 / 0x00000008 (与 SNAP_WORDS=65/63 一起用)。\n", 1)
-E("_proj_pcie/p7b_gate4_selftest.sh",                              # 现读 :137
+E1("_proj_pcie/p7b_gate4_selftest.sh",                              # 现读 :137
   "  0X04) V=\\${FAKE_BID:-0x0000001A};;\n",
   "  0X04) V=\\${FAKE_BID:-0x0000001C};;\n", 1)
 
 # ---- p7b_gate4_negctrl.sh (合成夹具: 几何行 + BID echo) ----
-E("_proj_pcie/p7b_gate4_negctrl.sh",                               # 现读 :31
+E1("_proj_pcie/p7b_gate4_negctrl.sh",                               # 现读 :31
   "# 几何: **70 字 (W0..W69)** —— 构建 F (2026-10-10, BID=0x1A / 未实现 0x138);\n",
   "# 几何: **70 字 (W0..W69)** —— 缺陷刀 (2026-10-11, BID=0x1C / 未实现 0x138);\n"
   "#       (原句: \"70 字 (W0..W69) —— 构建 F (2026-10-10, BID=0x1A / 未实现 0x138)\" = 历史代, 逐字保留于下)\n", 1)
-E("_proj_pcie/p7b_gate4_negctrl.sh",                               # 现读 :58
+E1("_proj_pcie/p7b_gate4_negctrl.sh",                               # 现读 :58
   '    echo "MAGIC 0x50360001"; echo "BID 0x0000001A"; echo "MARKER 0xdeadbeef"   # 构建 F: 原 0x19 = 构建 E / 0x18 = 构建 D / 0x0A = Stage C',
   '    echo "MAGIC 0x50360001"; echo "BID 0x0000001C"; echo "MARKER 0xdeadbeef"   # 缺陷刀: 原 0x1A = 构建 F / 0x19 = 构建 E / 0x0A = Stage C', 1)
 
 # ---- p7b_gate4_livefake.sh (假对端: bid 字典 + 兜底值) ----
 #    ⚠️ 字典按 **NW** 索引 ⇒ 70 字那一代只能装**现役**那一个身份。构建 F 的 0x1A 落在
 #       同槽的历史位 ⇒ 读 F 归档位流时本假对端必须配套（或整条覆盖）。
-E("_proj_pcie/p7b_gate4_livefake.sh",                              # 现读 :118
+E1("_proj_pcie/p7b_gate4_livefake.sh",                              # 现读 :118
   "    #   ⛔ 2026-10-10 (构建 F): 加 **70 字那一代 = 0x1A**; 兜底值同改 0x1A (现役代)。\n",
   "    #   ⛔ 2026-10-10 (构建 F): 加 **70 字那一代 = 0x1A**。\n"
   "    #   ⛔ 2026-10-11 (缺陷刀): 70 字那一代的**身份** 0x1A → **0x1C** (字长没动 ⇒ 槽号仍是 70);\n"
   "    #      兜底值同改 0x1C (现役代)。⚠️ 本字典**按 NW 索引** ⇒ 读构建 F 归档位流 (70 字/0x1A) 时\n"
   "    #      本假对端需配套回改, 否则整台在 G1 身份上假红。\n", 1)
-E("_proj_pcie/p7b_gate4_livefake.sh",                              # 现读 :119
+E1("_proj_pcie/p7b_gate4_livefake.sh",                              # 现读 :119
   '    bid = {70: "0x0000001A", 67: "0x00000019", 66: "0x00000018", 65: "0x00000017", 63: "0x0000000A", 61: "0x00000008", 51: "0x00000007"}.get(nw, "0x0000001A")',
   '    bid = {70: "0x0000001C", 67: "0x00000019", 66: "0x00000018", 65: "0x00000017", 63: "0x0000000A", 61: "0x00000008", 51: "0x00000007"}.get(nw, "0x0000001C")', 1)
 
 # ---- p6e_snap_selftest_fix2.sh (假板子: FAKE_BID) ----
-E("_proj_pcie/p6e_snap_selftest_fix2.sh",                          # 现读 :77
+E1("_proj_pcie/p6e_snap_selftest_fix2.sh",                          # 现读 :77
   "  0X04) V=\\${FAKE_BID:-0x0000001A};;   # 构建 F = 0x1A (⛔ 原 0x19 = 构建 E / 0x18 = 构建 D / 0x0A = Stage C);",
   "  0X04) V=\\${FAKE_BID:-0x0000001C};;   # 缺陷刀 = 0x1C (⛔ 原 0x1A = 构建 F / 0x19 = 构建 E / 0x0A = Stage C);", 1)
 
 # ===========================================================================
 # ④ final_state.sh (EXPECT_BID)
 # ===========================================================================
-E("_proj_10g/notes/p7b_gate4_3/final_state.sh",                    # 现读 :29
+E1("_proj_10g/notes/p7b_gate4_3/final_state.sh",                    # 现读 :29
   "EXPECT_BID=${EXPECT_BID:-0x0000001A}   # ⛔ 2026-10-10 构建 F (70 字); 原 0x17 = 构建 C",
   "EXPECT_BID=${EXPECT_BID:-0x0000001C}   # ⛔ 2026-10-11 缺陷刀 (70 字); 原 0x1A = 构建 F", 1)
 
@@ -135,29 +174,29 @@ E("_proj_10g/notes/p7b_gate4_3/final_state.sh",                    # 现读 :29
 #    ⚠️ 它自带 `_geo_guard`: 几何+身份与 accept 默认不同代 ⇒ **响亮失败 (exit 3 + 零文件)**
 #       ⇒ 必须与 ③ 同批改, 否则"夹具跑不起来"看着像板子问题。
 # ===========================================================================
-E("_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py",              # 现读 :10-:11
+E1("_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py",              # 现读 :10-:11
   "         ⚠️ 几何 = **70 字 / BID 0x1A** (P7b 构建 F, 2026-10-10 同步轮从 67 字/BID 0x19 同步)\n"
   "            ⛔ 2026-10-10 构建 F 同步: 上一行原写 \"几何 = 67 字 / BID 0x19 (构建 E)\";\n",
   "         ⚠️ 几何 = **70 字 / BID 0x1C** (P7b 缺陷刀, 2026-10-11 同步轮从 70 字/BID 0x1A 同步)\n"
   "            ⛔ 2026-10-11 缺陷刀同步: 上一行原写 \"几何 = 70 字 / BID 0x1A (P7b 构建 F)\";\n"
   "            ⛔ 2026-10-10 构建 F 同步: 那一行的上一行原写 \"几何 = 67 字 / BID 0x19 (构建 E)\";\n", 1)
-E("_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py",              # 现读 :39
+E1("_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py",              # 现读 :39
   "# 现应读作 \"不同代 ⇒ 假红\": 本夹具现 = **70 字 / BID 0x1A**, accept 默认也已是 70 字 / BID 0x1A\n",
   "# 现应读作 \"不同代 ⇒ 假红\": 本夹具现 = **70 字 / BID 0x1C**, accept 默认也已是 70 字 / BID 0x1C\n", 1)
-E("_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py",              # 现读 :41
+E1("_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py",              # 现读 :41
   "# 66 字/0x18 (构建 D) → 67 字/0x19 (构建 E) → **70 字/0x1A (构建 F, 未实现地址 0x138)**。\n",
   "# 66 字/0x18 (构建 D) → 67 字/0x19 (构建 E) → 70 字/0x1A (构建 F) → **70 字/0x1C (缺陷刀, 未实现地址 0x138 不变)**。\n", 1)
-E("_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py",              # 现读 :43
+E1("_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py",              # 现读 :43
   "BID_FIX = 0x0000001A       # 位流身份 (P7b 构建 F) —— ⛔ 2026-10-10: 原值 0x00000019 (构建 E)",
   "BID_FIX = 0x0000001C       # 位流身份 (P7b 缺陷刀) —— ⛔ 2026-10-11: 原值 0x0000001A (构建 F)", 1)
 
 # ===========================================================================
 # ⑥ sim 侧两个 TB 的 BUILD_ID 期望值 (未实现地址 0x138 本轮**不动**)
 # ===========================================================================
-E("sim/p6e_pcie/tb_p6e_pcie_counters.v",                           # 现读 :206
+E1("sim/p6e_pcie/tb_p6e_pcie_counters.v",                           # 现读 :206
   "chk(\"0b BUILD_ID (构建 F 70-word = 0x1A; 原 67-word=0x19 / 66-word=0x18 / 63-word=9)\", v, 32'h0000001A);",
   "chk(\"0b BUILD_ID (缺陷刀 70-word = 0x1C; 原 70-word=0x1A(构建 F) / 67-word=0x19 / 63-word=9)\", v, 32'h0000001C);", 1)
-E("sim/p6e_pcie/tb_p6e_pcie_wrapper.v",                            # 现读 :149
+E1("sim/p6e_pcie/tb_p6e_pcie_wrapper.v",                            # 现读 :149
   "chk(\"2  BUILD_ID (构建 F 70 字=0x1A; 原 67 字=0x19 / 66 字=0x18 / 63 字=9)\", v, 32'h0000001A);",
   "chk(\"2  BUILD_ID (缺陷刀 70 字=0x1C; 原 70 字=0x1A(构建 F) / 67 字=0x19 / 63 字=9)\", v, 32'h0000001C);", 1)
 
@@ -170,12 +209,132 @@ E("sim/p6e_pcie/tb_p6e_pcie_wrapper.v",                            # 现读 :149
 #       而 F 轮把该行的 BIE 改成了 0x1A ⇒ 现况已是"半代"）⇒ 再往上叠 0x1C 只会更错;
 #       正确处置 = 把那一行**退回 0x00000019/67**（或整臂重指）, 属另一件事, 见 REPORT.md。
 # ===========================================================================
-E("_proj_10g/notes/p7b_a3_negctl_20261010/step0_selfcheck.sh",     # 现读 :4
+E1("_proj_10g/notes/p7b_a3_negctl_20261010/step0_selfcheck.sh",     # 现读 :4
   "#     (i)  缺省档 (NW=70 / 0x138 / BID 0x1A) 对 D **响亮失败** (且失败点只在 BID = 档位错, 不是板错);",
   "#     (i)  缺省档 (NW=70 / 0x138 / BID 0x1C) 对 D **响亮失败** (且失败点只在 BID = 档位错, 不是板错);", 1)
-E("_proj_10g/notes/p7b_a3_negctl_20261010/step0_selfcheck.sh",     # 现读 :46
+E1("_proj_10g/notes/p7b_a3_negctl_20261010/step0_selfcheck.sh",     # 现读 :46
   'echo "### C-a) 默认档 (NW=70 / 0x138 / BID 0x1A) —— 对 D 位流: 期望 ID_FAIL 且失败点=身份不符 (BID 0x18 != 0x1A)"',
   'echo "### C-a) 默认档 (NW=70 / 0x138 / BID 0x1C) —— 对 D 位流: 期望 ID_FAIL 且失败点=身份不符 (BID 0x18 != 0x1C)"', 1)
+
+
+# ===========================================================================
+# ⑨ 阶段 ② (0x1C → 0x1D, **persist 刀**; BID-only, NW 仍 70 / 未实现地址仍 0x138)
+#
+#   ⚠️ 本阶段的 **old 侧 = 阶段 ① 的 new 侧**(即 0x1C 已 apply 之后的树) —— 逐条与 ① 对齐。
+#   ⚠️ 权威值: persist 构建 agent **正在改** `board/wrapper_p4.v`(`.PERSIST_EN→1'b1` + BID `0x1C→0x1D`),
+#      ⇒ 本表的期望值按**显式 `--bid 0x1D`** 钉死(0x0000001D), **不**从漂移中的权威源推导;
+#      待其构建完成后**复读 `board/wrapper_p4.v` 复核一次**(见 REPORT_BID1D.md)。
+# ===========================================================================
+# ---- ① 两个 j6 台架脚本: EXPECT_BID 默认值 + GEOM_TIERS 再插一行 ----
+E2("_proj_10g/notes/p7b_affinity/j6_r6fix.sh",
+  "EXPECT_BID=${EXPECT_BID:-0x0000001C}   # 2026-10-11 缺陷刀 (70 字; 原 0x0000001A = 构建 F / 0x19 = 构建 E / 0x18 = 构建 D)",
+  "EXPECT_BID=${EXPECT_BID:-0x0000001D}   # 2026-10-11 persist 刀 (70 字; 原 0x0000001C = 缺陷刀 / 0x1A = 构建 F / 0x19 = 构建 E)", 1)
+E2("_proj_10g/notes/p7b_biz_tcpreg/tcpreg_j6.sh",
+  "EXPECT_BID=${EXPECT_BID:-0x0000001C}   # 2026-10-11 缺陷刀 (70 字; 原 0x0000001A = 构建 F / 0x19 = 构建 E / 0x18 = 构建 D)",
+  "EXPECT_BID=${EXPECT_BID:-0x0000001D}   # 2026-10-11 persist 刀 (70 字; 原 0x0000001C = 缺陷刀 / 0x1A = 构建 F / 0x19 = 构建 E)", 1)
+for f in ("_proj_10g/notes/p7b_affinity/j6_r6fix.sh",
+          "_proj_10g/notes/p7b_biz_tcpreg/tcpreg_j6.sh"):
+    E2(f,
+      '  "70|0x0000001C|61 62|缺陷刀 (2026-10-11) 70 字 / BID 0x1C (RETXHI-GHOST 重放越界修复; 字长/未实现地址不变)"',
+      '  "70|0x0000001D|61 62|persist 刀 (2026-10-11) 70 字 / BID 0x1D"\n'
+      '  "70|0x0000001C|61 62|缺陷刀 (2026-10-11) 70 字 / BID 0x1C (RETXHI-GHOST 重放越界修复; 字长/未实现地址不变)"', 1)
+
+# ---- ② 取数器 p7b_snap.sh ----
+E2("_proj_pcie/p7b_biz/p7b_snap.sh",
+  "EXPECT_BID=${EXPECT_BID:-0x0000001C}",
+  "EXPECT_BID=${EXPECT_BID:-0x0000001D}", 1)
+E2("_proj_pcie/p7b_biz/p7b_snap.sh",
+  "# p7b_snap.sh -- 板侧快照窗口取数器 (**现役 = 70 字 / BID 0x1C**; 标题原文 = \"板侧 **63** 字\n"
+  "#   快照窗口的取数器 (P7b Stage C: BID=10 / SNAP_NW=63)\" —— 那一代已过时, 见下逐代订正)\n"
+  "#   ⭐ 缺陷刀 (2026-10-11): 身份 0x1A → **0x1C** (**字长/未实现地址不变** = 70 字 / 0x138;\n"
+  "#      RETXHI-GHOST 重放越界修复) ⇒ 70 字这一代现有**两个身份** (档表/字典按 NW 索引的件见下)。\n",
+  "# p7b_snap.sh -- 板侧快照窗口取数器 (**现役 = 70 字 / BID 0x1D**; 标题原文 = \"板侧 **63** 字\n"
+  "#   快照窗口的取数器 (P7b Stage C: BID=10 / SNAP_NW=63)\" —— 那一代已过时, 见下逐代订正)\n"
+  "#   ⭐ persist 刀 (2026-10-11): 身份 0x1C → **0x1D** (**字长/未实现地址不变** = 70 字 / 0x138; PERSIST_EN=1'b1)。\n"
+  "#   ⭐ 缺陷刀 (2026-10-11): 身份 0x1A → **0x1C** (字长/未实现地址不变; RETXHI-GHOST 重放越界修复)。\n", 1)
+
+# ---- ③ _proj_pcie 的验收/夹具脚本 ----
+E2("_proj_pcie/p6e_snap_check.sh",
+  "EXPECT_BID=${EXPECT_BID:-0x0000001C}       # ⛔ 2026-10-11 缺陷刀: 原默认 0x0000001A (构建 F 70 字) / 0x19 (构建 E) / 0x0A (Stage C)",
+  "EXPECT_BID=${EXPECT_BID:-0x0000001D}       # ⛔ 2026-10-11 persist 刀: 原默认 0x0000001C (缺陷刀) / 0x1A (构建 F) / 0x0A (Stage C)", 1)
+E2("_proj_pcie/p7b_gate4_accept.sh",
+  "EXPECT_BID=${EXPECT_BID:-0x0000001C}      # 缺陷刀 = 0x1C (源码 board/wrapper_p4.v 的 BUILD_ID_V; 原 0x1A = 构建 F / 0x19 = 构建 E)",
+  "EXPECT_BID=${EXPECT_BID:-0x0000001D}      # persist 刀 = 0x1D (源码 board/wrapper_p4.v 的 BUILD_ID_V; 原 0x1C = 缺陷刀 / 0x1A = 构建 F)", 1)
+E2("_proj_pcie/p7b_gate4_selftest.sh",
+  "  #    而\"正例必须 0 FAIL\"是本脚本的断言⑤)。现役 = **0x1C** (缺陷刀 70 字 —— ⛔ 2026-10-11 同步轮: 原 0x1A = 构建 F /\n"
+  "  #    0x19 = 构建 E 67 字 / 原句 = 现役 17 (构建 C 65 字) / 10 (P7b Stage C) / 更早 9 (P7B-WU 二轮)); 跑旧口径时\n"
+  "  #    FAKE_BID=0x0000001A (构建 F; SNAP_WORDS=70) / 0x00000017 / 0x0000000A / 0x00000009 / 0x00000008 (与 SNAP_WORDS=65/63 一起用)。\n",
+  "  #    而\"正例必须 0 FAIL\"是本脚本的断言⑤)。现役 = **0x1D** (persist 刀 70 字 —— ⛔ 2026-10-11 同步轮: 原 0x1C = 缺陷刀 /\n"
+  "  #    0x1A = 构建 F / 0x19 = 构建 E 67 字 / 原句 = 现役 17 (构建 C 65 字) / 10 (P7b Stage C)); 跑旧口径时\n"
+  "  #    FAKE_BID=0x0000001C (缺陷刀; SNAP_WORDS=70) / 0x0000001A (构建 F; 70) / 0x00000017 / 0x0000000A / 0x00000008。\n", 1)
+E2("_proj_pcie/p7b_gate4_selftest.sh",
+  "  0X04) V=\\${FAKE_BID:-0x0000001C};;\n",
+  "  0X04) V=\\${FAKE_BID:-0x0000001D};;\n", 1)
+E2("_proj_pcie/p7b_gate4_negctrl.sh",
+  "# 几何: **70 字 (W0..W69)** —— 缺陷刀 (2026-10-11, BID=0x1C / 未实现 0x138);\n"
+  "#       (原句: \"70 字 (W0..W69) —— 构建 F (2026-10-10, BID=0x1A / 未实现 0x138)\" = 历史代, 逐字保留于下)\n",
+  "# 几何: **70 字 (W0..W69)** —— persist 刀 (2026-10-11, BID=0x1D / 未实现 0x138);\n"
+  "#       (原句: \"70 字 (W0..W69) —— 缺陷刀 (2026-10-11, BID=0x1C / 未实现 0x138)\" = 历史代, 逐字保留于下)\n"
+  "#       (原句: \"70 字 (W0..W69) —— 构建 F (2026-10-10, BID=0x1A / 未实现 0x138)\" = 历史代, 逐字保留于下)\n", 1)
+E2("_proj_pcie/p7b_gate4_negctrl.sh",
+  '    echo "MAGIC 0x50360001"; echo "BID 0x0000001C"; echo "MARKER 0xdeadbeef"   # 缺陷刀: 原 0x1A = 构建 F / 0x19 = 构建 E / 0x0A = Stage C',
+  '    echo "MAGIC 0x50360001"; echo "BID 0x0000001D"; echo "MARKER 0xdeadbeef"   # persist 刀: 原 0x1C = 缺陷刀 / 0x1A = 构建 F / 0x19 = 构建 E', 1)
+E2("_proj_pcie/p7b_gate4_livefake.sh",
+  "    #   ⛔ 2026-10-10 (构建 F): 加 **70 字那一代 = 0x1A**。\n"
+  "    #   ⛔ 2026-10-11 (缺陷刀): 70 字那一代的**身份** 0x1A → **0x1C** (字长没动 ⇒ 槽号仍是 70);\n"
+  "    #      兜底值同改 0x1C (现役代)。⚠️ 本字典**按 NW 索引** ⇒ 读构建 F 归档位流 (70 字/0x1A) 时\n"
+  "    #      本假对端需配套回改, 否则整台在 G1 身份上假红。\n",
+  "    #   ⛔ 2026-10-10 (构建 F): 加 **70 字那一代 = 0x1A**。\n"
+  "    #   ⛔ 2026-10-11 (缺陷刀): 70 字那一代的身份 0x1A → **0x1C**。\n"
+  "    #   ⛔ 2026-10-11 (persist 刀): 70 字那一代的**身份** 0x1C → **0x1D** (字长没动 ⇒ 槽号仍是 70);\n"
+  "    #      兜底值同改 0x1D (现役代)。⚠️ 本字典**按 NW 索引** ⇒ 读构建 F (0x1A) / 缺陷刀 (0x1C) 归档位流时\n"
+  "    #      本假对端需配套回改, 否则整台在 G1 身份上假红。\n", 1)
+E2("_proj_pcie/p7b_gate4_livefake.sh",
+  '    bid = {70: "0x0000001C", 67: "0x00000019", 66: "0x00000018", 65: "0x00000017", 63: "0x0000000A", 61: "0x00000008", 51: "0x00000007"}.get(nw, "0x0000001C")',
+  '    bid = {70: "0x0000001D", 67: "0x00000019", 66: "0x00000018", 65: "0x00000017", 63: "0x0000000A", 61: "0x00000008", 51: "0x00000007"}.get(nw, "0x0000001D")', 1)
+E2("_proj_pcie/p6e_snap_selftest_fix2.sh",
+  "  0X04) V=\\${FAKE_BID:-0x0000001C};;   # 缺陷刀 = 0x1C (⛔ 原 0x1A = 构建 F / 0x19 = 构建 E / 0x0A = Stage C);",
+  "  0X04) V=\\${FAKE_BID:-0x0000001D};;   # persist 刀 = 0x1D (⛔ 原 0x1C = 缺陷刀 / 0x1A = 构建 F / 0x0A = Stage C);", 1)
+
+# ---- ④ final_state.sh ----
+E2("_proj_10g/notes/p7b_gate4_3/final_state.sh",
+  "EXPECT_BID=${EXPECT_BID:-0x0000001C}   # ⛔ 2026-10-11 缺陷刀 (70 字); 原 0x1A = 构建 F",
+  "EXPECT_BID=${EXPECT_BID:-0x0000001D}   # ⛔ 2026-10-11 persist 刀 (70 字); 原 0x1C = 缺陷刀", 1)
+
+# ---- ⑤ 反例台架夹具 gen_inputs.py ----
+E2("_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py",
+  "         ⚠️ 几何 = **70 字 / BID 0x1C** (P7b 缺陷刀, 2026-10-11 同步轮从 70 字/BID 0x1A 同步)\n"
+  "            ⛔ 2026-10-11 缺陷刀同步: 上一行原写 \"几何 = 70 字 / BID 0x1A (P7b 构建 F)\";\n"
+  "            ⛔ 2026-10-10 构建 F 同步: 那一行的上一行原写 \"几何 = 67 字 / BID 0x19 (构建 E)\";\n",
+  "         ⚠️ 几何 = **70 字 / BID 0x1D** (P7b persist 刀, 2026-10-11 同步轮从 70 字/BID 0x1C 同步)\n"
+  "            ⛔ 2026-10-11 persist 刀同步: 上一行原写 \"几何 = 70 字 / BID 0x1C (P7b 缺陷刀)\";\n"
+  "            ⛔ 2026-10-11 缺陷刀同步: 那一行的上一行原写 \"几何 = 70 字 / BID 0x1A (P7b 构建 F)\";\n"
+  "            ⛔ 2026-10-10 构建 F 同步: 那一行的上一行原写 \"几何 = 67 字 / BID 0x19 (构建 E)\";\n", 1)
+E2("_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py",
+  "# 现应读作 \"不同代 ⇒ 假红\": 本夹具现 = **70 字 / BID 0x1C**, accept 默认也已是 70 字 / BID 0x1C\n",
+  "# 现应读作 \"不同代 ⇒ 假红\": 本夹具现 = **70 字 / BID 0x1D**, accept 默认也已是 70 字 / BID 0x1D\n", 1)
+E2("_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py",
+  "# 66 字/0x18 (构建 D) → 67 字/0x19 (构建 E) → 70 字/0x1A (构建 F) → **70 字/0x1C (缺陷刀, 未实现地址 0x138 不变)**。\n",
+  "# 66 字/0x18 (构建 D) → 67 字/0x19 (构建 E) → 70 字/0x1A (构建 F) → 70 字/0x1C (缺陷刀) → **70 字/0x1D (persist 刀, 未实现地址 0x138 不变)**。\n", 1)
+E2("_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py",
+  "BID_FIX = 0x0000001C       # 位流身份 (P7b 缺陷刀) —— ⛔ 2026-10-11: 原值 0x0000001A (构建 F)",
+  "BID_FIX = 0x0000001D       # 位流身份 (P7b persist 刀) —— ⛔ 2026-10-11: 原值 0x0000001C (缺陷刀)", 1)
+
+# ---- ⑥ sim 侧两个 TB ----
+E2("sim/p6e_pcie/tb_p6e_pcie_counters.v",
+  "chk(\"0b BUILD_ID (缺陷刀 70-word = 0x1C; 原 70-word=0x1A(构建 F) / 67-word=0x19 / 63-word=9)\", v, 32'h0000001C);",
+  "chk(\"0b BUILD_ID (persist 刀 70-word = 0x1D; 原 70-word=0x1C(缺陷刀) / 0x1A(构建 F) / 63-word=9)\", v, 32'h0000001D);", 1)
+E2("sim/p6e_pcie/tb_p6e_pcie_wrapper.v",
+  "chk(\"2  BUILD_ID (缺陷刀 70 字=0x1C; 原 70 字=0x1A(构建 F) / 67 字=0x19 / 63 字=9)\", v, 32'h0000001C);",
+  "chk(\"2  BUILD_ID (persist 刀 70 字=0x1D; 原 70 字=0x1C(缺陷刀) / 0x1A(构建 F) / 63 字=9)\", v, 32'h0000001D);", 1)
+
+# ---- ⑦ 上一轮(A3)的档位自检 (描述"现役缺省档", 随 ② 改代) ----
+E2("_proj_10g/notes/p7b_a3_negctl_20261010/step0_selfcheck.sh",
+  "#     (i)  缺省档 (NW=70 / 0x138 / BID 0x1C) 对 D **响亮失败** (且失败点只在 BID = 档位错, 不是板错);",
+  "#     (i)  缺省档 (NW=70 / 0x138 / BID 0x1D) 对 D **响亮失败** (且失败点只在 BID = 档位错, 不是板错);", 1)
+E2("_proj_10g/notes/p7b_a3_negctl_20261010/step0_selfcheck.sh",
+  'echo "### C-a) 默认档 (NW=70 / 0x138 / BID 0x1C) —— 对 D 位流: 期望 ID_FAIL 且失败点=身份不符 (BID 0x18 != 0x1C)"',
+  'echo "### C-a) 默认档 (NW=70 / 0x138 / BID 0x1D) —— 对 D 位流: 期望 ID_FAIL 且失败点=身份不符 (BID 0x18 != 0x1D)"', 1)
 
 
 # ===========================================================================
@@ -381,12 +540,20 @@ DERIVED_SPECS = [
 ]
 
 # ---- B. 搜索面全扫: 四个族。**每个命中文件都必须已登记**, 否则 FAIL。
-FAMILIES = [
-    ("bid-oldvalue", re.compile(        # ⭐ 本轮新增: 旧身份的字面值（任何拼法）
-        r"(?:0[xX]|32'[hH])0{6}1[aA]\b")),
-    #   ⚠️ 只扫"8 位零填充"形态（`0x1A` 短写法在 base64/IP 数据里会出现假阳性 —— 实测
-    #      `xdma_0_sim_netlist.v` 的 base64 行里逐字含 `0x1A`）; 短写法由下面两族按**上下文**兜住。
-    #   ⚠️ 没有尾界会被 `0x0000001AA` 之类误伤 ⇒ 末尾 `\b`。
+def families_for(target):
+    """按**目标 BID** 造搜索面: `bid-oldvalue` 族 = **所有比 target 小的已登记身份字面值**
+    （target 0x1C ⇒ 只扫 0x1A; target 0x1D ⇒ 扫 0x1A **和** 0x1C）。
+    ⚠️ 只扫"8 位零填充"形态（`0x1A` 短写法在 base64/IP 数据里会出现假阳性 —— 实测
+       `xdma_0_sim_netlist.v` 的 base64 行里逐字含 `0x1A`）; 短写法由 identity-BID 族按**上下文**兜住。
+    ⚠️ 没有尾界会被 `0x0000001AA` 之类误伤 ⇒ 末尾 `\b`。"""
+    olds = [b for b in HISTORY_BIDS if int(b, 16) < int(target, 16)]
+    pat = "|".join(r"(?:0[xX]|32'[hH])0{6}%s\b" % b[-2:] for b in olds)
+    # ⚠️ 防呆: 空 alternation 会编译成"匹配一切"（实测一次: 1843 文件全命中）—— 宁可响亮失败。
+    assert pat, "families_for: target %s 没有更早的身份 ⇒ 旧值族为空 (会匹配一切!)" % target
+    return [("bid-oldvalue[%s]" % ",".join(olds), re.compile(pat))] + FAMILIES_TAIL
+
+
+FAMILIES_TAIL = [
     ("identity-BID", re.compile(
         r"EXPECT_BID=\$\{EXPECT_BID:-(0x[0-9A-Fa-f]+)"
         r"|BID_EXPECT=\$\{BID_EXPECT:-(0x[0-9A-Fa-f]+)"
@@ -577,30 +744,35 @@ def _strip_comment_lines(text):
     return "\n".join(out)
 
 
-def assert_edit_coverage():
+def assert_edit_coverage(edits):
     """**每个 EDITS 目标必须自带一个断言**（DEFAULT_SPECS / TABLE_SPECS / DERIVED_SPECS 里出现）——
     否则就是"改了但没人核": 下一轮它漂了不会有任何判据响（F 轮"五处只改三处"的同族缺口）。
     这条把"清单完整性"从**人的记忆**变成**脚本的结构**。"""
     spec_files = (set(rel for rel, _rx, _k in DEFAULT_SPECS)
                   | set(rel for rel, _k, _a, _n in TABLE_SPECS)
                   | set(rel for rel, _n, _p, _x in DERIVED_SPECS))
-    edit_files = set(rel for rel, _a, _b, _c in EDITS)
+    edit_files = set(rel for rel, _a, _b, _c in edits)
     fails = []
     for rel in sorted(edit_files):
         if rel not in spec_files:
             print("FAIL EDITS 目标没有对应断言: %-52s ⇒ 改了没人核" % rel)
             fails.append(rel)
-    print("%s EDIT_COVERAGE (EDITS 文件 %d / 有对应断言 %d)"
+    print("%s EDIT_COVERAGE (本阶段 EDITS 文件 %d / 有对应断言 %d)"
           % ("OK  " if not fails else "FAIL", len(edit_files), len(edit_files) - len(fails)))
     return fails
 
 
-def assert_search_face(overlay=None, extra=None):
-    """搜索面全扫: 每个命中文件必须已登记 (EDITS 目标 或 ALLOW 分类)。"""
-    targets = set(rel for rel, _a, _b, _c in EDITS)
+def assert_search_face(overlay=None, extra=None, targets=None, fams=None):
+    """搜索面全扫: 每个命中文件必须已登记 (EDITS 目标 或 ALLOW 分类)。
+    `targets` = 阶段链上所有 edit 目标文件并集; `fams` = `families_for(目标 BID)`。"""
+    if targets is None:
+        targets = set(rel for b, e, n in chain_for("0x0000001D") for rel, _a, _b, _c in e)
+        # 缺省 = 全链 (最严): 任何阶段的 EDITS 目标都算已登记
+    if fams is None:
+        fams = families_for("0x0000001C")
     ext = (".sh", ".bat", ".py", ".v", ".vh", ".tcl", ".ps1", ".cmd")
     fails, n_hit = [], 0
-    for fam, rx in FAMILIES:
+    for fam, rx in fams:
         hit = []
         for rel in _fileset(extra):
             if not rel.endswith(ext):
@@ -632,16 +804,18 @@ def assert_search_face(overlay=None, extra=None):
         for rel in unreg:
             print("FAIL 未登记的命中: %-60s ⇒ 先分类 (三档) 再决定改不改" % rel)
             fails.append("%s:%s" % (fam, rel))
-    print("SEARCH_FACE %s (%d 族 / %d 命中文件)" % ("OK" if not fails else "FAIL", len(FAMILIES), n_hit))
+    print("SEARCH_FACE %s (%d 族 / %d 命中文件)" % ("OK" if not fails else "FAIL", len(fams), n_hit))
     return fails
 
 
-def list_face():
+def list_face(target):
     """`--face`: 把各族的**每个命中文件 + 分类**打出来 (任务 1 全表的脚本面)。"""
-    targets = set(rel for rel, _a, _b, _c in EDITS)
+    chain = chain_for(target)
+    targets = set(rel for _b, e, _n in chain for rel, _a, _w, _c in e)
+    fams = families_for(target)
     ext = (".sh", ".bat", ".py", ".v", ".vh", ".tcl", ".ps1", ".cmd")
     rows = []
-    for fam, rx in FAMILIES:
+    for fam, rx in fams:
         for rel in _fileset():
             if not rel.endswith(ext):
                 continue
@@ -663,47 +837,64 @@ def list_face():
             rows.append((fam, rel, cls or "**未登记**"))
     for fam, rel, cls in rows:
         print("%-13s | %-74s | %s" % (fam, rel, cls))
-    print("--face 共 %d 行 (%d 文件)" % (len(rows), len(set(r[1] for r in rows))))
+    print("--face (target %s) 共 %d 行 (%d 文件)" % (target, len(rows), len(set(r[1] for r in rows))))
     return 0
 
 
-def rehearse():
-    """**沙盘彩排**（不落盘）: 把 EDITS 全部**在内存里**应用成 overlay, 再跑**同一套** A/B/C/D 断言
-    —— 期望**全绿**。它同时证明三件事:
+def rehearse(target):
+    """**沙盘彩排**（不落盘）: 把**阶段链**上每一阶段**在内存里**应用成 overlay, 再跑**同一套**
+    A/B/C/D 断言 —— 期望**全绿**。它同时证明三件事:
       ① 清单够全（apply 后 C 没有残留红 ⇒ 没有"该改没改"的处）;
       ② 改动不破表（A 绿）; ③ 改动不新增未登记命中（B 绿）。
+    ⚠️ 多阶段 (target 0x1D): 阶段 ② 的 old 侧 = 阶段 ① 的 new 侧 ⇒ **链式**在同一个 overlay 上做。
+    ⚠️ 某阶段的锚点若**已不在盘上**但其 new 侧在 ⇒ 判为"该阶段已落盘" ⇒ 跳过 (不动它)。
     ⛔ 仓内文件**一个字节都不动**（overlay 只活在进程内存里）。"""
+    chain = chain_for(target)
     overlay = {}
-    for rel, old, new, n in EDITS:
-        p = os.path.join(REPO, rel.replace("/", os.sep))
-        b, nl = rd(p)
-        cur = overlay.get(rel) or b.decode("utf-8")
-        old2 = old.replace("\n", nl.decode())
-        new2 = new.replace("\n", nl.decode())
-        k = cur.count(old2)
-        if k != n:
-            print("FAIL REHEARSE %-52s hits=%d/%d" % (rel, k, n))
-            return 1
-        overlay[rel] = cur.replace(old2, new2)
-    nw, bid = authoritative()
+    print("REHEARSE 阶段链: %s" % " -> ".join("%s(%s, %d 处)" % (b, n, len(e)) for b, e, n in chain))
+    for bk, edits, nm in chain:
+        applied = skipped = 0
+        for rel, old, new, n in edits:
+            p = os.path.join(REPO, rel.replace("/", os.sep))
+            b, nl = rd(p)
+            cur = overlay.get(rel) or b.decode("utf-8")
+            old2 = old.replace("\n", nl.decode())
+            new2 = new.replace("\n", nl.decode())
+            k = cur.count(old2)
+            if k == n:
+                overlay[rel] = cur.replace(old2, new2)
+                applied += 1
+            elif k == 0 and new2 in cur:
+                skipped += 1                       # 该阶段已在盘上 (或本阶段内已应用) ⇒ 跳过
+            else:
+                print("FAIL REHEARSE 阶段 %s %-52s hits=%d/%d (锚点缺失或半应用)"
+                      % (bk, rel, k, n))
+                return 1
+        print("REHEARSE 阶段 %s (%s): applied=%d / skipped=%d" % (bk, nm, applied, skipped))
+    nw, _bid_auto = authoritative()
+    targets = set(rel for _b, e, _n in chain for rel, _a, _w, _c in e)
     fails = []
     print("---- 彩排 A/B/C/D (内存 overlay; 仓内文件不动) ----")
     fails += assert_tables(nw, overlay)
-    fails += assert_search_face(overlay)
-    fails += assert_defaults(nw, bid, overlay)
-    fails += assert_edit_coverage()
-    print("REHEARSE %s (%d edits 全应用; %d fail)"
-          % ("OK —— 全绿 ⇒ 清单完整且自洽" if not fails else "FAIL", len(EDITS), len(fails)))
+    fails += assert_search_face(overlay, None, targets=targets, fams=families_for(target))
+    fails += assert_defaults(nw, target, overlay)
+    fails += assert_edit_coverage(chain[-1][1])
+    print("REHEARSE %s (target %s; %d 阶段 / 末阶段 %d edits; %d fail)"
+          % ("OK —— 全绿 ⇒ 清单完整且自洽" if not fails else "FAIL", target,
+             len(chain), len(chain[-1][1]), len(fails)))
     return 1 if fails else 0
 
 
-def negctl(name):
+def negctl(name, target):
     """负对照 (判据要有牙): 在 **tempfile 里的故意破坏副本**上重跑**同一套**断言函数
     (同一条代码路径), 必须看到 FAIL。
     ⛔ 仓内文件一个字节都不动 —— 破坏件写在 `tempfile.mkdtemp()` 里, 靠 `overlay` 注入。
     RC 约定: **0 = 负对照成立 (断言确实变红)** / **1 = 负对照失败 (断言没牙)** / 2 = 未知档。"""
-    nw, bid = authoritative()
-    tmp = tempfile.mkdtemp(prefix="readside_bid1c_negctl_")
+    nw, _bid_auto = authoritative()
+    chain = chain_for(target)
+    tgts = set(rel for _b, e, _n in chain for rel, _a, _w, _c in e)
+    pred = predecessor_bid(target) or "0x0000001A"
+    tmp = tempfile.mkdtemp(prefix="readside_readside_negctl_")
     try:
         overlay, extra, title = {}, [], ""
         if name == "table":      # ① 表长断言: 把 WLABEL 截短一项
@@ -714,28 +905,28 @@ def negctl(name):
             assert bad != s, "负对照 table: 锚点没命中 (要删的那一行漂了?)"
             title = "把 %s 的 WLABEL 末项删掉 (表长 %d → %d)" % (src, nw, nw - 1)
             overlay = {src: bad}
-        elif name == "bid":      # ② 默认值断言: 把某个 EXPECT_BID 改成一个**必然不等于权威值**的值
-            #   ⚠️ 写成 regex 替换（不写死"现役值"）⇒ dry-run (未 apply) 与 apply 后**都能跑**。
+        elif name == "bid":      # ② 默认值断言: 把某个 EXPECT_BID 改成一个**必然不等于目标值**的值
+            #   ⚠️ 写成 regex 替换（不写死"现役值"）⇒ 任一阶段 (dry-run / apply 后) **都能跑**。
             src = "_proj_10g/notes/p7b_affinity/j6_r6fix.sh"
             s = _src(src)
             bad, nsub = re.subn(r"(?m)^EXPECT_BID=\$\{EXPECT_BID:-0x[0-9A-Fa-f]+\}",
                                 "EXPECT_BID=${EXPECT_BID:-0x00000009}", s)
             assert nsub == 1, "负对照 bid: 锚点没命中 (nsub=%d)" % nsub
-            title = "把 %s 的 EXPECT_BID 改成 0x00000009 (≠ 权威值 %s)" % (src, bid)
+            title = "把 %s 的 EXPECT_BID 改成 0x00000009 (≠ 目标 %s)" % (src, target)
             overlay = {src: bad}
-        elif name == "tier":     # ③ 本轮新增断言: 把档表**首行**改成错代 (同 NW / 旧 BID)
+        elif name == "tier":     # ③ TIER_TOP 断言: 把档表**首行**改成错代 (同 NW / 错 BID)
             src = "_proj_10g/notes/p7b_biz_tcpreg/tcpreg_j6.sh"
             s = _src(src)
             bad, nsub = re.subn(r'(?m)^  "\d+\|0x[0-9A-Fa-f]+\|', '  "70|0x00000009|', s, count=1)
             assert nsub == 1, "负对照 tier: 锚点没命中 (nsub=%d)" % nsub
             title = "把 %s 的档表**首行**改成 70|0x00000009 ⇒ TIER_TOP 必须红" % src
             overlay = {src: bad}
-        elif name == "face":     # ④ 搜索面: 一个"下一轮的新文件"带旧值出现在未登记路径
+        elif name == "face":     # ④ 搜索面: 一个"下一轮的新文件"带**上一代值**出现在未登记路径
             src = "_proj_10g/notes/p7b_newround_2099/new_runner.sh"
-            body = "#!/bin/bash\nBID_EXPECT=${BID_EXPECT:-0x0000001A}\nNW=${NW:-70}\n"
+            body = "#!/bin/bash\nBID_EXPECT=${BID_EXPECT:-%s}\nNW=${NW:-70}\n" % pred
             extra = [src]
             overlay = {src: body}
-            title = "造一个**未登记路径**的新文件 %s (带 BID_EXPECT=0x0000001A)" % src
+            title = "造一个**未登记路径**的新文件 %s (带 BID_EXPECT=%s = 目标 %s 的上一代)" % (src, pred, target)
         else:
             print("NEGCTL 未知名: %s" % name)
             return 2
@@ -746,9 +937,9 @@ def negctl(name):
         if name == "table":
             fails = assert_tables(nw, overlay)
         elif name in ("bid", "tier"):
-            fails = assert_defaults(nw, bid, overlay)
+            fails = assert_defaults(nw, target, overlay)
         else:
-            fails = assert_search_face(overlay, extra)
+            fails = assert_search_face(overlay, extra, targets=tgts, fams=families_for(target))
         if name in ("bid", "tier"):
             # 更锋利的口径: 不只是"有红", 而是"**这个被破坏的断言**必须在红名单里"。
             key = "%s[%s]" % (src, "BID" if name == "bid" else "TIER_TOP")
@@ -773,27 +964,101 @@ def negctl(name):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def parse_target(args):
+    """`--bid 0x1C` / `--bid=0x1C` / 缺省 ⇒ ("0x0000001C", 是否显式)。接受大小写与前后导零。"""
+    val = None
+    for i, a in enumerate(args):
+        if a == "--bid":
+            val = args[i + 1] if i + 1 < len(args) else None
+        elif a.startswith("--bid="):
+            val = a.split("=", 1)[1]
+    if val is None:
+        return "0x0000001C", False        # 缺省 = 缺陷刀 (2026-10-11 现状兼容)
+    t = val.strip().upper().replace("0X", "").lstrip("0") or "0"
+    for b in ALL_BIDS:
+        if b.upper().replace("0X", "").lstrip("0") == t:
+            return b, True
+    raise SystemExit("不支持的 --bid: %s (支持: %s)" % (val, " / ".join(ALL_BIDS)))
+
+
+def _one_edit_hits(rel, old):
+    """该 edit 的 old 侧在**盘上**的命中数 (行尾按文件自身风格)。"""
+    p = os.path.join(REPO, rel.replace("/", os.sep))
+    b, nl = rd(p)
+    return b.decode("utf-8").count(old.replace("\n", nl.decode()))
+
+
 def main():
     args = sys.argv[1:]
     do_apply = "--apply" in args                 # ⚠️ 默认 dry-run（与 F 轮的 --check 语义相反）
-    only_assert = "--assert" in args             # 只跑 ⑧ 三条断言 (不同步, 用于"扩了搜索面重跑")
+    only_assert = "--assert" in args             # 只跑 ⑧ 四条断言 (不同步, 用于"扩了搜索面重跑")
     neg = [a.split("=", 1)[1] for a in args if a.startswith("--negctl=")]
+    target, explicit = parse_target(args)
+    chain = chain_for(target)
+    edits = chain[-1][1]
+    # 过滤出"位置参数"给未知参数检查 (`--bid` 的值不是开关)
+    rest, i = [], 0
+    while i < len(args):
+        if args[i] == "--bid":
+            i += 2
+            continue
+        if args[i].startswith("--bid="):
+            i += 1
+            continue
+        rest.append(args[i])
+        i += 1
     if neg:
-        return negctl("=".join(neg))
-    if "--face" in args:
-        return list_face()
-    if "--rehearse" in args:
-        return rehearse()
-    unknown = [a for a in args if a not in ("--apply", "--assert", "--dry-run", "--rehearse")]
+        return negctl("=".join(neg), target)
+    if "--face" in rest:
+        return list_face(target)
+    if "--rehearse" in rest:
+        return rehearse(target)
+    unknown = [a for a in rest
+               if a not in ("--apply", "--assert", "--dry-run", "--rehearse", "--face")]
     if unknown:
-        print("未知参数: %s (用法: [--dry-run|--apply] [--assert] [--face] [--negctl=名])" % " ".join(unknown))
+        print("未知参数: %s" % " ".join(unknown))
+        print("用法: [--bid 0x1C|0x1D] [--dry-run|--apply] [--assert] [--rehearse] [--face] [--negctl=名]")
         return 2
-    nw, bid = authoritative()
+    nw, bid_auto = authoritative()
+    print("TARGET BID = %s (%s; 阶段链 %s; 本阶段 %d 处 edit)"
+          % (target, "显式 --bid" if explicit else "缺省值",
+             " -> ".join(b for b, _e, _n in chain), len(edits)))
     print("AUTHORITY board/wrapper_p4.v: SNAP_NW_P6E = %d / BUILD_ID_V = %s / 未实现地址 = 0x%X"
-          % (nw, bid, unimpl_addr(nw)))
-    print("MODE %s (edit 清单 %d 条)" % ("APPLY (真改仓内文件)" if do_apply else "DRY-RUN (只报命中数, 不落盘)", len(EDITS)))
+          % (nw, bid_auto, unimpl_addr(nw)))
+    if bid_auto != target:
+        print("⚠️ 现读 wrapper 的 BUILD_ID_V (= %s) != 目标 (= %s) —— 目标值按【显式/缺省给定】钉死,"
+              " **不**从漂移中的权威源推导; ⚠️ 某构建 agent 可能正在改该文件 ⇒"
+              " 待其构建完成后**复读复核**一次。" % (bid_auto, target))
+    # ---- 前置阶段必须已落盘 (--apply 只落**最后一阶段**) ----
+    if do_apply:
+        pre_bad = []
+        for bk, e, nm in chain[:-1]:
+            for rel, old, new, n in e:
+                if _one_edit_hits(rel, old) != 0 or _one_edit_hits(rel, new) < 1:
+                    pre_bad.append(bk)
+                    break
+        if pre_bad:
+            print("FAIL 前置阶段 %s 尚未落盘 ⇒ 先 `--bid %s --apply` (本脚本只落最后一阶段)"
+                  % (",".join(sorted(set(pre_bad))), pre_bad[0]))
+            print("APPLY_READSIDE_BID %s (target %s; 前置未满足; %d fail)"
+                  % ("FAIL", target, len(pre_bad)))
+            return 1
+    print("MODE %s (target %s; 本阶段 edit 清单 %d 条; 全链 %d 阶段)"
+          % ("APPLY (真改仓内文件)" if do_apply else "DRY-RUN (只报命中数, 不落盘)",
+             target, len(edits), len(chain)))
+    if len(chain) > 1 and not only_assert:
+        # ⚠️ 多阶段时: 末阶段的 old 侧 = 前置阶段之后的树 ⇒ 前置没落盘时它**必然** 0/1 命中。
+        #    这是**预期**读法, 不是缺陷 —— 在这里显式说出来, 免得被当成锚点漂了。
+        pre_pending = []
+        for bk, e, nm in chain[:-1]:
+            if any(_one_edit_hits(rel, old) != 0 for rel, old, new, n in e):
+                pre_pending.append(bk)
+        if pre_pending:
+            print("ℹ️ 前置阶段 %s **尚未落盘** ⇒ 本阶段 (old 侧 = 其后的树) 现在**不可能**匹配,"
+                  " 下面的 0/1 是预期读法。链式验证用 `--rehearse --bid %s`;"
+                  " 真落地先 `--bid %s --apply`。" % (",".join(pre_pending), target, pre_pending[0]))
     fails = []
-    for rel, old, new, n in ([] if only_assert else EDITS):
+    for rel, old, new, n in ([] if only_assert else edits):
         p = os.path.join(REPO, rel.replace("/", os.sep))
         b, nl = rd(p)
         old2 = old.replace("\n", nl.decode())
@@ -807,21 +1072,22 @@ def main():
             continue
         if do_apply:
             io.open(p, "w", encoding="utf-8", newline="").write(s.replace(old2, new2))
-    # ---- ⑧ 三条结构性断言 (每次都跑; 任一条红 ⇒ 退出码 != 0) ----
+    # ---- ⑧ 四条结构性断言 (每次都跑; 任一条红 ⇒ 退出码 != 0) ----
     print("")
     if not do_apply and not only_assert:
-        print("⚠️ 读法: A/B/C 跑在**未 apply 的现状**上 —— C 的红 = **待改处**"
+        print("⚠️ 读法: A/B/C/D 跑在**未 apply 的现状**上 —— C 的红 = **待改处**"
               "(apply 后必须逐条转绿); A/B 的红才是真问题。")
     print("---- A. 表长断言 (每张表的项数必须 == NW) ----")
     fails += assert_tables(nw)
     print("---- B. 搜索面全扫 (旧值字面值 + 三个命名族; 未登记即红) ----")
-    fails += assert_search_face()
-    print("---- C. 默认值一致性 (读侧默认值 == 权威源现读值) ----")
-    fails += assert_defaults(nw, bid)
+    fails += assert_search_face(targets=set(rel for _b, e, _n in chain for rel, _a, _w, _c in e),
+                                fams=families_for(target))
+    print("---- C. 默认值一致性 (读侧默认值 == 目标 BID %s) ----" % target)
+    fails += assert_defaults(nw, target)
     print("---- D. 清单-断言覆盖 (每个 EDITS 目标必须自带断言) ----")
-    fails += assert_edit_coverage()
-    print("APPLY_READSIDE_BID1C %s (%d edits, %d fail)"
-          % ("OK" if not fails else "FAIL", len(EDITS), len(fails)))
+    fails += assert_edit_coverage(edits)
+    print("APPLY_READSIDE_BID %s (target %s, %d edits, %d fail)"
+          % ("OK" if not fails else "FAIL", target, len(edits), len(fails)))
     return 1 if fails else 0
 
 
