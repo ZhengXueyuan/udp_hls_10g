@@ -1,0 +1,32 @@
+P7B-PERSIST P-1 修 —— 落地件索引 (2026-10-11, persist 刀 P-1【实现修复】agent)
+=====================================================================================
+[1] 现役工作树 (改后件)
+    rtl/tcp_tx_frame.v   sha256 b08df7e9a605acfbd30c720771a29cc0df32883e00b9c81f05e3ba3cf04470b9  174,054 B
+      (改前件 = HEAD 1627e6f 侧, CRLF 落盘 172,494 B sha256 1c441f25563287b49500d52a11c1a285a79303a7a9a55e40ed0679ce2418e26f)
+      git diff --stat = 37 insertions / 19 deletions, 全落 OVL 支 (hunks @1074/@1088/@1129)
+      `git diff --stat` == `git diff --ignore-cr-at-eol --stat` (无 EOL 漂移)
+    tb/tb_tcp_tx_ovl.v   sha256 6190b903f8f7aec5b6ca04680fdc90ee976486bda0cc201290c7eef57cc6505c
+      (A4 的 tb_edit_D7_D3_D2.diff 已落并保留 = 92 insertions; 与 patch 往返比对逐字节相同)
+    sim/p7b_stagec_tx_regress/author_gate/static_check_persist.py sha256 a8035f707c1655b7db9b6c775494d4f40aafa24d3f01ea7e7f8125e01b46dee5 (D-9 改动, 已随 commit 420230e 入库 ⇒ 不在工作树 diff 内)
+[2] diff 全文
+    P1_FIX_gitdiff.diff   = rtl + tb (15,395 B; 2 个文件头)
+    P1_FIX_rtl_only.diff  = 仅 rtl (5,491 B; `git apply --check --reverse` = OK)
+[3] 冻结副本 (改后件锚): runs/rtl_fixed_P1.v sha256 = b08df7e9… (与现役件逐字节相同)
+[4] 臂读数 (runs/; run_arm.bat 恒 exit 0 ⇒ 判决 = "TB_TCP_TX_OVL: FAIL reds=N" 行)
+    D7A/       xs_A4_orig.log = 改前 (reds=5, rdy_survive=7 @319393, PS j10b 红)
+               xs_Aonly.log   = 变体 (a) 单独 (reds=5, rdy_survive=7) —— 移块**不**够
+               xs_Bonly.log   = 变体 (b) 单独 (reds=5, rdy_survive=7) —— 只加清位**不**够 (后写赢吞掉)
+               xs.log         = 改后 (reds=4, rdy_survive=0 @0; j10b 行消失, 其余判据行逐字同改前)
+    D7B_NOUP/  xs_A4_orig.log (改前) · xs.log (改后) —— 判决行**逐字节相同**, rdy_survive=7 保持 (正控仍活)
+    D3S/       xs_A4_orig.log (改前) · xs.log (改后) —— 判决行**逐字节相同** (reds=4, E7 臂零附带)
+[5] 全量门 stdout (26 臂; S/T 契约对照)
+    runs/gate_prefix_stdout.txt · runs/gate_postfix_stdout.txt
+    两者 sha256 相同 = c9b2382eaa28a45935e78f0ef7715c7103e23492ad6f239b5b8a497402719363
+    ⇒ 改前/改后逐字节无差: S reds=4 (同一集合) / T reds=22 / 全部变异臂 RC 契约不变;
+    两跑均 `TX_OVL_GATE: FAIL count=1` (契约现状)。mtime: RTL 01:19:07 < 改后门 01:22:57 (新鲜度已核)
+[6] 静态面复核 (static_check_persist.py, L1 基 = cfd3b1a..fd671b6)
+    正式跑: PASS (S1 22 信号/28 写点 零例外; FB 18/18; L1 109 行/越界 0/净新增 0; PD 4/4)
+    --selfcheck: 三负对照有牙 (SELFCHECK-1/2/3)
+    增量自查 (用脚本自己的 check_l1/check_s1 跑 工作树vsHEAD 增量):
+      code_plus=11 · 白名单越界 0 · 禁用符号净新增 0 (开/关配对都是 0) · S1 problems=0
+    ⇒ 判断: 白名单**无需**为 P-1 修扩 (决定权在 TL; L1 基目前钉在 cfd3b1a..fd671b6, 本增量不在其面内)

@@ -1,0 +1,148 @@
+diff --git a/tb/tb_tcp_tx_ovl.v b/tb/tb_tcp_tx_ovl.v
+index 17efaff..6707077 100644
+--- a/tb/tb_tcp_tx_ovl.v
++++ b/tb/tb_tcp_tx_ovl.v
+@@ -87,7 +87,13 @@ module tb_tcp_tx_ovl;
+     localparam integer PE_LAD_WAIT   = 90000;    // E1 阶梯窗上限 (3 档 = 80 visits = 20480 拍)
+     localparam integer PE_AFTER      = 2500;     // "恢复后 0 新探询" 观察窗
+     localparam integer PE_E2_DRAIN   = 8000;     // E2 排空窗
++`ifdef PE_HOLD_5200
++    // ⭐ D-2 (2026-10-11 审查轮, `-d PE_HOLD_5200`): 回 fd671b6 代的旧刺激档 —— 只此一行,
++    //   默认 (不定义该宏) 逐字 = 16000 (既有臂零影响)。用途: 复核"W 的破坏签名是刺激档函数"。
++    localparam integer PE_HOLD_SHORT = 5200;     // [D-2] = fd671b6 代取值
++`else
+     localparam integer PE_HOLD_SHORT = 16000;    // E2/E5/E6 的关窗观察窗
++`endif
+     //   [!!] 必须 >= 一次 fire 的 visit 时间: `ps_timer` 数的是**该连接自己的扫描访问**,
+     //   16 连接轮扫 + 扫描被 ACK/重放挤稀 => 1 visit ~ 840 拍 (实测) => 8 visits ~ 7000 拍。
+     //   首版 5200 拍 **小于**它 => 观察窗在 fire 之前就结束 => E5/E6 的"0 探询"是**空判据**,
+@@ -407,6 +413,16 @@ module tb_tcp_tx_ovl;
+     integer     pe_coll_wit;        // 相撞见证 (psc_coll 成立拍数)
+     integer     pe_coll_seq, pe_coll_conn;
+     integer     e_coll_bad, w_coll_frame;
++`ifdef PE_E4B
++    // ⭐ D-7 (PE_E4B, 2026-10-11 实施件审查轮): "cfg_up 打在读流水内 (fire+1)" 的可达性探针。
++    //   判什么: 设计意图 (§3.4b/j10) = cfg_up 必须清掉暂存 ⇒ cfg_up 落在捕获落地**之前**时,
++    //   捕获**不应**再落地。若采样窗内 `ps_stage_rdy=1` 仍出现 ⇒ §3.4b 未覆盖该窗 (P-1 可达)。
++    //   正控 = `-d PE_E4B_NOUP` (同构造、不打 cfg_up): 此时 rdy **必须**落地 ⇒ 证明采样链活着。
++    integer     w_e4b_fired;        // fire 见证 (非空判据)
++    integer     w_e4b_fire_cyc;
++    integer     pe_f_e4b_rdy;       // 采样窗内 ps_stage_rdy 为 1 的拍数
++    integer     w_e4b_rdy_at;       // 首拍时刻 (0 = 未观测到)
++`endif
+     // ---- 帧事件记录 (写者 = frame_check; 观察块按事件变化消费) ----
+     integer     pe_d_ev;  reg [3:0] pe_d_conn;  reg [31:0] pe_d_seq;
+     // (相撞判据的三根 wire 见下方 "DUT 例化之后" —— 它们要引用 win_open 等线网)
+@@ -444,6 +460,9 @@ module tb_tcp_tx_ovl;
+         e_ps_ladder = 0; e_ps_stop = 0; e_ps_field = 0; e_ps_side = 0;
+         e_ps_sndnxt = 0; e_ps_e2 = 0; e_ps_e3 = 0; e_ps_e4 = 0;
+         e_ps_e5 = 0; e_ps_e6 = 0; e_ps_coll = 0; e_ps_negctl = 0;
++`ifdef PE_E4B
++        w_e4b_fired = 0; w_e4b_fire_cyc = 0; pe_f_e4b_rdy = 0; w_e4b_rdy_at = 0;
++`endif
+         for (pe_x = 0; pe_x < 8; pe_x = pe_x + 1) pe_pt[pe_x] = 0;
+     end
+ `endif
+@@ -1649,7 +1668,50 @@ module tb_tcp_tx_ovl;
+             //  原 conn3 版在本 TB 上**结构性不可达**: conn3 的 RST 预留 +1 会被打到
+             //  conn3 的重放会话抹掉 —— `svc_rewind` 把 snd_nxt 写回 snd_una ⇒ 武装条件
+             //  的"有在飞"子句为假 ⇒ 该臂退化成空判据 (首轮实测 E6 inflight=0)。)
++`ifdef PE_E4B
++            7'd43: begin pe_ep <= 4'd7; pe_conn <= 4'd1; pe_ret <= 7'd44; pe_st <= 7'd70; end
++            // ===== ⭐ D-7 (PE_E4B): cfg_up 打在"读流水内" (fire+1) 的可达性实验 =====
++            //   构造 = E4 同款 (关 conn1 窗 + 按住 conn0 启动门 + 源持续呈交 conn0)
++            //   ⇒ 源持续呈交 ⇒ ds_guard=0 ⇒ 探询在窗内被压住 (相位可控, 与 E4 同理)。
++            //   唯一差别 = **看 fire 的同一拍就打 cfg_up** (⇒ cfg_up 生效于 T+1,
++            //   落在读流水 T+1..T+2 内; 捕获在 T+3 落地) —— E4 是"等 rdy 再打" (⇒ 生效 T+4)。
++            7'd44: begin  // 关 conn1 窗 + 按住 conn0 门 + 只允许 conn0 供数
++                      pe_conn <= 4'd1;
++                      psc_ack_hold[1] <= 1'b1; pe_no_retx <= 1'b1; pe_holdb <= 1'b1;
++                      src_skip <= 16'hFFFE;
++                      scfg_upd_wr <= 1'b1; scfg_upd_id <= 4'd1;
++                      scfg_upd_sel <= 3'd4; scfg_upd_val <= 32'd0;
++                      pe_st <= 7'd45;
++                  end
++            7'd45: if (tcb_wr && (tcb_sel == 3'd4) && (tcb_id == 4'd1)) begin
++                      scfg_upd_wr <= 1'b0; psc_win_closed[1] <= 1'b1;
++                      pe_clr_pc <= 1'b1; pe_exp_conn <= 4'd1;
++                      pe_exp_seq[1] <= u_tcb.snd_una_r[1]; pe_t <= 0;
++                      pe_st <= 7'd46;
++                  end
++            7'd46: begin  // 等 conn1 的 fire; **看到 fire 的同一拍打 cfg_up**
++                      pe_t <= pe_t + 1;
++                      if (u_dut.ps_fire && (u_dut.scan_id == 4'd1)) begin
++                          w_e4b_fired <= 1; w_e4b_fire_cyc <= cyc;
++`ifndef PE_E4B_NOUP
++                          cfg_up <= 1'b1; cfg_up_id <= 4'd1;   // 1 拍脉冲 (块首默认落 0)
++`endif
++                          pe_t <= 0; pe_st <= 7'd47;
++                      end else if (pe_t > PE_E4_WAIT) begin
++                          pe_t <= 0; pe_st <= 7'd47;
++                      end
++                  end
++            7'd47: begin  // 采样窗 (fire+1 起 8 拍; 捕获在 fire+3 落地)
++                      pe_t <= pe_t + 1;
++                      if ((pe_t <= 8) && u_dut.ps_stage_rdy) begin
++                          pe_f_e4b_rdy <= pe_f_e4b_rdy + 1;
++                          if (w_e4b_rdy_at == 0) w_e4b_rdy_at <= cyc;
++                      end
++                      if (pe_t > 8) begin pe_t <= 0; pe_ret <= 7'd48; pe_st <= 7'd70; end
++                  end
++`else
+             7'd43: begin pe_ep <= 4'd7; pe_conn <= 4'd1; pe_ret <= 7'd48; pe_st <= 7'd70; end
++`endif
+             // ============ E7 多连接相撞 (j13/j14; 本刀最重的那条缺陷) ==========
+             //   构造: A = conn1 (关窗 ⇒ 探询待发) + B = conn0 (供数, 但被
+             //   `ack_seen_tb[0]=0` ⇒ `tx_blk_sid[0]=1` 按住启动门 ⇒ 源**持续呈交**一个
+@@ -1683,7 +1745,17 @@ module tb_tcp_tx_ovl;
+                   end
+             7'd51: begin  // E7: 等 fire+2 (读流水第 2 拍) ⇒ 释放 hold
+                       pe_t <= pe_t + 1;
++`ifdef PE_E7B
++                      // ⭐ D-3 (PE_E7B, 2026-10-11): 释放**提前一拍** (fire+1 拍 ps_rd_d1 即发命令)。
++                      //   动机 (D-1b 逐拍读数): 原触发 (ps_rd_d2=fire+2 发命令) 经
++                      //   pe_holdb→ack_seen_tb→tx_blk_sid 两级寄存 ⇒ 门在 fire+4 才放开,
++                      //   而捕获在 fire+3 就落地 ⇒ **fire+3 那一拍 rdy=1 ∧ blk=1** ⇒ 删
++                      //   ds_guard 时探询在该拍抢先消费暂存 (t=0 早跑) ⇒ 撞车永不发生。
++                      //   提前一拍 ⇒ 门在 fire+3 放开 ⇒ 与捕获**同拍** ⇒ 真撞车可判。
++                      if (u_dut.ps_rd_d1) begin pe_holdb <= 1'b0; pe_t <= 0; pe_st <= 7'd52; end
++`else
+                       if (u_dut.ps_rd_d2) begin pe_holdb <= 1'b0; pe_t <= 0; pe_st <= 7'd52; end
++`endif
+                       else if (pe_t > 16) begin pe_holdb <= 1'b0; pe_t <= 0; pe_st <= 7'd52; end
+                   end
+             7'd52: begin  // E7: 相撞观察窗 (判决在观察块 + frame_check)
+@@ -2623,6 +2695,10 @@ module tb_tcp_tx_ovl;
+             $display("PS6 BAD ladder=%0d stop=%0d field=%0d side=%0d sndnxt=%0d e2=%0d e3=%0d e4=%0d e5=%0d e6=%0d coll=%0d",
+                      e_ps_ladder, e_ps_stop, e_ps_field, e_ps_side, e_ps_sndnxt,
+                      e_ps_e2, e_ps_e3, e_ps_e4, e_ps_e5, e_ps_e6, e_ps_coll);
++`ifdef PE_E4B
++            $display("PS7 E4B fire=%0d @%0d rdy_survive=%0d @%0d",
++                     w_e4b_fired, w_e4b_fire_cyc, pe_f_e4b_rdy, w_e4b_rdy_at);
++`endif
+             // ---- j5 (健康态零额外帧): episode 外探询必须为 0 ----
+             if (pe_probe_out != 0) begin tot_red = tot_red + 1;
+                 $display("[FAIL] PS j5: episode 外出现探询 =%0d", pe_probe_out); end
+@@ -2727,6 +2803,22 @@ module tb_tcp_tx_ovl;
+                 $display("[FAIL] PS j10 空判据: 未见暂存落地 (rdy 见证=0)"); end
+             if (w_ps_posctrl < 1) begin tot_red = tot_red + 1; e_ps_e4 = e_ps_e4 + 1;
+                 $display("[FAIL] PS j10 空判据: 正控未出探询 (posctrl=0)"); end
++`ifdef PE_E4B
++            // ---- ⭐ D-7 (PE_E4B): cfg_up 打在读流水内 —— **设计意图 = 捕获必须被清** ----
++            //   判什么: cfg_up 生效于 fire+1 (捕获在 fire+3 落地) 时, `ps_stage_rdy`
++            //   若仍为 1 ⇒ §3.4b「cfg_up(同 id) ⇒ rdy<=0」在该窗上不成立 (P-1 可达)。
++            //   正控: `-d PE_E4B_NOUP` (同构造、不打 cfg_up) ⇒ 此处改判"rdy 必须落地"。
++            if (w_e4b_fired < 1) begin tot_red = tot_red + 1; e_ps_e4 = e_ps_e4 + 1;
++                $display("[FAIL] PS j10b 空判据: PE_E4B 未见到 ps_fire (fire 见证=0)"); end
++`ifdef PE_E4B_NOUP
++            if (pe_f_e4b_rdy < 1) begin tot_red = tot_red + 1; e_ps_e4 = e_ps_e4 + 1;
++                $display("[FAIL] PS j10b 正控(无 cfg_up): 捕获未落地 ⇒ 采样链死"); end
++`else
++            if (pe_f_e4b_rdy > 0) begin tot_red = tot_red + 1; e_ps_e4 = e_ps_e4 + 1;
++                $display("[FAIL] PS j10b: cfg_up 落在读流水内但捕获仍落地 (rdy 存活 %0d 拍, 首拍 @%0d)",
++                         pe_f_e4b_rdy, w_e4b_rdy_at); end
++`endif
++`endif
+             // ---- j12 (FIN/RST 在飞 ⇒ 0 探询; v3 含 RST 角) ----
+             if (pe_f_e5_probe != 0) begin tot_red = tot_red + 1; e_ps_e5 = e_ps_e5 + 1;
+                 $display("[FAIL] PS j12: FIN 在飞时出现探询 =%0d", pe_f_e5_probe); end

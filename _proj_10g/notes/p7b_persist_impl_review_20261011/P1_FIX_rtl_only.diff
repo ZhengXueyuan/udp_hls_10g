@@ -1,0 +1,81 @@
+diff --git a/rtl/tcp_tx_frame.v b/rtl/tcp_tx_frame.v
+index 1627e6f..4af1121 100644
+--- a/rtl/tcp_tx_frame.v
++++ b/rtl/tcp_tx_frame.v
+@@ -1074,6 +1074,30 @@ module tcp_tx_frame (
+             end
+         end else begin
+             // ---- 与默认分支逐字相同的前置块 ----
++            // ============ ⭐ P7B-PERSIST §2.3 / §2.5-②: 读请求流水 + T+2 捕获 =========
++            //   逐拍分工 (v3 #3 **钉死**, 取代 v2 的两种读法):
++            //     T   (扫描拍, `ps_fire`) : 发 ring 读请求 + 在扫描块里锁 conn/estab/seq
++            //     T+1 (读地址拍)           : **本拍不锁任何暂存控制位**
++            //     T+2 (**只**捕获数据)      : `ps_stage_byte <= r_data[63:56]`; `rdy <= 1`
++            //   ⛔ **不许在 T+2 重采 estab/seq/conn** —— T+2 不是扫描拍, 该拍的 `rb_id`
++            //      未必 = `scan_id`; "采样拍 = 扫描拍" 是 §2.4-2 环断论证的**前提**。
++            //   ⚠️ 本块放在两个 `case` **之外** (T+2 拍不保证落在 RX_IDLE —— 与 R-1 的
++            //      `start_ack_d1` 块同理), 且**在 `cfg_up` 块之前** ⇒ 同拍写冲突时
++            //      **清位路径赢** (§3.4b 清位全集表: cfg_up / 解除武装 / 槽消费三条清位
++            //      都比"同拍新捕获"更具体; 让掉一次捕获只损失一次机会 = 下一档重发)。
++            //   ⭐ 2026-10-11 (P-1 修复): 本块原在 `cfg_up` 块**之后** ⇒ 同拍冲突实际
++            //      **捕获赢** (与上面注释及 §5.2-j10 意图相反), 且 `cfg_up` 不清在飞读
++            //      流水 ⇒ `cfg_up` 落在 fire+1/+2 拍时 T+2 照常把 `rdy` 置 1 (实测臂
++            //      D7A: fire 后 rdy 存活 7 拍)。修法 = ① 本块前移到 `cfg_up` 块**之前**;
++            //      ② `cfg_up` 同 id 支同时清 `ps_rd_d1/ps_rd_d2` (见该块内注释) ⇒
++            //      "清位赢"在**同拍**与**在飞**两个意义上都成立。
++            ps_rd_d1 <= ps_rd;
++            ps_rd_d2 <= ps_rd_d1;
++            if (ps_rd_d2) begin
++                ps_stage_byte <= ring_d[63:56];
++                ps_stage_rdy  <= 1'b1;
++            end
++
+             if (cfg_up) begin
+                 fin_sent_r[cfg_up_id]    <= 1'b0;
+                 whi_r[cfg_up_id]         <= 32'd0;   // ⭐ RETXHI-GHOST: 新会话重基 ⇒ 高水位清零
+@@ -1088,7 +1112,19 @@ module tcp_tx_frame (
+                 //   (清位全集表: `ps_stage_rdy <= 0 iff ps_stage_conn == k`)。
+                 ps_timer[cfg_up_id]     <= 26'd0;
+                 ps_phase[cfg_up_id]     <= 3'd0;
+-                if (ps_stage_conn == cfg_up_id) ps_stage_rdy <= 1'b0;
++                // ⭐ 2026-10-11 (P-1 修复; 原为单行 if, 只清 rdy):
++                //   同 id ⇒ 除 rdy 外**把在飞读流水一并清零** —— 只清 rdy 时,
++                //   cfg_up 落在 fire+1/+2 拍 (清位早于 T+2 捕获落地) 会让 §5.2-j10
++                //   「待发期间 cfg_up ⇒ 0」失效 (实测臂 D7A: rdy 存活 7 拍)。
++                //   生效前提 = 本块位于 T+2 捕获块**之后** (捕获块已前移到本块之前) ⇒
++                //   同拍以"后写赢"落到清位。⚠️ 残留边界 (登记, 未闭): cfg_up **恰与
++                //   fire 拍同拍**时本判据读到的 ps_stage_conn 还是**旧值** (fire 锁存
++                //   在本块之后) ⇒ 该角落覆盖不到 (≤1 条陈旧探询; 与 §3.4b 陈旧窗同族)。
++                if (ps_stage_conn == cfg_up_id) begin
++                    ps_stage_rdy <= 1'b0;
++                    ps_rd_d1 <= 1'b0;
++                    ps_rd_d2 <= 1'b0;
++                end
+             end
+             if (m_axis_tready && m_axis_tvalid) m_axis_tvalid <= 1'b0;
+             if (ack_req && ackq_full) stat_ack_drop <= stat_ack_drop + 1;
+@@ -1130,24 +1166,6 @@ module tcp_tx_frame (
+                 ctrl_tcpcsum <= ctrl_tcpcsum_now;
+             end
+ 
+-            // ============ ⭐ P7B-PERSIST §2.3 / §2.5-②: 读请求流水 + T+2 捕获 =========
+-            //   逐拍分工 (v3 #3 **钉死**, 取代 v2 的两种读法):
+-            //     T   (扫描拍, `ps_fire`) : 发 ring 读请求 + 在扫描块里锁 conn/estab/seq
+-            //     T+1 (读地址拍)           : **本拍不锁任何暂存控制位**
+-            //     T+2 (**只**捕获数据)      : `ps_stage_byte <= r_data[63:56]`; `rdy <= 1`
+-            //   ⛔ **不许在 T+2 重采 estab/seq/conn** —— T+2 不是扫描拍, 该拍的 `rb_id`
+-            //      未必 = `scan_id`; "采样拍 = 扫描拍" 是 §2.4-2 环断论证的**前提**。
+-            //   ⚠️ 本块放在两个 `case` **之外** (T+2 拍不保证落在 RX_IDLE —— 与 R-1 的
+-            //      `start_ack_d1` 块同理), 且在 `cfg_up` 块**之后** ⇒ 同拍写冲突时
+-            //      **清位路径赢** (§3.4b 清位全集表: cfg_up / 解除武装 / 槽消费三条清位
+-            //      都比"同拍新捕获"更具体; 让掉一次捕获只损失一次机会 = 下一档重发)。
+-            ps_rd_d1 <= ps_rd;
+-            ps_rd_d2 <= ps_rd_d1;
+-            if (ps_rd_d2) begin
+-                ps_stage_byte <= ring_d[63:56];
+-                ps_stage_rdy  <= 1'b1;
+-            end
+-
+             // ==================== RX 引擎 ====================
+             case (rx_state)
+             RX_IDLE: begin
