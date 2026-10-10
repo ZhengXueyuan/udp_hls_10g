@@ -2141,13 +2141,18 @@ module wrapper_p4 (
         end
     end
 
-    // ⭐ P7B-PERSIST (2026-10-10): `.PERSIST_EN(1'b1)` = 本刀唯一打开的功能开关
-    //   (设计件 `_proj_10g/notes/P7B_PERSIST_DESIGN.md` v3 §2.5-⑩ / §7.1)。
-    //   · **不包 `ifdef`** (先例 `.TX_CONTINUOUS(1'b1)`, 见 :1196 一带) —— 默认构建下
-    //     它是"未使用参数"(逻辑体全在 `ifdef TCP_TX_OVL` 内) ⇒ 命名覆盖合法
-    //     (【推断·未跑工具】: 只报 warning 与否未验证; 设计件 §7.1 同款口径)。
-    //   · 回退点 = 这一处改回 `1'b0` (或删这一项) —— 参数默认值本身就是 `1'b0`。
-    tcp_tx_frame #(.RING_CAP(WIN_CAP_5), .PERSIST_EN(1'b1)) u_tcp_tx (
+    // ⭐ 本轮构建配置 (2026-10-10 · BID **0x1C**): `.PERSIST_EN(1'b0)` = persist **关** (下一版才开)。
+    //   · persist 刀的 RTL 在本版**可证惰性** (设计件 `_proj_10g/notes/P7B_PERSIST_DESIGN.md`
+    //     v3 §2.5-⑩ / §7.1), 两条腿:
+    //     ① 静态检查**零例外** —— `p7b_persist_impl/ev/static_check_formal.txt` (S1: 22 信号 /
+    //        26 写点, 每点 = 字面零或 PERSIST_EN/ps_arm/ps_fire/ps_rd_d2 守卫下;
+    //        同目录 `static_check_selfcheck.txt` 三个负对照都有牙);
+    //     ② arm B (OVL 支) 读数**逐字相同** —— `ev/xs_runB_after.log` 对 `base/xs_runB_baseline.log`:
+    //        17 条判据行逐字同 + `$finish` 时间逐位同 (`2279132800 ps`); 文件级只差时间戳/PID/
+    //        内存/TB 行号等元信息。
+    //   · ⇒ **本版归因 = 缺陷刀 + 构建 F 基线**; **persist 留给下一版 (`0x1D`)**。
+    //   · 回退点 = 这一处改回 `1'b1` (参数默认值 = `1'b0`, 见 `rtl/tcp_tx_frame.v:299`)。
+    tcp_tx_frame #(.RING_CAP(WIN_CAP_5), .PERSIST_EN(1'b0)) u_tcp_tx (
         .clk            (dp_clk),
         .rst_n          (dp_rst_n),
         .s_axis_tdata   (txin_tdata),
@@ -4055,13 +4060,23 @@ module wrapper_p4 (
 
     axi_regs #(
         .MAGIC_V    (32'h50360001),
-        .BUILD_ID_V (32'h0000001B),     // ⚠️ 每次改动自增 (前置闸读这一项认位流; 构建 F = 0x1A)
-                                        //   ⭐ P7B-PERSIST (2026-10-10): **0x1A → 0x1B**。
-                                        //      内容 = 上面对 u_tcp_tx 加 `.PERSIST_EN(1'b1)`
-                                        //      (RTL 侧在 `ifdef TCP_TX_OVL` 内新增 persist 通路)。
+        .BUILD_ID_V (32'h0000001C),     // ⚠️ 每次改动自增 (前置闸读这一项认位流; 构建 F = 0x1A)
+                                        //   ⭐ 本轮构建 (2026-10-10 深夜): **0x1A → 0x1C** (改判)。
+                                        //      改判理由: `0x1B` 是 persist 实施阶段 1 (`fd671b6`)
+                                        //      分配**给 persist 刀**的 (其内容 = 把上面 u_tcp_tx
+                                        //      的 `.PERSIST_EN` 打开成 `1'b1`) ⇒ 本版 (persist **关**
+                                        //      + 缺陷修复) **不能沿用 `0x1B`** —— 否则会改变该 BID
+                                        //      的既定含义。**⇒ 缺陷刀 = `0x1C`; persist 刀留给
+                                        //      `0x1D`; `0x1B` 记为"已分配、从未构建"。**
+                                        //      0x1C 内容 = **重放越界缺陷修复** (RETXHI-GHOST; 设计件
+                                        //      `_proj_10g/notes/P7B_RETXHI_GHOST_DESIGN.md`):
+                                        //      `whi_r`/`ring_hi` 高水位 + `ring_ovf` 钳位 + `ring_restore`
+                                        //      收尾恢复写 (4 写源 mux); **两分支镜像**
+                                        //      (`rtl/tcp_tx_frame.v`: OVL 支 `whi_r` `:491` /
+                                        //       `ring_restore` `:795`; else 支 `:1594` / `:1690`)。
                                         //      ⚠️ 窗口字长/未实现地址**不变** (仍 70 字 / `0x138`)
-                                        //      ⇒ 读侧只需同步 `EXPECT_BID` (0x1A → 0x1B);
-                                        //      本次改动**未**触碰任何读侧文件 (阶段 1 边界)。
+                                        //      ⇒ 读侧 `EXPECT_BID` 需从 0x1A 同步到 **0x1C**
+                                        //      (本刀**未**触碰任何读侧文件 —— 读侧同步待下一步)。
                                         //   26 = **P7B 构建 F** (2026-10-10): 快照 67 → **70 字**
                                         //        (三个**纯观测**仪器: W67 = `tcp_tx_frame.stat_winstall_cap`
                                         //         (板帽侧等窗拍数; 只需一个 16 位比较 —— `win_wnd_eff` 本来

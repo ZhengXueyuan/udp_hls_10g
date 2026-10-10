@@ -339,7 +339,9 @@
 ### §10-5-2 ⭐ 缺陷刀构建（0x1C）读数 —— **TL 独立现读**（构建 agent 报告未回，回来后逐条对账）
 - 位流 `vivado_prj/p7b_ku5p_prj.runs/impl_1/wrapper_p4.bit` = **sha256 `09c280e4…b308ecbf` / 15,431,261 B**（Vivado 00:49:37 退出）。
 - **三类失败端点 `0/0/0`**；WNS `+0.262`（`txoutclk_out[0]_3` = MAC TX 域）/ WHS `+0.010` / WPWS `0.000`。
-- **DP 域（`g_hw.clk_out0` = 156.25 MHz MMCM 输出）= `+0.300`（F 归档同表 = `+0.281`）**；⭐ **DP 最差路径（该域 WNS 那条）确实穿过本刀新锥**：`u_tcp_tx/ring_restore1` 在路径上，宿 = `u_tcb/snd_nxt_r_reg[5][28]/D`（14 级 / logic 1.482 / route 4.461 = 布线主导）；全报告仅此 1 处提及新族名。
+- **DP 域（`g_hw.clk_out0` = 156.25 MHz MMCM 输出）= `+0.300`（F 归档同表 = `+0.281`）**；⚠️ **订正（2026-10-11 01:55，构建 agent 定向网查询判掉我的一条错记）**：我先前据路径里出现 `u_tcp_tx/ring_restore1` 网判"DP 最差路径穿过本刀新锥"——**不成立**：定向网络查询显示 `ring_restore1/2/11_out[31]` 三条网的**驱动全是 `u_tcp_tx/fc_rr_reg[3]_i_{10,9,8}` 的 CARRY8 进位输出**、负载全是同一 LUT5 `fc_rr[3]_i_7` ⇒ 它们是**进位链上的网**（opt/synth 网名归并产物，机理未定位），**不是 RTL 的 `ring_restore` 控制线**（`:795`/`:1690`）⇒ **不许据此写"本刀新族进了 DP 最差路径"**。
+- ⭐ **新族自身读数（定向查询）**：`whi_r`（512 cell）from = **2.608** / to = **0.754**（宿 = 自己的 CE，lvl=2）；`ring_hi`（39 cell）from = **2.101**（宿 = `u_tcb/snd_nxt_r_reg[5][28]/D`，与 DP 第 1 条同宿）/ to = **1.535**；`whi_r_reg*`/`ring_hi_reg*` 在 **DP 前 10 与前 50 里 0 命中**。
+- **DP 前 10**：8/10 出自 `ack_pend_r_reg` 一族（老信号，`git log -S` 追到 P5d/RETXFIX 轮，**非本刀新增**）；第 7 条 = 历史老族 `u_app_udp/u_txf → u_udp_tx/ip_csum_r`（21 级）。⚠️ **DP WNS 宿主换人**（F = `u_clkgen/rel_sr_reg[3] → u_retx/…RSTRAMB`；本版 = `ack_pend_r_reg → u_tcb/snd_nxt_r_reg[5][28]`）⇒ 按 #66"WNS 是不同对象"**登记为不可比**（无拆刀 A/B）。
 - 其它域 vs F（归档 `20261011_002044/p7b_ku5p_timing.rpt`）：`pcie_axi_aclk` `+0.297→+0.339`；`rxoutclk_out[0]_3` `+0.362→+0.701`；`txoutclk_out[0]_3` `+0.364→+0.262`；⭐ **F 的全局 WNS = `+0.111`（`pcie_axi_aclk` async_default Recovery）→ 本轮该组 = `+1.117`**（+1.0 ns 改善，**机理未查** ⇒ 记入待核）。
 - 布线 `0` 错（132,930/132,930 fully routed）；DRC 69 条全 Warning（DPIP-2×4/DPOP-3×2/DPOP-4×4/DPOR-2×18/REQP-1858×41）。
 - **矩阵 `17/17` 全过 / 0 fail / `VERDICT: FROZEN`**（257 文件逐字节不变；GIT_HEAD=`50828c9`）。归档 `20261011_002044/` 已含 **F 的全套（含 `wrapper_p4_routed.dcp` 60 MB）** ⇒ **§0-26 那笔欠账（F 档无 dcp）已随构建脚本自身归档步收走**（待构建 agent 对账确认）。
@@ -359,3 +361,24 @@
 3. 板级轮结束后：放行 persist 审查的 xsim 臂 → 按结论补 W 臂/P-1 → persist 构建 `0x1D`。
 4. 缺陷批（snd_wnd 守卫 + F-3 + …）另开（⛔ 不与 persist 捆绑）。
 5. 新里程碑：PCIe 审查回来 → 按订正实施 M1（阶段一 = user BAR 窗口）→ 构建 → 板级。
+
+---
+
+## §10-6 2026-10-11 02:00：构建 agent 报告 + 两份审查落盘 + persist 动态面首轮（**最新续接点**）
+
+### §10-6-1 构建 agent 报告（已回，TL 对账后 §10-5-2 已就地订正"新锥"一条）
+- **步骤 1 归档**：F 的 `wrapper_p4_routed.dcp` **找到并抢救**（活路径 60,011,449 B / sha `737a1418…`；归属双证 = impl_1 的 `wrapper_p4.bit` sha 与 `F/SHA256SUMS.txt` 逐字同 + 全盘 dcp 尺寸唯一）⇒ 已复制进 `F/`（17 件）⇒ **§0-26 / 队列 §3-12 那笔欠账收口**；本版预归档步 `ARCHIVE_DONE 20261011_002044 files=19`、与 `F/` 重叠 15 条逐字相同。
+- **步骤 2**：四行改动逐条对上（`:2155` 使能 / `:4063` BID / 两处注释重写）；CRLF 纯（4405 行 / 裸 LF=0）；sha256 `dd9fb07d…`。
+- **步骤 3 矩阵**：17/17 EXIT=0 / 0 fail / FROZEN / `DIGEST_ALL(content)=34bf1e5a…`；⚠️ 显示瑕疵 4 行"环境变量 TRUNC/50 …没有定义"（非红，源 `run_matrix_p4dfix.bat:186-187/268-269`）。
+- **步骤 4 构建**：一次收口无停滞；硬门 0 命中；`P7B_CONVERGED_AT_ROUND=2`；位流 `09c280e4…b308ecbf`；三类失败端点 0/0/0；**全局 `0.262` 的身份 = `txoutclk_out[0]_3` setup（`u_mac_tx/cw_len_reg[1]/C → u_pcs/…/is_valid_ctrl_reg[0]/D`，16 级）** ⇒ 与 F 的全局 `+0.111`（`async_default` Recovery）**不同对象/不同检查类型 ⇒ 不可比**（#66）；DP `+0.300`（F `+0.281`）；资源 +655 FF / +1,338 LUT（vs 纸面 +544/+100–250 ⇒ **不归因**，同树含 persist RTL 无拆刀臂）；路由 0 错；DRC 仅 Warning。
+- **它报的 5 条待拍板** ⇒ TL 裁定：① 读侧同步 = **已派**（预建干跑中）；② 本版取证落盘 = **准，已派**（建 `_proj_10g/notes/p7b_build_0x1C/`：bit + routed dcp + 查询脚本/输出 + REPORT.md）；③ 新族读数与 `ring_restore1` 网名机理 = **登记**（见 §10-5-2 订正 + 未定位项）；④ 宿主/检查类型换人 = **登记为不可比**；⑤ persist `0x1D` 顺序 = **等板级轮后**。
+
+### §10-6-2 两份审查已落盘（bash 路线成功；Write 被平台拒是**间歇**的）
+- `notes/p7b_persist_impl_review_20261011/FINDINGS.md`（36,660 B / sha `4f217a37…`）+ `FINDINGS_DYNAMIC.md`（18,683 B / sha `5f310b3d…`）
+- `notes/p7b_pcie_datapath_review_20261011/FINDINGS.md`（222 行 / sha `08c6ae7d…`）
+
+### §10-6-3 persist 动态面首轮（A4 已完成 D-1/D-9/D-10；xsim 臂待放行 → **本刻放行**）
+- ⭐ **P-2 从推断推到现读**：E7 观察窗 15 拍逐拍 —— S 臂 `t=1 blk=0 coll=1`（守卫恰压住"数据帧即将启动"唯一一拍）；**W 臂（删 `ds_guard`）`t=0 rdy=1 blk=1 → t=1 rdy=0 busy=1`** ⇒ 探询在"门将开未开"拍抢先消费暂存 ⇒ **撞车在现行构造下结构性不可达**；且 `psc_coll` 要求 `!tx_blk_sid` 看不到 t=0 ⇒ **见证=0 是定义面不覆盖、不是仪器坏**。
+- D-9：L1 diff 基钉 `cfd3b1a..fd671b6` ⇒ **空判据已消除**（109 行 / 0 越界 / 0 净新增；selfcheck 三负对照有牙）。
+- D-10：新建 `s2_equiv_persist.py` + `run_s2_equiv_persist.bat` ⇒ `S2_EQUIV_PERSIST: PASS`（正文 sha256 两边同 `f542dfbb…`；三负对照全红）。
+- 预案（未执行，已写进 DYNAMIC）：D-2（`PE_HOLD_SHORT 16000→5200` 一行）· **D-3（按新机制重写：让释放拍前 `ds_guard≡1` ⇒ 目标 `e_coll_bad ≥1` 首次发火）** · D-7（`-d PE_E4B` 新 episode：cfg_up 落 T+1 ⇒ 判 P-1 可达性）。

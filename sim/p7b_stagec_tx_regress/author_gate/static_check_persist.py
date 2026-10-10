@@ -102,8 +102,21 @@ def rd(path):
     return io.open(path, encoding="utf-8", newline="").read().replace("\r\n", "\n")
 
 
+# ⭐ 2026-10-11 (实施件审查轮 D-9 / 问题 P-5): L1 的 diff 基**不再用 HEAD** ——
+#   钉死到 persist 刀的锚提交对: cfd3b1a (改前件, 与 `frozen/tcp_tx_frame_revcfd3b1a.v`
+#   同源) .. fd671b6 (persist 实施)。理由: 原实现 `git diff -U0 -- <file>` = 工作树 vs
+#   HEAD ⇒ 改动一经提交, 该 diff 恒为空 ⇒ L1(a)/(b) 退化成**空判据**
+#   (落盘的 `ev/static_check_formal.txt` 就是该形态: "代码 `+` 行 0 条")。
+#   ⚠️ 这里改用**双端钉死**的提交对 ⇒ 与工作树/后续刀漂移解耦、可永久复跑
+#   (纪律: 判据的锚必须钉在不可漂的坐标)。
+L1_BASE   = "cfd3b1a"     # persist 刀的"改前"锚 (＝冻锚来源提交)
+L1_TARGET = "fd671b6"     # persist 刀的实施提交
+
+
 def git_diff_u0():
-    out = subprocess.run(["git", "diff", "-U0", "--", "rtl/tcp_tx_frame.v"],
+    """L1 主体 = **钉死提交对** (L1_BASE..L1_TARGET) 对 rtl/tcp_tx_frame.v 的 -U0 diff。"""
+    out = subprocess.run(["git", "diff", "-U0", L1_BASE, L1_TARGET,
+                          "--", "rtl/tcp_tx_frame.v"],
                          cwd=ROOT, capture_output=True)
     if out.returncode != 0:
         raise SystemExit("git diff failed: " + out.stderr.decode("utf-8", "replace"))
@@ -345,7 +358,7 @@ def main():
         # 负对照 1: 注入一个**独立 hunk** 的越界符号 (只触及被禁符号, 不触白名单)
         diff_use = diff + "@@ -999990,0 +999990,1 @@\n+    assign zz = svc_rewind;\n"
     wl_bad, ban_bad, n_plus_code = check_l1(diff_use, pairing=pairing)
-    print("\n[L1] git diff -U0 三项:")
+    print("\n[L1] git diff -U0 三项 (diff 基 = 钉死提交对 %s..%s):" % (L1_BASE, L1_TARGET))
     print("     (a) 白名单: 代码 `+` 行 %d 条 (注释/空行不计), 越界 %d 条" % (
         n_plus_code, len(wl_bad)))
     for l in wl_bad[:8]:
