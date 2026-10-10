@@ -17,7 +17,7 @@
 | 4 `TX_BYTES=0` = 静默停滞 | ✅ **成立**（我独立复核了链条） | `:619-620` 第二支 `TX_BYTES[11:0]=0` ⇒ `seg_len=0`；`:403` `op_beat` 含 `(seg_len != 12'd0)` ⇒ 恒 0 ⇒ `:748-751` 不可达 ⇒ `op_pend` 恒 1 ⇒ `asm_go`（`:449-451`/`:455-456`）被 `!op_pend` 挡住 ⇒ `:670-683` 与 `:732-742` 全不可达 ⇒ `active` 恒 1、线上零帧、`done` 不置、`close_req` 不发，直到 `ev_down`（`:634-636`）或复位 |
 | 5 回归面（4 处判据 + 6 处 `TX_BYTES=0` 实例） | ✅ **全部成立** | `tb/tb_app_rx8_equiv.v:506-508`（`t_txb==30000` / `t_txf==21` / `t_done==1`）· `tb/tb_app_a2_equiv.v:384`（`chk(w_txb[ii]==BYTTAB[...])`）与 `:401`（`w_txb[12]==32'd7460`）· `tb/tb_integ_app_tx.v:15`（J5 守恒）· `tools/gen_stim_p5_app.py:361-365`（`pat_tx_bytes != tx_bytes_cfg` / `pat_done==0` 两条 errs）；6 个纯 RX 实例 = `tb_app_rx8_equiv.v:144/154/164/174/184/256`（均 `.TX_BYTES(32'd0)`） |
 | 6 常驻矩阵对这三门命中 0 | ✅ **成立**（实测 `grep -c` = **0**） | `sim/p4gates/run_matrix_p4dfix.bat` 里 `app_rx8`/`app_a2`/`integ_app_tx` 命中 0；⚠️ **且我核出矩阵根本不编译 `rtl/app_pattern.v` 与 `board/wrapper_p4.v`** —— 见背景订正 ⑥ |
-| 7 `sim/` 下 21 个 `app_pattern #(` 镜像件（禁全局替换） | ⛔ **数字错**：实测 **71 个文件**含 `app_pattern #(`（其中 19 个 `tb_*.v`、19 个 `rtl/app_pattern.v` 镜像、其余为 `wrapper_p4.v`/`tb_p5_app.v` 等） | `grep -rl "app_pattern #(" sim/ \| wc -l` = 71；含 `sim/p5bfix/`、`sim/p5c_t4neg/neg_*/rtl/`、`sim/p5d_d1neg/*/rtl/`、`sim/p5e_win/`、`sim/p7b_stage*/…`；**"刻意外来夹具"在 `sim/p4gates/evidence/negctl/foreign/tb/` 确实存在** ⇒ **禁止任何全局 grep 替换**这条纪律不变（且现在有 71 处而不是 21 处，风险面更大） |
+| 7 `sim/` 下 21 个 `app_pattern #(` 镜像件（禁全局替换） | ⛔ **数字错**：实测 **71 个文件**含 `app_pattern #(`（其中 19 个 `tb_*.v`、19 个 `rtl/app_pattern.v` 镜像、其余为 `wrapper_p4.v`/`tb_p5_app.v` 等） | `grep -rl "app_pattern #(" sim/ \| wc -l` = 71；含 `sim/p5bfix/`、`sim/p5c_t4neg/neg_*/rtl/`、`sim/p5d_d1neg/*/rtl/`、`sim/p5e_win/`、`sim/p7b_stage*/…`；**"刻意外来夹具"在 `sim/p4gates/evidence/negctl/foreign/tb/` 确实存在** ⇒ **禁止任何全局 grep 替换**这条纪律不变（且现在有 71 处而不是 21 处，风险面更大） ⛔ **2026-10-10 订正（构建 F 轮）：旧值 71 未能复现** —— 现核 = **全仓 161 个文件**（`sim/` **79** + `_proj_10g/` 39 + `vivado_prj/` 32 + `tb/` 7 + `rtl/` 1 + `board/` 1 + 顶层 `.md` 2；`.md` 共 9，其中 7 个已在 `_proj_10g/` 的 39 内；**本次自行 `grep -rl` 重跑逐项复现**）；**旧值口径 = `sim/` 内，同口径现测 = 79**。原句保留。 |
 | 8 wrapper 的 app 例化只传 2 个参数 | ✅ **成立** | `board/wrapper_p4.v:1177-1208`：`.TX_BYTES(32'h0FFFFFFF), .TX_SEGSZ(12'd1460)`；`:1198` `.i_bad_frame(16'd0)`；`:1203-1206` `.active()/.act_id()/.done()/.dbg_lfsr()` 悬空 |
 | 9 观测面 | ✅ **成立** | `W51..W62` 归属见 `_proj_pcie/p7b_biz/p7b_snap.sh:102-106`（真值源 = `wrapper_p4.v` 装配段）；速率 `P = ΔW43/ΔW20`（W43=`mac_tx_10g.stat_tx_words`、W20=MAC 帧数）、时基 W5；**`active/act_id/done` 不在快照**（`:1203-1206` 悬空） |
 | 10 `--maxbytes` 默认 4 MiB = 每连接唯一终止条件 | ✅ **成立，并订正一处** | 循环 `while (got < a->maxbytes)`：`_proj_pcie/p7b_biz/p7b_tcp_sink.cpp:126`（双线程 I/O 线程）/ `:335`（单线程路径）；默认 `:210` `long maxbytes = 4L << 20;`；解析 `:224`；`got` 是 `long long` `:122`。⛔ **订正 ④（重要）**：`--seconds` **不终止正在跑的连接** —— `secs` 只在外层连接循环入口判一次（`:287` `if (p7b_io_now_s() - t_start > secs) break;`），一条已建立的连接只可能被 `maxbytes` / 对端 FIN(`:154` `if (n == 0) break;`) / STALL(`:129-137`，默认 3×5000 ms)/ 外部 `timeout` 终止 |
@@ -1042,7 +1042,7 @@ extra_head/p5_pattern/run.bat,author_gate/run_tx_ovl_gate.bat,author_gate/mk_mut
 `_proj_10g/notes/p7b_longflow_board/lf_dl.sh`（全文）· `tb/tb_app_a2_equiv.v:1-60 / 380-420` · `tb/tb_app_rx8_equiv.v:100-200 / 500-512` ·
 `_proj_10g/notes/P7B_LOOP_HANDOFF.md:1-120` · `_proj_10g/notes/P7B_LONGFLOW_DESIGN.md:560-641`。
 **哈希/计数实测**：`rtl/app_pattern.v` 与 `frozen/app_pattern_rev0e804099.v` 同 sha256；`head_rtl/app_pattern.v` 为另一版本；
-`grep -rl "app_pattern #(" sim/` = 71；矩阵对三门命中 0；`sim/p4gates/chain_src.f` 不含 `app_pattern.v`/`wrapper_p4.v`。
+`grep -rl "app_pattern #(" sim/` = 71（⛔ **2026-10-10 订正（构建 F 轮）：旧值 71 未能复现** —— 现核 = **全仓 161 个文件**（`sim/` **79** + `_proj_10g/` 39 + `vivado_prj/` 32 + `tb/` 7 + `rtl/` 1 + `board/` 1 + 顶层 `.md` 2；**本次自行 `grep -rl` 重跑逐项复现**）；**旧值口径 = `sim/` 内，同口径现测 = 79**。原句保留）；矩阵对三门命中 0；`sim/p4gates/chain_src.f` 不含 `app_pattern.v`/`wrapper_p4.v`。
 
 **没核（施工前必须自己补核）**：
 1. **`WNS +0.052 / 2²⁰→2³¹ 的 −0.049`** —— 来自文档（`P7B_LONGFLOW_DESIGN.md:590-607`），**未**回
@@ -1190,6 +1190,7 @@ extra_head/p5_pattern/run.bat,author_gate/run_tx_ovl_gate.bat,author_gate/mk_mut
    本刀可用的活门 = `sim/p7b_stageb_rx8/run_rx8_gate.bat` 与 `sim/p7b_longsend/run_cont_gate.bat`。
    ⚠️ **`sim/` 下含 `app_pattern #(` 的镜像件实测 = 71 个**（**订正**：此前记录写 21；`§R 背景订正 ⑦` 已改对，此处再确认）；
    其中 `sim/p4gates/evidence/negctl/foreign/` 是**刻意的外来夹具**（路径守卫负对照语料）⇒ **禁全局 grep 替换**。
+   ⛔ **2026-10-10 订正（构建 F 轮）：旧值 71 未能复现** —— 现核 = **全仓 161 个文件**（`sim/` **79** + `_proj_10g/` 39 + `vivado_prj/` 32 + `tb/` 7 + `rtl/` 1 + `board/` 1 + 顶层 `.md` 2；`.md` 共 9，其中 7 个已在 `_proj_10g/` 的 39 内；**本次自行 `grep -rl` 重跑、逐项复现**）；**旧值口径 = `sim/` 内，同口径现测 = 79** ⇒ **"禁全局 grep 替换"这条纪律不变（风险面更大）**。原句保留。
 
 ### 8.4 下一步的精确选项（**决策权在用户**）
 

@@ -10,6 +10,13 @@
 > 轮级原件 = `p7b_build_a7/READINGS.txt`（构建 D）· `p7b_buildE_build/READINGS.txt`（构建 E）·
 > `p7b_a7_board_20261010/`（板级 D 轮）· `p7b_buildE_board_20261010/`（板级 E 轮：含 A3 板级回合）·
 > **`p7b_window_side_20261010/`**（**2026-10-10 窗口侧判别轮**：本件 §7-选项1 的收官，零构建 —— 只压对端 `--rcvbuf`，位流不动 = 构建 E / BID `0x19`）。
+>
+> ⛔ **2026-10-10 订正（构建 F 轮）——本件以下两类句子已过时（原句一律保留、按历史读）**：
+> **① 「板上现役 = 构建 E / BID `0x19` / 67 字」⇒ 现为 构建 F**（BID **`0x1A`** · **70 字** · 未实现地址 **`0x138`** · `0x08 = 0` · `carrier = 1`；依据 = `_proj_10g/notes/p7b_buildF_board_20261010/REPORT.md` §②/§⑤-7 的 `FINAL_STATE`）——
+> 涉及本件 §1 表全部行 · §2 的"E（现役）"行 · §6-6 口径 · §8-6（**均已在原地加订正行，行号按加行后的现文采**）。
+> **② 「取数器默认值 = `NW=67` / `EXPECT_BID=0x19`」⇒ 现为 `NW=70` / `EXPECT_BID=0x0000001A`**（现核 = `_proj_pcie/p7b_gate4_accept.sh:137/131` + `_proj_pcie/p7b_biz/p7b_snap.sh:49/51` + `_proj_pcie/p6e_snap_check.sh:71/60` 三件同代）——
+> 涉及本件 `§4` 注释行 · `§5-2` 的"本轮有更新件" · `§8-1`（**读旧位流才需显式覆盖**：D = `66/0x18`、C = `65/0x17`、E = `67/0x19`、Stage C = `63/0x0A`）。
+> 以上订正只动**身份/默认值**，**不改任何读数、不改任何结论**。
 
 ---
 
@@ -22,9 +29,12 @@
 | 停流门 | **`0x08 = 0`（未受控停流）· `carrier = 1`** |
 | 时序 | `WNS +0.090 / WHS +0.010 / 三类失败端点 0/0/0`（`p7b_buildE_build/READINGS.txt` 步骤 2.3） |
 | 身份读数出处 | `p7b_buildE_board_20261010/FINAL_STATE.txt`（`FINAL_BID=0x00000019` / `FINAL_SCRATCH_0x08=0x00000000` / `FINAL_CARRIER=1` / `LnkSta x4`） |
+| ⛔ **现役（2026-10-10 构建 F 轮订正）** | **构建 F**：BID **`0x0000001A`** · **70 字** · 未实现地址 **`0x138`** · `0x08 = 0` · `carrier = 1` · sha256 **`89e89f31efb5f1450a1c39acfce587bb4e4b6347c5fdc2f470c91ff0d4400f45`**（15,431,261 B）—— 出处 = `p7b_buildF_board_20261010/REPORT.md` §② + §⑤-7 `FINAL_STATE`（本行的**前四行按历史读**） |
 
 > ⚠️ **旧句按"历史"读**：`P7B_LONGSEND_HANDOFF.md` §1 的"板上现态 = A 臂（BID `0x16`）"、
 > `P7B_LOOP_HANDOFF.md` §6 与 `udp_hls_10g/CLAUDE.md` 各处写的"受控停流 / S3 / r6-fix"全部是更早两轮的态。
+> ⛔ **2026-10-10 订正（构建 F 轮）**：**上表（§1）与 §2 的"E（现役）"行本身也已过时** ——
+> 板上现役 = **构建 F**（BID `0x1A` / 70 字 / 未实现地址 `0x138`）⇒ **接手第一件事仍照做：核它**（读 `0x04` 应为 `0x0000001a`、`0x138` 应回 `0xffffffff`）。
 
 ## 2. 位流对照表（五档；⛔ **全部 15,431,261 B ⇒ 只有 sha256 与 BID 能分版**）
 
@@ -38,6 +48,7 @@
 | （更早，仍在盘） | `0x11` | — | `8c8b6126…d5baf5` | r6-fix：`p7b_retxfix_salvage/bits/8c8b6126__wrapper_p4.bit`（⚠️ 同目录 `burn_r6fix.bat` 内部仍指已删旧树，**别直接跑**） |
 
 五档 WNS 轨迹 = S3 `+0.052` · A `+0.021` · C `+0.006` · **D `+0.099`** · **E `+0.090`**（逐档出处 = 各档自己的 `READINGS.txt` 步骤 4 表）。
+⛔ **2026-10-10 订正（构建 F 轮）**：**第六档 = 构建 F**（BID **`0x1A`** · 70 字 · sha256 `89e89f31…0f45` · W67/W68/W69 三个观测仪器）**已是板上现役** ⇒ 上表"E（现役）"一行按历史读；逐档出处见 `p7b_buildF_build/READINGS.txt` 与 `p7b_buildF_board_20261010/REPORT.md`（⚠️ 本轮**未复核 F 档 WNS**，不在此写数）。
 
 ## 3. 重烧配方（本机）
 
@@ -58,6 +69,8 @@ stdout 是上一 session 的陈旧件。判据必须是 **stdout 里的本次 `H
 
 ```bash
 # 取数器默认值**本轮已随构建 E 更新** = NW=67 / EXPECT_BID=0x00000019 / 未实现地址 0x12C
+# ⛔ 2026-10-10 订正（构建 F 轮）：上一行**已过时** —— 现役默认值 = NW=70 / EXPECT_BID=0x0000001A / 未实现地址 0x138
+#    （现核 = `p7b_gate4_accept.sh:137/131` · `p7b_snap.sh:49/51` · `p6e_snap_check.sh:71/60`；E 档才需显式覆盖 `NW=67 EXPECT_BID=0x00000019 UNIMPL_ADDR=0x12C`）
 bash /tmp/p7b_biz/p7b_snap.sh id                            # ID_OK + ID_UNIMPL 回 0xffffffff（0x12C）
 bash /tmp/p7b_biz/p7b_snap.sh snap TAG 5 20 43 51 63 64 65 66   # 短表（长流必须短表：12 字 ~288 ms > 整条流）
 ```
@@ -75,9 +88,13 @@ bash /tmp/p7b_biz/p7b_snap.sh snap TAG 5 20 43 51 63 64 65 66   # 短表（长�
    然后 `ip route get 192.168.100.2`（必须**不走 WiFi**）+ 读 `carrier`。
 2. **台架重部署**（`/tmp` 会被清）：`04_deploy.txt` 的 27 件逐件 `--put`，再 `05_remote_md5.txt` 逐件核 md5。
    ⭐ **本轮有更新件**：`p7b_snap.sh`（新默认 NW=67 / EXPECT_BID=0x19 / W63..W66 名字齐）
+   ⛔ 2026-10-10 订正（构建 F 轮）：**该默认值已再换代** ⇒ 现役 = **NW=70 / EXPECT_BID=0x1A**（W0..W69 名字齐；F 轮部署件 md5 = `ba2faf79…`，见 `p7b_buildF_board_20261010/STEP0_selfcheck.txt`）
    —— 部署自证原件 = `p7b_buildE_board_20261010/STEP0_selfcheck.txt`（部署后 md5 **`ec4e4b252ae30164fd79702de3e1eded`**，
    并逐字打印生效默认值三行 + NAME 表 W63..W66 四行）。
    ⚠️ `lf_dl.sh` 本轮回合**未变更**（md5 `8c8301aacc95ae5dc8760ef121def26c`，与 `_tools/lf_dl.deployed.sh` 相同）。
+   ⛔ 2026-10-10 订正（构建 F 轮）：**主树** `_proj_10g/notes/p7b_longflow_board/lf_dl.sh` **已在 `0713a13` 改过注释**（md5 现 = `eab008e1358e28efb0f065f9c973a5a8`），
+   而**对端 `/tmp/p7b_biz/lf_dl.sh` 与两份 `_tools/lf_dl.deployed.sh`（A7 轮 / E 轮）仍是旧件**（md5 仍 `8c8301aa…`，**且其 `:84` 仍是硬编码 `NW=63` 显示行**）——
+   F 轮的 `STEP0_selfcheck.txt:21` 逐字记着"对端 lf_dl.sh md5（本轮回合不变更）" ⇒ **该残留是"明知未同步"**；重部署配方见 `P7B_OPEN_ITEMS.md` §0-22 / §3-C6。
 3. **重编 8 个二进制**（`06_compile.txt` 的形状；命令以 `p7b_affinity/BUILD.md` 为准 —— 树里三条编译行互相打架）；
    `p7b_tcp_sink` 部署件 md5 **`c6b624205d64f1f4bd723d8fd5cc6414`**（169,392 B，带 `SINK_LIMITS` 见证行）。
 4. **5 项工具自检**：`p7b_selftest.sh` · `p7b_dualthread_selftest.sh` · `p7b_lane8_selftest.sh` · `aff_selftest.sh` · `pcap_off_dryrun.sh`。
@@ -191,6 +208,7 @@ bash /tmp/p7b_biz/p7b_snap.sh snap TAG 5 20 43 51 63 64 65 66   # 短表（长�
 
 1. **五档位流同为 15,431,261 B** ⇒ 只有 **sha256 + BID** 能分版；取数器默认值**已随构建 E 变成 `0x19/67`**
    ⇒ **读旧位流必显式覆盖**（与上一件写的"默认 `0x0A`"相反，别再照抄）。
+   ⛔ 2026-10-10 订正（构建 F 轮）：**现役默认值 = `70` / `0x1A` / 未实现地址 `0x138`**；本节"读旧位流必显式覆盖"**仍成立**（覆盖表：E = `67/0x19/0x12C` · D = `66/0x18/0x128` · C = `65/0x17/0x124` · A = `63/0x16/0x11C` · S3 = `63/0x15` · Stage C = `63/0x0A`）。
 2. **`0x08` 既是 SCRATCH 又是 `TX_DIS` 门**：`0x08 w 0x2` = **物理停发**（`carrier=0`）⇒ 那一臂的 ping/nc 结果不是慢路径结果。
 3. **`carrier=0` 时板侧计数照跑而 NIC 全 0** ⇒ 板内计数**不能**当"线上发生了什么"的见证（两条口径独立）。
 4. **32 位计数器**：`W51/W15/W53/W54` ≈3.65 s 回卷（9.3 Gbps 下）；`W43/W5` ≈27.5 s；本轮 E 轮 `W65` 出现 **k=2**、`W66` **k=1**
@@ -198,6 +216,7 @@ bash /tmp/p7b_biz/p7b_snap.sh snap TAG 5 20 43 51 63 64 65 66   # 短表（长�
 5. **`W43` 每拍无条件 +1 ⇒ `P ≡ 156.25e6/fps` 是恒等式** ⇒ `193/P` **不是线占空测量**；
    真正的线空闲仪器 = **`W65`**（`mac_tx_10g.stat_tx_idle`，语义 = `state == S_IDLE` 拍数；S_IFG 不算空闲）。
 6. **快照窗口 67 字**：字址 = `0x20 + 4*n`，未实现地址 = `0x12C`；`SNAP_NW_P6E`（`board/wrapper_p4.v:3205`）= 单一真值源。
+   ⛔ 2026-10-10 订正（构建 F 轮）：**现役 = 70 字**，未实现地址 = **`0x138`**；`SNAP_NW_P6E` 现核在 **`board/wrapper_p4.v:3228`**（旧引 `:3205` 已过时）。
 7. **`--check lane8` 是两个参数**（写成一个词 ⇒ `unknown arg` + **RC=2**）；`--maxbytes 0` = 立即退出（假红）。
 8. **长流必须短表**：12 字 ~288 ms > 整条流 227 ms（#67 仪器变慢）。
 9. **构建/烧录只走 `board/run_build_p7b_ku5p.bat` + `p7b_biz_tcpreg/run_program_tcpreg.bat`**；
