@@ -1,0 +1,26 @@
+### 任务② 消费门 1/2: sim/p7b_longsend/run_cont_gate.bat
+命令: cmd //c 'sim\p7b_longsend\run_cont_gate.bat'
+退出码: 0   末行: "CONT-GATE: PASS"
+
+--- 门内 mutgen 段 (新生成器, 全成或全不落版) ---
+SRC D:\repo\XCKU5PMini\udp_hls_10g\rtl\app_pattern.v  82034 B  sha256 811a84e4bd0e8b20ba8ac007cbb16a8f310091b141f7a6d59964dd8288f317bc
+WROTE m1_cont_off            M1 CONT_OK=0 => 连续模式整条失效 (A1/A3 必红)
+WROTE m2_no_reload_txok      M2 tx_ok 臂不重装载 => 连续会停在量子末
+WROTE m3_miss_frmwait        M3 漏改 frm_wait 臂 => 量子末边界遇 tx_ok=0 即静默停滞 (A11/A3 必红)
+WROTE m5_no_uppend           M5 无待补登记 => u_rec1/u_rec2 又静默 (A13a/A13b 必红; A13c 仍绿)
+WROTE m4_term_open           M4 终结判据开 => 连续模式也终结 (A1/A2 必红)
+ANCHORS: all 5 mutants matched (5 subs, each hits==expect)
+MUTGEN OK (5 mutants)
+
+--- 各臂 verdict (直读 run<X>/xs.log) ---
+runA   TB_APP_CONT: OK
+runB   TB_APP_CONT: OK
+runC   TB_APP_CONT: OK
+runG   TB_APP_CONT: FAIL
+runM1  TB_APP_CONT: FAIL
+runM2  TB_APP_CONT: FAIL
+runM3  TB_APP_CONT: FAIL
+runM4  TB_APP_CONT: FAIL
+runM5  TB_APP_CONT: FAIL
+
+判读: A/B/C (正臂) OK; G (冻结锚=修前) FAIL + M1..M5 全 FAIL ⇒ **五条变异件全部有牙**

@@ -6,10 +6,11 @@
 两个口径的窗口与速率), 用 sed 拼就是一堆隐式耦合; 这里全部**显式算出来**, 每个数都来自算式。
 
 形态与真读数**逐字同形** (`reg_rw` 打 `0x..`; `ethtool -S` 打 "键 十进制"):
-  快照 : SNAP_BEGIN / TLATCH / GEN / MAGIC / BID / MARKER / W0..W62 / UNIMPL / SNAP_END
-         ⚠️ 几何 = **63 字 / BID 10** (P7b Stage C, 2026-10-07 BID 同步轮从 63 字/BID 9 同步)
-            ⛔ 2026-10-07 Stage C: 上一行原写 "BID 9 (P7B-WU 二轮, 从 51 字/BID 7 同步)";
-               窗口仍 63 字, 只有身份变 —— 但 `_geo_guard()` 要求与 accept 默认**同代**, 必须同批改。
+  快照 : SNAP_BEGIN / TLATCH / GEN / MAGIC / BID / MARKER / W0..W66 / UNIMPL / SNAP_END
+         ⚠️ 几何 = **67 字 / BID 0x19** (P7b 构建 E, 2026-10-10 同步轮从 63 字/BID 0xA 同步)
+            ⛔ 2026-10-10 构建 E 同步: 上一行原写 "几何 = 63 字 / BID 10 (P7b Stage C)";
+               accept 默认已随构建 D/E 走到 67 字 / BID 0x19 (未实现地址 0x12C) ⇒ 必须同批改,
+               否则 `_geo_guard()` 直接拒绝生成 (实测: GEOM_GUARD_FAIL + exit 3 + 零文件)。
             —— 必须与 `_proj_pcie/p7b_gate4_accept.sh` 的默认 `SNAP_WORDS`/`EXPECT_BID` 同代,
             否则 accept 会因"窗口不完整: 缺 W51 / 身份不符"把整套反例台架打成假红 (实测)。
   NIC  : NIC_BEGIN / TLATCH / <键 十进制>... / NIC_END
@@ -33,10 +34,12 @@ W32 = 1 << 32
 # 本生成器的几何 (必须与 `_proj_pcie/p7b_gate4_accept.sh` 的**默认**值同代, 否则整套反例台架
 # 会在"窗口不完整 / 身份不符"上**假红** —— 2026-10-07 "台架修复轮"实测: 51 字夹具 + BID 7
 # 喂给 63 字/BID 9 的 accept ⇒ clean 正对照退出 2、15 条反例全部 BAD)。
-# ⛔ 2026-10-07 Stage C BID 同步轮: 上一句保留 (它是 9 字那一代的历史实测) —— 现应读作
-# "不同代 ⇒ 假红": 本夹具现 = 63 字 / BID 0xA, accept 默认也已是 63 字 / BID 0xA (`_geo_guard` 守着)。
-NW_FIX = 63                # 快照字数 (W0..W62)
-BID_FIX = 0x0000000A       # 位流身份 (P7b Stage C) —— ⛔ 2026-10-07: 原值 0x00000009 (P7B-WU 二轮)
+# ⛔ 2026-10-10 构建 E 同步轮 (本夹具落后两代): 上一句保留 (它是 63 字那一代的历史实测) ——
+# 现应读作 "不同代 ⇒ 假红": 本夹具现 = **67 字 / BID 0x19**, accept 默认也已是 67 字 / BID 0x19
+# (`_geo_guard` 守着)。本轮订正经过: 63 字/BID 0xA (Stage C) → 65 字/BID 0x17 (构建 C) →
+# 66 字/0x18 (构建 D) → **67 字/0x19 (构建 E, 未实现地址 0x12C)**; 中间两轮几何同步都漏了本夹具。
+NW_FIX = 67                # 快照字数 (W0..W66)
+BID_FIX = 0x00000019       # 位流身份 (P7b 构建 E) —— ⛔ 2026-10-10: 原值 0x0000000A (P7b Stage C)
 
 
 def _geo_guard():
@@ -126,8 +129,9 @@ TRAFFIC_END
 
 
 def snap_words(lat, w20, vcc):
-    """**63 字 (W0..W62)**; lat = 该块锁存的时刻 (秒) ⇒ 三个域自由计数由它算出。
-    W51..W62 (P7B-BIZ/WU 新增字) 全填 0 —— accept 只要求"窗口齐全 + 无 0xffffffff 混入";
+    """**67 字 (W0..W66)**; lat = 该块锁存的时刻 (秒) ⇒ 三个域自由计数由它算出。
+    W51..W66 (P7B-BIZ/WU/构建 C/D/E 新增字) 全填 0 —— accept 只要求"窗口齐全 + 无 0xffffffff 混入"
+    (B_WIN); 本例判据层不消费 W63..W66 (构建 C/D/E 新增的停滞/空闲/窗门计数), 故填 0 无判别力损失。
     若将来判据开始消费某个新字, **这里要跟着造它的真形态** (否则负对照会"打空")。"""
     W = [0] * NW_FIX
     W[0] = 1000                                     # rx_stat_frames

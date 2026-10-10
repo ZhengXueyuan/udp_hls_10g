@@ -1,0 +1,55 @@
+================================================================================
+P7b 工具修复轮 取证目录 (2026-10-10)
+================================================================================
+本目录 = 本 agent 的取证目录。被修的四件 (逐条对应):
+
+ ① _proj_10g/notes/p7b_gate4_criteria/gen_inputs.py  几何落后两代 ⇒ 已同步
+ ② sim/p7b_stagec_tx/mk_mut_tx.py  + sim/p7b_longsend/mk_mut_cont.py
+                                                     失败仍落盘地雷 ⇒ 已改全成或全不落
+ ③ _proj_10g/notes/p7b_longflow_board/lf_dl.sh:90     NW=63 显示误标 ⇒ ${NW}
+ ④ sim/p4gates/ manifest (wrapper_p4.v / app_pattern.v 空证据) ⇒ 未改, 出最小可行清单
+
+--------------------------------------------------------------------------------
+任务① 证据
+--------------------------------------------------------------------------------
+  BEFORE  (复现): 见报告正文 "① 修前复现" —— GEOM_GUARD_FAIL + RC=3 + 0 文件
+  AFTER   : inputs/*/snap_*.txt 现 = 67 字 / BID 0x00000019 (直读已核)
+  台架    : _proj_10g/notes/p7b_gate4_criteria/logs/SUMMARY.txt  ⇒ OK=31 BAD=0
+  负控制  : 副本 gen_inputs_negctl_tmp.py (NW_FIX=68) ⇒ RC=3 + 0 文件, 已删除
+
+--------------------------------------------------------------------------------
+任务② 证据
+--------------------------------------------------------------------------------
+  BEFORE_mk_mut_tx.txt         修前逐锚点命中表 (旧逻辑复刻, ast 抽参)
+  BEFORE_mk_mut_cont.txt       同上
+  AFTER_dryrun_mk_mut_tx.txt   修后 --dry-run 命中表 (18 锚点全 1/1, 0 bytes written)
+  AFTER_dryrun_mk_mut_cont.txt 修后 --dry-run 命中表 (5 锚点全 1/1, 0 bytes written)
+  AFTER_gen_mk_mut_tx.txt      修后正常生成 (14 件)
+  AFTER_gen_mk_mut_cont.txt    修后正常生成 (5 件)
+  PRE_MUT_STATE.txt            修前 mut/ 的 sha256 (证明 stagec_tx 那批是**陈旧件**)
+  AFTER_MUT_STATE.txt          修后 mut/ 的 sha256 (与跑完门之后逐字节相同)
+  DECLARED_CHANGE_CHECK.txt    声明改动确实落在件里 (逐条 grep 命中)
+  TASK2_GATE_LONGSEND.txt      消费门 1/2: CONT-GATE: PASS (A/B/C OK; G+M1..M5 全 FAIL)
+  TASK2_GATE_TXOVL.txt         消费门 2/2: TX_OVL_GATE: PASS (20 臂逐条命中期望)
+  probe_anchors_old.py         只读锚点探针 (ast 抽 add() 字面实参, 不 import ⇒ 不落盘)
+
+--------------------------------------------------------------------------------
+任务④ 证据 (未改, 出清单)
+--------------------------------------------------------------------------------
+  P4_FINGERPRINT_BASELINE.txt          现役指纹: 237 文件 (0 命中 wrapper_p4/app_pattern)
+  P4_FINGERPRINT_HYPOTHETICAL.txt      假设指纹: 240 文件 (chain_src.f + 3 文件)
+  TASK4_MINIMAL_PLAN.txt               最小可行清单 + 障碍 (manifestcheck 精确相等)
+  TASK4_COMPILE_PROBE_EVIDENCE.txt     编译可行性探针 (PROBE-COMPILE-OK; 但 xelab 0 命中)
+  probe_compile_wrapper.bat            探针脚本本身 (ASCII-only bat)
+  chain_src_NEGCTL.f                   drift 演示用的临时清单 (未影响仓内任何 .f)
+  MANIFESTCHECK_baseline.txt           基线 manifestcheck = OK
+  MANIFESTCHECK_drift_demo.txt         manifest-only 加两件 ⇒ [P4GUARD FAIL] drift
+
+--------------------------------------------------------------------------------
+md5 副作用
+--------------------------------------------------------------------------------
+  MD5_SIDE_EFFECTS.txt   (4 个改动文件的新旧 md5 + 部署台账待落笔处)
+
+================================================================================
+⛔ 本目录所有文件仅供参考, 不含任何判据裁定。
+================================================================================

@@ -147,6 +147,15 @@ module tcp_tx_frame (
     // 与 tcp_echo stat_tlast_wr/fwd 对账: wr>0 而本计数 0 => tlast 死在 echo→帧器之间
     // (frame_fifo 读出 / axis_pipe / 帧器接受的 tlast 通路)。
     output reg  [31:0] stat_tlast_in,
+    // ---- ⭐ P7B 构建 E: 帧器侧**窗口门**停顿计数器 (纯观测) ---------------------
+    //   语义 (哪一拍算) = 帧器**站在数据帧启动点**、呈交口**确实有字**、启动门的
+    //   **其余每一项都开**、而**唯一关着的门是 `wnd_open`** ⇒ 等价表述:
+    //   "把 `wnd_open` 换成 1, 这一拍就正好是 `start_data` 拍"。
+    //   逐拍定义 / 不算的边界 / 与 app 侧 W64 的关系 = OVL 分支 `stat_winstall_ev`
+    //   处那段注释 (**两个分支同一语义, 那一段是唯一权威**)。
+    //   ⚠️ 纯观测: 不驱动任何功能逻辑, 不改任何门的判据 (默认构建数据行为逐位不变)。
+    //   ⚠️ 32 位自然回卷 (156.25 MHz ⇒ 27.487 s) ⇒ 差值判据必须 mod 2^32 且记原始值。
+    output reg  [31:0] stat_winstall,
     // ---- P4b-7-P6 调试探针 (纯 assign 线束输出, 不动任何逻辑) ----
     output wire        dbg_wnd_open,   // 窗口门控开 (wnd_open, S_IDLE 决策)
     output wire        dbg_pay_full,   // 载荷 FIFO 满 (pay_full)
@@ -403,6 +412,7 @@ module tcp_tx_frame (
     reg  [31:0] fin_seq_r [0:15];
     reg  [15:0] fin_retx_pend;
     reg         ack_pend_r;
+    reg         start_ack_d1;     // P7B-A7 R-1: start_ack 的 1 拍延迟 (校验和装载使能)
     reg  [3:0]  svc_id_r;
     reg         rto_pend_any;
     reg  [3:0]  tick_cnt;
@@ -517,6 +527,62 @@ module tcp_tx_frame (
                              s_axis_tvalid && !fifo_full && !bank_rdy[rx_bank] &&
                              wnd_open && !tx_blk_sid;
 
+    // ================= ⭐ P7B 构建 E: 帧器侧窗口门停顿计数器 =================
+    //   (W66; 默认分支 `else` 侧有**逐字同款**的一份, 语义以此处为权威)
+    //
+    //   【语义定义 —— 哪一拍算】同时满足这四组:
+    //     ① `rx_state == RX_IDLE && recv_first`
+    //        = 帧器**站在数据帧启动点**: 本帧一拍都还没吞 (recv_first 在吞下首拍
+    //          的那一刻才落 0) ⇒ "想开一个新数据帧"的那个点。
+    //     ② `s_axis_tvalid`
+    //        = 呈交口**确实有字** (不是空等) ⇒ "想开"是真的有货要开。
+    //     ③ 启动门的**其余每一项都开**: `!ack_pend_r && !svc && !ring_eval &&
+    //        !scan_now && !rx_flush && !fifo_full && !bank_rdy[rx_bank] && !tx_blk_sid`
+    //        (逐项 = `start_data` 里除 wnd_open 之外的全部合取项)。
+    //     ④ `!wnd_open` = **唯一**关着的门是窗口门 (tcb 注册输出: 32 位回绕正确的
+    //        在飞差 vs 帽 `min(snd_wnd, RING_CAP)`; 门本体在 tcb.v:142-148)。
+    //
+    //   等价表述 (判据只用它解释, 不用它实现): `stat_winstall_ev ⟺ (以 wnd_open:=
+    //   1'b1 代入 start_data) && !wnd_open` ⇒ 计数 = 帧器**因窗口而没能开帧**的拍数。
+    //
+    //   【哪一拍不算 —— 逐条边界 (每一条都是刻意的排除, 混进来就失去判别力)】
+    //     · 帧内拍 (recv_first==0 / rx_state!=RX_IDLE): 不算 —— 帧已经开着,
+    //       "开新帧"这个语义不适用 (帧内续传的门在 S_RECV 子句, 不含 wnd_open);
+    //     · `s_axis_tvalid==0`: 不算 —— 那是"没得开"不是"想开被挡"
+    //       (帧器真闲着的拍归 W65 线占空 / W63 app 侧 frm_wait 那一侧读);
+    //     · 被**别的**门挡着 (ACK 优先 ack_pend_r/svc · 轮扫 scan_now · 重放 ring_eval
+    //       · 冲洗 rx_flush · 载荷 FIFO 满 fifo_full · 本 bank 还在被 TX 引擎发
+    //       bank_rdy[rx_bank] · FIN/RST fence / 非 ESTAB / r6 的"对端首个 ACK 未到"
+    //       合成项 tx_blk_sid) ⇒ **一律不算**。本字只量窗口这一格 —— W64 里"帧器忙
+    //       别的事"的那部分要**减掉本字之后**才归它 (见下面与 W64 的关系)。
+    //     · 复位拍: rx_state=RX_IDLE/recv_first=1 但 tvalid=0 ⇒ 结构性不算。
+    //
+    //   【与 app 侧 W64 (`app_pattern.stat_bp_cyc`) 的关系】
+    //     W64 的口径 = `pw_valid && !m_tready && !closing && !bad_frm` (app 有字压在
+    //     自己的呈交口上、帧器经 axis_pipe 不收) —— 它把"等窗口"和"帧器忙别的"
+    //     **混在一起**, 分不出是哪一种 (这正是本字要补的那一格)。
+    //     方向: **W64 是该停顿在 app 观测点上的投影, 本字是它在帧器启动点上的投影**。
+    //     帧器算的那一拍 ⇒ 呈交口有字 ⇒ 1 深 axis_pipe 满 ⇒ pipe.s_ready
+    //     (= app 的 m_tready) = 帧器端 s_axis_tready, 而本拍 s_axis_tready == 0
+    //     (④ 的 !wnd_open 正是 S_IDLE 子句里那一项) ⇒ app 侧 `!m_tready` 成立。
+    //     ⚠️ 严格成立的式子 = `ΔW64 ≥ ΔW66 − ΔH` (同一窗): ΔH = app 侧"呈交口上
+    //     没有字"的拍 (字刚被 pipe 锁存的那 1 拍 / 逐字节装配拍 / opener 交接拍 /
+    //     W3 收尾拍) —— 那些拍 app 侧 W64 结构性不计 (它要求 pw_valid=1), 而帧器
+    //     侧本字照计 (pipe 里有字)。**ΔH 是有界的少数拍** (每字 ≤1 拍, 每帧边界
+    //     ~1-2 拍; 且 `P7B_10G` 的 A2/整字路把装配拍压成 0), 因此**长窗下**
+    //     ΔW64 ⊇ ΔW66 逐拍成立到 ΔH 之内; 读法 = 同窗比 ΔW66 与 ΔW64:
+    //       ΔW66 ≈ ΔW64 ⇒ 帧器停顿基本**全是等窗** (window-limited);
+    //       ΔW66 ≪ ΔW64 ⇒ 其余部分 = 帧器**忙别的门** (ACK 优先/轮扫/重放/FIFO/
+    //                     bank fence), 那部分归 W63/W64 与 FSM 观测。
+    //     ⚠️ **登记过的盲区 (不许当已证)**: ΔH 本身**没有独立计数器** ⇒ 上述
+    //     "ΔW66 ≪ ΔW64" 只能给"不是等窗"的**方向**, 不能把差额逐拍归因到具体那一个门
+    //     (要那个得再补"帧器在启动点被非窗门挡住"的计数器 —— 本轮不做)。
+    wire        stat_winstall_ev = (rx_state == RX_IDLE) && recv_first &&
+                                   s_axis_tvalid && !ack_pend_r && !svc &&
+                                   !ring_eval && !scan_now && !rx_flush &&
+                                   !fifo_full && !bank_rdy[rx_bank] &&
+                                   !tx_blk_sid && !wnd_open;
+
     // ---- 重传 ring 读/写 + 会话 ----
     wire        ring_act = (rx_state == RX_RING);
     wire [7:0]  ring_end = nbeats + 8'd2;
@@ -578,20 +644,49 @@ module tcp_tx_frame (
     wire [15:0] csum;
     wire        csum_valid;
 
-    // ---- 控制帧的组合校验和树 (start_ack 拍值, 与帧头同拍同源) ----
+    // ---- 控制帧的校验和树 (⭐ P7B-A7 R-1「T+2 重定时」, 2026-10-10) ------------------
+    //   与构建 C 及以前的**唯一**差别 = 操作数来源: 旧式在 start_ack 拍**直接消费组合
+    //   读总线** (rb_snd_nxt / cam_rd_sip / cam_rd_dport / cam_rd_sport / ctrl_ack_now /
+    //   ctrl_doff_now / id_r / rb_rcv_wnd), 于是这条加法树挂在 `rb_id` 选择 mux 与
+    //   TCB/CAM 组合读的下游 —— 实测 = 六档全中的 DP 域 WNS 宿
+    //   `u_tcp_tx/* → ctrl_tcpcsum_reg[*]/D` (设计件 = _proj_10g/notes/
+    //   P7B_A7_CSUM_SINK_DESIGN.md §1.3/§1.6)。R-1 改用**已寄存的 ctrl_* 字段**,
+    //   对应关系逐条取自 :855-867 的装载表 (一对一):
+    //     cam_rd_sip→ctrl_dip(:862) · cam_rd_dport→ctrl_sport(:863) ·
+    //     cam_rd_sport→ctrl_dport(:864) · rb_snd_nxt→ctrl_seq(:857) ·
+    //     ctrl_ack_now→ctrl_ack(:858) · ctrl_doff_now→ctrl_doff(:859) ·
+    //     rb_rcv_wnd→ctrl_wnd(:860) · id_r→ctrl_idcap(:865)
+    //   ⇒ 加法交换律 + 单次 fold16 (32 位无溢出: 四个 18 位项 + init 最大 0x10FFF8)
+    //     下**逐位相同**。
+    //   逐拍论证 (为什么值不变 + 读点还剩几拍):
+    //     T0 = start_ack 拉高的那一拍 (装载块在 T0 沿把上表逐项写入 ctrl_*)。
+    //     · T0+1: 全部 ctrl_* 恒为 T0 拍被采样的那份操作数 (唯一功能写使能 start_ack
+    //       在 T0+1 恒 0 —— ctrl_slot_busy 已在 T0 沿拉高, 其 T_DONE 清位支与 start_ack
+    //       **结构性不共存**; 且本块不写 ctrl_seq/ack/… 任何一项) ⇒ 本拍复算的值与旧式
+    //       T0 拍组合算出的值逐位相同; 新值在 T0+1 沿落地 (可见于 T0+2)。
+    //     · 消费侧最早读点: T_HDR 只从 :944-947 (T_IDLE) / :1051-1053 (T_DONE 边界)
+    //       两处进入, 而 ctrl_tx_pend 最早在 T0+1 才可见 ⇒ T_HDR 最早 T0+2 进入,
+    //       thcnt 从 0 起 ⇒ `h_ipcsum` 最早 **T0+5** 读 (thcnt==3), `h_tcpcsum` 最早
+    //       **T0+7** 读 (thcnt==5); m_axis 反压只会更晚。⇒ 新装载到两个读点的余量 =
+    //       **3 / 5 拍** (旧 = 4 / 6 拍), 仍 ≥3。
+    //     · 会话级无覆盖: 下一帧的 start_ack 必须等本帧 T_DONE 清 ctrl_slot_busy
+    //       (≥ T0+9), 其校验和装载必然晚于本帧两个读点 ⇒ 不会覆盖在飞帧的字段。
+    //   ⚠️ 一次折叠、加完再折 (不许边加边折成 16 位) — 与三拍 aen 序列逐位等价
     wire [31:0] ctrl_ack_now  = (aq_fin || aq_rst) ? rb_rcv_nxt : ackq_dout[31:0];
     wire [15:0] ctrl_doff_now = {8'h50, aq_syn ? 8'h12 : aq_fin ? 8'h11 :
                                  aq_rst ? 8'h14 : 8'h10};
-    wire [17:0] ctl_aen_v1 = 18'd20 + {2'b0, cam_rd_dport} + {2'b0, cam_rd_sport} +
-                             {2'b0, rb_snd_nxt[31:16]};
-    wire [17:0] ctl_aen_v2 = {2'b0, rb_snd_nxt[15:0]} + {2'b0, ctrl_ack_now[31:16]} +
-                             {2'b0, ctrl_ack_now[15:0]} + {2'b0, ctrl_doff_now};
-    wire [17:0] ctl_aen_v3 = {2'b0, rb_rcv_wnd};
-    // ⚠️ 一次折叠、加完再折 (不许边加边折成 16 位) — 与三拍 aen 序列逐位等价
-    wire [31:0] ctrl_acc = csum_init_val + {14'b0, ctl_aen_v1} + {14'b0, ctl_aen_v2} +
+    wire [31:0] csum_init_ctrl = {4'b0, cfg_src_ip[31:16]} + {4'b0, cfg_src_ip[15:0]} +
+                                 {4'b0, ctrl_dip[31:16]} + {4'b0, ctrl_dip[15:0]} +
+                                 32'h0006;
+    wire [17:0] ctl_aen_v1 = 18'd20 + {2'b0, ctrl_sport} + {2'b0, ctrl_dport} +
+                             {2'b0, ctrl_seq[31:16]};
+    wire [17:0] ctl_aen_v2 = {2'b0, ctrl_seq[15:0]} + {2'b0, ctrl_ack[31:16]} +
+                             {2'b0, ctrl_ack[15:0]} + {2'b0, ctrl_doff};
+    wire [17:0] ctl_aen_v3 = {2'b0, ctrl_wnd};
+    wire [31:0] ctrl_acc = csum_init_ctrl + {14'b0, ctl_aen_v1} + {14'b0, ctl_aen_v2} +
                            {14'b0, ctl_aen_v3};
     wire [15:0] ctrl_tcpcsum_now = ~fold16(ctrl_acc);
-    wire [15:0] ctrl_ipcsum_now  = ip_csum_calc(16'd40, id_r, cam_rd_sip);
+    wire [15:0] ctrl_ipcsum_now  = ip_csum_calc(16'd40, ctrl_idcap, ctrl_dip);
 
     // ---- TX 引擎: 头字段来源 mux (控制槽 vs bank) ----
     wire        h_ctrl    = tx_is_ctrl;
@@ -726,9 +821,11 @@ module tcp_tx_frame (
             rto_pend <= 16'h0; ring_seq <= 0; ring_rem <= 0; tap_seq <= 0;
             nbeats <= 8'd0; beat_cnt <= 8'd0; ring_d_r <= 64'h0;
             svc_id_r <= 0; tick_cnt <= 0; rto_pend_any <= 0; ack_pend_r <= 0;
+            start_ack_d1 <= 1'b0;    // P7B-A7 R-1 (校验和装载使能延迟位)
             stat_retx_wrap <= 32'd0;
             retx_ovf_p     <= 1'b0;
             stat_retx <= 0;
+            stat_winstall <= 32'd0;   // P7B 构建 E: 窗口门停顿计数
             fin_sent_r <= 16'h0; rst_sent_r <= 16'h0; fin_retx_pend <= 16'h0;
             for (ri = 0; ri < 16; ri = ri + 1) begin
                 rto_timer[ri] <= 21'd0;
@@ -754,11 +851,32 @@ module tcp_tx_frame (
             retx_ovf_p <= retx_ovf && retx_active;
             if (retx_ovf && retx_active && !retx_ovf_p)
                 stat_retx_wrap <= stat_retx_wrap + 32'd1;
+            // ⭐ 构建 E: 帧器侧窗口门停顿计数 (语义见 stat_winstall_ev 处的权威注释)
+            //   口径与其它 stat_* 同族: **按当拍寄存器态**计数 (拍数, 不是事件数)。
+            if (stat_winstall_ev) stat_winstall <= stat_winstall + 32'd1;
             svc_id_r <= retx_req ? retx_id : prio_lo(rto_pend);
             rto_pend_any <= |rto_pend;
             ack_pend_r <= !ackq_empty;
+            start_ack_d1 <= start_ack;   // ⭐ R-1: 校验和装载使能 = start_ack 延迟 1 拍
             tick_cnt <= tick_cnt + 4'd1;
             ring_d_r <= ring_d;
+
+            // ⭐ P7B-A7 R-1「T+2 重定时」(2026-10-10): 控制帧两个校验和的**装载拍**
+            //   从 start_ack 当拍推到 start_ack+1 拍 (使能 = start_ack_d1), 且装载源 =
+            //   上面 :582 段那棵**以 ctrl_* 寄存器为操作数**的树。动机 = 把 D 锥的
+            //   **前端 7–11 级** (rb_id 选择解码 + TCB/CAM 16:1 组合读) 整段移出
+            //   `ctrl_tcpcsum_reg[*]/D` (它是六档全中的 DP 域 WNS 宿; 设计件 =
+            //   _proj_10g/notes/P7B_A7_CSUM_SINK_DESIGN.md §1/§2.1)。
+            //   逐拍论证 (值逐位不变 + 读点余量) 见 :582 段 R-1 注释。
+            //   ⚠️ 本块必须放在**两个 case 之外**, 不能放进 RX_IDLE 分支:
+            //      start_ack 与"活帧首字"可以**同拍** accept (start_ack 只要求 rx_idle),
+            //      而那一拍若恰是帧尾 (tlast) 会把 rx_state 推到 RX_FIN ⇒ 延迟拍上
+            //      rx_state 未必是 RX_IDLE ⇒ 放进 RX_IDLE 分支会**静默漏装**
+            //      (该控制帧带着上一帧的旧校验和上线, 无任何握手判据会红)。
+            if (start_ack_d1) begin
+                ctrl_ipcsum  <= ctrl_ipcsum_now;
+                ctrl_tcpcsum <= ctrl_tcpcsum_now;
+            end
 
             // ==================== RX 引擎 ====================
             case (rx_state)
@@ -862,8 +980,9 @@ module tcp_tx_frame (
                     ctrl_sport     <= cam_rd_dport;
                     ctrl_dport     <= cam_rd_sport;
                     ctrl_idcap     <= id_r;
-                    ctrl_ipcsum    <= ctrl_ipcsum_now;
-                    ctrl_tcpcsum   <= ctrl_tcpcsum_now;
+                    // ⭐ R-1: `ctrl_ipcsum` / `ctrl_tcpcsum` **不再在这里装载** —— 推到
+                    //   下一拍, 由本块外的 `if (start_ack_d1)` 装载 (使能位在 T0 沿置,
+                    //   T0+1 装载; 源树见 :582 段)。其余 10 项与 id_r 一字未动。
                     id_r           <= id_r + 16'd1;
                 end
                 // ---- 活帧收字 (含帧首拍上下文锁存) ----
@@ -1301,6 +1420,14 @@ module tcp_tx_frame (
     wire        start_data = (state == S_IDLE) && !ack_pend_r && !svc && !ring_eval &&
                              !scan_now && !flush_pend && s_axis_tvalid && !pay_full &&
                              wnd_open && !tx_blk_sid;
+    // ⭐ 构建 E (默认/串行分支): 与 OVL 分支**逐条同款**的窗口门停顿判据 ——
+    //   "数据帧启动点" 在本分支 = `state == S_IDLE` (串行 FSM 没有 recv_first;
+    //   S_IDLE 即"本帧一拍都还没吞"), 其余八项逐字相同 (flush_pend↔rx_flush,
+    //   pay_full↔fifo_full, 其余同名) ⇒ 两个分支的**语义完全相同**。
+    //   完整语义/边界/与 W64 的关系 = OVL 分支 `stat_winstall_ev` 处那段注释 (权威)。
+    wire        stat_winstall_ev = (state == S_IDLE) && s_axis_tvalid &&
+                                   !ack_pend_r && !svc && !ring_eval && !scan_now &&
+                                   !flush_pend && !pay_full && !tx_blk_sid && !wnd_open;
 
     // rb/cam 读口 mux: svc/ring_eval/scan_now 拍旁路 start_id (TCB/CAM 组合读,
     // 本拍即目标连接值)。scan_now 仅依赖 scan_tick (寄存器) 与 state/ack_pend_r
@@ -1621,6 +1748,7 @@ module tcp_tx_frame (
             nbeats <= 8'd0; beat_cnt <= 8'd0; ring_d_r <= 64'h0;
             svc_id_r <= 0; tick_cnt <= 0; rto_pend_any <= 0; ack_pend_r <= 0;
             stat_retx <= 0;
+            stat_winstall <= 32'd0;   // P7B 构建 E: 窗口门停顿计数
             for (ri = 0; ri < 16; ri = ri + 1) begin
                 rto_timer[ri] <= 21'd0;
                 snd_una_prev[ri] <= 32'd0;
@@ -1654,6 +1782,8 @@ module tcp_tx_frame (
             // P4b-7-P6 tlast 探针: 帧首拍 (S_IDLE start_data) 或 S_RECV 吞到末 beat
             // (两处都是 accept && s_axis_tlast; S_IDLE 的 accept 即 start_data 拍)
             if (accept && s_axis_tlast) stat_tlast_in <= stat_tlast_in + 32'd1;
+            // ⭐ 构建 E: 窗口门停顿计数 (与 OVL 分支同款; 纯观测)
+            if (stat_winstall_ev) stat_winstall <= stat_winstall + 32'd1;
             // svc 优先编码寄存器化 (P6 时序, 见 svc_id 声明注释): 每拍刷新,
             // svc 拍消费上拍编码 — rto_pend 置位到 svc 至少隔 1 拍 (扫描拍
             // 置位, 下一 S_IDLE 拍 svc), retx_req 电平期间 retx_id 稳定

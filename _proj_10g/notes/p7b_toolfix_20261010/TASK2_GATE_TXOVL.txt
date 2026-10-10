@@ -1,0 +1,46 @@
+### 任务② 消费门 2/2: sim/p7b_stagec_tx/run_tx_ovl_gate.bat
+命令: cmd //c 'sim\p7b_stagec_tx\run_tx_ovl_gate.bat'
+退出码: 0   末行: "TX_OVL_GATE: PASS"
+
+--- 门内 mutgen 段 (新生成器; 14 件 / 18 锚点) ---
+SRC D:\repo\XCKU5PMini\udp_hls_10g\rtl\tcp_tx_frame.v  136970 B  sha256 0ffaaa3e7af8e3d44a37ba24b6e70b140961f99db45dd86ec17408e336dad8a6
+NORM: 2170 CRLF / 0 lone CR -> LF (matching + output, 与签出风格无关)
+WROTE mut_s0a    OVL: 数据推进写不推进 (seq 复用)
+WROTE mut_s0b    默认分支: 数据推进写不推进 (S0 灵敏度证明用)
+WROTE mut_c1     M-C1 同拍撞写口 => $onehot0 红
+WROTE mut_c2     M-C2 预留写滞后 8 拍 => J_seq_mono / J_seq_cont 红
+WROTE mut_c3     M-C3 退化单 bank => 帧周期/TX 引擎拍数红
+WROTE mut_c6     M-C6 撤回卷门 => FIN 预留被当 ring 数据重放 => J_seq_cont 红
+WROTE mut_c7     M-C7 撤槽独占 => issued > transmitted => J6 红
+WROTE mut_c8     M-C8 撤 rx_idle => 控制帧在收帧期装载 (混拼)
+WROTE mut_c9     M-C9 仲裁键=busy => 控制帧 T_DONE 自选 => transmitted > issued => J6 红
+WROTE mut_f1     M-F1 撒!retx_ovf => delta 下溢当起重放 => 洪水 (两分支)
+WROTE mut_c4     M-C4 排空支不清会话 => retx 会话永不终止 => stuck 红
+WROTE mut_k1     M-K1 撤预算+跳写 => 会话重放整窗 => 跨度判据红 (确定性)
+WROTE mut_k2     M-K2 撤跳写 => 会话收尾 snd_nxt<retx_hi => 跳写判据红 (确定性)
+WROTE mut_l1     M-L1 撤 ack_seen 门 => ARM_ACKGATE 保持窗内帧照常启动 => 判据红 (确定性)
+ANCHORS: all 14 mutants matched (18 subs, each hits==expect)
+MUTGEN OK (14 mutants)
+
+--- 全臂契约表 (逐条命中期望) ---
+  A default serial  RC=0  (expect 0)
+  B TCP_TX_OVL      RC=0  (expect 0)
+  C M-S0a advance   RC=1  (expect nonzero)
+  D M-S0b default   RC=1  (expect nonzero)
+  E M-C1  samecycle RC=1  (expect nonzero)
+  F M-C7  no slot   RC=1  (expect nonzero)
+  G M-C9  arb busy  RC=1  (expect nonzero)
+  H M-C3  one bank  RC=1  (expect nonzero)
+  I M-C2  reg 8cyc  RC=1  (expect nonzero)
+  J M-C6  no rewgate RC=1 (expect nonzero; stimulus = in-slot FIN window + retx_req)
+  K M-C8  no rx_idle RC=1 (expect nonzero)
+  L M-C4  self-lock RC=1  (expect nonzero; stuck judge)
+  P probe OVL fixed RC=0 (expect 0 = NOFLOOD)
+  Q probe M-F1      RC=0 (expect 0 = FLOOD verdict found; teeth)
+  R probe serial    RC=0 (expect 0 = NOFLOOD)
+  S integ app to frm RC=0 (expect 0 = OK)
+  T integ + M-S0a   RC=1 (expect nonzero)
+  U M-K1 retxfx-off RC=1 (expect nonzero; 撤预�?跳写)
+  V M-K2 nojump     RC=1 (expect nonzero; 只撤收尾跳写)
+  W L-A ack gate    RC=0 (expect 0; ARM_ACKGATE: �?ack_seen 期间禁启�?
+  X M-L1 gate off   RC=1 (expect nonzero; �?ack_seen 门项)

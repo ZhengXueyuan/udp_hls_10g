@@ -87,7 +87,7 @@ if [ "$(norm "$BID0")" != "$(norm "$BID_EXPECT")" ]; then
   echo "LF_GEOM_FAIL 板侧 BID=$BID0 != $BID_EXPECT ⇒ 拒绝继续"; exit 3
 fi
 bash "$S" id || { echo "LF_GEOM_FAIL 取数器身份闸未过 ⇒ 拒绝继续"; exit 3; }
-echo "LF_GEOM_OK NW=63 BID=$BID0"
+echo "LF_GEOM_OK NW=${NW} BID=$BID0"
 
 echo "### PHASE nic_pre $(date +%s.%N)"; NIC pre
 sleep 2.0; echo "### PHASE nic_pre2 $(date +%s.%N)"; NIC pre2   # 同上: 取刷新后的读数 (判据用 pre2)

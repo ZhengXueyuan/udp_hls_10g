@@ -1,0 +1,32 @@
+### 任务④ 最小可行清单 (2026-10-10, 实测)
+
+--- 基线指纹 (现役 237 文件) ---
+#   compile set: 201 files (manifests: chain_src.f, retx_src.f, fifo_src.f, vlan_src.f, uart_src.f)
+#   extra      : 36 files (generators/bats/criteria)
+#   total      : 237 files hashed
+FILES_COMPILE=201  FILES_ALL=237
+DIGEST_ALL = ef3f914c26c0eeed6c81a45e0b5270f3a1ca7821ef643cbb3066ea09d3fca546
+
+--- 假设指纹 (chain_src.f + 3 文件, 已实测后还原) ---
+#   compile set: 204 files (manifests: chain_src.f, retx_src.f, fifo_src.f, vlan_src.f, uart_src.f)
+#   extra      : 36 files (generators/bats/criteria)
+#   total      : 240 files hashed
+[P4GATE] fingerprint written: D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\notes\p7b_toolfix_20261010\P4_FINGERPRINT_HYPOTHETICAL.txt
+DIGEST_COMPILE = 1777b5e45f9214b39b5ebd04e933cbe428bb08421da269fb7a1f966dd47814ca
+FILES_COMPILE  = 204
+DIGEST_ALL     = fecb35630ca5d0e8584200fb9cab1c6a6c57ac949e7fb97749518be5516ebf00
+FILES_ALL      = 240
+GIT_HEAD       = 0ffbb4f
+
+--- 新增 3 文件 (uart_dbg.v 已在 uart_src.f 里, 不新增) ---
+  board/wrapper_p4.v
+  board/util_gmii_to_rgmii.v
+  rtl/app_pattern.v
+
+--- 障碍: manifestcheck 要求【精确集合相等】 ---
+  chain_src.f 被 12 个门共用, 对应 5 个 bat (全在 sim/p4sim/, 不在我的所有权内):
+    sim/p4sim/run_tb_p4_chain.bat
+    sim/p4sim/run_tb_p4_burst.bat
+    sim/p4sim/run_tb_p4_chain_vlan.bat
+    sim/p4sim/run_tb_p4_burst_vlan.bat
+    sim/p4sim/run_tb_p4_chain_stall.bat
