@@ -789,7 +789,8 @@ module tcp_tx_frame (
                               scan_estab && (replay_left == 4'd0) && !replay_full;
     // ⭐ RETXHI-GHOST: 排空拍恢复写 —— 环内数据已发完而 ack 上界还在更高处
     //   (漂移区) ⇒ 把 snd_nxt 恢复到 retx_hi。为什么不恢复不行: 随后的控制帧取
-    //   ctrl_seq = rb_snd_nxt (:1264) ⇒ seq 下漂 ⇒ spurious FIN (本文件 :2003-2007 逐字警告).
+    //   ctrl_seq = rb_snd_nxt (现读 :1300) ⇒ seq 下漂 ⇒ spurious FIN
+    //   (本文件现读 :2060 / :2305 / :2344 三处逐字警告).
     //   只增不减: 越顶 (snd_nxt > retx_hi) 时本项恒 0, 不夺 F1 的既有语义.
     assign      ring_restore = ring_eval && !ring_ovf && scan_estab &&
                                (ring_delta == 32'd0) &&
@@ -2179,7 +2180,8 @@ module tcp_tx_frame (
             //   拍, 而那拍 `upd_val` 取 `rb_snd_una` (非数据支) ⇒ 会用**上一帧的 `seq_r+plen_r`**
             //   刷 `whi_r[cur_id]` (与"环里真写出过的最高 seq"语义不符)。
             //   ring 重放帧亦置 `is_data_r=1` ⇒ 仍靠 `!retx_active` 门掉 (会话期无活帧)。
-            // ⚠️ 登记 (TL 裁定③, 2026-10-10): 本支的 `whi_r` **没有任何判据** —— `e_ghost` 已
+            // ⚠️ 登记 (TL 裁定③, 2026-10-10; 本登记块 = **:2182-2187** (6 行) 现读, `if` 在
+            //   :2188-2189、写值在 :2190): 本支的 `whi_r` **没有任何判据** —— `e_ghost` 已
             //   限定在 OVL 支 (默认支的推进写落在 **S_DONE = 该帧自己的尾拍**, 帧尾直读会结构性
             //   误报: 实测 arm A `e_ghost=346`, 全部呈 `tail=本帧尾 / whi=上帧尾`).
             //   收益 = 镜像一致性 + 防未来 (设计件 §4.4 本就承认"镜像对幽灵无门可测").

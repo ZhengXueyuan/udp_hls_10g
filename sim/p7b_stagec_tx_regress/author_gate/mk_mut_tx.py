@@ -297,6 +297,19 @@ add("mut_ghost_noclamp", [
 ], "M-5 拆钳位 + 注入陈旧 whi => e_ringhi 命中")
 
 
+# ---- 诊断 (TL 裁定①(b) 分离实验): 只撤 cfg_up 的**其它**清位, 保留 whi_r 清位 ----
+#   用途 = 把 "PS j9/j6 是不是由 cfg_up 的其它清位 (rto_pend/rto_timer/epoch) 造成" 分离掉.
+#   ⚠️ 不是门臂: 它故意破坏 persist 状态机的前提 (quiet 例程靠 cfg_up 清 rto_pend),
+#      预期长出别的红; 判读只看 **j9/j6 是否变化**.
+add("mut_ghost_noclearothers", [(
+    "                epoch[cfg_up_id]        <= 4'd0;\n"
+    "                snd_una_prev[cfg_up_id] <= 32'd0;\n"
+    "                rto_pend[cfg_up_id]     <= 1'b0;\n"
+    "                rto_timer[cfg_up_id]    <= 21'd0;\n",
+    "                // DIAG (mut_ghost_noclearothers): 撤 epoch/snd_una_prev/rto_pend/rto_timer 清位\n",
+    2)], "DIAG 撤 cfg_up 的'其它'清位 (保留 whi_r) => 分离候选②")
+
+
 def norm(s):
     """换行归一化: \\r\\n / 单独 \\r 一律成 \\n (幂等)."""
     return s.replace("\r\n", "\n").replace("\r", "\n")

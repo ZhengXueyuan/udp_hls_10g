@@ -32,6 +32,10 @@ if "%WHICH%"=="TDBG" call :run2 TDBG "%RTL%"  "%TB%"  "-d TCP_TX_OVL -d ARM_PERS
 if "%WHICH%"=="M3"   call :run2 M3   "%HERE%\mut\mut_ghost_m3.v"         "%TB%" "-d TCP_TX_OVL -d ARM_PERSIST" & goto :done
 if "%WHICH%"=="M4"   call :run2 M4   "%HERE%\mut\mut_ghost_norestore.v"  "%TB%" "-d TCP_TX_OVL -d ARM_PERSIST" & goto :done
 if "%WHICH%"=="M5"   call :run2 M5   "%HERE%\mut\mut_ghost_noclamp.v"    "%TB%" "-d TCP_TX_OVL -d ARM_PERSIST" & goto :done
+REM   RC/RCT = DIAG (TL ruling 1(b)): drop cfg_up clearing of epoch/snd_una_prev/rto_pend/rto_timer
+REM           (keep whi_r clear) => separates candidate 2 for PS j9/j6
+if "%WHICH%"=="RC"   call :run2 RC   "%HERE%\mut\mut_ghost_noclearothers.v" "%TB%" "-d TCP_TX_OVL -d ARM_PERSIST" & goto :done
+if "%WHICH%"=="RCT"  call :run2 RCT  "%HERE%\mut\mut_ghost_noclearothers.v" "%TB%" "-d TCP_TX_OVL -d ARM_PERSIST -d PERSIST_NEGCTL" & goto :done
 echo unknown arm %WHICH% & exit /b 2
 :done
 exit /b %errorlevel%
