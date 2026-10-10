@@ -3,7 +3,7 @@ setlocal
 set XV=C:\AMDDesignTools\2025.2\Vivado\bin
 set R=D:\repo\XCKU5PMini\udp_hls_10g
 set AG=D:\repo\XCKU5PMini\udp_hls_10g\sim\p7b_stagec_tx_regress\author_gate
-call :one S "mut\..\..\..\..\rtl\tcp_tx_frame.v" "-d TCP_TX_OVL -d ARM_PERSIST" "%AG%\runS"
+call :one S "%R%\rtl\tcp_tx_frame.v" "-d TCP_TX_OVL -d ARM_PERSIST" "%AG%\runS"
 call :one T "%R%\rtl\tcp_tx_frame.v" "-d TCP_TX_OVL -d ARM_PERSIST -d PERSIST_NEGCTL" "%AG%\runT"
 call :one U "%AG%\mut\mut_ps_noarmfin.v" "-d TCP_TX_OVL -d ARM_PERSIST" "%AG%\runU"
 call :one V "%AG%\mut\mut_ps_noarmrst.v" "-d TCP_TX_OVL -d ARM_PERSIST" "%AG%\runV"

@@ -87,7 +87,13 @@ module tb_tcp_tx_ovl;
     localparam integer PE_LAD_WAIT   = 90000;    // E1 阶梯窗上限 (3 档 = 80 visits = 20480 拍)
     localparam integer PE_AFTER      = 2500;     // "恢复后 0 新探询" 观察窗
     localparam integer PE_E2_DRAIN   = 8000;     // E2 排空窗
-    localparam integer PE_HOLD_SHORT = 5200;     // E2/E5/E6 的关窗观察窗 (2×RTO' + 余量)
+    localparam integer PE_HOLD_SHORT = 16000;    // E2/E5/E6 的关窗观察窗
+    //   [!!] 必须 >= 一次 fire 的 visit 时间: `ps_timer` 数的是**该连接自己的扫描访问**,
+    //   16 连接轮扫 + 扫描被 ACK/重放挤稀 => 1 visit ~ 840 拍 (实测) => 8 visits ~ 7000 拍。
+    //   首版 5200 拍 **小于**它 => 观察窗在 fire 之前就结束 => E5/E6 的"0 探询"是**空判据**,
+    //   且 PS-MUT-1/2 (撤 !fin_sent_r / !rst_sent_r) 也因此抓不到。
+    //   ⛔ 订正记录: 本条曾以为已改成 16000 —— 实际**没落地** (补丁锚点把源文件的 `×` 写成
+    //      了 ASCII `x` 而 assert 在后台任务里静默失败), 现盘一度仍是 5200。
     localparam integer PE_E3_SESS    = 14000;    // E3 epoch 饱和窗
     localparam integer PE_E3_HOLD    = 34000;     // E3 关窗观察窗
     localparam integer PE_E4_WAIT    = 30000;     // E4 等 fire 窗
@@ -960,6 +966,39 @@ module tb_tcp_tx_ovl;
     end
 
 `ifdef ARM_PERSIST
+    // ==== 归因探针 Q1: **帧中** snd_nxt 是否变过 (app 的每拍基址 kw_live 是组合取
+    //      u_tcb.snd_nxt_r[cur_c], 而 DUT 的帧 seq 是帧首拍锁存 => 帧中一变就错位) ====
+    integer    dbg_st_n;
+    reg [31:0] dbg_st_prev;
+    reg        dbg_st_v;
+    initial begin dbg_st_n = 0; dbg_st_prev = 0; dbg_st_v = 0; end
+    always @(posedge clk) begin
+        // 只抓**收帧进行中** (rx_state==RX_IDLE 且 recv_first==0): 帧尾 RX_FIN 的推进写
+        // (upd_wr_data) 是合法帧末事件, 不是帧中错位
+        if (dbg_st_v && (u_dut.rx_state == 2'd0) && !u_dut.recv_first &&
+            (u_tcb.snd_nxt_r[cur_c] != dbg_st_prev) && (dbg_st_n < 12)) begin
+            dbg_st_n = dbg_st_n + 1;
+            $display("DBG SNMID c=%0d %h -> %h @%0d rxst=%0d f_conn=%0d f_seq=%h",
+                     cur_c, dbg_st_prev, u_tcb.snd_nxt_r[cur_c], cyc,
+                     u_dut.rx_state, u_dut.f_conn[u_dut.rx_bank], u_dut.f_seq[u_dut.rx_bank]);
+        end
+        dbg_st_prev <= u_tcb.snd_nxt_r[cur_c]; dbg_st_v <= 1'b1;
+    end
+    // ==== 归因探针 Q1b: 每连接**在飞最大值** (snd_nxt - snd_una) ====
+    //   判据: 环 = 每连接 64KB (retx_ram 13 位 ring idx); 窗帽 = WIN_CAP_5 = 0xF000 = 61440;
+    //   设计件 §2.2-3 的余量前提 = 在飞 <= 61440 + 1508 = 62948 < 65536。
+    //   若实测 maxd >= 65536 => 环形窗口越界 (读点会被早一圈的数据覆盖)。
+    reg [31:0] dbg_maxd [0:15];      // 32 位无符号 (用 integer 会被符号位毁掉: 实测踩过)
+    integer    dbg_c2;
+    initial for (dbg_c2 = 0; dbg_c2 < 16; dbg_c2 = dbg_c2 + 1) dbg_maxd[dbg_c2] = 32'd0;
+    always @(posedge clk)
+        for (dbg_c2 = 0; dbg_c2 < 16; dbg_c2 = dbg_c2 + 1)
+            // 只在 ESTAB 且差值 < 2^31 时计 (建连期 snd_nxt=isn / snd_una=0 的瞬态要排除)
+            if ((u_tcb.state_r[dbg_c2] == 4'd1) &&
+                ((u_tcb.snd_nxt_r[dbg_c2] - u_tcb.snd_una_r[dbg_c2]) < 32'h8000_0000) &&
+                ((u_tcb.snd_nxt_r[dbg_c2] - u_tcb.snd_una_r[dbg_c2]) > dbg_maxd[dbg_c2]))
+                dbg_maxd[dbg_c2] <= u_tcb.snd_nxt_r[dbg_c2] - u_tcb.snd_una_r[dbg_c2];
+
     // ==== PERSIST 归因探针 (体; 只读 TB 自己的源状态) ====
     always @(posedge clk) if (u_dut.start_data) begin
         dbg_sd_c <= cur_c; dbg_sd_kb <= kw_live; dbg_sd_pos <= cur_pos;
@@ -2370,6 +2409,8 @@ module tb_tcp_tx_ovl;
             // ============ ⭐ P7B-PERSIST 判据组 (设计件 §5.2-Ⅲ: j1..j14) ============
             //   【事实】= 本 TB 的读数与判据式; 【推断】= 见设计件的对应节。
             //   判例形态: 每条判据 = 计数器 + `tot_red+1` + `[FAIL]` 行 (与既有判据同款)。
+            $display("PS0 MAXINFLIGHT c0=%0d c1=%0d c2=%0d c3=%0d (BOUND 62948 / RING 65536)",
+                     dbg_maxd[0], dbg_maxd[1], dbg_maxd[2], dbg_maxd[3]);
             $display("PS1 fire probe_ep=%0d probe_out=%0d probe_bad=%0d d_ev=%0d",
                      pe_probe_ep, pe_probe_out, pe_probe_bad, pe_d_ev);
             $display("PS2 LAD n=%0d visits dc=%0d d1=%0d d2=%0d gap4=%0d (want %0d/%0d/%0d/%0d) n2=%0d",

@@ -1,0 +1,38 @@
+==========================================================================
+P7B-PERSIST 静态核对 (S1 / FB / L1 / PD)  [SELFCHECK 模式]
+  RTL = D:\repo\XCKU5PMini\udp_hls_10g\rtl\tcp_tx_frame.v
+==========================================================================
+
+[S1] PERSIST_EN=0 常量性: 新增信号 22 个 / 写点 26 处
+     ==> 零例外 (每个写点 = 字面零 或 在 PERSIST_EN/ps_arm/ps_fire/ps_rd_d2 守卫下)
+     [FB-ok] start_ack        orig<->probe_sel  行距 0 (窗口 6)
+     [FB-ok] upd_wr_ctrl      orig<->probe_sel  行距 0 (窗口 6)
+     [FB-ok] rb_id            orig<->probe_sel  行距 1 (窗口 6)
+     [FB-ok] ctrl_is          orig<->probe_sel  行距 0 (窗口 6)
+     [FB-ok] ctrl_seq         orig<->probe_sel  行距 0 (窗口 6)
+     [FB-ok] ctrl_doff        orig<->probe_sel  行距 0 (窗口 6)
+     [FB-ok] ctrl_pld         orig<->probe_sel  行距 0 (窗口 6)
+     [FB-ok] h_totlen         orig<->tx_is_probe 行距 0 (窗口 6)
+     [FB-ok] ctl_aen_v1       orig<->ctrl_probe 行距 0 (窗口 6)
+     [FB-ok] ctrl_ipcsum_now  orig<->ctrl_probe 行距 1 (窗口 6)
+     [FB-ok] ctrl_acc         orig<->ctrl_pld   行距 1 (窗口 6)
+     [FB-ok] rd_en_m          orig<->ps_rd      行距 0 (窗口 6)
+     [FB-ok] r_conn_m         orig<->ps_rd      行距 0 (窗口 6)
+     [FB-ok] r_seq_m          orig<->ps_rd      行距 0 (窗口 6)
+     [FB-ok] m_axis_tdata     orig<->tx_is_probe 行距 12 (窗口 20)
+     [FB-ok] m_axis_tkeep     orig<->tx_is_probe 行距 13 (窗口 20)
+     [FB-ok] rb_id            orig<->probe_sel  行距 0 (窗口 6)
+     [FB-ok] ctrl_ack_now     orig<->probe_sel  行距 0 (窗口 6)
+
+[FB] mux 折回 (被改写的既有信号: 原操作数仍在 + 新项门控): 18 条
+     ==> 全部通过 (原操作数文本仍在, 新项由 probe_sel/tx_is_probe/ctrl_probe/ps_rd 门控)
+
+[L1] git diff -U0 三项:
+     (a) 白名单: 代码 `+` 行 1 条 (注释/空行不计), 越界 1 条
+         [越界] assign zz = svc_rewind;
+     (b) 保序配对豁免: 禁用符号净新增 1 条
+         [净新增] svc_rewind     +1 -0 => 1
+     [SELFCHECK-1] 注入独立 hunk 的 `assign zz = svc_rewind;` => 白名单红=True 禁用符号红=True
+     [SELFCHECK-2] 成对搬移 (含 svc_rewind 的 `-` 行 + `+` 行): 开配对豁免 => 净新增 0 (期望 0); 关掉 => 原始命中 1 (期望 >0)
+     [SELFCHECK-3] 单侧新增 svc_rewind (无配对) => 净新增 1 (期望 >0)
+     ==> 自检通过 (三个负对照都有牙)

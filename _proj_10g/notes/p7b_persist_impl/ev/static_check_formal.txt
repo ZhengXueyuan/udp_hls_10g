@@ -1,0 +1,42 @@
+==========================================================================
+P7B-PERSIST 静态核对 (S1 / FB / L1 / PD)
+  RTL = D:\repo\XCKU5PMini\udp_hls_10g\rtl\tcp_tx_frame.v
+==========================================================================
+
+[S1] PERSIST_EN=0 常量性: 新增信号 22 个 / 写点 26 处
+     ==> 零例外 (每个写点 = 字面零 或 在 PERSIST_EN/ps_arm/ps_fire/ps_rd_d2 守卫下)
+     [FB-ok] start_ack        orig<->probe_sel  行距 0 (窗口 6)
+     [FB-ok] upd_wr_ctrl      orig<->probe_sel  行距 0 (窗口 6)
+     [FB-ok] rb_id            orig<->probe_sel  行距 1 (窗口 6)
+     [FB-ok] ctrl_is          orig<->probe_sel  行距 0 (窗口 6)
+     [FB-ok] ctrl_seq         orig<->probe_sel  行距 0 (窗口 6)
+     [FB-ok] ctrl_doff        orig<->probe_sel  行距 0 (窗口 6)
+     [FB-ok] ctrl_pld         orig<->probe_sel  行距 0 (窗口 6)
+     [FB-ok] h_totlen         orig<->tx_is_probe 行距 0 (窗口 6)
+     [FB-ok] ctl_aen_v1       orig<->ctrl_probe 行距 0 (窗口 6)
+     [FB-ok] ctrl_ipcsum_now  orig<->ctrl_probe 行距 1 (窗口 6)
+     [FB-ok] ctrl_acc         orig<->ctrl_pld   行距 1 (窗口 6)
+     [FB-ok] rd_en_m          orig<->ps_rd      行距 0 (窗口 6)
+     [FB-ok] r_conn_m         orig<->ps_rd      行距 0 (窗口 6)
+     [FB-ok] r_seq_m          orig<->ps_rd      行距 0 (窗口 6)
+     [FB-ok] m_axis_tdata     orig<->tx_is_probe 行距 12 (窗口 20)
+     [FB-ok] m_axis_tkeep     orig<->tx_is_probe 行距 13 (窗口 20)
+     [FB-ok] rb_id            orig<->probe_sel  行距 0 (窗口 6)
+     [FB-ok] ctrl_ack_now     orig<->probe_sel  行距 0 (窗口 6)
+
+[FB] mux 折回 (被改写的既有信号: 原操作数仍在 + 新项门控): 18 条
+     ==> 全部通过 (原操作数文本仍在, 新项由 probe_sel/tx_is_probe/ctrl_probe/ps_rd 门控)
+
+[L1] git diff -U0 三项:
+     (a) 白名单: 代码 `+` 行 0 条 (注释/空行不计), 越界 0 条
+     (b) 保序配对豁免: 禁用符号净新增 0 条
+     ==> 白名单/禁用符号净新增 均通过
+
+[PD] 参数账实一致 (§5.3):
+     PERSIST_EN   OK
+     PS_BASE      OK
+     PS_MAX       OK
+     RTO_LIM_DP   OK
+
+==========================================================================
+STATIC_CHECK_PERSIST: PASS
