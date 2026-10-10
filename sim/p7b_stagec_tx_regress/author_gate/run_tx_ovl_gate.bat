@@ -14,7 +14,14 @@ REM     H = M-C3   ping-pong degenerated to single bank
 REM     I = M-C2   control reservation registered 8 cycles (form A)
 REM   L = M-W66-1  stat_winstall never counts (build E)
 REM   M = M-W66-2  stat_winstall predicate drops !wnd_open (build E)
-REM Contract: A/B RC==0; C..M RC!=0 (J = KNOWN GAP, not counted).
+REM   --- build F (W67/W69 judges + the W67_CAP_SMALL arm) ---
+REM   N = M-W67-1  split predicate drops the side term (expect nonzero; has teeth in arm B)
+REM   O = CLEAN  -d TCP_TX_OVL -d W67_CAP_SMALL  expect RC 0  (the ONLY arm where the
+REM       board-cap side is non-empty: cap 8192 is reachable, so W67 is NOT an empty judge)
+REM   P = M-W67-2  cap-side counter never counts (expect nonzero; teeth ONLY in arm O)
+REM   Q = M-W69-2  op-point latch enabled by start_data instead of the wait cycle
+REM   R = M-W69-1  op-point latch never updates
+REM Contract: A/B/O RC==0; C..R RC!=0 except J (KNOWN GAP, not counted).
 REM =====================================================================
 set "HERE=%~dp0"
 if "%HERE:~-1%"=="\" set "HERE=%HERE:~0,-1%"
@@ -56,6 +63,16 @@ call :run L "%HERE%\mut\mut_w66_dead.v" "-d TCP_TX_OVL"
 set RCL=%errorlevel%
 call :run M "%HERE%\mut\mut_w66_nownd.v" "-d TCP_TX_OVL"
 set RCM=%errorlevel%
+call :run N "%HERE%\mut\mut_w67_always.v" "-d TCP_TX_OVL"
+set RCN=%errorlevel%
+call :run O "%RTL%\tcp_tx_frame.v" "-d TCP_TX_OVL -d W67_CAP_SMALL"
+set RCO=%errorlevel%
+call :run P "%HERE%\mut\mut_w67_dead.v" "-d TCP_TX_OVL -d W67_CAP_SMALL"
+set RCP=%errorlevel%
+call :run Q "%HERE%\mut\mut_w69_atstart.v" "-d TCP_TX_OVL"
+set RCQ=%errorlevel%
+call :run R "%HERE%\mut\mut_w69_dead.v" "-d TCP_TX_OVL"
+set RCR=%errorlevel%
 
 echo ==================== SUMMARY ====================
 echo   A default serial  RC=%RCA%  (expect 0)
@@ -71,6 +88,11 @@ echo   J M-C6  no rewgate RC=%RCJ% (KNOWN GAP: stimulus hits the resv window onl
 echo   K M-C8  no rx_idle RC=%RCK% (expect nonzero)
 echo   L M-W66-1 dead counter RC=%RCL% (expect nonzero; new W66 judge, build E)
 echo   M M-W66-2 no !wnd_open RC=%RCM% (expect nonzero; semantic-wrong direction)
+echo   N M-W67-1 no side term  RC=%RCN% (expect nonzero; build F)
+echo   O CLEAN W67_CAP_SMALL   RC=%RCO% (expect 0; **cap-side arm** - W67 non-vacuous here)
+echo   P M-W67-2 dead cap cnt  RC=%RCP% (expect nonzero; build F)
+echo   Q M-W69-2 latch@start   RC=%RCQ% (expect nonzero; build F)
+echo   R M-W69-1 dead latch    RC=%RCR% (expect nonzero; build F)
 
 set FAILS=0
 if not "%RCA%"=="0" set /a FAILS+=1
@@ -85,11 +107,18 @@ if "%RCI%"=="0" set /a FAILS+=1
 if "%RCK%"=="0" set /a FAILS+=1
 if "%RCL%"=="0" set /a FAILS+=1
 if "%RCM%"=="0" set /a FAILS+=1
+if "%RCN%"=="0" set /a FAILS+=1
+if not "%RCO%"=="0" set /a FAILS+=1
+if "%RCP%"=="0" set /a FAILS+=1
+if "%RCQ%"=="0" set /a FAILS+=1
+if "%RCR%"=="0" set /a FAILS+=1
 
 echo   ---- B key readings ----
-findstr /C:"FRAMES" /C:"COV " /C:"MINGAP" /C:"CYCRX" /C:"CYCTX" /C:"FRAMEPERIOD" /C:"OVL " /C:"REDS" /C:"T8 " /C:"W66" /C:"TB_TCP_TX_OVL" "runB\xs.log"
+findstr /C:"FRAMES" /C:"COV " /C:"MINGAP" /C:"CYCRX" /C:"CYCTX" /C:"FRAMEPERIOD" /C:"OVL " /C:"REDS" /C:"T8 " /C:"W66" /C:"W67" /C:"W69" /C:"TB_TCP_TX_OVL" "runB\xs.log"
+echo   ---- arm O key readings (the W67_CAP_SMALL arm) ----
+findstr /C:"W66" /C:"W67" /C:"W69" /C:"REDS " /C:"FRAMES" /C:"TB_TCP_TX_OVL" "runO\xs.log"
 echo   ---- mutant verdicts (REDS line + verdict + first FAIL lines) ----
-for %%M in (C D E F G H I J K L M) do (
+for %%M in (C D E F G H I J K L M N O P Q R) do (
   echo   [%%M]:
   findstr /C:"REDS " /C:"TB_TCP_TX_OVL:" /C:"T8 " "run%%M\xs.log"
 )

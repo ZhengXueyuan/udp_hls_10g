@@ -128,14 +128,14 @@ BOARD_IP=192.168.100.2
 MYIP=192.168.100.100
 DEV=/dev/xdma0_user
 TOOLS=/home/a/xdma_test/dma_ip_drivers-patched/XDMA/linux-kernel/tools
-EXPECT_BID=${EXPECT_BID:-0x00000019}      # 构建 E = 0x19 (源码 board/wrapper_p4.v 的 BUILD_ID_V; 原 0x18 = 构建 D / 17 = 构建 C)
+EXPECT_BID=${EXPECT_BID:-0x0000001A}      # 构建 F = 0x1A (源码 board/wrapper_p4.v 的 BUILD_ID_V; 原 0x19 = 构建 E / 0x18 = 构建 D)
 # ⛔ 2026-10-07 Stage C 同步轮: 原句 = "P7B-WU 二轮 = 9"; 读 Build 2 (63 字 / BID 9) 覆盖 EXPECT_BID=0x00000009
 # ⛔ 2026-10-10 订正 (构建 C 门同步轮): 原默认 0x0000000A (P7b Stage C 63 字) ⇒ 现役 = **17 / 65 字**。
 #    ⚠️ 默认 `EXPECT_BID` 与默认 `SNAP_WORDS` **必须同代** (后者本轮已 = 65): 不同代 ⇒ G1 身份红 +
 #    B_WIN "窗口不完整" 红 (假红)。读旧位流: Stage C 63 字 = `EXPECT_BID=0x0000000A SNAP_WORDS=63`;
 #    WU 二轮 / Build 2 = `EXPECT_BID=0x00000009 SNAP_WORDS=63`。
-SNAP_WORDS=${SNAP_WORDS:-67}
-UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 67 ⇒ 0x12C (66 ⇒ 0x128; 65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)
+SNAP_WORDS=${SNAP_WORDS:-70}
+UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 70 ⇒ 0x138 (67 ⇒ 0x12C; 66 ⇒ 0x128; 65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)
 # ⚠️ 未实现地址 = 0x20 + 4*SNAP_WORDS 这条公式本轮**重新成立**: 读侧译码已加宽到 7 位
 #    (araddr[8:2]) ⇒ 地址每 **512** 字节才回绕, 而 `0x20+4*63 = 0x11C` 真正未实现 ⇒
 #    仍回 0xffffffff。红线随之改成"**绝不能挑 ≥0x200**" (旧红线是 ≥0x100)。

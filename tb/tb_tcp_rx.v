@@ -58,6 +58,18 @@ module tb_tcp_rx;
     wire [3:0]  ack_id;
     wire [31:0] ack_val;
     wire [31:0] stat_pass, stat_nonmatch, stat_ipcsum, stat_crc, stat_seq, stat_ack, stat_bytes;
+    // ⭐ 构建 F (W68): DUT 的新输出 + **TB 侧独立复算**
+    //   ⚠️ 刻意**不引用** DUT 的 `ack_adv_ev` (引用它 = 环路恒等式, 变异体改判据时 oracle 跟着改
+    //      ⇒ 永远相等 = 没牙)。这里逐项自写; 用到的 `ack_adv_l`/`fend_trunc` 是 DUT 的**状态线**,
+    //      不是它的判据线 —— 与既有 W66 复算引用 `u_dut.svc/ring_eval/...` 同一手法。
+    //   ⚠️ 登记过的暴露面: 若有人改 `fend_trunc` 本身, 两边同步改 (该子项不是独立 oracle)。
+    wire [31:0] stat_ack_adv;
+    integer     exp_ack_adv;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) exp_ack_adv <= 0;
+        else if (fend && s_tcrs && u_rx.ack_adv_l && !u_rx.fend_trunc)
+            exp_ack_adv <= exp_ack_adv + 1;
+    end
     wire [31:0] m_frames, m_crc_err, m_drop, m_bytes;
     wire        u_rx_upd_wr;
     wire [3:0]  u_rx_upd_id;
@@ -124,7 +136,9 @@ module tb_tcp_rx;
         .cam_q_hit(cam_q_hit), .cam_q_id(cam_q_id),
         .stat_pass(stat_pass), .stat_drop_nonmatch(stat_nonmatch),
         .stat_drop_ipcsum(stat_ipcsum), .stat_drop_crc(stat_crc),
-        .stat_drop_seq(stat_seq), .stat_ack(stat_ack), .stat_bytes(stat_bytes)
+        .stat_drop_seq(stat_seq), .stat_ack(stat_ack), .stat_bytes(stat_bytes),
+        // ⭐ P7B 构建 F: W68 (`stat_ack_adv` = 推进 snd_una 的 ACK 事件数; 纯观测)
+        .stat_ack_adv(stat_ack_adv)
     );
 
     tcp_cam u_cam (
@@ -261,6 +275,13 @@ module tb_tcp_rx;
         else
             $display("P4b7 DIRECTED FAIL rcv_nxt=%08h (exp 0000044c) snd_una=%08h (exp 00001770) snd_wnd=%04h (exp 4000)",
                      u_tcb.rcv_nxt_r[0], u_tcb.snd_una_r[0], u_tcb.snd_wnd_r[0]);
+        // ⭐ 构建 F: W68 判据 (双边等式 + 非空见证; 形状与 tb_tcp_tx_ovl 的 W66/W67 同款)
+        //   ⚠️ 本门的整体口径另有既存红 (HARD 臂的 python 期望失配), 与本判据无关;
+        //      本判据只保证"dut 与 TB 独立复算逐字相等, 且非空"。
+        $display("W68ADV dut=%0d tb=%0d", stat_ack_adv, exp_ack_adv);
+        if (exp_ack_adv == 0) $display("[FAIL] W68 空判据 (TB 侧推进 ACK 事件 = 0)");
+        if (stat_ack_adv !== exp_ack_adv)
+            $display("[FAIL] W68 语义不符 (逐拍复算): dut=%0d tb=%0d", stat_ack_adv, exp_ack_adv);
         $display("DONE pass=%0d nonmatch=%0d ipcsum=%0d crc=%0d seq=%0d ack=%0d bytes=%0d | mac fr=%0d crc=%0d drop=%0d",
                  stat_pass, stat_nonmatch, stat_ipcsum, stat_crc, stat_seq, stat_ack, stat_bytes,
                  m_frames, m_crc_err, m_drop);

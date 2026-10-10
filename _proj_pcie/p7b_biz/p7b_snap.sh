@@ -1,6 +1,7 @@
 #!/bin/bash
-# p7b_snap.sh -- 板侧快照窗口取数器 (**现役 = 67 字 / BID 0x19**; 标题原文 = "板侧 **63** 字
+# p7b_snap.sh -- 板侧快照窗口取数器 (**现役 = 70 字 / BID 0x1A**; 标题原文 = "板侧 **63** 字
 #   快照窗口的取数器 (P7b Stage C: BID=10 / SNAP_NW=63)" —— 那一代已过时, 见下逐代订正)
+#   ⭐ 构建 F (2026-10-10): 67 → **70** (W67/W68/W69 = 三个纯观测仪器; 未实现地址 0x12C → **0x138**)。
 #   ⭐ 构建 E (2026-10-10): 66 → **67** (W66 = tcp_tx_frame.stat_winstall; 未实现地址 0x128 → **0x12C**)。
 #   ⛔ 2026-10-10 订正 (构建 C 门同步轮): 上面这句的标题**已过时** —— 默认几何现 = **65 字 /
 #      BID 0x17** (构建 C: 快照 63→65, 新增 W63/W64 = `app_pattern` 的两个停滞计数);
@@ -45,9 +46,9 @@ D=/dev/xdma0_user
 #   ⚠️ **NW 上限 = 119** (读侧译码 7 位 ⇒ 字 0..127; 快照从字 8 起; 负对照需留 1 个空字)。
 #      红线随之从"≥ 0x100 回绕" 改成 **"绝不能挑 ≥ 0x200"**
 #      (0x200 在 7 位译码下回绕到 word 0 = MAGIC ⇒ 假 FAIL)。
-NW=${NW:-67}
-UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 67 ⇒ 0x12C (65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)
-EXPECT_BID=${EXPECT_BID:-0x00000019}
+NW=${NW:-70}
+UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 70 ⇒ 0x138 (67 ⇒ 0x12C; 65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)
+EXPECT_BID=${EXPECT_BID:-0x0000001A}
 # ⛔ 2026-10-07 Stage C: 原默认值 = 0x00000009 (P7B-WU 二轮 = 9)。
 # ⛔ 2026-10-10 (构建 C 门同步轮): 再上一代的默认 = **0x0000000A** (Stage C 63 字) ——
 #    现役 = **0x00000017** (65 字; 源码 `board/wrapper_p4.v` 的 `BUILD_ID_V = 32'h00000017`)。
@@ -122,6 +123,13 @@ declare -A NAME=(
  #    打成 `?`: 表原只到 [64])。真值源 = `board/wrapper_p4.v` 装配段:
  #      W65 = mac_tx_10g.stat_tx_idle (线占空: S_IDLE 拍数) / W66 = tcp_tx_frame.stat_winstall (窗口门停顿拍数)。
  [65]=mac_tx_idle          [66]=tx_stat_winstall
+# ⭐ 构建 F (2026-10-10): W67/W68/W69 —— 三个**纯观测**仪器 (把 `L` 拆开)。真值源 =
+#    `board/wrapper_p4.v` 装配段 / `_proj_10g/notes/P7B_L_INSTRUMENT_DESIGN.md` §2:
+#      W67 = tcp_tx_frame.stat_winstall_cap (板帽侧等窗拍数) /
+#      W68 = tcp_rx.stat_ack_adv (推进 snd_una 的 ACK 次数 = L 的分母) /
+#      W69 = tcp_tx_frame.o_win_at_winstall (最近一次等窗拍 {在飞, 有效窗} 锁存;
+#            ⚠️ **仅当同窗 ΔW66 > 0 时才有效** —— 否则是上一次的陈旧值)。
+[67]=tx_winstall_cap      [68]=rx_stat_ack_adv     [69]=tx_win_at_winstall
 )
 
 id_check(){

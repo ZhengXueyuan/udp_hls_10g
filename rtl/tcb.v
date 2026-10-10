@@ -10,6 +10,12 @@ module tcb #(
     // P5: 窗口门控帽提为参数 (原先硬编码 16'hBFFE)。必须与
     // tcp_tx_frame.RING_CAP 同值 (P4c 起两处同值 0xBFFE; wrapper 显式传参,
     // 避免日后分叉)。默认值 = 历史硬编码值, 行为不变。
+    // ⛔ 2026-10-10 (构建 F, B8 债订正): 上面那句「两处同值 **0xBFFE**」是 **P4c 时代的
+    //   历史值** —— **现役帽 = `0xF000` (61440 B; P7B-LONGSEND 轮抬帽)**, 单一真值源 =
+    //   `board/wrapper_p4.v:227` 的 `WIN_CAP_5`, 由它同时下发本模块 (`.WIN_CAP(WIN_CAP_5)`,
+    //   `wrapper_p4.v:1971`) 与 `tcp_tx_frame` (`.RING_CAP(WIN_CAP_5)`, `wrapper_p4.v:2135`)
+    //   ⇒ **三处同值由构造保证, 不会分叉**。下面 `WIN_CAP` 的**参数默认值 `0xBFFE` 只是
+    //   给不传参例化 (各单元 TB) 用的历史默认值**, 不是板上现役值 (改它 = 改行为)。
     parameter [15:0] WIN_CAP = 16'hBFFE
 ) (
     input  wire        clk,
@@ -139,6 +145,9 @@ module tcb #(
     // RING_CAP 硬编码同值, 两处必须一致)。结构性安全界同步放宽: ring 物理
     // 容量 65536 字节/conn (retx_ram 13 位 ring 字 idx), 最坏在飞 =
     // (0xBFFE-1) + plen_max 4095 = 53244 < 65536 — 硬 ring 界仍成立。
+    // ⛔ 2026-10-10 (构建 F, B8 债订正): 本行(`0xBFFE`/53244)与上一行(`0xBFFE`)都是
+    //   **P4c 历史值** —— 现役帽 = **`0xF000`** (单一真值源 = wrapper 的 `WIN_CAP_5`,
+    //   见本模块参数处的 B8 订正块); 现役帽下的最坏在飞**本轮未重算** (如实登记)。
     wire [31:0] win_diff = snd_nxt_r[win_id] - snd_una_r[win_id];   // 32-bit wrap-correct
     wire [15:0] win_cap  = (snd_wnd_r[win_id] < WIN_CAP) ? snd_wnd_r[win_id] : WIN_CAP;
     always @(posedge clk) begin

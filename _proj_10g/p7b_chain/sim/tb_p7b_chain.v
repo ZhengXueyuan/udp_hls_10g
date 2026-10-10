@@ -1517,10 +1517,10 @@ module tb_p7b_chain;
         //   chk("7b 0x11C reads 0 no wrap",
         //       (v === 32'h00000000) && (u_dut.u_pcie_xdma.last_rresp === 2'd2),
         //       "axi_regs decode; 63-word bound (原 51 字/0xEC; 2026-10-07 订正)");
-        u_dut.u_pcie_xdma.axil_read(32'h12C, v);
-        chk("7b 0x12C reads 0 no wrap",
+        u_dut.u_pcie_xdma.axil_read(32'h138, v);
+        chk("7b 0x138 reads 0 no wrap",
             (v === 32'h00000000) && (u_dut.u_pcie_xdma.last_rresp === 2'd2),
-            "axi_regs decode; 67-word bound (原 66 字/0x128, 65 字/0x124, 63 字/0x11C; 2026-10-10 订正)");
+            "axi_regs decode; 70-word bound (原 67 字/0x12C, 66 字/0x128, 63 字/0x11C; 2026-10-10 订正)");
 
         // =============================================================
         // F2X-PATCH: F-2 归因实验 (窗口 = 快照基准, 判据 = 线上逐帧内容)

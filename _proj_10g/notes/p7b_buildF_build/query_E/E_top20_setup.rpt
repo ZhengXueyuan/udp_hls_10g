@@ -1,0 +1,1228 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version      : Vivado v.2025.2 (win64) Build 6299465 Fri Nov 14 19:35:11 GMT 2025
+| Date              : Sat Oct 10 10:15:03 2026
+| Host              : xyz-intel running 64-bit major release  (build 9200)
+| Command           : report_timing -max_paths 20 -delay_type max -file {D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\notes\p7b_buildF_build\query_E/E_top20_setup.rpt}
+| Design            : wrapper_p4
+| Device            : xcku5p-ffvb676
+| Speed File        : -1  PRODUCTION 1.29 05-01-2022
+| Design State      : Routed
+| Temperature Grade : E
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Timing Report
+
+Slack (MET) :             0.090ns  (required time - arrival time)
+  Source:                 u_tcp_tx/FSM_sequential_rx_state_reg[1]_replica/C
+                            (rising edge-triggered cell FDCE clocked by g_hw.clk_out0  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            u_app/stg_reg[4]/D
+                            (rising edge-triggered cell FDCE clocked by g_hw.clk_out0  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             g_hw.clk_out0
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            6.400ns  (g_hw.clk_out0 rise@6.400ns - g_hw.clk_out0 rise@0.000ns)
+  Data Path Delay:        6.084ns  (logic 1.939ns (31.870%)  route 4.145ns (68.130%))
+  Logic Levels:           22  (CARRY8=2 LUT2=2 LUT4=2 LUT5=3 LUT6=11 MUXF7=1 MUXF8=1)
+  Clock Path Skew:        -0.191ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    4.787ns = ( 11.187 - 6.400 ) 
+    Source Clock Delay      (SCD):    4.704ns
+    Clock Pessimism Removal (CPR):    -0.275ns
+  Clock Uncertainty:      0.062ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.101ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.878ns (routing 0.619ns, distribution 1.259ns)
+  Clock Net Delay (Destination): 1.571ns (routing 0.564ns, distribution 1.007ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock g_hw.clk_out0 rise edge)
+                                                      0.000     0.000 r  
+    T25                                               0.000     0.000 r  sys_clk_p (IN)
+                         net (fo=0)                   0.100     0.100    u_clkgen/g_hw.u_ibufds/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.479     0.579 r  u_clkgen/g_hw.u_ibufds/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.050     0.629    u_clkgen/g_hw.u_ibufds/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     0.629 r  u_clkgen/g_hw.u_ibufds/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.343     0.972    u_clkgen/g_hw.clk_in_ibuf
+    BUFGCE_X0Y24         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.028     1.000 r  u_clkgen/g_hw.u_bufg_in/O
+                         net (fo=485, routed)         1.647     2.647    u_clkgen/clk_in_100
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                     -0.106     2.541 r  u_clkgen/g_hw.u_mmcm/CLKOUT0
+                         net (fo=1, routed)           0.257     2.798    u_clkgen/g_hw.clk_out0
+    BUFGCE_X0Y35         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.028     2.826 r  u_clkgen/g_hw.u_bufg_out/O
+    X1Y1 (CLOCK_ROOT)    net (fo=49391, routed)       1.878     4.704    u_tcp_tx/dp_clk
+    SLICE_X56Y150        FDCE                                         r  u_tcp_tx/FSM_sequential_rx_state_reg[1]_replica/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X56Y150        FDCE (Prop_DFF2_SLICEM_C_Q)
+                                                      0.098     4.802 f  u_tcp_tx/FSM_sequential_rx_state_reg[1]_replica/Q
+                         net (fo=2, routed)           0.112     4.913    u_tcp_tx/u_retx/rx_state[1]_repN_alias
+    SLICE_X57Y150        LUT2 (Prop_E6LUT_SLICEL_I0_O)
+                                                      0.064     4.977 f  u_tcp_tx/u_retx/wa_o_r[12]_i_2/O
+                         net (fo=27, routed)          0.109     5.087    u_tcp_tx/u_ackq/wa_o_r_reg[15]_2
+    SLICE_X56Y150        LUT6 (Prop_C6LUT_SLICEM_I4_O)
+                                                      0.098     5.185 r  u_tcp_tx/u_ackq/retx_id_r[3]_i_2/O
+                         net (fo=34, routed)          0.072     5.256    u_tcp_tx/u_retx/d_e_r_reg[0]_1
+    SLICE_X56Y150        LUT6 (Prop_D6LUT_SLICEM_I0_O)
+                                                      0.038     5.294 r  u_tcp_tx/u_retx/scan_id[3]_i_5/O
+                         net (fo=4, routed)           0.112     5.406    u_tcp_tx/u_ackq/stat_winstall_reg[0]
+    SLICE_X56Y152        LUT6 (Prop_C6LUT_SLICEM_I5_O)
+                                                      0.062     5.468 r  u_tcp_tx/u_ackq/scan_id[3]_i_1__0/O
+                         net (fo=320, routed)         0.127     5.595    u_tcp_tx/u_ackq/E[0]
+    SLICE_X56Y154        LUT6 (Prop_D6LUT_SLICEM_I1_O)
+                                                      0.098     5.693 r  u_tcp_tx/u_ackq/ctrl_seq[30]_i_11/O
+                         net (fo=10, routed)          0.175     5.867    u_tcp_tx/u_ackq/ctrl_seq[30]_i_11_n_53
+    SLICE_X56Y156        LUT5 (Prop_E6LUT_SLICEM_I4_O)
+                                                      0.063     5.930 r  u_tcp_tx/u_ackq/snd_una_prev[0][18]_i_10/O
+                         net (fo=96, routed)          0.404     6.334    u_tcb/snd_una_prev_reg[0][18]_i_4_1
+    SLICE_X55Y160        LUT6 (Prop_G6LUT_SLICEM_I4_O)
+                                                      0.116     6.450 r  u_tcb/rto_pend[15]_i_29/O
+                         net (fo=1, routed)           0.017     6.467    u_tcb/rto_pend[15]_i_29_n_53
+    SLICE_X55Y160        MUXF7 (Prop_F7MUX_GH_SLICEM_I1_O)
+                                                      0.080     6.547 r  u_tcb/rto_pend_reg[15]_i_14/O
+                         net (fo=1, routed)           0.000     6.547    u_tcb/rto_pend_reg[15]_i_14_n_53
+    SLICE_X55Y160        MUXF8 (Prop_F8MUX_TOP_SLICEM_I0_O)
+                                                      0.028     6.575 r  u_tcb/rto_pend_reg[15]_i_7/O
+                         net (fo=7, routed)           0.638     7.214    u_tcb/rb_state[1]
+    SLICE_X47Y140        LUT4 (Prop_F6LUT_SLICEL_I3_O)
+                                                      0.062     7.276 f  u_tcb/rto_pend[15]_i_3_replica/O
+                         net (fo=15, routed)          0.194     7.469    u_tcp_tx/u_ackq/rto_pend_reg[15]_i_7_0_repN_alias
+    SLICE_X47Y135        LUT6 (Prop_E6LUT_SLICEL_I1_O)
+                                                      0.039     7.508 f  u_tcp_tx/u_ackq/trace_mem[1033]_i_3/O
+                         net (fo=1, routed)           0.187     7.695    u_tcp_tx/u_ackq/trace_mem[1033]_i_3_n_53
+    SLICE_X45Y131        LUT6 (Prop_A6LUT_SLICEL_I3_O)
+                                                      0.064     7.759 f  u_tcp_tx/u_ackq/trace_mem[1033]_i_2/O
+                         net (fo=21, routed)          0.065     7.824    u_tcp_tx/u_ackq/bank_rdy_reg[1]
+    SLICE_X45Y131        LUT2 (Prop_C6LUT_SLICEL_I0_O)
+                                                      0.038     7.862 f  u_tcp_tx/u_ackq/remain[31]_i_4/O
+                         net (fo=82, routed)          0.179     8.040    u_app/app_tx_tready
+    SLICE_X44Y133        LUT6 (Prop_A6LUT_SLICEM_I2_O)
+                                                      0.040     8.080 r  u_app/pw_n[3]_i_47/O
+                         net (fo=7, routed)           0.466     8.546    u_app/pw_n[3]_i_47_n_53
+    SLICE_X42Y126        LUT5 (Prop_G6LUT_SLICEM_I2_O)
+                                                      0.116     8.662 r  u_app/pw_n[3]_i_56/O
+                         net (fo=1, routed)           0.017     8.679    u_app/pw_n[3]_i_56_n_53
+    SLICE_X42Y126        CARRY8 (Prop_CARRY8_SLICEM_S[6]_CO[7])
+                                                      0.150     8.829 r  u_app/pw_n_reg[3]_i_36/CO[7]
+                         net (fo=1, routed)           0.028     8.857    u_app/pw_n_reg[3]_i_36_n_53
+    SLICE_X42Y127        CARRY8 (Prop_CARRY8_SLICEM_CI_O[2])
+                                                      0.086     8.943 f  u_app/pw_n_reg[3]_i_35/O[2]
+                         net (fo=1, routed)           0.173     9.116    u_app/pw_n_reg[3]_i_35_n_66
+    SLICE_X42Y127        LUT6 (Prop_G6LUT_SLICEM_I4_O)
+                                                      0.179     9.295 f  u_app/pw_n[3]_i_37/O
+                         net (fo=5, routed)           0.065     9.361    u_app/pw_n[3]_i_37_n_53
+    SLICE_X42Y127        LUT4 (Prop_E6LUT_SLICEM_I3_O)
+                                                      0.115     9.476 r  u_app/pw_n[3]_i_8/O
+                         net (fo=8, routed)           0.151     9.627    u_app/pw_n[3]_i_8_n_53
+    SLICE_X41Y127        LUT6 (Prop_H6LUT_SLICEL_I3_O)
+                                                      0.179     9.806 f  u_app/bcnt[3]_i_11/O
+                         net (fo=2, routed)           0.167     9.973    u_app/bcnt[3]_i_11_n_53
+    SLICE_X39Y129        LUT6 (Prop_F6LUT_SLICEL_I1_O)
+                                                      0.062    10.035 r  u_app/tx_lfsr[63]_i_4__0/O
+                         net (fo=40, routed)          0.402    10.437    u_app/tx_lfsr[63]_i_4__0_n_53
+    SLICE_X38Y126        LUT5 (Prop_B6LUT_SLICEL_I1_O)
+                                                      0.064    10.501 r  u_app/stg[4]_i_1__0/O
+                         net (fo=1, routed)           0.287    10.788    u_app/stg[4]_i_1__0_n_53
+    SLICE_X40Y126        FDCE                                         r  u_app/stg_reg[4]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock g_hw.clk_out0 rise edge)
+                                                      6.400     6.400 r  
+    T25                                               0.000     6.400 r  sys_clk_p (IN)
+                         net (fo=0)                   0.079     6.479    u_clkgen/g_hw.u_ibufds/I
+    HPIOBDIFFINBUF_X0Y37 DIFFINBUF (Prop_DIFFINBUF_HPIOBDIFFINBUF_DIFF_IN_P_O)
+                                                      0.398     6.877 r  u_clkgen/g_hw.u_ibufds/DIFFINBUF_INST/O
+                         net (fo=1, routed)           0.040     6.917    u_clkgen/g_hw.u_ibufds/OUT
+    T25                  IBUFCTRL (Prop_IBUFCTRL_HPIOB_M_I_O)
+                                                      0.000     6.917 r  u_clkgen/g_hw.u_ibufds/IBUFCTRL_INST/O
+                         net (fo=1, routed)           0.303     7.220    u_clkgen/g_hw.clk_in_ibuf
+    BUFGCE_X0Y24         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.024     7.244 r  u_clkgen/g_hw.u_bufg_in/O
+                         net (fo=485, routed)         1.476     8.720    u_clkgen/clk_in_100
+    MMCM_X0Y1            MMCME4_ADV (Prop_MMCM_CLKIN1_CLKOUT0)
+                                                      0.644     9.364 r  u_clkgen/g_hw.u_mmcm/CLKOUT0
+                         net (fo=1, routed)           0.228     9.592    u_clkgen/g_hw.clk_out0
+    BUFGCE_X0Y35         BUFGCE (Prop_BUFCE_BUFGCE_I_O)
+                                                      0.024     9.616 r  u_clkgen/g_hw.u_bufg_out/O
+    X1Y1 (CLOCK_ROOT)    net (fo=49391, routed)       1.571    11.187    u_app/dp_clk
+    SLICE_X40Y126        FDCE                                         r  u_app/stg_reg[4]/C
+                         clock pessimism             -0.275    10.912    
+                         clock uncertainty           -0.062    10.850    
+    SLICE_X40Y126        FDCE (Setup_EFF_SLICEL_C_D)
+                                                      0.027    10.877    u_app/stg_reg[4]
+  -------------------------------------------------------------------
+                         required time                         10.877    
+                         arrival time                         -10.788    
+  -------------------------------------------------------------------
+                         slack                                  0.090    
+
+Slack (MET) :             0.100ns  (required time - arrival time)
+  Source:                 u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+                            (rising edge-triggered cell FDPE clocked by pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Destination:            u_pcie_regs/snap_words_r_reg[1929]/CLR
+                            (recovery check against rising-edge clock pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Path Group:             **async_default**
+  Path Type:              Recovery (Max at Slow Process Corner)
+  Requirement:            4.000ns  (pcie_axi_aclk rise@4.000ns - pcie_axi_aclk rise@0.000ns)
+  Data Path Delay:        3.547ns  (logic 0.096ns (2.706%)  route 3.451ns (97.294%))
+  Logic Levels:           0  
+  Clock Path Skew:        -0.234ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.497ns = ( 5.497 - 4.000 ) 
+    Source Clock Delay      (SCD):    1.804ns
+    Clock Pessimism Removal (CPR):    0.073ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.575ns (routing 0.527ns, distribution 1.048ns)
+  Clock Net Delay (Destination): 1.293ns (routing 0.479ns, distribution 0.814ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock pcie_axi_aclk rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     0.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.090     0.090    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.575     1.804    u_pcie_xdma/inst/pcie4_ip_i/inst/user_clk
+    SLICE_X99Y16         FDPE                                         r  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X99Y16         FDPE (Prop_EFF_SLICEL_C_Q)
+                                                      0.096     1.900 f  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/Q
+                         net (fo=5199, routed)        3.451     5.351    u_pcie_regs/bbstub_axi_aresetn
+    SLICE_X74Y91         FDCE                                         f  u_pcie_regs/snap_words_r_reg[1929]/CLR
+  -------------------------------------------------------------------    -------------------
+
+                         (clock pcie_axi_aclk rise edge)
+                                                      4.000     4.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     4.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.082     4.082    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     4.204 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.293     5.497    u_pcie_regs/axi_aclk
+    SLICE_X74Y91         FDCE                                         r  u_pcie_regs/snap_words_r_reg[1929]/C
+                         clock pessimism              0.073     5.570    
+                         clock uncertainty           -0.046     5.524    
+    SLICE_X74Y91         FDCE (Recov_FFF2_SLICEM_C_CLR)
+                                                     -0.072     5.452    u_pcie_regs/snap_words_r_reg[1929]
+  -------------------------------------------------------------------
+                         required time                          5.452    
+                         arrival time                          -5.351    
+  -------------------------------------------------------------------
+                         slack                                  0.100    
+
+Slack (MET) :             0.100ns  (required time - arrival time)
+  Source:                 u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+                            (rising edge-triggered cell FDPE clocked by pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Destination:            u_pcie_regs/snap_words_r_reg[1932]/CLR
+                            (recovery check against rising-edge clock pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Path Group:             **async_default**
+  Path Type:              Recovery (Max at Slow Process Corner)
+  Requirement:            4.000ns  (pcie_axi_aclk rise@4.000ns - pcie_axi_aclk rise@0.000ns)
+  Data Path Delay:        3.547ns  (logic 0.096ns (2.706%)  route 3.451ns (97.294%))
+  Logic Levels:           0  
+  Clock Path Skew:        -0.234ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.497ns = ( 5.497 - 4.000 ) 
+    Source Clock Delay      (SCD):    1.804ns
+    Clock Pessimism Removal (CPR):    0.073ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.575ns (routing 0.527ns, distribution 1.048ns)
+  Clock Net Delay (Destination): 1.293ns (routing 0.479ns, distribution 0.814ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock pcie_axi_aclk rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     0.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.090     0.090    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.575     1.804    u_pcie_xdma/inst/pcie4_ip_i/inst/user_clk
+    SLICE_X99Y16         FDPE                                         r  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X99Y16         FDPE (Prop_EFF_SLICEL_C_Q)
+                                                      0.096     1.900 f  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/Q
+                         net (fo=5199, routed)        3.451     5.351    u_pcie_regs/bbstub_axi_aresetn
+    SLICE_X74Y91         FDCE                                         f  u_pcie_regs/snap_words_r_reg[1932]/CLR
+  -------------------------------------------------------------------    -------------------
+
+                         (clock pcie_axi_aclk rise edge)
+                                                      4.000     4.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     4.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.082     4.082    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     4.204 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.293     5.497    u_pcie_regs/axi_aclk
+    SLICE_X74Y91         FDCE                                         r  u_pcie_regs/snap_words_r_reg[1932]/C
+                         clock pessimism              0.073     5.570    
+                         clock uncertainty           -0.046     5.524    
+    SLICE_X74Y91         FDCE (Recov_EFF2_SLICEM_C_CLR)
+                                                     -0.072     5.452    u_pcie_regs/snap_words_r_reg[1932]
+  -------------------------------------------------------------------
+                         required time                          5.452    
+                         arrival time                          -5.351    
+  -------------------------------------------------------------------
+                         slack                                  0.100    
+
+Slack (MET) :             0.100ns  (required time - arrival time)
+  Source:                 u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+                            (rising edge-triggered cell FDPE clocked by pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Destination:            u_snap_p7bdp/dout_a_reg[684]/CLR
+                            (recovery check against rising-edge clock pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Path Group:             **async_default**
+  Path Type:              Recovery (Max at Slow Process Corner)
+  Requirement:            4.000ns  (pcie_axi_aclk rise@4.000ns - pcie_axi_aclk rise@0.000ns)
+  Data Path Delay:        3.547ns  (logic 0.096ns (2.706%)  route 3.451ns (97.294%))
+  Logic Levels:           0  
+  Clock Path Skew:        -0.234ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.497ns = ( 5.497 - 4.000 ) 
+    Source Clock Delay      (SCD):    1.804ns
+    Clock Pessimism Removal (CPR):    0.073ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.575ns (routing 0.527ns, distribution 1.048ns)
+  Clock Net Delay (Destination): 1.293ns (routing 0.479ns, distribution 0.814ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock pcie_axi_aclk rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     0.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.090     0.090    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.575     1.804    u_pcie_xdma/inst/pcie4_ip_i/inst/user_clk
+    SLICE_X99Y16         FDPE                                         r  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X99Y16         FDPE (Prop_EFF_SLICEL_C_Q)
+                                                      0.096     1.900 f  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/Q
+                         net (fo=5199, routed)        3.451     5.351    u_snap_p7bdp/valid_a_reg_1
+    SLICE_X74Y91         FDCE                                         f  u_snap_p7bdp/dout_a_reg[684]/CLR
+  -------------------------------------------------------------------    -------------------
+
+                         (clock pcie_axi_aclk rise edge)
+                                                      4.000     4.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     4.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.082     4.082    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     4.204 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.293     5.497    u_snap_p7bdp/axi_aclk
+    SLICE_X74Y91         FDCE                                         r  u_snap_p7bdp/dout_a_reg[684]/C
+                         clock pessimism              0.073     5.570    
+                         clock uncertainty           -0.046     5.524    
+    SLICE_X74Y91         FDCE (Recov_HFF_SLICEM_C_CLR)
+                                                     -0.072     5.452    u_snap_p7bdp/dout_a_reg[684]
+  -------------------------------------------------------------------
+                         required time                          5.452    
+                         arrival time                          -5.351    
+  -------------------------------------------------------------------
+                         slack                                  0.100    
+
+Slack (MET) :             0.100ns  (required time - arrival time)
+  Source:                 u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+                            (rising edge-triggered cell FDPE clocked by pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Destination:            u_snap_p7bdp/dout_a_reg[686]/CLR
+                            (recovery check against rising-edge clock pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Path Group:             **async_default**
+  Path Type:              Recovery (Max at Slow Process Corner)
+  Requirement:            4.000ns  (pcie_axi_aclk rise@4.000ns - pcie_axi_aclk rise@0.000ns)
+  Data Path Delay:        3.547ns  (logic 0.096ns (2.706%)  route 3.451ns (97.294%))
+  Logic Levels:           0  
+  Clock Path Skew:        -0.234ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.497ns = ( 5.497 - 4.000 ) 
+    Source Clock Delay      (SCD):    1.804ns
+    Clock Pessimism Removal (CPR):    0.073ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.575ns (routing 0.527ns, distribution 1.048ns)
+  Clock Net Delay (Destination): 1.293ns (routing 0.479ns, distribution 0.814ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock pcie_axi_aclk rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     0.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.090     0.090    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.575     1.804    u_pcie_xdma/inst/pcie4_ip_i/inst/user_clk
+    SLICE_X99Y16         FDPE                                         r  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X99Y16         FDPE (Prop_EFF_SLICEL_C_Q)
+                                                      0.096     1.900 f  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/Q
+                         net (fo=5199, routed)        3.451     5.351    u_snap_p7bdp/valid_a_reg_1
+    SLICE_X74Y91         FDCE                                         f  u_snap_p7bdp/dout_a_reg[686]/CLR
+  -------------------------------------------------------------------    -------------------
+
+                         (clock pcie_axi_aclk rise edge)
+                                                      4.000     4.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     4.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.082     4.082    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     4.204 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.293     5.497    u_snap_p7bdp/axi_aclk
+    SLICE_X74Y91         FDCE                                         r  u_snap_p7bdp/dout_a_reg[686]/C
+                         clock pessimism              0.073     5.570    
+                         clock uncertainty           -0.046     5.524    
+    SLICE_X74Y91         FDCE (Recov_GFF_SLICEM_C_CLR)
+                                                     -0.072     5.452    u_snap_p7bdp/dout_a_reg[686]
+  -------------------------------------------------------------------
+                         required time                          5.452    
+                         arrival time                          -5.351    
+  -------------------------------------------------------------------
+                         slack                                  0.100    
+
+Slack (MET) :             0.100ns  (required time - arrival time)
+  Source:                 u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+                            (rising edge-triggered cell FDPE clocked by pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Destination:            u_snap_p7bdp/dout_a_reg[776]/CLR
+                            (recovery check against rising-edge clock pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Path Group:             **async_default**
+  Path Type:              Recovery (Max at Slow Process Corner)
+  Requirement:            4.000ns  (pcie_axi_aclk rise@4.000ns - pcie_axi_aclk rise@0.000ns)
+  Data Path Delay:        3.547ns  (logic 0.096ns (2.706%)  route 3.451ns (97.294%))
+  Logic Levels:           0  
+  Clock Path Skew:        -0.234ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.497ns = ( 5.497 - 4.000 ) 
+    Source Clock Delay      (SCD):    1.804ns
+    Clock Pessimism Removal (CPR):    0.073ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.575ns (routing 0.527ns, distribution 1.048ns)
+  Clock Net Delay (Destination): 1.293ns (routing 0.479ns, distribution 0.814ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock pcie_axi_aclk rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     0.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.090     0.090    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.575     1.804    u_pcie_xdma/inst/pcie4_ip_i/inst/user_clk
+    SLICE_X99Y16         FDPE                                         r  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X99Y16         FDPE (Prop_EFF_SLICEL_C_Q)
+                                                      0.096     1.900 f  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/Q
+                         net (fo=5199, routed)        3.451     5.351    u_snap_p7bdp/valid_a_reg_1
+    SLICE_X74Y91         FDCE                                         f  u_snap_p7bdp/dout_a_reg[776]/CLR
+  -------------------------------------------------------------------    -------------------
+
+                         (clock pcie_axi_aclk rise edge)
+                                                      4.000     4.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     4.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.082     4.082    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     4.204 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.293     5.497    u_snap_p7bdp/axi_aclk
+    SLICE_X74Y91         FDCE                                         r  u_snap_p7bdp/dout_a_reg[776]/C
+                         clock pessimism              0.073     5.570    
+                         clock uncertainty           -0.046     5.524    
+    SLICE_X74Y91         FDCE (Recov_FFF_SLICEM_C_CLR)
+                                                     -0.072     5.452    u_snap_p7bdp/dout_a_reg[776]
+  -------------------------------------------------------------------
+                         required time                          5.452    
+                         arrival time                          -5.351    
+  -------------------------------------------------------------------
+                         slack                                  0.100    
+
+Slack (MET) :             0.100ns  (required time - arrival time)
+  Source:                 u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+                            (rising edge-triggered cell FDPE clocked by pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Destination:            u_snap_p7bdp/dout_a_reg[781]/CLR
+                            (recovery check against rising-edge clock pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Path Group:             **async_default**
+  Path Type:              Recovery (Max at Slow Process Corner)
+  Requirement:            4.000ns  (pcie_axi_aclk rise@4.000ns - pcie_axi_aclk rise@0.000ns)
+  Data Path Delay:        3.547ns  (logic 0.096ns (2.706%)  route 3.451ns (97.294%))
+  Logic Levels:           0  
+  Clock Path Skew:        -0.234ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.497ns = ( 5.497 - 4.000 ) 
+    Source Clock Delay      (SCD):    1.804ns
+    Clock Pessimism Removal (CPR):    0.073ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.575ns (routing 0.527ns, distribution 1.048ns)
+  Clock Net Delay (Destination): 1.293ns (routing 0.479ns, distribution 0.814ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock pcie_axi_aclk rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     0.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.090     0.090    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.575     1.804    u_pcie_xdma/inst/pcie4_ip_i/inst/user_clk
+    SLICE_X99Y16         FDPE                                         r  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X99Y16         FDPE (Prop_EFF_SLICEL_C_Q)
+                                                      0.096     1.900 f  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/Q
+                         net (fo=5199, routed)        3.451     5.351    u_snap_p7bdp/valid_a_reg_1
+    SLICE_X74Y91         FDCE                                         f  u_snap_p7bdp/dout_a_reg[781]/CLR
+  -------------------------------------------------------------------    -------------------
+
+                         (clock pcie_axi_aclk rise edge)
+                                                      4.000     4.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     4.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.082     4.082    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     4.204 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.293     5.497    u_snap_p7bdp/axi_aclk
+    SLICE_X74Y91         FDCE                                         r  u_snap_p7bdp/dout_a_reg[781]/C
+                         clock pessimism              0.073     5.570    
+                         clock uncertainty           -0.046     5.524    
+    SLICE_X74Y91         FDCE (Recov_EFF_SLICEM_C_CLR)
+                                                     -0.072     5.452    u_snap_p7bdp/dout_a_reg[781]
+  -------------------------------------------------------------------
+                         required time                          5.452    
+                         arrival time                          -5.351    
+  -------------------------------------------------------------------
+                         slack                                  0.100    
+
+Slack (MET) :             0.102ns  (required time - arrival time)
+  Source:                 u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+                            (rising edge-triggered cell FDPE clocked by pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Destination:            u_pcie_regs/snap_words_r_reg[1920]/CLR
+                            (recovery check against rising-edge clock pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Path Group:             **async_default**
+  Path Type:              Recovery (Max at Slow Process Corner)
+  Requirement:            4.000ns  (pcie_axi_aclk rise@4.000ns - pcie_axi_aclk rise@0.000ns)
+  Data Path Delay:        3.555ns  (logic 0.096ns (2.701%)  route 3.459ns (97.299%))
+  Logic Levels:           0  
+  Clock Path Skew:        -0.225ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.506ns = ( 5.506 - 4.000 ) 
+    Source Clock Delay      (SCD):    1.804ns
+    Clock Pessimism Removal (CPR):    0.073ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.575ns (routing 0.527ns, distribution 1.048ns)
+  Clock Net Delay (Destination): 1.302ns (routing 0.479ns, distribution 0.823ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock pcie_axi_aclk rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     0.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.090     0.090    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.575     1.804    u_pcie_xdma/inst/pcie4_ip_i/inst/user_clk
+    SLICE_X99Y16         FDPE                                         r  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X99Y16         FDPE (Prop_EFF_SLICEL_C_Q)
+                                                      0.096     1.900 f  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/Q
+                         net (fo=5199, routed)        3.459     5.359    u_pcie_regs/bbstub_axi_aresetn
+    SLICE_X74Y87         FDCE                                         f  u_pcie_regs/snap_words_r_reg[1920]/CLR
+  -------------------------------------------------------------------    -------------------
+
+                         (clock pcie_axi_aclk rise edge)
+                                                      4.000     4.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     4.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.082     4.082    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     4.204 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.302     5.506    u_pcie_regs/axi_aclk
+    SLICE_X74Y87         FDCE                                         r  u_pcie_regs/snap_words_r_reg[1920]/C
+                         clock pessimism              0.073     5.579    
+                         clock uncertainty           -0.046     5.533    
+    SLICE_X74Y87         FDCE (Recov_DFF_SLICEM_C_CLR)
+                                                     -0.072     5.461    u_pcie_regs/snap_words_r_reg[1920]
+  -------------------------------------------------------------------
+                         required time                          5.461    
+                         arrival time                          -5.359    
+  -------------------------------------------------------------------
+                         slack                                  0.102    
+
+Slack (MET) :             0.102ns  (required time - arrival time)
+  Source:                 u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+                            (rising edge-triggered cell FDPE clocked by pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Destination:            u_pcie_regs/snap_words_r_reg[1923]/CLR
+                            (recovery check against rising-edge clock pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Path Group:             **async_default**
+  Path Type:              Recovery (Max at Slow Process Corner)
+  Requirement:            4.000ns  (pcie_axi_aclk rise@4.000ns - pcie_axi_aclk rise@0.000ns)
+  Data Path Delay:        3.555ns  (logic 0.096ns (2.701%)  route 3.459ns (97.299%))
+  Logic Levels:           0  
+  Clock Path Skew:        -0.225ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.506ns = ( 5.506 - 4.000 ) 
+    Source Clock Delay      (SCD):    1.804ns
+    Clock Pessimism Removal (CPR):    0.073ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.575ns (routing 0.527ns, distribution 1.048ns)
+  Clock Net Delay (Destination): 1.302ns (routing 0.479ns, distribution 0.823ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock pcie_axi_aclk rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     0.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.090     0.090    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.575     1.804    u_pcie_xdma/inst/pcie4_ip_i/inst/user_clk
+    SLICE_X99Y16         FDPE                                         r  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X99Y16         FDPE (Prop_EFF_SLICEL_C_Q)
+                                                      0.096     1.900 f  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/Q
+                         net (fo=5199, routed)        3.459     5.359    u_pcie_regs/bbstub_axi_aresetn
+    SLICE_X74Y87         FDCE                                         f  u_pcie_regs/snap_words_r_reg[1923]/CLR
+  -------------------------------------------------------------------    -------------------
+
+                         (clock pcie_axi_aclk rise edge)
+                                                      4.000     4.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     4.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.082     4.082    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     4.204 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.302     5.506    u_pcie_regs/axi_aclk
+    SLICE_X74Y87         FDCE                                         r  u_pcie_regs/snap_words_r_reg[1923]/C
+                         clock pessimism              0.073     5.579    
+                         clock uncertainty           -0.046     5.533    
+    SLICE_X74Y87         FDCE (Recov_CFF_SLICEM_C_CLR)
+                                                     -0.072     5.461    u_pcie_regs/snap_words_r_reg[1923]
+  -------------------------------------------------------------------
+                         required time                          5.461    
+                         arrival time                          -5.359    
+  -------------------------------------------------------------------
+                         slack                                  0.102    
+
+Slack (MET) :             0.102ns  (required time - arrival time)
+  Source:                 u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+                            (rising edge-triggered cell FDPE clocked by pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Destination:            u_pcie_regs/snap_words_r_reg[1926]/CLR
+                            (recovery check against rising-edge clock pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Path Group:             **async_default**
+  Path Type:              Recovery (Max at Slow Process Corner)
+  Requirement:            4.000ns  (pcie_axi_aclk rise@4.000ns - pcie_axi_aclk rise@0.000ns)
+  Data Path Delay:        3.555ns  (logic 0.096ns (2.701%)  route 3.459ns (97.299%))
+  Logic Levels:           0  
+  Clock Path Skew:        -0.225ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.506ns = ( 5.506 - 4.000 ) 
+    Source Clock Delay      (SCD):    1.804ns
+    Clock Pessimism Removal (CPR):    0.073ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.575ns (routing 0.527ns, distribution 1.048ns)
+  Clock Net Delay (Destination): 1.302ns (routing 0.479ns, distribution 0.823ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock pcie_axi_aclk rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     0.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.090     0.090    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.575     1.804    u_pcie_xdma/inst/pcie4_ip_i/inst/user_clk
+    SLICE_X99Y16         FDPE                                         r  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X99Y16         FDPE (Prop_EFF_SLICEL_C_Q)
+                                                      0.096     1.900 f  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/Q
+                         net (fo=5199, routed)        3.459     5.359    u_pcie_regs/bbstub_axi_aresetn
+    SLICE_X74Y87         FDCE                                         f  u_pcie_regs/snap_words_r_reg[1926]/CLR
+  -------------------------------------------------------------------    -------------------
+
+                         (clock pcie_axi_aclk rise edge)
+                                                      4.000     4.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     4.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.082     4.082    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     4.204 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.302     5.506    u_pcie_regs/axi_aclk
+    SLICE_X74Y87         FDCE                                         r  u_pcie_regs/snap_words_r_reg[1926]/C
+                         clock pessimism              0.073     5.579    
+                         clock uncertainty           -0.046     5.533    
+    SLICE_X74Y87         FDCE (Recov_BFF_SLICEM_C_CLR)
+                                                     -0.072     5.461    u_pcie_regs/snap_words_r_reg[1926]
+  -------------------------------------------------------------------
+                         required time                          5.461    
+                         arrival time                          -5.359    
+  -------------------------------------------------------------------
+                         slack                                  0.102    
+
+Slack (MET) :             0.102ns  (required time - arrival time)
+  Source:                 u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+                            (rising edge-triggered cell FDPE clocked by pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Destination:            u_pcie_regs/snap_words_r_reg[2088]/CLR
+                            (recovery check against rising-edge clock pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Path Group:             **async_default**
+  Path Type:              Recovery (Max at Slow Process Corner)
+  Requirement:            4.000ns  (pcie_axi_aclk rise@4.000ns - pcie_axi_aclk rise@0.000ns)
+  Data Path Delay:        3.555ns  (logic 0.096ns (2.701%)  route 3.459ns (97.299%))
+  Logic Levels:           0  
+  Clock Path Skew:        -0.225ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.506ns = ( 5.506 - 4.000 ) 
+    Source Clock Delay      (SCD):    1.804ns
+    Clock Pessimism Removal (CPR):    0.073ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.575ns (routing 0.527ns, distribution 1.048ns)
+  Clock Net Delay (Destination): 1.302ns (routing 0.479ns, distribution 0.823ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock pcie_axi_aclk rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     0.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.090     0.090    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.575     1.804    u_pcie_xdma/inst/pcie4_ip_i/inst/user_clk
+    SLICE_X99Y16         FDPE                                         r  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X99Y16         FDPE (Prop_EFF_SLICEL_C_Q)
+                                                      0.096     1.900 f  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/Q
+                         net (fo=5199, routed)        3.459     5.359    u_pcie_regs/bbstub_axi_aresetn
+    SLICE_X74Y87         FDCE                                         f  u_pcie_regs/snap_words_r_reg[2088]/CLR
+  -------------------------------------------------------------------    -------------------
+
+                         (clock pcie_axi_aclk rise edge)
+                                                      4.000     4.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     4.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.082     4.082    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     4.204 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.302     5.506    u_pcie_regs/axi_aclk
+    SLICE_X74Y87         FDCE                                         r  u_pcie_regs/snap_words_r_reg[2088]/C
+                         clock pessimism              0.073     5.579    
+                         clock uncertainty           -0.046     5.533    
+    SLICE_X74Y87         FDCE (Recov_AFF_SLICEM_C_CLR)
+                                                     -0.072     5.461    u_pcie_regs/snap_words_r_reg[2088]
+  -------------------------------------------------------------------
+                         required time                          5.461    
+                         arrival time                          -5.359    
+  -------------------------------------------------------------------
+                         slack                                  0.102    
+
+Slack (MET) :             0.102ns  (required time - arrival time)
+  Source:                 u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+                            (rising edge-triggered cell FDPE clocked by pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Destination:            u_snap_p7bdp/dout_a_reg[672]/CLR
+                            (recovery check against rising-edge clock pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Path Group:             **async_default**
+  Path Type:              Recovery (Max at Slow Process Corner)
+  Requirement:            4.000ns  (pcie_axi_aclk rise@4.000ns - pcie_axi_aclk rise@0.000ns)
+  Data Path Delay:        3.555ns  (logic 0.096ns (2.701%)  route 3.459ns (97.299%))
+  Logic Levels:           0  
+  Clock Path Skew:        -0.225ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.506ns = ( 5.506 - 4.000 ) 
+    Source Clock Delay      (SCD):    1.804ns
+    Clock Pessimism Removal (CPR):    0.073ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.575ns (routing 0.527ns, distribution 1.048ns)
+  Clock Net Delay (Destination): 1.302ns (routing 0.479ns, distribution 0.823ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock pcie_axi_aclk rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     0.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.090     0.090    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.575     1.804    u_pcie_xdma/inst/pcie4_ip_i/inst/user_clk
+    SLICE_X99Y16         FDPE                                         r  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X99Y16         FDPE (Prop_EFF_SLICEL_C_Q)
+                                                      0.096     1.900 f  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/Q
+                         net (fo=5199, routed)        3.459     5.359    u_snap_p7bdp/valid_a_reg_1
+    SLICE_X74Y87         FDCE                                         f  u_snap_p7bdp/dout_a_reg[672]/CLR
+  -------------------------------------------------------------------    -------------------
+
+                         (clock pcie_axi_aclk rise edge)
+                                                      4.000     4.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     4.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.082     4.082    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     4.204 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.302     5.506    u_snap_p7bdp/axi_aclk
+    SLICE_X74Y87         FDCE                                         r  u_snap_p7bdp/dout_a_reg[672]/C
+                         clock pessimism              0.073     5.579    
+                         clock uncertainty           -0.046     5.533    
+    SLICE_X74Y87         FDCE (Recov_DFF2_SLICEM_C_CLR)
+                                                     -0.072     5.461    u_snap_p7bdp/dout_a_reg[672]
+  -------------------------------------------------------------------
+                         required time                          5.461    
+                         arrival time                          -5.359    
+  -------------------------------------------------------------------
+                         slack                                  0.102    
+
+Slack (MET) :             0.102ns  (required time - arrival time)
+  Source:                 u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+                            (rising edge-triggered cell FDPE clocked by pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Destination:            u_snap_p7bdp/dout_a_reg[673]/CLR
+                            (recovery check against rising-edge clock pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Path Group:             **async_default**
+  Path Type:              Recovery (Max at Slow Process Corner)
+  Requirement:            4.000ns  (pcie_axi_aclk rise@4.000ns - pcie_axi_aclk rise@0.000ns)
+  Data Path Delay:        3.555ns  (logic 0.096ns (2.701%)  route 3.459ns (97.299%))
+  Logic Levels:           0  
+  Clock Path Skew:        -0.225ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.506ns = ( 5.506 - 4.000 ) 
+    Source Clock Delay      (SCD):    1.804ns
+    Clock Pessimism Removal (CPR):    0.073ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.575ns (routing 0.527ns, distribution 1.048ns)
+  Clock Net Delay (Destination): 1.302ns (routing 0.479ns, distribution 0.823ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock pcie_axi_aclk rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     0.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.090     0.090    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.575     1.804    u_pcie_xdma/inst/pcie4_ip_i/inst/user_clk
+    SLICE_X99Y16         FDPE                                         r  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X99Y16         FDPE (Prop_EFF_SLICEL_C_Q)
+                                                      0.096     1.900 f  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/Q
+                         net (fo=5199, routed)        3.459     5.359    u_snap_p7bdp/valid_a_reg_1
+    SLICE_X74Y87         FDCE                                         f  u_snap_p7bdp/dout_a_reg[673]/CLR
+  -------------------------------------------------------------------    -------------------
+
+                         (clock pcie_axi_aclk rise edge)
+                                                      4.000     4.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     4.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.082     4.082    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     4.204 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.302     5.506    u_snap_p7bdp/axi_aclk
+    SLICE_X74Y87         FDCE                                         r  u_snap_p7bdp/dout_a_reg[673]/C
+                         clock pessimism              0.073     5.579    
+                         clock uncertainty           -0.046     5.533    
+    SLICE_X74Y87         FDCE (Recov_CFF2_SLICEM_C_CLR)
+                                                     -0.072     5.461    u_snap_p7bdp/dout_a_reg[673]
+  -------------------------------------------------------------------
+                         required time                          5.461    
+                         arrival time                          -5.359    
+  -------------------------------------------------------------------
+                         slack                                  0.102    
+
+Slack (MET) :             0.102ns  (required time - arrival time)
+  Source:                 u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+                            (rising edge-triggered cell FDPE clocked by pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Destination:            u_snap_p7bdp/dout_a_reg[678]/CLR
+                            (recovery check against rising-edge clock pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Path Group:             **async_default**
+  Path Type:              Recovery (Max at Slow Process Corner)
+  Requirement:            4.000ns  (pcie_axi_aclk rise@4.000ns - pcie_axi_aclk rise@0.000ns)
+  Data Path Delay:        3.555ns  (logic 0.096ns (2.701%)  route 3.459ns (97.299%))
+  Logic Levels:           0  
+  Clock Path Skew:        -0.225ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.506ns = ( 5.506 - 4.000 ) 
+    Source Clock Delay      (SCD):    1.804ns
+    Clock Pessimism Removal (CPR):    0.073ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.575ns (routing 0.527ns, distribution 1.048ns)
+  Clock Net Delay (Destination): 1.302ns (routing 0.479ns, distribution 0.823ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock pcie_axi_aclk rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     0.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.090     0.090    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.575     1.804    u_pcie_xdma/inst/pcie4_ip_i/inst/user_clk
+    SLICE_X99Y16         FDPE                                         r  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X99Y16         FDPE (Prop_EFF_SLICEL_C_Q)
+                                                      0.096     1.900 f  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/Q
+                         net (fo=5199, routed)        3.459     5.359    u_snap_p7bdp/valid_a_reg_1
+    SLICE_X74Y87         FDCE                                         f  u_snap_p7bdp/dout_a_reg[678]/CLR
+  -------------------------------------------------------------------    -------------------
+
+                         (clock pcie_axi_aclk rise edge)
+                                                      4.000     4.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     4.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.082     4.082    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     4.204 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.302     5.506    u_snap_p7bdp/axi_aclk
+    SLICE_X74Y87         FDCE                                         r  u_snap_p7bdp/dout_a_reg[678]/C
+                         clock pessimism              0.073     5.579    
+                         clock uncertainty           -0.046     5.533    
+    SLICE_X74Y87         FDCE (Recov_BFF2_SLICEM_C_CLR)
+                                                     -0.072     5.461    u_snap_p7bdp/dout_a_reg[678]
+  -------------------------------------------------------------------
+                         required time                          5.461    
+                         arrival time                          -5.359    
+  -------------------------------------------------------------------
+                         slack                                  0.102    
+
+Slack (MET) :             0.102ns  (required time - arrival time)
+  Source:                 u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+                            (rising edge-triggered cell FDPE clocked by pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Destination:            u_snap_p7bdp/dout_a_reg[775]/CLR
+                            (recovery check against rising-edge clock pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Path Group:             **async_default**
+  Path Type:              Recovery (Max at Slow Process Corner)
+  Requirement:            4.000ns  (pcie_axi_aclk rise@4.000ns - pcie_axi_aclk rise@0.000ns)
+  Data Path Delay:        3.555ns  (logic 0.096ns (2.701%)  route 3.459ns (97.299%))
+  Logic Levels:           0  
+  Clock Path Skew:        -0.225ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.506ns = ( 5.506 - 4.000 ) 
+    Source Clock Delay      (SCD):    1.804ns
+    Clock Pessimism Removal (CPR):    0.073ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.575ns (routing 0.527ns, distribution 1.048ns)
+  Clock Net Delay (Destination): 1.302ns (routing 0.479ns, distribution 0.823ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock pcie_axi_aclk rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     0.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.090     0.090    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.575     1.804    u_pcie_xdma/inst/pcie4_ip_i/inst/user_clk
+    SLICE_X99Y16         FDPE                                         r  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X99Y16         FDPE (Prop_EFF_SLICEL_C_Q)
+                                                      0.096     1.900 f  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/Q
+                         net (fo=5199, routed)        3.459     5.359    u_snap_p7bdp/valid_a_reg_1
+    SLICE_X74Y87         FDCE                                         f  u_snap_p7bdp/dout_a_reg[775]/CLR
+  -------------------------------------------------------------------    -------------------
+
+                         (clock pcie_axi_aclk rise edge)
+                                                      4.000     4.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     4.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.082     4.082    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     4.204 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.302     5.506    u_snap_p7bdp/axi_aclk
+    SLICE_X74Y87         FDCE                                         r  u_snap_p7bdp/dout_a_reg[775]/C
+                         clock pessimism              0.073     5.579    
+                         clock uncertainty           -0.046     5.533    
+    SLICE_X74Y87         FDCE (Recov_AFF2_SLICEM_C_CLR)
+                                                     -0.072     5.461    u_snap_p7bdp/dout_a_reg[775]
+  -------------------------------------------------------------------
+                         required time                          5.461    
+                         arrival time                          -5.359    
+  -------------------------------------------------------------------
+                         slack                                  0.102    
+
+Slack (MET) :             0.104ns  (required time - arrival time)
+  Source:                 u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+                            (rising edge-triggered cell FDPE clocked by pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Destination:            u_pcie_regs/snap_words_r_reg[1796]/CLR
+                            (recovery check against rising-edge clock pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Path Group:             **async_default**
+  Path Type:              Recovery (Max at Slow Process Corner)
+  Requirement:            4.000ns  (pcie_axi_aclk rise@4.000ns - pcie_axi_aclk rise@0.000ns)
+  Data Path Delay:        3.549ns  (logic 0.096ns (2.705%)  route 3.453ns (97.295%))
+  Logic Levels:           0  
+  Clock Path Skew:        -0.229ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.502ns = ( 5.502 - 4.000 ) 
+    Source Clock Delay      (SCD):    1.804ns
+    Clock Pessimism Removal (CPR):    0.073ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.575ns (routing 0.527ns, distribution 1.048ns)
+  Clock Net Delay (Destination): 1.298ns (routing 0.479ns, distribution 0.819ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock pcie_axi_aclk rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     0.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.090     0.090    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.575     1.804    u_pcie_xdma/inst/pcie4_ip_i/inst/user_clk
+    SLICE_X99Y16         FDPE                                         r  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X99Y16         FDPE (Prop_EFF_SLICEL_C_Q)
+                                                      0.096     1.900 f  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/Q
+                         net (fo=5199, routed)        3.453     5.353    u_pcie_regs/bbstub_axi_aresetn
+    SLICE_X74Y86         FDCE                                         f  u_pcie_regs/snap_words_r_reg[1796]/CLR
+  -------------------------------------------------------------------    -------------------
+
+                         (clock pcie_axi_aclk rise edge)
+                                                      4.000     4.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     4.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.082     4.082    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     4.204 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.298     5.502    u_pcie_regs/axi_aclk
+    SLICE_X74Y86         FDCE                                         r  u_pcie_regs/snap_words_r_reg[1796]/C
+                         clock pessimism              0.073     5.575    
+                         clock uncertainty           -0.046     5.529    
+    SLICE_X74Y86         FDCE (Recov_FFF2_SLICEM_C_CLR)
+                                                     -0.072     5.457    u_pcie_regs/snap_words_r_reg[1796]
+  -------------------------------------------------------------------
+                         required time                          5.457    
+                         arrival time                          -5.353    
+  -------------------------------------------------------------------
+                         slack                                  0.104    
+
+Slack (MET) :             0.104ns  (required time - arrival time)
+  Source:                 u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+                            (rising edge-triggered cell FDPE clocked by pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Destination:            u_snap_p7bdp/dout_a_reg[548]/CLR
+                            (recovery check against rising-edge clock pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Path Group:             **async_default**
+  Path Type:              Recovery (Max at Slow Process Corner)
+  Requirement:            4.000ns  (pcie_axi_aclk rise@4.000ns - pcie_axi_aclk rise@0.000ns)
+  Data Path Delay:        3.549ns  (logic 0.096ns (2.705%)  route 3.453ns (97.295%))
+  Logic Levels:           0  
+  Clock Path Skew:        -0.229ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.502ns = ( 5.502 - 4.000 ) 
+    Source Clock Delay      (SCD):    1.804ns
+    Clock Pessimism Removal (CPR):    0.073ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.575ns (routing 0.527ns, distribution 1.048ns)
+  Clock Net Delay (Destination): 1.298ns (routing 0.479ns, distribution 0.819ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock pcie_axi_aclk rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     0.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.090     0.090    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.575     1.804    u_pcie_xdma/inst/pcie4_ip_i/inst/user_clk
+    SLICE_X99Y16         FDPE                                         r  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X99Y16         FDPE (Prop_EFF_SLICEL_C_Q)
+                                                      0.096     1.900 f  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/Q
+                         net (fo=5199, routed)        3.453     5.353    u_snap_p7bdp/valid_a_reg_1
+    SLICE_X74Y86         FDCE                                         f  u_snap_p7bdp/dout_a_reg[548]/CLR
+  -------------------------------------------------------------------    -------------------
+
+                         (clock pcie_axi_aclk rise edge)
+                                                      4.000     4.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     4.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.082     4.082    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     4.204 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.298     5.502    u_snap_p7bdp/axi_aclk
+    SLICE_X74Y86         FDCE                                         r  u_snap_p7bdp/dout_a_reg[548]/C
+                         clock pessimism              0.073     5.575    
+                         clock uncertainty           -0.046     5.529    
+    SLICE_X74Y86         FDCE (Recov_HFF_SLICEM_C_CLR)
+                                                     -0.072     5.457    u_snap_p7bdp/dout_a_reg[548]
+  -------------------------------------------------------------------
+                         required time                          5.457    
+                         arrival time                          -5.353    
+  -------------------------------------------------------------------
+                         slack                                  0.104    
+
+Slack (MET) :             0.104ns  (required time - arrival time)
+  Source:                 u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+                            (rising edge-triggered cell FDPE clocked by pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Destination:            u_snap_p7bdp/dout_a_reg[675]/CLR
+                            (recovery check against rising-edge clock pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Path Group:             **async_default**
+  Path Type:              Recovery (Max at Slow Process Corner)
+  Requirement:            4.000ns  (pcie_axi_aclk rise@4.000ns - pcie_axi_aclk rise@0.000ns)
+  Data Path Delay:        3.549ns  (logic 0.096ns (2.705%)  route 3.453ns (97.295%))
+  Logic Levels:           0  
+  Clock Path Skew:        -0.229ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.502ns = ( 5.502 - 4.000 ) 
+    Source Clock Delay      (SCD):    1.804ns
+    Clock Pessimism Removal (CPR):    0.073ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.575ns (routing 0.527ns, distribution 1.048ns)
+  Clock Net Delay (Destination): 1.298ns (routing 0.479ns, distribution 0.819ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock pcie_axi_aclk rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     0.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.090     0.090    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.575     1.804    u_pcie_xdma/inst/pcie4_ip_i/inst/user_clk
+    SLICE_X99Y16         FDPE                                         r  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X99Y16         FDPE (Prop_EFF_SLICEL_C_Q)
+                                                      0.096     1.900 f  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/Q
+                         net (fo=5199, routed)        3.453     5.353    u_snap_p7bdp/valid_a_reg_1
+    SLICE_X74Y86         FDCE                                         f  u_snap_p7bdp/dout_a_reg[675]/CLR
+  -------------------------------------------------------------------    -------------------
+
+                         (clock pcie_axi_aclk rise edge)
+                                                      4.000     4.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     4.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.082     4.082    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     4.204 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.298     5.502    u_snap_p7bdp/axi_aclk
+    SLICE_X74Y86         FDCE                                         r  u_snap_p7bdp/dout_a_reg[675]/C
+                         clock pessimism              0.073     5.575    
+                         clock uncertainty           -0.046     5.529    
+    SLICE_X74Y86         FDCE (Recov_GFF_SLICEM_C_CLR)
+                                                     -0.072     5.457    u_snap_p7bdp/dout_a_reg[675]
+  -------------------------------------------------------------------
+                         required time                          5.457    
+                         arrival time                          -5.353    
+  -------------------------------------------------------------------
+                         slack                                  0.104    
+
+Slack (MET) :             0.104ns  (required time - arrival time)
+  Source:                 u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+                            (rising edge-triggered cell FDPE clocked by pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Destination:            u_snap_p7bdp/dout_a_reg[679]/CLR
+                            (recovery check against rising-edge clock pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Path Group:             **async_default**
+  Path Type:              Recovery (Max at Slow Process Corner)
+  Requirement:            4.000ns  (pcie_axi_aclk rise@4.000ns - pcie_axi_aclk rise@0.000ns)
+  Data Path Delay:        3.549ns  (logic 0.096ns (2.705%)  route 3.453ns (97.295%))
+  Logic Levels:           0  
+  Clock Path Skew:        -0.229ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.502ns = ( 5.502 - 4.000 ) 
+    Source Clock Delay      (SCD):    1.804ns
+    Clock Pessimism Removal (CPR):    0.073ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.575ns (routing 0.527ns, distribution 1.048ns)
+  Clock Net Delay (Destination): 1.298ns (routing 0.479ns, distribution 0.819ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock pcie_axi_aclk rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     0.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.090     0.090    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.575     1.804    u_pcie_xdma/inst/pcie4_ip_i/inst/user_clk
+    SLICE_X99Y16         FDPE                                         r  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X99Y16         FDPE (Prop_EFF_SLICEL_C_Q)
+                                                      0.096     1.900 f  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/Q
+                         net (fo=5199, routed)        3.453     5.353    u_snap_p7bdp/valid_a_reg_1
+    SLICE_X74Y86         FDCE                                         f  u_snap_p7bdp/dout_a_reg[679]/CLR
+  -------------------------------------------------------------------    -------------------
+
+                         (clock pcie_axi_aclk rise edge)
+                                                      4.000     4.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     4.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.082     4.082    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     4.204 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.298     5.502    u_snap_p7bdp/axi_aclk
+    SLICE_X74Y86         FDCE                                         r  u_snap_p7bdp/dout_a_reg[679]/C
+                         clock pessimism              0.073     5.575    
+                         clock uncertainty           -0.046     5.529    
+    SLICE_X74Y86         FDCE (Recov_FFF_SLICEM_C_CLR)
+                                                     -0.072     5.457    u_snap_p7bdp/dout_a_reg[679]
+  -------------------------------------------------------------------
+                         required time                          5.457    
+                         arrival time                          -5.353    
+  -------------------------------------------------------------------
+                         slack                                  0.104    
+
+Slack (MET) :             0.104ns  (required time - arrival time)
+  Source:                 u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+                            (rising edge-triggered cell FDPE clocked by pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Destination:            u_pcie_regs/snap_words_r_reg[1795]/CLR
+                            (recovery check against rising-edge clock pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Path Group:             **async_default**
+  Path Type:              Recovery (Max at Slow Process Corner)
+  Requirement:            4.000ns  (pcie_axi_aclk rise@4.000ns - pcie_axi_aclk rise@0.000ns)
+  Data Path Delay:        3.553ns  (logic 0.096ns (2.702%)  route 3.457ns (97.298%))
+  Logic Levels:           0  
+  Clock Path Skew:        -0.225ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.506ns = ( 5.506 - 4.000 ) 
+    Source Clock Delay      (SCD):    1.804ns
+    Clock Pessimism Removal (CPR):    0.073ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      1.575ns (routing 0.527ns, distribution 1.048ns)
+  Clock Net Delay (Destination): 1.302ns (routing 0.479ns, distribution 0.823ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock pcie_axi_aclk rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     0.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.090     0.090    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.575     1.804    u_pcie_xdma/inst/pcie4_ip_i/inst/user_clk
+    SLICE_X99Y16         FDPE                                         r  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X99Y16         FDPE (Prop_EFF_SLICEL_C_Q)
+                                                      0.096     1.900 f  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/Q
+                         net (fo=5199, routed)        3.457     5.357    u_pcie_regs/bbstub_axi_aresetn
+    SLICE_X74Y87         FDCE                                         f  u_pcie_regs/snap_words_r_reg[1795]/CLR
+  -------------------------------------------------------------------    -------------------
+
+                         (clock pcie_axi_aclk rise edge)
+                                                      4.000     4.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     4.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.082     4.082    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     4.204 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X2Y0 (CLOCK_ROOT)    net (fo=20800, routed)       1.302     5.506    u_pcie_regs/axi_aclk
+    SLICE_X74Y87         FDCE                                         r  u_pcie_regs/snap_words_r_reg[1795]/C
+                         clock pessimism              0.073     5.579    
+                         clock uncertainty           -0.046     5.533    
+    SLICE_X74Y87         FDCE (Recov_EFF_SLICEM_C_CLR)
+                                                     -0.072     5.461    u_pcie_regs/snap_words_r_reg[1795]
+  -------------------------------------------------------------------
+                         required time                          5.461    
+                         arrival time                          -5.357    
+  -------------------------------------------------------------------
+                         slack                                  0.104    
+
+
+
+

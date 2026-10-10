@@ -129,6 +129,27 @@ module tcp_rx (
     output reg  [31:0] stat_drop_crc,      // 接受但 FCS 坏 (载荷交付, 不回 ACK)
     output reg  [31:0] stat_drop_seq,      // 窗口内 seq 不符 (重复/乱序): 丢数据仍回 ACK
     output reg  [31:0] stat_ack,           // ACK 请求数
+    // ---- ⭐ P7B 构建 F: 「推进 snd_una 的 ACK」事件计数器 (W68; 纯观测) ------------
+    //   语义 (逐字定义 —— **哪一拍算**): 第 T 拍 +1 ⟺ 第 T 拍
+    //     `fend && s_axis_tcrs && ack_adv_l && !fend_trunc`
+    //   (谓词与 :551 那条**逐字同款** —— 那里用它清 `in_retx/dup_cnt`; 本字只**计数**。
+    //   ⚠️ 刻意**不改成共用一根线**: 那会动到功能路径上的表达式, 违反本轮「纯观测」口径;
+    //   两处若将来分叉, 以 :551 的功能语义为准 —— 本字的口径定义在上面的表达式里)。
+    //   ⇒ 口径 = **事件数** (不是拍数): 每次 = 「对端发来一个把**该连接** `snd_una`
+    //     往前推的 ACK」。
+    //   ⚠️ 与既有 `stat_ack` (:579, = **本板要回**的 ACK 数) **完全不是一回事**, 读表别混。
+    //   · `fend` 拍是本帧唯一的收尾拍 ⇒ 每帧至多 +1, 不会重复计;
+    //   · `ack_ok` 已把「ACK 必须落在 [snd_una, ack_hi]」做掉 (:300) ⇒ 乱序/陈旧 ACK
+    //     不会误计;
+    //   · `conn_id_l` 是**该帧的连接** (不随 rb_id 复用而漂) ⇒ 天然不分槽。
+    //   ⚠️ 已知边角 (如实登记; `P7B_L_INSTRUMENT_DESIGN.md` §2.3 边角 4): `ack_adv_l` 用
+    //     的是 w5 拍采样的 `ra_snd_una`, 而 TCB 落地要到 drain 的 `drn==2` 拍 ⇒ 若**另一条**
+    //     ACK 的 drain 恰在 w5→fend (1-2 拍) 内推进了同一连接的 snd_una, 本帧会被**多计
+    //     一次** (分母略大 ⇒ `L` 略小)。**发生率未量** —— 要精确时用设计件 §2.3 的变体
+    //     `E_ack'` (tcb 写口比较版)。
+    //   ⚠️ 纯观测: 谓词全是既有寄存器 + 本计数器不回喂任何功能逻辑。
+    //   ⚠️ 32 位自然回卷 (156.25 MHz ⇒ 27.487 s) ⇒ 差值判据必须 mod 2^32 且记原始值。
+    output reg  [31:0] stat_ack_adv,
     output reg  [31:0] stat_bytes,         // 接受且 FCS 好的载荷字节
     // P4b-7-P6 诊断 (UART RX 侧快照, 纯 assign): FSM 位点 + 接受/发射状态
     output wire [2:0]  dbg_state,          // FSM state (S_HDR/S_PAY/S_PAD/S_DROP/S_TAIL)
@@ -356,6 +377,9 @@ module tcp_rx (
     wire fend_w6a = (state == S_HDR) && accept && (wcnt == 3'd6) && s_axis_tlast &&
                     !s_axis_tuser && w6a_ok_l && !syn_l;
     assign fend   = fend_w6 || fend_w6t || fend_w6a || fend_pay || fend_pad || fend_trunc;
+    // ⭐ 构建 F (W68) 的判据线 (纯观测; 与 :551 那条功能判据**逐字同款**, 见端口注).
+    //   ⚠️ 不复用 :551 的表达式 = 不动功能路径 (本轮硬口径); 两处的**语义**由端口注钉死。
+    wire        ack_adv_ev = fend && s_axis_tcrs && ack_adv_l && !fend_trunc;
     assign ferr   = fend_trunc || !s_axis_tcrs || s_axis_terr;
     // 帧真实载荷字节 (截断帧 = 实际到达字节; w6 截断 = 0; 正常帧 = plen_l)
     wire [15:0] adv_cnt = trunc_pay ? (pcount + {12'b0, pop8w}) :
@@ -466,6 +490,7 @@ module tcp_rx (
             ack_obs <= 1'b0; ack_obs_id <= 4'd0;
             stat_pass <= 0; stat_drop_nonmatch <= 0; stat_drop_ipcsum <= 0;
             stat_drop_crc <= 0; stat_drop_seq <= 0; stat_ack <= 0; stat_bytes <= 0;
+            stat_ack_adv <= 32'd0;   // P7B 构建 F: 推进 snd_una 的 ACK 数 (W68)
             stat_drop_trunc <= 0;
             words_in <= 32'd0;
         end else begin
@@ -577,6 +602,8 @@ module tcp_rx (
             // P4b-7-P6 三站词计数 (第 2 站): 接受拍 +1 (头字与载荷字同一计法)
             if (accept) words_in <= words_in + 32'd1;
             if (ack_req) stat_ack <= stat_ack + 1;
+            // ⭐ 构建 F (W68): 推进 ACK 事件计数 (逐字定义见端口注; 纯观测)
+            if (ack_adv_ev) stat_ack_adv <= stat_ack_adv + 32'd1;
             case (state)
                 S_HDR: begin
                     if (accept) begin

@@ -156,6 +156,34 @@ module tcp_tx_frame (
     //   ⚠️ 纯观测: 不驱动任何功能逻辑, 不改任何门的判据 (默认构建数据行为逐位不变)。
     //   ⚠️ 32 位自然回卷 (156.25 MHz ⇒ 27.487 s) ⇒ 差值判据必须 mod 2^32 且记原始值。
     output reg  [31:0] stat_winstall,
+    // ---- ⭐ P7B 构建 F: 窗口门停顿的「哪一侧在咬」分裂计数器 (W67; 纯观测) ---------
+    //   语义 (逐字定义 —— **哪一拍算**): 第 T 拍 +1 ⟺ 第 T 拍 `stat_winstall_ev`
+    //   成立 **且** `win_wnd_eff >= RING_CAP`。
+    //     · `win_wnd_eff` = `tcb.win_wnd_eff` = **同一个注册样本**里的
+    //       `min(snd_wnd, WIN_CAP)` (与 `win_open`/`win_inflight` 同沿、同 `win_id`、
+    //       同拍 —— tcb.v:144-148 的单个 always 块) ⇒ 本判据与产生 `wnd_open=0` 的
+    //       那个比较**同源同拍**, 不是另采一份 (所以「哪一侧在咬」与「等窗」严格配对)。
+    //   ⇒ 结构性蕴含: `stat_winstall_cap_ev ⇒ stat_winstall_ev`
+    //     ⇒ **`ΔW67 ≤ ΔW66` 逐窗恒真** (反了就是实现错 —— 这是一条免费的牙)。
+    //   ⇒ 对端侧 (对端通告窗在咬) 的拍数 = `ΔW66 − ΔW67` —— 本设计**不做**第二个
+    //     计数器 (`P7B_L_INSTRUMENT_DESIGN.md` §2.2 裁定②)。
+    //   ⚠️ 并列档归属 (必须写清): `win_wnd_eff == RING_CAP` 判为**板帽侧** (与
+    //      `tcb.v:143` 的 `snd_wnd < WIN_CAP` 同一个比较同向) ⇒ 对端**恰好**给到
+    //      WIN_CAP 时会被算成板帽侧; 结构性偏置**至多一个 16 位档**, 不影响判定。
+    //   ⚠️ 纯观测: 唯一消费者是本计数器 CE; 不驱动任何功能逻辑, 不改任何门的判据。
+    //   ⚠️ 32 位自然回卷 (156.25 MHz ⇒ 27.487 s) ⇒ 差值判据必须 mod 2^32 且记原始值。
+    output reg  [31:0] stat_winstall_cap,
+    // ---- ⭐ P7B 构建 F: 等窗拍的操作点锁存 (W69; 纯观测) --------------------------
+    //   语义 (逐字定义): 在第 T 拍, 若 `stat_winstall_ev` 成立, 则
+    //   `o_win_at_winstall <= {win_inflight, win_wnd_eff}` (**同沿同源样本**, 与那次
+    //   阻塞判据用的是同一份寄存器样本); 否则**保持**。
+    //   ⇒ 它是「**最近一次因窗口而没开成帧**那一刻的 (在飞, 有效窗)」;
+    //     高 16 位 = `win_inflight`, 低 16 位 = `win_wnd_eff`。
+    //   ⚠️ **读法边界 (必须遵守)**: 本字是**锁存字** —— 只在同窗 `ΔW66 > 0` 时才
+    //      属于本窗; `ΔW66 == 0` ⇒ 它是**上一次**留下的陈旧值, **不许读**
+    //      (与 W57 `retx_hi` 的「只在 retx_active=1 时有效」同款口径)。
+    //   ⚠️ 纯观测: 只多 `stat_winstall_ev` 的 32 个 CE 扇出, 不碰功能路径。
+    output reg  [31:0] o_win_at_winstall,
     // ---- P4b-7-P6 调试探针 (纯 assign 线束输出, 不动任何逻辑) ----
     output wire        dbg_wnd_open,   // 窗口门控开 (wnd_open, S_IDLE 决策)
     output wire        dbg_pay_full,   // 载荷 FIFO 满 (pay_full)
@@ -195,13 +223,21 @@ module tcp_tx_frame (
 `endif
     // P4c: 门控帽 0x2FFE -> 0xBFFE (窗口 12KB -> 48KB-2; tcb win 读口内亦硬编码
     // 同值, 两处必须一致)。
+    // ⛔ 2026-10-10 (构建 F, B8 债订正): **上面两行是 P4c 时代的历史值, 不是现役值** ——
+    //   现役帽 = **`0xF000` (61440 B; P7B-LONGSEND 轮抬帽)**, 单一真值源 = wrapper 的
+    //   localparam `WIN_CAP_5` (`board/wrapper_p4.v:227`), 由它同时下发 `tcb.WIN_CAP`
+    //   (`:1971`) 与本模块 `RING_CAP` (`:2135`) ⇒ **两处(三处)结构性同值, 不分叉**。
+    //   ⚠️ 下面 `RING_CAP` 的**参数默认值 `0xBFFE` 只是给不传参例化 (各单元 TB) 用的
+    //   历史默认值** —— 它不是板上现役值, 也不是行为契约 (改它 = 改行为, 本轮不动)。
+    //   ⚠️ 本注释块内所有**由帽值派生的数字** (如 53244 / 48KB) 仍是按 0xBFFE 写的
+    //   历史在案值, 现役帽 (0xF000) 下的对应量**本轮未重算** (如实登记, 不猜)。
     // 门控消费 1 拍注册在飞 (win_open = 32 位回绕差 < 帽, 见下): 帧完成写
     // snd_nxt 的当拍, 下一 S_IDLE 决策读到的仍是旧值, 可误开 1 拍 (OPEN
     // 方向, 每次最多多放 1 帧); 连接切换 (scan/svc/ack 旁路 rb_id) 同效。
     // 实际在飞最坏 = (RING_CAP-1) + plen_max 4095 = 53244 < 65536 ring 字节
     // (retx_ram 13 位 ring 字 idx = 64KB/conn) — 硬 ring 界仍结构性成立,
     // 永不溢出。窗帽与在飞差均 32 位计算, 全 4GB 序列空间回绕正确
-    // (帽 0xBFFE << 64K, 无 16 位化边角)。
+    // (帽 0xBFFE << 64K, 无 16 位化边角; ⚠️ 现役帽 = 0xF000, 见上面 B8 订正块)。
     parameter [15:0]  RING_CAP = 16'hBFFE; // 窗口门控帽 (ring 容量的收紧版, 见上)
     // P5 长度守卫上界 (app 契约: 一帧 = 一个 TCP 段 ≤1460B; 这里放到 1500 留
     // 余量)。超过即整帧中止 (不写 FIFO/ring/csum, 不收帧, tlast 拍回 S_IDLE
@@ -583,6 +619,17 @@ module tcp_tx_frame (
                                    !ring_eval && !scan_now && !rx_flush &&
                                    !fifo_full && !bank_rdy[rx_bank] &&
                                    !tx_blk_sid && !wnd_open;
+    // ⭐ 构建 F (W67): 窗口门的「哪一侧在咬」—— 与上面那条**同源同拍**的第二投影。
+    //   判据与 `tcb.v:143` 的 `snd_wnd < WIN_CAP` **同型式** (不相等 ⟺ 生效帽 == 板帽):
+    //     `win_cap_bind` = `win_wnd_eff >= RING_CAP`; 真 ⇒ 咬住的是**板的帽**,
+    //     假 ⇒ 咬住的是**对端通告窗**。
+    //   ⚠️ `RING_CAP` 与 `tcb.WIN_CAP` 的结构性同源 = wrapper 的单一 localparam
+    //     `WIN_CAP_5` (`board/wrapper_p4.v:227`) ⇒ `:1971` `.WIN_CAP(WIN_CAP_5)` 与
+    //     `:2135` `.RING_CAP(WIN_CAP_5)` 由同一个值下发, **不会分叉**。
+    //   ⚠️ 比较器输入是**寄存器** (tcb 的注册输出) ⇒ 不引入新的组合长链;
+    //     本线只喂 `stat_winstall_cap_ev` (唯一消费者 = 计数器 CE)。
+    wire        win_cap_bind         = (win_wnd_eff >= RING_CAP);
+    wire        stat_winstall_cap_ev = stat_winstall_ev && win_cap_bind;
 
     // ---- 重传 ring 读/写 + 会话 ----
     wire        ring_act = (rx_state == RX_RING);
@@ -827,6 +874,8 @@ module tcp_tx_frame (
             retx_ovf_p     <= 1'b0;
             stat_retx <= 0;
             stat_winstall <= 32'd0;   // P7B 构建 E: 窗口门停顿计数
+            stat_winstall_cap <= 32'd0;     // P7B 构建 F: 板帽侧等窗拍数 (W67)
+            o_win_at_winstall <= 32'd0;      // P7B 构建 F: 等窗拍操作点锁存 (W69)
             fin_sent_r <= 16'h0; rst_sent_r <= 16'h0; fin_retx_pend <= 16'h0;
             for (ri = 0; ri < 16; ri = ri + 1) begin
                 rto_timer[ri] <= 21'd0;
@@ -855,6 +904,9 @@ module tcp_tx_frame (
             // ⭐ 构建 E: 帧器侧窗口门停顿计数 (语义见 stat_winstall_ev 处的权威注释)
             //   口径与其它 stat_* 同族: **按当拍寄存器态**计数 (拍数, 不是事件数)。
             if (stat_winstall_ev) stat_winstall <= stat_winstall + 32'd1;
+            // ⭐ 构建 F: W67 (板帽侧那一份) + W69 (操作点锁存; 语义/读法见端口注)
+            if (stat_winstall_cap_ev) stat_winstall_cap <= stat_winstall_cap + 32'd1;
+            if (stat_winstall_ev) o_win_at_winstall <= {win_inflight, win_wnd_eff};
             svc_id_r <= retx_req ? retx_id : prio_lo(rto_pend);
             rto_pend_any <= |rto_pend;
             ack_pend_r <= !ackq_empty;
@@ -1335,12 +1387,14 @@ module tcp_tx_frame (
                              !flush_pend;
     // P4b-7-P6-fix 窗口门控: wnd_open = tcb 注册输出的 win_open — 门 =
     // REGISTERED 32 位回绕正确的在飞 (snd_nxt - snd_una, 全 32 位) vs
-    // RING_CAP 帽 (0xBFFE) 钳位后的对端通告窗, 比较在 tcb win 读口内完成
+    // RING_CAP 帽钳位后的对端通告窗 (**该值现役 = 0xF000**; `0xBFFE` = 历史默认值,
+    // 见本模块参数处的 B8 订正块), 比较在 tcb win 读口内完成
     // (32 位减法 + 16 位比较 + 帽 mux 全在寄存器块前, 输出即寄存器) —
     // rb_id -> TCB mux -> 减法/比较 -> tready -> accept -> retx_ram WEA/ADDR
     // 的最差前向链已断 (win_* 比 rb_* 旧 1 拍且按 rb_id 上一拍取值, 误开界见
     // RING_CAP 注释)。rb_* 仍供帧首锁存与 svc/ring 逻辑 (那些链以 FF 端点
-    // 为终点, 不是最差路径)。1 拍陈旧性分析 (RING_CAP 0xBFFE, 最坏误开 ≤
+    // 为终点, 不是最差路径)。1 拍陈旧性分析 (RING_CAP **现役 0xF000** / 历史默认
+    // 0xBFFE, 最坏误开 ≤
     // (CAP-1)+4095 = 53244 < 65536 ring 字节) 保持不变 — 本修复只把 16 位
     // 高半相等门换成 32 位回绕正确比较, 无跨 64K 边界误关边角。
     wire        wnd_open  = win_open;
@@ -1429,6 +1483,9 @@ module tcp_tx_frame (
     wire        stat_winstall_ev = (state == S_IDLE) && s_axis_tvalid &&
                                    !ack_pend_r && !svc && !ring_eval && !scan_now &&
                                    !flush_pend && !pay_full && !tx_blk_sid && !wnd_open;
+    // ⭐ 构建 F (W67): 与 OVL 分支**逐字同款**的分裂判据 (语义权威在 OVL 分支处)
+    wire        win_cap_bind         = (win_wnd_eff >= RING_CAP);
+    wire        stat_winstall_cap_ev = stat_winstall_ev && win_cap_bind;
 
     // rb/cam 读口 mux: svc/ring_eval/scan_now 拍旁路 start_id (TCB/CAM 组合读,
     // 本拍即目标连接值)。scan_now 仅依赖 scan_tick (寄存器) 与 state/ack_pend_r
@@ -1750,6 +1807,8 @@ module tcp_tx_frame (
             svc_id_r <= 0; tick_cnt <= 0; rto_pend_any <= 0; ack_pend_r <= 0;
             stat_retx <= 0;
             stat_winstall <= 32'd0;   // P7B 构建 E: 窗口门停顿计数
+            stat_winstall_cap <= 32'd0;     // P7B 构建 F: 板帽侧等窗拍数 (W67)
+            o_win_at_winstall <= 32'd0;      // P7B 构建 F: 等窗拍操作点锁存 (W69)
             for (ri = 0; ri < 16; ri = ri + 1) begin
                 rto_timer[ri] <= 21'd0;
                 snd_una_prev[ri] <= 32'd0;
@@ -1785,6 +1844,9 @@ module tcp_tx_frame (
             if (accept && s_axis_tlast) stat_tlast_in <= stat_tlast_in + 32'd1;
             // ⭐ 构建 E: 窗口门停顿计数 (与 OVL 分支同款; 纯观测)
             if (stat_winstall_ev) stat_winstall <= stat_winstall + 32'd1;
+            // ⭐ 构建 F: W67 (板帽侧那一份) + W69 (操作点锁存)
+            if (stat_winstall_cap_ev) stat_winstall_cap <= stat_winstall_cap + 32'd1;
+            if (stat_winstall_ev) o_win_at_winstall <= {win_inflight, win_wnd_eff};
             // svc 优先编码寄存器化 (P6 时序, 见 svc_id 声明注释): 每拍刷新,
             // svc 拍消费上拍编码 — rto_pend 置位到 svc 至少隔 1 拍 (扫描拍
             // 置位, 下一 S_IDLE 拍 svc), retx_req 电平期间 retx_id 稳定

@@ -43,6 +43,18 @@ module tb_tcp_tx_ovl;
     localparam [31:0]  RCV_NXT = 32'h0000_4000;
     localparam [15:0]  SND_WND = 16'hC000;
     localparam [31:0]  CBASE   = 32'h0010_0000;
+    // ⭐ 构建 F: **窗帽档位** (TB 与 DUT 必须同值 —— 生产里两者同源于 wrapper 的 `WIN_CAP_5`)。
+    //   `-d W67_CAP_SMALL`: 把帽压到 **8192 B**。为什么需要这一臂 (结构性, 不是调参):
+    //     W67 的判据 = `win_wnd_eff >= RING_CAP`, 而 `!wnd_open` 要求在飞 >= min(snd_wnd, 帽)。
+    //     默认帽 0xBFFE=49150 下本 TB 的**在飞到不了** (ack_lag=8192) ⇒ 板帽侧**恒 0**
+    //     = 空判据 (判据会退化成"两个 0 相等"); 压到 8192 后每个 ACK 周期都自然越过
+    //     ⇒ 板帽侧有靶; 而关窗插曲 (snd_wnd=1460) 仍是**对端侧** ⇒ 同一臂里**两侧都激励**。
+    //   ⚠️ 默认档 (无该宏) = `0xBFFE` = 今天的取值 ⇒ 既有 A..M 各臂**逐位不变**。
+`ifdef W67_CAP_SMALL
+    localparam [15:0] TB_WIN_CAP = 16'd8192;
+`else
+    localparam [15:0] TB_WIN_CAP = 16'hBFFE;
+`endif
 
     // ===================== 函数 =====================
     function [7:0] fb;                      // 无状态字节函数
@@ -277,7 +289,7 @@ module tb_tcp_tx_ovl;
     wire [3:0]  tcb_id  = sel_tx ? tx_upd_id  : (sel_rx ? rx_upd_id  : scfg_upd_id);
     wire [31:0] tcb_val = sel_tx ? tx_upd_val : (sel_rx ? rx_upd_val : scfg_upd_val);
 
-    tcb #(.N(16), .WIN_CAP(16'hBFFE)) u_tcb (
+    tcb #(.N(16), .WIN_CAP(TB_WIN_CAP)) u_tcb (   // 构建 F: 与 DUT 的 RING_CAP 同值 (见 TB_WIN_CAP 注)
         .clk(clk), .rst_n(rst_n),
         .ra_id(4'd0), .ra_rcv_nxt(), .ra_snd_nxt(), .ra_snd_una(),
         .ra_rcv_wnd(), .ra_snd_wnd(), .ra_state(), .ra_wscale(),
@@ -313,6 +325,9 @@ module tb_tcp_tx_ovl;
     wire [31:0] stat_retx;
     // ⭐ 构建 E: W66 = tcp_tx_frame.stat_winstall (帧器侧窗口门停顿拍数)
     wire [31:0] w_stat_winstall;
+    // ⭐ 构建 F: W67 = 板帽侧等窗拍数 / W69 = 等窗拍操作点锁存 (源同模块, 纯观测)
+    wire [31:0] w_stat_winstall_cap;
+    wire [31:0] w_win_at_winstall;
     //   定向窗口关闭插曲 (见下方激励块) 的参数与状态
     localparam integer WC_AT   = 120000;   // 关窗起始拍 (远早于覆盖率目标)
     localparam integer WC_HOLD = 12000;    // 关窗保持拍 (≈6 个 ACK 周期)
@@ -327,6 +342,9 @@ module tb_tcp_tx_ovl;
     //      rx_state/recv_first/ack_pend_r/svc/ring_eval/scan_now/rx_flush/fifo_full/
     //      bank_rdy/tx_blk_sid 全是读 DUT 的**状态线**, 判据表达式由本 TB 写。
     integer     exp_winstall_cyc;          // TB 复算的窗口门停顿拍数
+    // ⭐ 构建 F 的 TB 侧复算 (与 W66 同款: **逐项自写**, 不引用 DUT 的判据线)
+    integer     exp_winstall_cap_cyc;      // TB 复算: 其中"板帽侧"那一份 (W67 的期望值)
+    reg  [31:0] exp_win_at_winstall;       // TB 复算: 最近一次等窗拍的 {在飞, 有效窗} (W69)
     reg         wc_seen;                   // 见证: 窗口确实被观察到关过 (!wnd_open)
     wire [31:0] o_retx_hi; wire o_retx_active; wire [3:0] o_retx_id;
     wire [31:0] stat_frames, stat_bytes, stat_ack, stat_ack_drop, stat_eend,
@@ -343,7 +361,7 @@ module tb_tcp_tx_ovl;
     wire [15:0] ack_seen_tb = 16'hFFFF;   // 既有臂: 门恒开 (本刀不动既有判据)
 `endif
 
-    tcp_tx_frame u_dut (
+    tcp_tx_frame #(.RING_CAP(TB_WIN_CAP)) u_dut (   // 构建 F: 与 u_tcb.WIN_CAP 同值
         .clk(clk), .rst_n(rst_n),
         .s_axis_tdata(s_tdata), .s_axis_tkeep(s_tkeep), .s_axis_tvalid(s_tvalid),
         .s_axis_tready(s_tready), .s_axis_tlast(s_tlast), .s_axis_tid(s_tid),
@@ -361,6 +379,8 @@ module tb_tcp_tx_ovl;
         .retx_req(retx_req), .retx_id(retx_id), .retx_gnt(retx_gnt),
         .stat_retx(stat_retx),
         .stat_winstall(w_stat_winstall),
+        .stat_winstall_cap(w_stat_winstall_cap),   // 构建 F: W67
+        .o_win_at_winstall(w_win_at_winstall),     // 构建 F: W69
         .o_retx_hi(o_retx_hi), .o_retx_active(o_retx_active), .o_retx_id(o_retx_id),
         .upd_wr(tx_upd_wr), .upd_id(tx_upd_id), .upd_sel(tx_upd_sel),
         .upd_val(tx_upd_val),
@@ -845,15 +865,56 @@ module tb_tcp_tx_ovl;
     //   ⚠️ 只在 TCP_TX_OVL 分支有对应实现 (默认/串行分支的启动点是 state==S_IDLE,
     //      判据不同) ⇒ 本判据包 OVL。
 `ifdef TCP_TX_OVL
+    // ⭐ 构建 F: 谓词线提出成 `wire` —— W66/W67/W69 三个判据共用同一份**TB 自写**表达式
+    //   (与改动前的内联写法**逐字同款**; 提出只是去重, 值不变)。
+    wire tb_winstall_ev = (u_dut.rx_state == 2'd0) && u_dut.recv_first && s_tvalid &&
+                          !u_dut.ack_pend_r && !u_dut.svc && !u_dut.ring_eval && !u_dut.scan_now &&
+                          !u_dut.rx_flush && !u_dut.fifo_full && !u_dut.bank_rdy[u_dut.rx_bank] &&
+                          !u_dut.tx_blk_sid && !win_open;
+    // ⭐ 构建 F: 分裂判据 (TB 侧独立写; 与 DUT 的 `win_cap_bind` 同式不同源 —— 阈值取 TB 的档位值)
+    wire tb_winstall_cap_ev = tb_winstall_ev && (win_wnd_eff >= TB_WIN_CAP);
+    // ⭐ 构建 F (第二轮实测后补): W69 的**定向见证快照**。
+    //   为什么第一轮的"跑完比末尾值"不够: 跑窗里还有一族 "零帽 conn" 的等窗事件
+    //   (`tcb` 复位把 16 槽全清 0 ⇒ `win_cap = 0` ⇒ `win_open ≡ 0` ⇒ 那些拍也算等窗,
+    //   且样本 = {0,0}) ⇒ 末尾值经常**恰好是 0** ⇒ "0 == 0" 是空判据 (实测 arm B/O 都是)。
+    //   本快照只抓"样本归属 = 关窗那个 conn"的事件 (prev_rb_id == WC_CONN): 那时
+    //   `win_cap == 1460` 且 `wing_diff >= 1460` ⇒ 样本**构造上非零** ⇒ 判据非空。
+    reg  [3:0]  w67w_id_d;                    // 上一拍 rb_id = 本拍样本的归属 conn
+    reg         w69_dir_arm, w69_dir_arm1;
+    reg  [31:0] w69_dir_dut, w69_dir_tb;
+    integer     w69_dir_hits;
+    // ⭐ W67 机理探针 (arm B 实测有 4 拍"板帽侧" —— 结构性上需要某样本在飞 >= RING_CAP,
+    //   机理**未定位** ⇒ 先取原始读数; 只打前 8 条, 不改变任何判据)
+    integer     w67_dbg_n;
     always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin exp_winstall_cyc <= 0; wc_seen <= 1'b0; end
-        else begin
-            if ((u_dut.rx_state == 2'd0) && u_dut.recv_first && s_tvalid &&
-                !u_dut.ack_pend_r && !u_dut.svc && !u_dut.ring_eval && !u_dut.scan_now &&
-                !u_dut.rx_flush && !u_dut.fifo_full && !u_dut.bank_rdy[u_dut.rx_bank] &&
-                !u_dut.tx_blk_sid && !win_open)
+        if (!rst_n) begin
+            exp_winstall_cyc <= 0; exp_winstall_cap_cyc <= 0;
+            exp_win_at_winstall <= 32'd0; wc_seen <= 1'b0;
+            w67w_id_d <= 4'd0; w69_dir_arm <= 1'b0; w69_dir_arm1 <= 1'b0;
+            w69_dir_dut <= 32'd0; w69_dir_tb <= 32'd0; w69_dir_hits <= 0;
+            w67_dbg_n <= 0;
+        end else begin
+            if (tb_winstall_ev) begin
                 exp_winstall_cyc <= exp_winstall_cyc + 1;
+                exp_win_at_winstall <= {win_inflight, win_wnd_eff};   // W69 的期望锁存值
+            end
+            if (tb_winstall_cap_ev) exp_winstall_cap_cyc <= exp_winstall_cap_cyc + 1;
             if (!win_open) wc_seen <= 1'b1;
+            // ---- W69 定向见证快照 (见声明处注) ----
+            w67w_id_d   <= rb_id;
+            w69_dir_arm1 <= w69_dir_arm;
+            w69_dir_arm  <= (wc_st == 3'd2) && tb_winstall_ev && (w67w_id_d == WC_CONN);
+            if (w69_dir_arm) w69_dir_hits <= w69_dir_hits + 1;
+            if (w69_dir_arm1) begin      // 事件后 1 拍: DUT 与 TB 的锁存都已落地
+                w69_dir_dut <= w_win_at_winstall;
+                w69_dir_tb  <= exp_win_at_winstall;
+            end
+            // ---- W67 机理探针 (只打前 8 条) ----
+            if (tb_winstall_cap_ev && (w67_dbg_n < 8)) begin
+                w67_dbg_n = w67_dbg_n + 1;
+                $display("DBG W67CAP#%0d @%0d prev_id=%0d eff=%04h infl=%04h win_open=%0d",
+                         w67_dbg_n, cyc, w67w_id_d, win_wnd_eff, win_inflight, win_open);
+            end
         end
     end
 `endif
@@ -1436,6 +1497,43 @@ module tb_tcp_tx_ovl;
             if (w_stat_winstall !== exp_winstall_cyc) begin tot_red = tot_red + 1;
                 $display("[FAIL] W66 语义不符 (逐拍复算): dut=%0d tb=%0d",
                          w_stat_winstall, exp_winstall_cyc); end
+            // ---- ⭐ 构建 F: W67 (板帽侧那一份) + W69 (操作点锁存) -----------------
+            //   判据形状 = **双边等式** (与 TB 侧独立复算逐字相等) ⇒ 两个方向都有牙:
+            //     多数 (把对端侧也算进来) 与 少数 (哑计数器) 都会红。
+            //   ⚠️ 在**默认帽** (0xBFFE) 下板帽侧结构性为 0 ⇒ 该方向是**空判据**;
+            //     真正激励它的是 `-d W67_CAP_SMALL` 那一臂 (`W67_MINCAP_WIT 见下)。
+            $display("W67 dut=%0d tb_cap=%0d tb_peer=%0d (W66=%0d)",
+                     w_stat_winstall_cap, exp_winstall_cap_cyc,
+                     exp_winstall_cyc - exp_winstall_cap_cyc, w_stat_winstall);
+            $display("W69 dut=%08h tb=%08h", w_win_at_winstall, exp_win_at_winstall);
+            if (w_stat_winstall_cap !== exp_winstall_cap_cyc) begin tot_red = tot_red + 1;
+                $display("[FAIL] W67 语义不符 (逐拍复算): dut=%0d tb_cap=%0d",
+                         w_stat_winstall_cap, exp_winstall_cap_cyc); end
+            // 结构性牙 (设计件 §2.2 点名的**免费**判据): W67 是 W66 的子集 ⇒ 逐窗恒真
+            if (w_stat_winstall_cap > w_stat_winstall) begin tot_red = tot_red + 1;
+                $display("[FAIL] W67 > W66 (=%0d > %0d) ⇒ 子集关系被破坏 (实现错)",
+                         w_stat_winstall_cap, w_stat_winstall); end
+            // W69 判据 (定向见证快照): 关窗保持期内"样本归属 = 关窗 conn"的事件后 1 拍,
+            //   DUT 与 TB 的锁存值必须逐字相等, 且**非零** (构造上必非零: 窗=1460, 在飞>=1460)。
+            $display("W69DIR hits=%0d dut=%08h tb=%08h (末尾值 dut=%08h tb=%08h)",
+                     w69_dir_hits, w69_dir_dut, w69_dir_tb,
+                     w_win_at_winstall, exp_win_at_winstall);
+            if (w69_dir_hits < 1) begin tot_red = tot_red + 1;
+                $display("[FAIL] W69 空判据: 关窗保持期内没有\"样本归属=关窗 conn\"的等窗事件"); end
+            if (w69_dir_dut === 32'd0) begin tot_red = tot_red + 1;
+                $display("[FAIL] W69 空判据: 定向快照读到 0 (构造上不可能)"); end
+            if (w69_dir_dut !== w69_dir_tb) begin tot_red = tot_red + 1;
+                $display("[FAIL] W69 定向快照不符: dut=%08h tb=%08h", w69_dir_dut, w69_dir_tb); end
+            // 次要 (跑完的末尾值; ⚠️ 可能落到 {0,0} 上 ⇒ 这一条比上面弱, 只作显示)
+            if (w_win_at_winstall !== exp_win_at_winstall) begin tot_red = tot_red + 1;
+                $display("[FAIL] W69 末尾锁存值与复算不符: dut=%08h tb=%08h",
+                         w_win_at_winstall, exp_win_at_winstall); end
+`ifdef W67_CAP_SMALL
+            // 本臂的存在理由 = 让"板帽侧"非空 ⇒ 必须见证它真的被激励 (否则又是空判据)
+            if (exp_winstall_cap_cyc < 64) begin tot_red = tot_red + 1;
+                $display("[FAIL] W67 空判据 (W67_CAP_SMALL 臂): TB 侧板帽侧拍=%0d < 64",
+                         exp_winstall_cap_cyc); end
+`endif
 `endif
 `ifdef ARM_ACKGATE
             // ⭐ r6 (L-A): ack_seen 门专项判据 (见驱动块注)

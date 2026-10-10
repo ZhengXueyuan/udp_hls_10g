@@ -1,0 +1,276 @@
+# P7B 构建 F 轮 (三个纯观测仪器 W67/W68/W69 + 搭车注释订正 + 快照 70 字) 轮级登记
+# (2026-10-10; 构建工程师)。⚠️ 本构建跑过两次 (run1 因工具停滞中止, 见步骤 1) —— 两次输出全部留档。
+#=============================================================================
+# 交付 = 一次构建收口 (构建 F):
+#   (1) `rtl/tcp_tx_frame.v`: 新端口 `stat_winstall_cap` (W67, 板帽侧等窗拍; 两分支都驱动)
+#       + `o_win_at_winstall` (W69, 等窗拍操作点锁存 {win_inflight, win_wnd_eff}) (两分支都驱动)。
+#   (2) `rtl/tcp_rx.v`: 新端口 `stat_ack_adv` (W68, 推进 `snd_una` 的 ACK 事件数)。
+#   (3) `board/wrapper_p4.v`: `SNAP_NW_P6E 67→70` · `SNAP_P7BDP_NW 27→30` ·
+#       **`BUILD_ID_V 0x19 → 0x1A`**; **未实现地址 `0x12C` → `0x138`**; 三个新字在 **MSB 端**。
+#   (4) 纯注释订正 (`rtl/retx_ram.v` / `rtl/tcb.v` / `rtl/tcp_tx_frame.v` 里"帽值仍写 0xBFFE"的注释;
+#       实现轮已用 `git diff -U0` 逐文件证明只动 `//` 行) —— 本登记只记录"构建前后 sha256 相同"。
+# ⚠️ 实现轮已跑过的门 (本轮不重跑; 引用口径 = 实现轮报告): TX_OVL_GATE: PASS (含新臂 N/O/P/Q/R) ·
+#   CONT-GATE: PASS · RX8-GATE: PASS · 真 wrapper 全链 106 PASS/0 FAIL (含 7b 0x138) · xvlog 4/4 ·
+#   check_window.py PASS=85/FAIL=0 · 反例台架 OK=31 BAD=0 · 假板子 14/0 与 19/0。
+# 命令 = MSYS_NO_PATHCONV=1 cmd /c 'D:\repo\XCKU5PMini\udp_hls_10g\board\run_build_p7b_ku5p.bat' (从仓根)
+# 完整 stdout = 本目录 F_build_stdout.txt (540 B; bat 全部打印行; 同内容副本 = F/F_bat_stdout.txt)
+#             + F/p7b_ku5p_stdout.txt (522,009 B; Vivado 全文, 4337 行)
+#=============================================================================
+
+== 步骤 0: 源码冻结自证 (全局 #57) —— 判据 = 构建前后逐条相同 ⇒ **PASS (9/9)** ==
+| 文件 | 构建前 = 构建后 sha256 | 判 |
+|---|---|---|
+| rtl/tcp_tx_frame.v                 | 9bf333f4e24ba8f5ad3fa9bf6ec4a347d4798e4fd3b44bf6af85c1d0e0ee0fc7 | 逐字相同 |
+| rtl/tcp_rx.v                       | b080c5df8dd9178a9a3859719f0021a2bccbbaab996eebefa1bc65365916b580 | 逐字相同 |
+| rtl/app_pattern.v                  | 811a84e4bd0e8b20ba8ac007cbb16a8f310091b141f7a6d59964dd8288f317bc | 逐字相同 |
+| board/wrapper_p4.v                 | fe75b74751d84b8803817ccced27f317a804bd2559f3a2434841b41e9c5d15d7 | 逐字相同 |
+| rtl/tcb.v                          | a449d1ef6ec4f200d161c333f3e05edb0fa54d5d780737eff1fc9bf7aa745d68 | 逐字相同 |
+| rtl/retx_ram.v                     | 65dcb88f7169e8be179dabfdc9a2929bb57c9643c1daed0306ba8b767d91cd5e | 逐字相同 |
+| rtl/app_ctrl.v                     | f6c5b29652219cdfb9080428963d8b7202775f1cb58617720057b5cdd15899a9 | 逐字相同 |
+| _proj_10g/p7b_mac/rtl/mac_tx_10g.v | 59475c827af78644f42462d6deab341e5077532808efcff4112c0c860c969f37 | 逐字相同 |
+| board/build_p7b_ku5p.tcl           | 48a29036c7b9f70ee6787e1b58aedcaffea055c497fe9b89433dd75b1ff467aa | 逐字相同 |
+⇒ 两次构建 (run1+run2) 的合窗口内 **9/9** 源码未被改动 (构建前 = run1 前 09:15 采样; 构建后 = run2 后 10:07 采样)。
+原始记录 = 本目录 SRC_PRE.sha256 / SRC_POST.sha256 (`diff` 输出空 = 逐条相同)。
+⚠️ 跨档锚对照 (E 档 READINGS 步骤 0): E 档 tcp_tx_frame.v = 0ffaaa3e…d8a6 / wrapper_p4.v = 6b200cb5…0fe3
+  ⇒ 本刀这两文件 sha256 **均已变** (即确有改动); tcb.v / app_ctrl.v / mac_tx_10g.v / build tcl 与 E 档逐字相同。
+⚠️ 本档 9 文件清单 = 派单指定 (与 E 档清单不同: 本档含 tcp_rx.v / retx_ram.v, 不含两个 TB 锚)。
+
+== 步骤 1: 构建 ==
+⭐ 本构建**跑过两次**, 逐字记录:
+  run1 = 2026-10-10 09:15:34 启动 → 09:38:13 中止 (**工具停滞, 见下**); 输出留档 = hang_evidence/
+  run2 = 2026-10-10 09:38:51 启动 → 10:05:56 结束 (**收口跑; 本次读数全部来自它**)
+  run2 时长 ≈ 27 min 05 s; Vivado 末行 "Exiting Vivado at Sat Oct 10 10:05:55 2026";
+  `write_bitstream completed successfully` @ F/p7b_ku5p_stdout.txt:4256 (上一行 :4252 "Writing bitstream ./wrapper_p4.bit...");
+  .bit 头时间 = 2026/10/10 10:04 (在 run2 窗口内 ✓)
+BUILD_EXIT = 0 (bat 打印) ; CONSOLE_RC = 0 (外层重定向捕获) ; bat 尾 = BITSTREAM-OK ; `P7B DONE` 出现
+⭐ 中间阶段标记: `P7B_IS_LOCKED_AT_CREATE = 0` (:43) · `P7B_SYNTH_LAUNCH = 0` (:294) ·
+  `P7B_SYNTH_STATUS = synth_design Complete!` (:3215) · `P7B_IMPL_STATUS = write_bitstream Complete!` (:4262)
+预构建归档 (#54 收口):
+  · run1 的归档 = `ARCHIVE_DONE 20261010_091536 files=19` + `ARCHIVE_SHA256_OK`
+    (dir=D:\repo\XCKU5PMini\udp_hls_10g\board\..\_proj_10g\notes\p7b_build_archive\20261010_091536)
+  · run2 的归档 = `ARCHIVE_SKIP no previous bitstream at "...impl_1\wrapper_p4.bit"`
+    (原因: run1 的 `create_project -force` 已抹掉 impl_1、而 run1 死在 bitgen 前 ⇒ impl_1 里没有 .bit;
+     该行是**如实记录**、不是失败)
+⭐ 上一档取证保全核对 (派单要求): **run1 归档内 wrapper_p4.bit sha256 =
+   b88b2beee1650a9ecdfd1196b01d9e84422374ea2a168dd1bb54bc7ceb05a64f = 构建 E 位流逐字**
+   (双路核对: 直接 sha256sum + 归档内 SHA256SUMS.txt, 两路同值) ⇒ E 档取证已保全, 未被抹掉。
+   ⚠️ 同一归档内 `wrapper_p4_routed.dcp` 亦 = E 档 routed dcp (本档所有 E 侧定向查询用的就是它;
+      交叉自证 = 该 dcp 的 WNS 查询给出 0.090 / rx_state_reg[1]_replica → u_app/stg_reg[4]/D, 与 E 档报告逐字相同)。
+
+⭐ run1 停滞 (工具级, 不可复现) —— 取证全在 hang_evidence/ (7 文件):
+  · 停滞点 = **xdma_0 IP OOC 综合子进程** (vivado PID 15956, cmdline `-log xdma_0.vds -source xdma_0.tcl`)
+  · 冻结判据 (三项独立): ① CPU = 113.375 s **三次采样 (25 s / 90 s / 30 s) 零增长**;
+    ② 进程 IO 计数 30 s 内全零增长 (Read=163397 / Write=41996 / Other=272751 / PageFaults=5379182);
+    ③ 16/16 线程全 Wait (UserRequest=6 / EventPairLow=1 / Unknown=8 / ExecutionDelay=1);
+    ④ xdma_0_synth_1/runme.log 末次写入 09:18:06, 之后 >20 min 零增长 (冻结时 102,933 B; run2 正常完成时 199,990 B)
+  · 排除: 内存 45.1/64.9 GB 空闲; 磁盘 1.4 TB 空闲; 无第三方 DLL 注入 (206 modules 全 Windows/AMD 路径);
+    整条 wrapper 链 (cmd 10952 → cscript 27292 → cmd 3444 → vivado 15956) 全部零 CPU
+  · 处置 (纪律 #3 唯一例外 = 不可复现原因): 09:38 杀 PID 15956 ⇒ 父进程自记录失败:
+    `ERROR: [Vivado 12-13638] Failed runs(s) : 'xdma_0_synth_1'` / `wait_on_runs ... elapsed = 00:21:03` /
+    `ERROR: [Common 17-39] 'wait_on_runs' failed` / BUILD_EXIT=1 / NO-BITSTREAM (全在 hang_evidence/)
+  · **原样重跑一次** (run2): 越过同一阶段正常 (xdma_0 完成 09:43:15) ⇒ 未复现
+  · 归因边界: xdma_0 是 **IP OOC 综合** (输入 = IP 源, **不含用户 RTL**) ⇒ 与本次源码改动无关;
+    E 档同 flow 3 小时前正常 ⇒ 环境/工具级偶发 (机理未定位)。**不做因果断言**。
+  · hang_evidence/ 清单: F_run1_stdout_FULL.txt (bat 全部打印行) · F_run1_board_p7b_ku5p_stdout_FULL.txt
+    (Vivado 全文, 含错误尾) · F_run1_MAIN_stdout_AT_HANG.txt (冻结时刻快照) ·
+    xdma_0_synth_runme.log_AT_HANG.txt · xdma_0.vds_AT_HANG · xdma_0_vivado.jou_AT_HANG.txt ·
+    (run1 归档目录 20261010_091536 内含 E 档 19 件)
+
+== 步骤 2: 闸 (逐条, 原始行; 全部来自 run2) ==
+2.1 bat 三条硬门 = **无命中** (bat 未打印 DROPPED-CONSTRAINT-FAIL / IMPLICIT-NET-FAIL / DRC-KEY-FAIL)。
+    逐键原始计数 (F/p7b_ku5p_stdout.txt, grep -c; 12/12 全 0):
+      12-4739=0 · Synth 8-11241=0 · undeclared symbol=0 · VRFC 10-3091=0 · VRFC 10-2989=0 ·
+      implicitly declared=0 · NSTD-1=0 · UCIO-1=0 · AVAL-326=0 · Opt 31-155=0 · Opt 31-67=0 · Route 35-7=0
+    ⭐ `Slack (VIOLATED)` 计数 = **0** (两报告各一次 grep): board/p7b_ku5p_timing.rpt = 0 ·
+      impl_1/wrapper_p4_timing_summary_routed.rpt = 0 (块数 = 62 / 574 ⇒ "0 命中"不是报告变小造成的; 与 E 档同口径)
+    布线/DRC: route_status = 全部 131,204 可布网 fully routed / routing errors 0; DRC 仅 Warning (DPIP-2×4, DPOP-3×2), Violation 0。
+2.2 读数行 (出现在 stdout 本体, 非仅在报告; 逐字):
+    P7B_CONVERGED_AT_ROUND = 2
+    P7B_IS_LOCKED_POSTGEN = 0
+    P7B_WNS = 0.111
+    P7B_WHS = 0.010
+    P7B_WPWS = 0.010 0.010 0.011 0.011 0.012 0.013 0.014 0.017 0.027 0.039 0.050 0.051 0.051 0.066 0.066 0.081 0.111 0.142 0.281 0.297 0.362 0.364 1.284 2.166 3.309 3.890 4.672 6.581 6.896 6.918 6.947 7.581 8.195 999.018
+    P7B_BIT_EXISTS = 1
+    P7B DONE
+    ⚠️ `P7B_VERDICT` **未出现** (前五档同; 回源码核 = 只在两个失败分支打印 ⇒ 非异常, 如实登记)。
+    成功证据三条 = `P7B DONE` + `BITSTREAM-OK` + `P7B_BIT_EXISTS = 1`。
+2.3 三类失败端点 (check_p6e_timing.py; 两报告都跑, 逐字且一致; RC=0):
+      [PASS] setup:       WNS=+0.111 TNS=+0.000 failing=0/248339
+      [PASS] hold:        WHS=+0.010 THS=+0.000 failing=0/248339
+      [PASS] pulse-width: WPWS=+0.000 failing=0/81107
+      [INFO] 报告自述: constraints met
+    ⇒ **判据 PASS** (setup/hold/pulse 三类失败端点全 0); 自述行 = board/p7b_ku5p_timing.rpt:159
+      "All user specified timing constraints are met." (impl 副本同句)
+    Design Timing Summary 12 数行 (board/p7b_ku5p_timing.rpt:156 逐字):
+      0.111 0.000 0 248339 | 0.010 0.000 0 248339 | 0.000 0.000 0 81107
+    ⭐ DP 域 (g_hw.clk_out0) 逐字行 (board/p7b_ku5p_timing.rpt:221):
+      g_hw.clk_out0  0.281  0.000  0  138839 | 0.010  0.000  0  138839 | 2.627  0.000  0  49481
+    ⚠️ 全局 WPWS 打印值 = +0.000 而失败端点 0, 与前四档同性质 (pipe_clk/PCIe 核内部段); 如实记录。
+2.4 ⭐⭐ 失败族清单 + WNS 路径完整分解 (即使 0 违例也报):
+    **失败族清单 = 0 条** (两份报告 `Slack (VIOLATED)` 各 0; 见 2.1)。
+    ⭐ **F 档全局 WNS = +0.111 —— 它是一条 Recovery 检查, 在 `**async_default**` 组内, 不在数据面**:
+      Slack (MET) : 0.111ns (@ board/p7b_ku5p_timing.rpt:3458, 逐字)
+        Source:      u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C   (FDPE, pcie_axi_aclk 250MHz)
+        Destination: u_pcie_regs/snap_words_r_reg[1797]/CLR              (recovery vs pcie_axi_aclk)
+        Path Group:  **async_default**
+        Path Type:   Recovery (Max at Slow Process Corner); Requirement: 4.000ns
+        Data Path Delay: 3.439ns (logic 0.093ns (2.704%)  route 3.346ns (97.296%))
+        Logic Levels: 0  ; Clock Path Skew: -0.331 (DCD 2.251 / SCD 2.706 / CPR 0.124)
+        数据段:  user_reset_reg/Q → net `u_pcie_regs/bbstub_axi_aresetn` (fo=5392, routed 3.346ns) → snap_words_r_reg[1797]/CLR
+      ⇒ 即"XDMA 异步复位释放在快照寄存器阵列 CLR 引脚上"的纯布线路径 (logic 仅 0.093ns)。
+      ⭐ 定向查询独立复现 (FAM2 F snap_clr slack=0.111 lvl=0, src/dst 逐字相同) —— 与本报告面一致。
+      ⭐ **top-20 构成 (定向报告 query_F/F_top20_setup.rpt)**: 20 条**全部同源** (`user_reset_reg/C`) 且**同 slack 0.111**,
+        宿 = 快照 CDC 链上的 CLR 引脚群 (`u_snap_seq/dout_reg[*]/CLR` · `u_snap_p7bdp/dout_a_reg[*]/CLR` ·
+        `u_snap_dp/dout_a_reg[*]/CLR` · `snap_words_r_reg[*]/CLR`) ⇒ WNS 是**一族** (共享复位网 `bbstub_axi_aresetn`, fo=5392),
+        不是单点; 该 async 组端点 = 5409 (E 档 5216)。
+    ⭐ **F 档 DP 域最差 (setup, 0.281)** (board/p7b_ku5p_timing.rpt:2016 起, 逐字):
+        Source:      u_clkgen/rel_sr_reg[3]/C            (FDCE, g_hw.clk_out0)
+        Destination: u_tcp_tx/u_retx/g_byte[1].mem_e_reg_7_bram_7/RSTRAMB   (RAMB36E2, g_hw.clk_out0)
+        Path Group:  g_hw.clk_out0 ; Path Type: Setup (Max at Slow Process Corner); Requirement: 6.400ns
+        Data Path Delay: 5.898ns (logic 0.097ns (1.645%)  route 5.801ns (98.355%))
+        Logic Levels: 0  ; Clock Path Skew: +0.179 (DCD 5.298 / SCD 4.866 / CPR -0.253)
+      ⇒ "时钟生成器的复位移位寄存器 → retx BRAM 复位脚"的纯布线路径 (logic 仅 0.097ns)。
+    ⭐⭐ 特别核 ①: "WNS 的宿是否仍是 E 档那条 `u_app/stg_reg[4]/D`?" ⇒ **否 (两处都不是)**:
+      · 全局 WNS 宿 = `u_pcie_regs/snap_words_r_reg[1797]/CLR` (**新对象; 且路径类型 = recovery, 不是 setup**)
+      · DP 域 WNS 宿 = `u_tcp_tx/u_retx/g_byte[1].mem_e_reg_7_bram_7/RSTRAMB` (**新对象**)
+      · 原族**仍在网表里** (CELLCOUNT F `u_app/stg_reg*` = 64 格) 但定向查询: 最差 = D 引脚 **0.732 (13 级)** /
+        CE 引脚 **0.441 (13 级)**, 源族也换了 (`u_app_ctrl/c_snd_nxt_reg[12][1]`) ⇒ **不是被证变差, 是退出最差面**。
+      · E 档那条源 `FSM_sequential_rx_state_reg[1]_replica` 在 F **不存在 replica 单元** (CELLCOUNT=0; 布局产物);
+        同源族 (2 格) 在 F 的最差 = **0.295 (14 级, → u_tcb/snd_nxt_r_reg[3][25]/CE)**。
+    ⭐⭐ 特别核 ②: "新仪器的两个锥有没有成为新最差" ⇒ **都没有 (定向查询, 不是只读 top-N 清单)**:
+      a) **`win_wnd_eff → 16 位比较 → W67 的 CE`** (定向 `-from win_wnd_eff_reg* -to stat_winstall_cap_reg*/CE`):
+         `DIR F winw->w67ce slack=4.791 lvl=1 src=u_tcb/win_wnd_eff_reg[12]/C dst=u_tcp_tx/stat_winstall_cap_reg[4]/CE`
+         报告逐字 (query_F/F_winw2w67ce.rpt): Data Path Delay 1.461ns (logic 0.195 (13.3%) / route 1.266 (86.7%));
+         **Logic Levels: 1 (LUT5=1)** —— 实现轮估 "≈2 级 LUT" ⇒ 实测 **1 级**; slack 4.791 = DP WNS 的 **17.1×**。
+      b) **`stat_winstall_ev` 的 +32 CE 扇出** (定向 `-to stat_winstall_cap_reg[*]/CE` 全部 32 个 CE 引脚):
+         `FAM F w67_CE slack=1.177 lvl=7 src=u_tcp_tx/u_ackq/dout_reg[36]/C dst=u_tcp_tx/stat_winstall_cap_reg[4]/CE`
+         报告逐字 (query_F/F_w67_CE.rpt): Data Path Delay 5.094ns (logic 0.604 (11.9%) / route 4.490 (88.1%));
+         Logic Levels: 7 (LUT3=1 LUT5=1 LUT6=5) ⇒ slack 1.177 = DP WNS 的 **4.2×**。
+      c) 另外两个新仪器 (同命令): W69 CE 最差 **1.360 (6 级)** / W68 CE 最差 **1.222 (6 级)**;
+         W67/W69 的 D 侧 = 5.197 / 4.574; W66 (E 档已有) CE = 2.217 (9 级)。
+      d) **报告面**: 三个新仪器名 (`stat_winstall_cap` / `win_at_winstall` / `stat_ack_adv`) 在
+         **board 报告 = 0 次 / impl 报告 (574 块) = 0 次** ⇒ 一条都没进任何最差清单。
+      ⇒ 结论 (限本档): **新仪器不构成新的最差端点; 三个锥全部远离 (min 4.2×) 本档 DP 域 WNS。**
+    ⭐ 跨档同族 A/B (E vs F; E 侧 = 归档 `20261010_091536/{p7b_ku5p_timing.rpt, wrapper_p4_routed.dcp}`,
+       同命令报告 + **同一 TCL 定向查询**; 全局 #66 口径):
+      | 族 | E 档 | F 档 |
+      |---|---|---|
+      | 全局 WNS (同命令报告) | `rx_state_reg[1]_replica/C → u_app/stg_reg[4]/D`, **0.090**, setup, 22 级, logic 1.939/route 4.145 | `user_reset_reg/C → snap_words_r_reg[1797]/CLR`, **0.111**, **Recovery/async_default**, 0 级, logic 0.093/route 3.346 |
+      | DP 域 WNS (同命令报告) | 同上 (0.090); 第 2 = retx mem_o CLK → ring_d_r[5]/D, 0.120 | `rel_sr_reg[3]/C → retx mem_e RSTRAMB`, **0.281**; 第 2 = retx mem_o CLK → ring_d_r[6]/D, **0.283** |
+      | 全局 WNS 同族 = pcie async (同命令表行) | **0.100** (5216 ep), dst = snap_words_r_reg[**1929**]/CLR | **0.111** (5409 ep), dst = snap_words_r_reg[**1797**]/CLR |
+      | u_app/stg_reg 族 (定向) | D = **0.090** / CE = 0.185 (源 = rx_state_replica) | D = **0.732** / CE = **0.441** (源 = app_ctrl/c_snd_nxt[12][1]) |
+      | rx_state 源族最差 (定向) | **0.090** (→ stg_reg[4]/D) | **0.295** (→ tcb/snd_nxt_r_reg[3][25]/CE) |
+      | W66 计数器 CE (定向) | 1.932 (13 级, 源 rx_state_replica) | 2.217 (9 级, 源 rx_state_reg[1]) |
+      | win_wnd_eff D / win_inflight D (定向) | 3.857 (9) / 2.886 (11) | 3.371 (6) / 2.579 (8) |
+      | async_default 组其他行 (同命令表) | DP 1.791 / pcie_ref 8.634 / pipe 2.755 | DP 0.833 / pcie_ref 8.291 / pipe 2.774 |
+      | 计数判别 (定向, 同一 TCL) | stat_winstall_reg=36 / cap=**0** / win_at=**0** / ack_adv=**0** | 36 / **36** / **32** / **36** |
+      ⚠️ **#66 口径**: 每行内多数 **不是同一条对象** (全局 WNS 换了类型 setup→recovery + 两端换;
+        DP 域换族; snap_words 位号 1929→1797; stg 族源族换) ⇒ **只做"同族对照", 不做单条 slack 比对**。
+      ⚠️ async 组其余四个时钟名在 E/F 之间**带下划线编号位移** (`rxoutclk_out[0]`/`_1` → `_2`/`_3`, txout 同)
+        —— 时钟重命名, 不是消失; 如实登记。
+2.5 ⭐ 参数绑定自证 (F/p7b_ku5p_stdout.txt, 逐字; 前三条紧邻 `synthesizing module 'app_pattern'` :393):
+      394:	Parameter TX_BYTES bound to: 268435455 - type: integer
+      396:	Parameter TX_CONTINUOUS bound to: 1'b1
+      397:	Parameter TX_TAILCARRY bound to: 1'b0
+      1080:	Parameter BUILD_ID_V bound to: 26 - type: integer
+    判据 = TX_BYTES=268435455 ✓ · TX_CONTINUOUS=1 ✓ · **TX_TAILCARRY = 1'b0** ✓ · BUILD_ID_V=26 (0x1A) ✓
+    (另 :1041 `Parameter TX_BYTES bound to: 0` = app_udp_pattern 默认例化, 未动, 与前档同)
+    跨档交叉 (强于静态 grep): 三消费模块绑定值全中 —— WIN_CAP bound to 16'b1111000000000000 (:413 app_ctrl / :567 tcb) ·
+      RING_CAP bound to 16'b1111000000000000 (:578 tcp_tx_frame) = 0xF000 = 61440 ✓
+2.6 静态核对 (board/wrapper_p4.v, `grep -n "WIN_CAP_5\|SNAP_NW_P6E\|SNAP_P7BDP_NW\|BUILD_ID_V"`, 逐字):
+      227:    localparam [15:0] WIN_CAP_5 = 16'hF000;
+      1254:    app_ctrl #(.WIN_CAP(WIN_CAP_5)) u_app_ctrl (
+      1980:    tcb #(.WIN_CAP(WIN_CAP_5)) u_tcb (
+      2144:    tcp_tx_frame #(.RING_CAP(WIN_CAP_5)) u_tcp_tx (
+      3228:    localparam SNAP_NW_P6E = 70;        // 总字数 W0..W69 (未实现地址 = 0x138 = word 78)
+      3249:    localparam SNAP_P7BDP_NW = 30;      // ... (构建 F 27→30)
+      4050:        .BUILD_ID_V (32'h0000001A),     // ⚠️ 每次改动自增 (构建 F = 0x1A)
+    ⭐ 地址预算自洽核 (独立复算): 0x20 + 4×70 = **0x138** = 首未实现字 (word 78) ✓;
+      70 ≤ 119 (7 位译码上限) ✓; 三个新槽 = p7bdp_din[27][28][29] (3784-3786)。
+    ⭐ 三新字在 MSB 端核 (拼接首三项 = 最高槽号): board/wrapper_p4.v:3839-3842 逐字:
+      `wire [SNAP_NW_P6E*32-1:0] snap_dout_all = {`
+      `        p7bdp_dout[29*32 +: 32],   // W69 ...`
+      `        p7bdp_dout[28*32 +: 32],   // W68 ...`
+      `        p7bdp_dout[27*32 +: 32],   // W67 ...`
+      ⇒ W67/W68/W69 = 拼接**前三项** = 向量 MSB 端 ✓ (W0..W66 槽号未平移)。
+    ⭐ 定向查询的独立佐证 (F dcp): CELLCOUNT F: stat_winstall_reg*=36 (32 FF + 4 进位 LUT `*_i_1`) ·
+      stat_winstall_cap_reg*=36 · win_at_winstall_reg*=32 · stat_ack_adv_reg*=36 (E dcp 后三者 = 0/0/0)。
+
+== 步骤 3: 位流身份 ==
+sha256 = 89e89f31efb5f1450a1c39acfce587bb4e4b6347c5fdc2f470c91ff0d4400f45   (F/ 副本与 impl_1 原件逐字相同)
+bytes  = 15431261   (⚠️ 与 S3/A/C/D/E **同一字节数** ⇒ 只有 sha256 与 BID 能分版)
+SW_CRC = dd9f4786   (并列: S3=7eab4107 / A=2c237c32 / C=4c5973e5 / D=f5cdf37f / E=82424462 /
+                     S1=81dbe1db / S2=bcdcfa1d / C1=da663843 — 与前八者全不同)
+.bit 头原文 (逐字, 去 NUL): `<wrapper_p4;UserID=0XFFFFFFFF;Version=2025.2;SW_CRC=dd9f4786` /
+                            `xcku5p-ffvb676-1-e` / `2026/10/10` / `10:04`
+.bit 头日期/时间 = 2026/10/10 10:04   (run2 窗口 09:38:51–10:05:56 内 ✓)
+归档目录 = 本目录 F/ (位流 + 7 份 impl_1 报告 + runme_impl_1.log + 5 份 board 报告 + F_bat_stdout.txt
+           + SHA256SUMS.txt (15 文件, 全量校验和))
+
+== 步骤 4: 读数表 (S3 / A / C / D / E / **F** 六档并列; ⚠️ 资源数字**全部来自各档自己的构建报告**, 无照抄) ==
+| 项 | S3 (2^28) | A (BID 0x16) | C (0x17) | D (0x18) | E (0x19) | **F (本刀; BID 0x1A)** | Δ(F−E) |
+|---|---|---|---|---|---|---|---|
+| WNS | +0.052 | +0.021 | +0.006 | +0.099 | +0.090 | **+0.111** | **+0.021** |
+| WHS | +0.010 | +0.010 | +0.011 | +0.010 | +0.010 | **+0.010** | 0 |
+| WPWS (Design Timing Summary) | +0.000 (fail 0) | +0.000 (fail 0) | +0.000 (fail 0) | +0.000 (fail 0) | +0.000 (fail 0) | **+0.000 (fail 0)** | 0 |
+| setup/hold/pulse 失败端点 | 0/0/0 | 0/0/0 | 0/0/0 | 0/0/0 | 0/0/0 | **0/0/0** | 0 |
+| 时序端点总数 (setup = hold) | 247049 | 247479 | 246226 | 247043 | 248992 | **248339** | **−653** |
+| 同上 (pulse 栏) | 80015 | 80256 | 80247 | 80686 | 80815 | **81107** | +292 |
+| CLB LUTs | 73121 | 73194 | 73207 | 73108 | 73082 | **72874** | **−208** |
+| CLB Registers | 70677 | 70918 | 70909 | 71348 | 71476 | **71769** | **+293** |
+| Unique Control Sets | 2873 | 2861 | 2811 | 2844 | 2842 | **2810** | −32 |
+| BUFGCE | 4 | 4 | 4 | 4 | 5 | **5** | 0 |
+| Block RAM Tile | 348 | 348 | 348 | 348 | 348 | **348** | 0 |
+| URAM | 0 | 0 | 0 | 0 | 0 | **0** | 0 |
+| DSPs | 4 | 4 | 4 | 4 | 4 | **4** | 0 |
+| Bonded IOB | 10 | 10 | 10 | 10 | 10 | **10** | 0 |
+| 位流 sha256 (前 8) | 492c3579 | 052c5200 | 5fff2be8 | edb6dcb8 | b88b2bee | **89e89f31** | 不同 |
+| 位流 bytes | 15431261 | 15431261 | 15431261 | 15431261 | 15431261 | **15431261** | 同 |
+| SW_CRC | 7eab4107 | 2c237c32 | 4c5973e5 | f5cdf37f | 82424462 | **dd9f4786** | 不同 |
+| WNS 源 → 宿 (对象) | retx_active_reg → ctrl_tcpcsum[14] | rx_state[0] → ctrl_tcpcsum[14] | recv_first → ctrl_tcpcsum[14] | recv_first → tcb/state_r[0][1]/CE | rx_state[1]_replica → u_app/stg_reg[4]/D | **pcie user_reset_reg → snap_words_r_reg[1797]/CLR (async recovery)** | 双换 + 换型 |
+| WNS 级数 / logic ns | 19 / — | 22 / 2.482 | 20 / 2.198 | 18 / 1.660 | 22 / 1.939 | **0 / 0.093** | −22 / −1.846 |
+| WNS route ns (占比) | — | — | 4.158 | 4.435 (72.8%) | 4.145 (68.13%) | **3.346 (97.30%)** | −0.799 |
+来源逐条 (可回核): S3/A/C/D/E 各列 = 各档自己的 READINGS.txt + 其归档报告 (S3=p7b_build_longflow/S3/ ·
+  A=p7b_build_longsend/A/ · C=p7b_build_gap9/C/ · D=p7b_build_a7/D/ · E=p7b_buildE_build/E/ + E 档读数表);
+  **F 列 = 本次构建报告** (F/wrapper_p4_utilization_placed.rpt 报告头 Date = Sat Oct 10 10:0x = 本次;
+  F/p7b_ku5p_timing.rpt:156 = 本档 12 数行)。
+六档时序 12 数行逐字: S3 `0.052 0.000 0 247049 | 0.010 … | 0.000 …` · A `0.021 …` · C `0.006 …` ·
+  D `0.099 …` · E `0.090 …` · **F `0.111 0.000 0 248339 | 0.010 0.000 0 248339 | 0.000 0.000 0 81107`**
+⚠️ 全局 #64: 本刀含真实 RTL 改动 (三个新仪器) + 常量改动 (快照宽度 / 未实现地址 / BID) ⇒ 资源与时序**一定会变**,
+  上表差异是**预期形态**, 不做"解释成没变"。
+
+⭐ **成本对照 (派单要求)**: 实现轮预判 "**三个新字 = 计数器 96 FF + 快照侧 ≈ 3×96 FF**" ⇒ 合计 ≈ **384 FF**。
+   **实测 (报告面) CLB Registers Δ(F−E) = +293 FF** ⇒ 与预判**不吻合 (−91)**; 只报差异, 不解释
+   (注: 预判未给 dcp 侧 `hold_b`/`dout_a` 等其他副本项; 本处亦不补算 —— 只报报告面净增量)。
+   ⭐ 附: 定向查询的"设计侧"FF 计数 = 三个新仪器 32+32+32 = **96 FF** 逐位在网表内
+     (stat_winstall_cap 36 格 / win_at_winstall 32 格 / stat_ack_adv 36 格, 多出的 4 格 = 进位 LUT `*_i_1`)
+     ⇒ "计数器 96 FF"那一半被独立证实; 差额全部落在快照/CDC 侧与布局器行为上 (未拆)。
+
+⭐ **风险预判对照 (派单要求)**: 这批是**纯观测** ⇒ 预期**不加深任何既有端点**、WNS 应与 E 档同量级。
+   · 全局 WNS 0.090 → **0.111 (+0.021, 仍同量级 = 周期 6.400 的 1.73%)**; 三类失败端点仍 **0/0/0**。
+   · **但宿主对象与类型都换了** (E 的 setup 数据面路径 → F 的 pcie 异步 recovery 路径) ⇒
+     ⛔ **不许读成"时序变好了"** —— 换绑定的"变好"不是改善, 是对象换了 (全局 #66)。
+   · DP 域 setup WNS 0.090 → **0.281** (宿主换成 `rel_sr_reg[3] → retx RSTRAMB`, 纯布线族)。
+   · 既有最紧族 `u_app/stg_reg` 定向读数 0.090 → **0.441 (CE) / 0.732 (D)**; 新仪器 3 锥 min 4.2× 余量;
+     新仪器名在报告面 **0 命中** ⇒ **既有端点上未见加深** (报告面 + 定向两面证据)。
+   · ⛔ **不写"时序问题已解决"** —— 那需要一个机制, 本档无拆刀 A/B、无 netlist 对比。
+⚠️ 本表读数**只代表这一档输入 (构建 F)**, 不许外推 (既不能外推到其它常量/参数档, 也不能当板级行为预测)。
+
+== 步骤 5: 未做 / 未证 / 异常登记 ==
+- **未烧板、未碰对端、未写 QSPI** (任务边界); 构建期间未跑第二个 Vivado/xsim/xvlog; 构建后只跑诊断查询 (3 次 dcp 打开, 已完)。
+- **未改任何源码** (9/9 sha256 逐条相同); **未做 git 写操作**。
+- ⚠️ **重跑过 (唯一例外, 如实登记)**: run1 因 xdma_0 IP 综合子进程**工具级停滞**中止 (取证见步骤 1 hang_evidence/);
+  xdma_0 输入不含用户 RTL + E 档同 flow 正常 + run2 未复现 ⇒ 判为**不可复现原因** ⇒ 按纪律 #3 例外**原样重跑一次**。
+  两次输出全留 (run1 = F_run1_stdout_FULL.txt / F_run1_board_p7b_ku5p_stdout_FULL.txt; run2 = F_build_stdout.txt + F/)。
+  ⚠️ 停滞的**机理未定位** (只做了排除: 内存/磁盘/注入 DLL/进程链); 不许写成"已查明"。
+- ⚠️ run2 的预构建归档 = `ARCHIVE_SKIP` (无位流可归档, 因 run1 已抹 impl_1) ⇒ **F 档自身的"上一轮取证"格子缺**;
+  E 档取证仍完整 (双份: 归档 20261010_091536 + p7b_buildE_build/E/)。
+- ⚠️ **归因未证 (不许当已证)**: WNS 宿主换位/DP 域 0.090→0.281/FF +293 —— 本构建捆绑 (三仪器 + 注释订正 +
+  快照 70 字 + 地址/BID), **无拆刀 A/B、无 netlist 对比** ⇒ 一律只报读数。
+- ⚠️ **"新仪器不加深端点"的证据面 = 报告面 (0 命中) + 定向查询 (slack/lvl)**; **netlist 级逐锥对比未做**。
+- ⚠️ 全局 WPWS = +0.000 的归属 (pipe_clk/PCIe 核内部) 为回读报告的推断, 与前档同口径; 未独立复核。
+- ⚠️ 跨档 async 组时钟名带下划线编号位移 (`[0]`/`_1` → `_2`/`_3`): 时钟重命名, 非消失; 未深查。
+- ⚠️ 本机 python 不在 PATH (Anaconda 在 C:/Users/zhxue/anaconda3/) ⇒ check_p6e_timing.py 用绝对路径调起
+  (PYTHONIOENCODING=utf-8); 首轮查询脚本曾因 `get_property PATH_GROUP` (该对象无此属性) 中止 ⇒ 已加 catch 守卫并
+  **原样重跑查询** (诊断脚本, 非设计源码; 中止版与完整版两份 stdout 都在)。
+- ⛔ **本登记不写"时序问题已解决"、不写"WNS 已改善"** —— 一切读数只代表本档输入的一次构建。

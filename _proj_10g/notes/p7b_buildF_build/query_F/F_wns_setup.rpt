@@ -1,0 +1,74 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version      : Vivado v.2025.2 (win64) Build 6299465 Fri Nov 14 19:35:11 GMT 2025
+| Date              : Sat Oct 10 10:13:20 2026
+| Host              : xyz-intel running 64-bit major release  (build 9200)
+| Command           : report_timing -max_paths 1 -delay_type max -file {D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\notes\p7b_buildF_build\query_F/F_wns_setup.rpt}
+| Design            : wrapper_p4
+| Device            : xcku5p-ffvb676
+| Speed File        : -1  PRODUCTION 1.29 05-01-2022
+| Design State      : Routed
+| Temperature Grade : E
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Timing Report
+
+Slack (MET) :             0.111ns  (required time - arrival time)
+  Source:                 u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+                            (rising edge-triggered cell FDPE clocked by pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Destination:            u_pcie_regs/snap_words_r_reg[1797]/CLR
+                            (recovery check against rising-edge clock pcie_axi_aclk  {rise@0.000ns fall@2.000ns period=4.000ns})
+  Path Group:             **async_default**
+  Path Type:              Recovery (Max at Slow Process Corner)
+  Requirement:            4.000ns  (pcie_axi_aclk rise@4.000ns - pcie_axi_aclk rise@0.000ns)
+  Data Path Delay:        3.439ns  (logic 0.093ns (2.704%)  route 3.346ns (97.296%))
+  Logic Levels:           0  
+  Clock Path Skew:        -0.331ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.251ns = ( 6.251 - 4.000 ) 
+    Source Clock Delay      (SCD):    2.706ns
+    Clock Pessimism Removal (CPR):    0.124ns
+  Clock Uncertainty:      0.046ns  ((TSJ^2 + DJ^2)^1/2) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Discrete Jitter          (DJ):    0.060ns
+    Phase Error              (PE):    0.000ns
+  Clock Net Delay (Source):      2.477ns (routing 1.020ns, distribution 1.457ns)
+  Clock Net Delay (Destination): 2.047ns (routing 0.926ns, distribution 1.121ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock pcie_axi_aclk rise edge)
+                                                      0.000     0.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     0.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.090     0.090    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.139     0.229 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X1Y1 (CLOCK_ROOT)    net (fo=20994, routed)       2.477     2.706    u_pcie_xdma/inst/pcie4_ip_i/inst/user_clk
+    SLICE_X103Y68        FDPE                                         r  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X103Y68        FDPE (Prop_EFF_SLICEM_C_Q)
+                                                      0.093     2.799 f  u_pcie_xdma/inst/pcie4_ip_i/inst/user_reset_reg/Q
+                         net (fo=5392, routed)        3.346     6.146    u_pcie_regs/bbstub_axi_aresetn
+    SLICE_X15Y17         FDCE                                         f  u_pcie_regs/snap_words_r_reg[1797]/CLR
+  -------------------------------------------------------------------    -------------------
+
+                         (clock pcie_axi_aclk rise edge)
+                                                      4.000     4.000 r  
+    GTYE4_CHANNEL_X0Y3   GTYE4_CHANNEL                0.000     4.000 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/xdma_0_pcie4_ip_gt_i/inst/gen_gtwizard_gtye4_top.xdma_0_pcie4_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_channel_container[3].gen_enabled_channel.gtye4_channel_wrapper_inst/channel_inst/gtye4_channel_gen.gen_gtye4_channel_inst[3].GTYE4_CHANNEL_PRIM_INST/TXOUTCLK
+                         net (fo=6, routed)           0.082     4.082    u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/CLK_TXOUTCLK
+    BUFG_GT_X0Y18        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.122     4.204 r  u_pcie_xdma/inst/pcie4_ip_i/inst/xdma_0_pcie4_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk/O
+    X1Y1 (CLOCK_ROOT)    net (fo=20994, routed)       2.047     6.251    u_pcie_regs/axi_aclk
+    SLICE_X15Y17         FDCE                                         r  u_pcie_regs/snap_words_r_reg[1797]/C
+                         clock pessimism              0.124     6.375    
+                         clock uncertainty           -0.046     6.329    
+    SLICE_X15Y17         FDCE (Recov_HFF_SLICEM_C_CLR)
+                                                     -0.072     6.257    u_pcie_regs/snap_words_r_reg[1797]
+  -------------------------------------------------------------------
+                         required time                          6.257    
+                         arrival time                          -6.146    
+  -------------------------------------------------------------------
+                         slack                                  0.111    
+
+
+
+

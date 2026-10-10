@@ -146,6 +146,50 @@ add("mut_c9", [(
     "if (ctrl_slot_busy) begin",
     2)], "M-C9 仲裁键=busy => 控制帧 T_DONE 自选 => transmitted > issued => J6 红")
 
+# ===========================================================================
+# ⭐ 构建 F 的三个新仪器 (W67/W69) —— 判据在 tb/tb_tcp_tx_ovl.v 的 W67/W69 段
+#   判据形状 = **双边等式** (DUT 字 == TB 侧逐拍独立复算) ⇒ 两个方向都有牙:
+#     · 多数 (把对端侧也算进板帽侧) / 少数 (哑计数器/哑锁存) 都会红;
+#     · 另加一条结构性牙 `W67 <= W66` (子集关系, 逐窗恒真)。
+# ===========================================================================
+
+# ---- W67-1 (构建 F): 分裂判据**去掉侧别** (板帽侧 == 全部等窗拍 = 对端侧也被算进来) ----
+#   判据 (tb_tcp_tx_ovl.v 的 W67 段) 逐拍复算同一个判据并要求两者**相等** ⇒ 计数器**多**数
+#   (把对端侧那份也算进板帽侧) ⇒ 必红。两个分支各一处 (声明命中数 = 2)。
+#   ⚠️ 本变异在 `-d TCP_TX_OVL` (默认帽) 臂上就有牙 (W67 期望 0, 变异后 != 0)。
+add("mut_w67_always", [(
+    "    wire        win_cap_bind         = (win_wnd_eff >= RING_CAP);",
+    "    wire        win_cap_bind         = 1'b1;   // M-W67-1: 去掉侧别 (板帽侧 := 全部)",
+    2)], "M-W67-1 分裂判据去掉侧别 => 板帽侧多数 (对端侧那份被算进来)")
+
+# ---- W67-2 (构建 F): 板帽侧计数器**永不计数** (哑观测) ----
+#   ⚠️ **只在 `-d W67_CAP_SMALL` 臂上有牙** —— 默认帽 (0xBFFE) 下板帽侧结构性为 0 (在飞
+#   够不到 49150) ⇒ 本变异与正例不可分 (该方向的空判据, 已在 TB 与报告里登记)。
+#   两个分支各一处 (声明命中数 = 2)。
+add("mut_w67_dead", [(
+    "            if (stat_winstall_cap_ev) stat_winstall_cap <= stat_winstall_cap + 32'd1;",
+    "            // M-W67-2: 哑观测 (板帽侧永不计数)",
+    2)], "M-W67-2 板帽侧计数器恒 0 (需 W67_CAP_SMALL 臂才有靶)")
+
+# ---- W69-1 (构建 F): 操作点锁存**永不更新** (哑观测) ----
+#   判据要求 DUT 的 `o_win_at_winstall` == TB 侧复算的最近一次等窗样本 (非 0) ⇒ 恒 0 必红。
+#   两个分支各一处 (声明命中数 = 2)。
+add("mut_w69_dead", [(
+    "            if (stat_winstall_ev) o_win_at_winstall <= {win_inflight, win_wnd_eff};",
+    "            // M-W69-1: 哑观测 (锁存永不更新)",
+    2)], "M-W69-1 锁存恒 0 => 与 TB 复算 (非 0) 不等")
+
+# ---- W69-2 (构建 F): 锁存使能换成**帧启动拍** (`start_data` 而不是等窗拍) ----
+#   值会变成\"最近一次**开成帧**那一拍的操作点\" (= 窗口开着的样本, `win_wnd_eff` 已回到
+#   全帽) ⇒ 与\"最近一次**没开成**那一拍\"的复算值**低 16 位就不同** (1460 vs 49150 一档)
+#   ⇒ 必红。**只锚 OVL 分支那一处** (默认分支没有 `start_data`; 用后随的 `svc_id_r` 行定界)。
+add("mut_w69_atstart", [(
+    "            if (stat_winstall_ev) o_win_at_winstall <= {win_inflight, win_wnd_eff};\n"
+    "            svc_id_r <= retx_req ? retx_id : prio_lo(rto_pend);\n",
+    "            if (start_data) o_win_at_winstall <= {win_inflight, win_wnd_eff};   // M-W69-2\n"
+    "            svc_id_r <= retx_req ? retx_id : prio_lo(rto_pend);\n",
+    1)], "M-W69-2 锁存使能换成 start_data => 操作点相位错")
+
 
 def norm(s):
     """换行归一化: \\r\\n / 单独 \\r 一律成 \\n (幂等)."""

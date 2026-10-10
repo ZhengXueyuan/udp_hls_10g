@@ -50,7 +50,7 @@ if not exist "%XV%\xvlog.bat" ( echo [TOOL FAIL] no xvlog.bat & exit /b 91 )
 if not exist "%W%" mkdir "%W%"
 set SRCFILE=%ROOT%\board\wrapper_p4.v
 set TXF=%ROOT%\rtl\tcp_tx_frame.v
-findstr /C:"SNAP_NW_P6E = 67" "%SRCFILE%" >NUL || ( echo [FINGERPRINT FAIL] source is not the 67-word version & exit /b 92 )
+findstr /C:"SNAP_NW_P6E = 70" "%SRCFILE%" >NUL || ( echo [FINGERPRINT FAIL] source is not the 70-word version & exit /b 92 )
 if not exist "%TXF%" ( echo [PATHGUARD FAIL] no rtl\tcp_tx_frame.v under %ROOT% & exit /b 93 )
 
 set D3=-d APP_MODE -d P7B_10G -d PCIE_OBS -d DEV_USP -d DP_156MHZ -d UDP_TX_OVL
