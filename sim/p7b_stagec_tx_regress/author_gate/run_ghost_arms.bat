@@ -36,6 +36,8 @@ REM   RC/RCT = DIAG (TL ruling 1(b)): drop cfg_up clearing of epoch/snd_una_prev
 REM           (keep whi_r clear) => separates candidate 2 for PS j9/j6
 if "%WHICH%"=="RC"   call :run2 RC   "%HERE%\mut\mut_ghost_noclearothers.v" "%TB%" "-d TCP_TX_OVL -d ARM_PERSIST" & goto :done
 if "%WHICH%"=="RCT"  call :run2 RCT  "%HERE%\mut\mut_ghost_noclearothers.v" "%TB%" "-d TCP_TX_OVL -d ARM_PERSIST -d PERSIST_NEGCTL" & goto :done
+REM   YT = DIAG (TL ruling 1 final): M-4 (ring_restore := 0) under the T configuration
+if "%WHICH%"=="YT"   call :run2 YT   "%HERE%\mut\mut_ghost_norestore.v" "%TB%" "-d TCP_TX_OVL -d ARM_PERSIST -d PERSIST_NEGCTL" & goto :done
 echo unknown arm %WHICH% & exit /b 2
 :done
 exit /b %errorlevel%
