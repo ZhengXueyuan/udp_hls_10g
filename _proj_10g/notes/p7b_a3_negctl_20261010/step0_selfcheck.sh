@@ -1,7 +1,7 @@
 #!/bin/bash
 # step0_selfcheck.sh -- P7B A3 负对照轮 (2026-10-10, p7b_a3_negctl_20261010)
 #   目的: 在**刚烧入的构建 D 位流** (66 字 / BID 0x18 / 未实现地址 0x128) 上做档位自检 —— 证明
-#     (i)  缺省档 (NW=70 / 0x138 / BID 0x1A) 对 D **响亮失败** (且失败点只在 BID = 档位错, 不是板错);
+#     (i)  缺省档 (NW=70 / 0x138 / BID 0x1D) 对 D **响亮失败** (且失败点只在 BID = 档位错, 不是板错);
 #     (ii) 显式 66 档 (= 本臂正确档位) ID_OK;
 #     (iii) 66 档下的业务字表 (与 a3_round*.sh 逐字相同) 全部有名、nff=0;
 #     (iv) 负对照: 声称 NW=65 时未实现地址 0x124 在 D 上读出**真数据** ⇒ 断言有牙 ⇒ D 的窗口 ≥ 66 字;
@@ -43,7 +43,7 @@ PEER_PW=111111 $SSH --sudo "T=/home/a/xdma_test/dma_ip_drivers-patched/XDMA/linu
   lspci -vvv -s 02:00.0 2>/dev/null | grep -E 'LnkSta:'"
 
 echo
-echo "### C-a) 默认档 (NW=70 / 0x138 / BID 0x1A) —— 对 D 位流: 期望 ID_FAIL 且失败点=身份不符 (BID 0x18 != 0x1A)"
+echo "### C-a) 默认档 (NW=70 / 0x138 / BID 0x1D) —— 对 D 位流: 期望 ID_FAIL 且失败点=身份不符 (BID 0x18 != 0x1D)"
 PEER_PW=111111 $SSH --sudo "bash $SREAD id; echo RC=\$?" || true
 
 echo

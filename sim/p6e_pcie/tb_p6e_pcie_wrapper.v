@@ -146,7 +146,7 @@ module tb_p6e_pcie_wrapper;
         // ⛔ 2026-10-10 订正 (构建 C 门同步轮): 窗口 63 → **65 字** ⇒ `board/wrapper_p4.v` 的
         //    `BUILD_ID_V = 32'h00000017` ⇒ 期望值 9 → **17**。判据语义不变
         //    (= BUILD_ID 必须等于**本构建**的地图版本); 本条与上面判据 9 的地址是同一次订正。
-        u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("2  BUILD_ID (构建 F 70 字=0x1A; 原 67 字=0x19 / 66 字=0x18 / 63 字=9)", v, 32'h0000001A);
+        u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("2  BUILD_ID (persist 刀 70 字=0x1D; 原 70 字=0x1C(缺陷刀) / 0x1A(构建 F) / 63 字=9)", v, 32'h0000001D);
         u_dut.u_pcie_xdma.axil_read(32'h14, v); chk("3  MARKER", v, 32'hDEADBEEF);
         // HW_STATUS 字段: [7:5]=msi_vec_w [4]=msi_enable [3]=user_lnk_up [2:0]=0
         u_dut.u_pcie_xdma.axil_read(32'h10, v);

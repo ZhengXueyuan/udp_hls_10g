@@ -26,7 +26,7 @@ BID_N=$(printf '%s' "$BID" | tr 'A-F' 'a-f')
 #    现默认 = **0x17** (构建 C 65 字; 源码 `board/wrapper_p4.v` 的 `BUILD_ID_V = 32'h00000017`);
 #    读旧位流: `EXPECT_BID=0x0000000a bash final_state.sh` (Stage C 63 字) / `0x00000009` (Build 2)。
 #    判据语义不变 (仍是"读回值必须 == 期望值"), 只是期望值可注入。
-EXPECT_BID=${EXPECT_BID:-0x0000001A}   # ⛔ 2026-10-10 构建 F (70 字); 原 0x17 = 构建 C
+EXPECT_BID=${EXPECT_BID:-0x0000001D}   # ⛔ 2026-10-11 persist 刀 (70 字); 原 0x1C = 缺陷刀
 EXPECT_BID_N=$(printf '%s' "$EXPECT_BID" | tr 'A-F' 'a-f')
 if [ "$BID_N" != "$EXPECT_BID_N" ]; then
   echo "  [ABORT] BID=$BID != $EXPECT_BID (大小写归一后 $BID_N) ⇒ **板上不是本脚本期望的位流** (构建 C = 0x17 / 65 字); 下面 W61/W62 若为 0xffffffff 是 SLVERR(读失败) 不是数据"

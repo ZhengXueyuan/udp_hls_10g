@@ -1030,13 +1030,21 @@ def main():
               " **不**从漂移中的权威源推导; ⚠️ 某构建 agent 可能正在改该文件 ⇒"
               " 待其构建完成后**复读复核**一次。" % (bid_auto, target))
     # ---- 前置阶段必须已落盘 (--apply 只落**最后一阶段**) ----
+    # ⚠️ 2026-10-11 TL 订正（假 FAIL 修复）：原判 = `old_hits != 0 or new_hits < 1` ⇒ 对
+    #    **"插入新行 + 逐字保留旧行"型编辑**（GEOM_TIERS 两处 INSERT）**必然假红** —— 旧串按
+    #    设计就该留着（旧行逐字保留是刻意的取证要求）⇒ 判"前置已落盘"的**充分条件 = new_hits ≥ 1**
+    #    （前置阶段自己的 apply 已对每条编辑断言过命中数；old_hits 只作**信息**打印）。
     if do_apply:
         pre_bad = []
         for bk, e, nm in chain[:-1]:
             for rel, old, new, n in e:
-                if _one_edit_hits(rel, old) != 0 or _one_edit_hits(rel, new) < 1:
+                ho = _one_edit_hits(rel, old)
+                if _one_edit_hits(rel, new) < 1:
                     pre_bad.append(bk)
                     break
+                if ho != 0:
+                    print("ℹ️ 前置 %s: %s 的 old 串仍有 %d 处（插入型编辑 = 旧行逐字保留，属预期）"
+                          % (bk, rel, ho))
         if pre_bad:
             print("FAIL 前置阶段 %s 尚未落盘 ⇒ 先 `--bid %s --apply` (本脚本只落最后一阶段)"
                   % (",".join(sorted(set(pre_bad))), pre_bad[0]))

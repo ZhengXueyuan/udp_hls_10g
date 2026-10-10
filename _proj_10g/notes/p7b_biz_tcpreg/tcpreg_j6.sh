@@ -67,13 +67,15 @@ cd /tmp/p7b_biz || exit 9
 #   ⛔ 2026-10-10 (构建 C 门同步轮): 本轮之前门里只列了 61/8 与 63/9 两档, 而 `NW` 默认早已随
 #      构建抬到 65 ⇒ **默认跑必然 J6_GEOM_FAIL + exit 3** (新位流测不了)。现在档表是唯一来源。
 NW=${NW:-70}
-EXPECT_BID=${EXPECT_BID:-0x0000001A}   # 2026-10-10 构建 F (70 字; 原 0x00000019 = 构建 E / 0x18 = 构建 D / 0x09 = WU 二轮)
+EXPECT_BID=${EXPECT_BID:-0x0000001D}   # 2026-10-11 persist 刀 (70 字; 原 0x0000001C = 缺陷刀 / 0x1A = 构建 F / 0x19 = 构建 E)
 export NW EXPECT_BID        # ⚠️ 必须 export: 取数器 p7b_snap.sh 读的是**它自己的环境**
 # 十六进制**大小写归一** (只用于比较, 打印仍用原样; 判据语义零改动 —— 先例 = p7b_snap.sh 的
 #   Stage C 订正 / j6_r6fix.sh 的 geom_gate 块: `reg_rw` 打小写而期望值写大写时字符串比较必假红)
 norm(){ printf "%s" "$1" | tr "A-F" "a-f"; }
 # 档表格式: "NW|BID|WEXTRA|说明"  (WEXTRA 空 = t0/t1 字表退回 5 20 43 53 54)
 GEOM_TIERS=(
+  "70|0x0000001D|61 62|persist 刀 (2026-10-11) 70 字 / BID 0x1D"
+  "70|0x0000001C|61 62|缺陷刀 (2026-10-11) 70 字 / BID 0x1C (RETXHI-GHOST 重放越界修复; 字长/未实现地址不变)"
   "70|0x0000001A|61 62|构建 F (2026-10-10) 70 字 / BID 0x1A (W67/W68/W69 = 三个纯观测仪器)"
   "67|0x00000019|61 62|构建 E (2026-10-10) 67 字 / BID 0x19 (W66 = tcp_tx_frame.stat_winstall)"
   "66|0x00000018|61 62|构建 D (2026-10-10) 66 字 / BID 0x18 (P7B-A7: W65 = mac_tx_10g.stat_tx_idle)"
