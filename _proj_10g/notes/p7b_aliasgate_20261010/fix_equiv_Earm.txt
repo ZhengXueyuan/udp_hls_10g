@@ -1,0 +1,36 @@
+== live fixed (board\wrapper_p4.v)
+   assign m_tx_tdata = txsrc_tdata;
+   assign m_tx_tkeep = txsrc_tkeep;
+   assign m_tx_tlast = txsrc_tlast;
+   assign m_tx_tvalid = txsrc_tvalid;
+   assign txsrc_tready = m_tx_tready;
+   assign tx_fifo_full = 1'b0;
+   assign tx_fifo_empty = 1'b0;
+   assign txcdc_occ_w = 9'd0;
+   assign txcdc_ovf_cnt = 32'd0;
+== diag E-arm (_proj_10g\notes\p7b_p5wrapper_diag_20261010\work\E\wrapper_p4.v)
+   assign m_tx_tdata = txsrc_tdata;
+   assign m_tx_tkeep = txsrc_tkeep;
+   assign m_tx_tlast = txsrc_tlast;
+   assign m_tx_tvalid = txsrc_tvalid;
+   assign txsrc_tready = m_tx_tready;
+   assign tx_fifo_full = 1'b0;
+   assign tx_fifo_empty = 1'b0;
+   assign txcdc_occ_w = 9'd0;
+   assign txcdc_ovf_cnt = 32'd0;
+== selftest mutant (sim\aliasgate\_selftest\wrapper_p4_mutant.v)
+   assign txsrc_tdata = m_tx_tdata;
+   assign txsrc_tkeep = m_tx_tkeep;
+   assign txsrc_tlast = m_tx_tlast;
+   assign txsrc_tvalid = m_tx_tvalid;
+   assign m_tx_tready = txsrc_tready;
+   assign tx_fifo_full = 1'b0;
+   assign tx_fifo_empty = 1'b0;
+   assign txcdc_occ_w = 9'd0;
+   assign txcdc_ovf_cnt = 32'd0;
+
+assign lines: live=9 E-arm=9 mutant=9
+alias lines only: live=5 E-arm=5 mutant=5
+live == E-arm (token-normalised): True
+mutant == reversed(live):         True
+FIX-EQUIVALENCE OK: the landed 5 lines are token-identical to the copy that the diag E/F/H arms already ran green in xsim, and the selftest mutant is exactly their reversal

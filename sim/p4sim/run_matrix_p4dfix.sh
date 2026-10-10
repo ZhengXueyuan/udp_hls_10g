@@ -1,10 +1,11 @@
 #!/bin/bash
 # ===========================================================================
 # sim/p4sim/run_matrix_p4dfix.sh -- documented entry point for the P4
-# default-build regression matrix (16 gates).
+# default-build regression matrix (the gate list is the 'call :gate' rows of
+# the runner; the count printed in the log is derived from those rows).
 #
 #   Thin SELF-LOCATING shim.  The real runner is a .bat
-#   (sim/p4gates/run_matrix_p4dfix.bat) so that the 16 gates, the path guard
+#   (sim/p4gates/run_matrix_p4dfix.bat) so that the gates, the path guard
 #   and the revision fingerprint all live on the Windows side and no
 #   bash<->windows path translation is involved.  This file hardcodes NO
 #   repository path: the root is derived from its own location

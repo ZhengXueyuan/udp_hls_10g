@@ -1,0 +1,817 @@
+====================================================================================================
+== R1A  (snaps=145, snmp_points=6)
+   META | LF_META_TAG=R1A LF_META_CONNS=1 LF_META_SECS=180 LF_META_RCVBUF=8388608
+   LIMITS | SINK_LIMITS maxbytes=75000000000 poll_ms=5000 stall_n=3 rcvbuf=8388608 conns=1 secs=180
+   CARRIER | CARRIER=1
+   GEOM | LF_GEOM_OK NW=63 BID=0x0000001a
+   BID_PRE | LF_META_BOARD_BID_PRE=0x0000001a
+   BID_END | LF_META_BOARD_BID_END=0x0000001a
+   SINK | SINK_SUM conns=1 fail_conns=0 bytes=75000004785 clean_conns=1 bad_conns=0 mismatch_bytes=0 stall_conns=0 err_conns=0 poll_tmo=0 wall_s=65.093 net_s=65.092 agg_Mbps=9217.658 THREADED=on full_push=14217913 full_pop=14217913 free_push=14217929 free_pop=14217913 slot_wait_spins=2986205 checked_bytes=750
+   GUARDS | 无 (0 命中)
+   --- 全窗 (a=R1A_pre gen=249 -> b=R1A_post gen=393) ---
+   W5   raw 967def4d -> 1a35b7fe  d=10799794353  k=3
+   W20  raw 030fec8c -> 061fd1c7  d=51373371  k=0
+   W43  raw 967a4a78 -> 1a307d2f  d=10799690423  k=3
+   W51  raw 765a2a85 -> ecb46072  d=75000067565  k=17
+   W66  raw 1343b6ba -> 212a236b  d=233204913  k=0
+   W67  raw 11df0515 -> 1eb6773f  d=215446058  k=0
+   W68  raw 00a8a492 -> 018254ab  d=14266393  k=0
+   W69  raw f53cf000 -> f53cf000  (**锁存字, 无 delta 语义**)
+   TIME | dW5=10799794353 dW43=10799690423 equal=False | dt=69.118684 s
+   --- 独立分母 (对端 /proc/net/snmp; 全系统口径) ---
+   SNMP raw: pre_a out=673644413 pre_b out=673644486 post_a out=687915547 post_b out=687915620
+   dTcpOutSegs: lo(post_a-pre_b)=14271061  hi(post_b-pre_a)=14271207  (bracket 宽=146 = 0.0010%)
+   dTcpInSegs : lo=51374438  hi=51374510 | dTcpRetransSegs=1 | dDelayedACKs=0 | dDelayedACKLost=3034
+   t: pre_a=1791602832.739 pre_b=1791602833.011 post_a=1791602901.859 post_b=1791602902.131 | 快照窗(pre_b->post_a)=68.848 s
+   背景率见证 idle: dTcpOutSegs=18 / 5.016 s = 3.59 段/s (无连接空闲窗)
+   sshd 见证: pre_b sum=75846 -> post_a sum=77615  d_ssh=1769 (n_sock=3, 占全系统 0.0124%)
+   ⭐ dW68 / dTcpOutSegs = lo: 0.999673   hi: 0.999663
+   ⭐ L  (分母=W68)        = 0.104617 µs/事件
+   ⭐ L' (分母=TcpOutSegs) = lo: 0.104583  hi: 0.104582 µs/对端段
+   ⭐ L'/L = lo: 0.999673  hi: 0.999663  (={dTcpOutSegs 与 dW68 的相对大小})
+   分解: dTcpOutSegs_lo(14271061) − d_ssh(1769) = 本连接近似 14269292;  本连接 − dW68 = 2899 (0.0203% of dW68)
+   --- 补充字 (全窗 pre->post; 只对确定不回卷的字算 delta) ---
+   W22 raw 00a8b5f1 -> 01827159  d=14269288 (npts=2)
+   W14 raw 030fec77 -> 061fd1ab  d=51373364 (npts=2)
+   W55 raw 000000f0 -> 00000199  d=169 (npts=2)
+   W15 raw 76cff8a5 -> ed76817a  d=1990625493 (npts=2)  ⚠️ 单跑回卷 >1 次 ⇒ 只记 raw, delta 不可解
+   ⭐ U_board = dW22 − dW68 = 2895 (0.0203% of dW68)  [板侧: 收到但未推进的 TCP 帧]
+   区间: 总 144, 含帧 141
+   稳态区间 (fps >= 0.9×含帧中位): n=140 / 141
+   ⭐[稳态] fps      n=140 min=727648.5 med=788310.0 max=799880.5
+   ⭐[稳态] L_us     n=140 min=0.047088 med=0.110549 max=0.593985
+   ⭐[稳态] cap_sharen=140 min=0.907914 med=0.924480 max=0.934577
+   ⭐[稳态] 事件/帧  n=140 min=0.173861 med=0.276238 max=0.291180
+   --- 逐区间 (含帧) ---
+   fps        n=141 min=7870.7 med=788251.9 max=799880.5
+   app_Mbps   n=141 min=91.9 med=9206.0 max=9342.2
+   L_us       n=141 min=0.047088 med=0.110851 max=0.593985
+   dW68>0 区间数 = 141 / 141
+   W69 (infl,eff) 直方 (仅 dW66>0): [((0, 0), 120), ((62780, 61440), 21)]
+   --- 全窗比率 ---
+   dW67/dW66 = 0.923849   (1-该值 = 对端侧占比)
+   dW68/dW20 = 0.277700 事件/帧   dW66/dW20 = 4.5394 拍/帧
+   三角核左腿 dW67<=dW66 (真牙): 违例 = 0/141
+====================================================================================================
+== R1B  (snaps=66, snmp_points=6)
+   META | LF_META_TAG=R1B LF_META_CONNS=1 LF_META_SECS=180 LF_META_RCVBUF=8388608
+   LIMITS | SINK_LIMITS maxbytes=75000000000 poll_ms=5000 stall_n=3 rcvbuf=8388608 conns=1 secs=180
+   CARRIER | CARRIER=1
+   GEOM | LF_GEOM_OK NW=63 BID=0x0000001a
+   BID_PRE | LF_META_BOARD_BID_PRE=0x0000001a
+   BID_END | LF_META_BOARD_BID_END=0x0000001a
+   SINK | SINK_SUM conns=1 fail_conns=0 bytes=75000003325 clean_conns=1 bad_conns=0 mismatch_bytes=0 stall_conns=0 err_conns=0 poll_tmo=0 wall_s=64.911 net_s=64.911 agg_Mbps=9243.487 THREADED=on full_push=12194203 full_pop=12194203 free_push=12194219 free_pop=12194203 slot_wait_spins=91669 checked_bytes=75000
+   GUARDS | 无 (0 命中)
+   --- 全窗 (a=R1B_pre gen=394 -> b=R1B_post gen=459) ---
+   W5   raw 3b2db086 -> bd261e57  d=10770476497  k=2
+   W20  raw 061fd1ce -> 092fb796  d=51373512  k=0
+   W43  raw 3b267b70 -> bd1d533a  d=10770372554  k=2
+   W51  raw ecb46072 -> 630e90ab  d=75000066105  k=18
+   W66  raw 212a236b -> 2d99693c  d=208618961  k=0
+   W67  raw 1eb6773f -> 2a2e24f2  d=192392627  k=0
+   W68  raw 018254ab -> 023c836d  d=12201666  k=0
+   W69  raw f53cf000 -> f53cf000  (**锁存字, 无 delta 语义**)
+   TIME | dW5=10770476497 dW43=10770372554 equal=False | dt=68.931050 s
+   --- 独立分母 (对端 /proc/net/snmp; 全系统口径) ---
+   SNMP raw: pre_a out=687917012 pre_b out=687917090 post_a out=700122730 post_b out=700122804
+   dTcpOutSegs: lo(post_a-pre_b)=12205640  hi(post_b-pre_a)=12205792  (bracket 宽=152 = 0.0012%)
+   dTcpInSegs : lo=51374020  hi=51374096 | dTcpRetransSegs=2 | dDelayedACKs=0 | dDelayedACKLost=3224
+   t: pre_a=1791602987.864 pre_b=1791602988.139 post_a=1791603056.786 post_b=1791603057.058 | 快照窗(pre_b->post_a)=68.647 s
+   背景率见证 idle: dTcpOutSegs=13 / 5.017 s = 2.59 段/s (无连接空闲窗)
+   sshd 见证: pre_b sum=76187 -> post_a sum=77067  d_ssh=880 (n_sock=3, 占全系统 0.0072%)
+   ⭐ dW68 / dTcpOutSegs = lo: 0.999674   hi: 0.999662
+   ⭐ L  (分母=W68)        = 0.109425 µs/事件
+   ⭐ L' (分母=TcpOutSegs) = lo: 0.109389  hi: 0.109388 µs/对端段
+   ⭐ L'/L = lo: 0.999674  hi: 0.999662  (={dTcpOutSegs 与 dW68 的相对大小})
+   分解: dTcpOutSegs_lo(12205640) − d_ssh(880) = 本连接近似 12204760;  本连接 − dW68 = 3094 (0.0254% of dW68)
+   --- 补充字 (全窗 pre->post; 只对确定不回卷的字算 delta) ---
+   W22 raw 01827159 -> 023cac2b  d=12204754 (npts=2)
+   W14 raw 061fd1ab -> 092fb768  d=51373501 (npts=2)
+   W55 raw 00000199 -> 00000242  d=169 (npts=2)
+   W15 raw ed76817a -> 642017a3  d=1990825513 (npts=2)  ⚠️ 单跑回卷 >1 次 ⇒ 只记 raw, delta 不可解
+   ⭐ U_board = dW22 − dW68 = 3088 (0.0253% of dW68)  [板侧: 收到但未推进的 TCP 帧]
+   区间: 总 65, 含帧 64
+   稳态区间 (fps >= 0.9×含帧中位): n=62 / 64
+   ⭐[稳态] fps      n=62 min=721470.8 med=790129.9 max=802363.4
+   ⭐[稳态] L_us     n=62 min=0.041612 med=0.114859 max=0.603016
+   ⭐[稳态] cap_sharen=62 min=0.897272 med=0.922897 max=0.934762
+   ⭐[稳态] 事件/帧  n=62 min=0.219329 med=0.237190 max=0.240462
+   --- 逐区间 (含帧) ---
+   fps        n=64 min=1.1 med=789958.9 max=802363.4
+   app_Mbps   n=63 min=21.8 med=9227.8 max=9371.2
+   L_us       n=63 min=0.041612 med=0.116466 max=0.750055
+   dW68>0 区间数 = 63 / 64
+   W69 (infl,eff) 直方 (仅 dW66>0): [((0, 0), 49), ((62780, 61440), 14)]
+   --- 全窗比率 ---
+   dW67/dW66 = 0.922220   (1-该值 = 对端侧占比)
+   dW68/dW20 = 0.237509 事件/帧   dW66/dW20 = 4.0608 拍/帧
+   三角核左腿 dW67<=dW66 (真牙): 违例 = 0/64
+   WARN UNWRAP_SUSPECT n=3: [(51, 4, 'R1B_s3', 2436773822), (51, 6, 'R1B_s5', 2220666780), (51, 52, 'R1B_s51', 2454905219)]
+====================================================================================================
+== PRE_R1A  (snaps=248, snmp_points=6)
+   META | LF_META_TAG=R1A LF_META_CONNS=1 LF_META_SECS=180 LF_META_RCVBUF=8388608
+   LIMITS | SINK_LIMITS maxbytes=75000000000 poll_ms=5000 stall_n=3 rcvbuf=8388608 conns=1 secs=180
+   CARRIER | CARRIER=1
+   GEOM | LF_GEOM_OK NW=63 BID=0x0000001a
+   BID_PRE | LF_META_BOARD_BID_PRE=0x0000001a
+   BID_END | LF_META_BOARD_BID_END=0x0000001a
+   SINK | SINK_SUM conns=1 fail_conns=0 bytes=75000001865 clean_conns=1 bad_conns=0 mismatch_bytes=0 stall_conns=0 err_conns=0 poll_tmo=0 wall_s=65.715 net_s=65.715 agg_Mbps=9130.322 THREADED=on full_push=11020057 full_pop=11020057 free_push=11020073 free_pop=11020057 slot_wait_spins=217921 checked_bytes=7500
+   GUARDS | 无 (0 命中)
+   --- 全窗 (a=R1A_pre gen=1 -> b=R1A_post gen=248) ---
+   W5   raw bd370d63 -> 467fa422  d=10893170367  k=3
+   W20  raw 00000000 -> 030fec82  d=51375234  k=0
+   W43  raw bd37959a -> 467eaf30  d=10893072790  k=3
+   W51  raw 00000000 -> 765a2a85  d=75000064645  k=17
+   W66  raw 00000000 -> 1343b6ba  d=323204794  k=0
+   W67  raw 00000000 -> 11df0515  d=299828501  k=0
+   W68  raw 00000000 -> 00a8a492  d=11052178  k=0
+   W69  raw 00000000 -> f53cf000  (**锁存字, 无 delta 语义**)
+   TIME | dW5=10893170367 dW43=10893072790 equal=False | dt=69.716290 s
+   --- 独立分母 (对端 /proc/net/snmp; 全系统口径) ---
+   SNMP raw: pre_a out=662583288 pre_b out=662583360 post_a out=673642872 post_b out=673642945
+   dTcpOutSegs: lo(post_a-pre_b)=11059512  hi(post_b-pre_a)=11059657  (bracket 宽=145 = 0.0013%)
+   dTcpInSegs : lo=51376838  hi=51376909 | dTcpRetransSegs=0 | dDelayedACKs=0 | dDelayedACKLost=4644
+   t: pre_a=1791602644.489 pre_b=1791602644.752 post_a=1791602714.207 post_b=1791602714.472 | 快照窗(pre_b->post_a)=69.454 s
+   背景率见证 idle: dTcpOutSegs=16 / 5.006 s = 3.20 段/s (无连接空闲窗)
+   ⭐ dW68 / dTcpOutSegs = lo: 0.999337   hi: 0.999324
+   ⭐ L  (分母=W68)        = 0.187159 µs/事件
+   ⭐ L' (分母=TcpOutSegs) = lo: 0.187035  hi: 0.187032 µs/对端段
+   ⭐ L'/L = lo: 0.999337  hi: 0.999324  (={dTcpOutSegs 与 dW68 的相对大小})
+   --- 补充字 (全窗 pre->post; 只对确定不回卷的字算 delta) ---
+   W22 raw 00000000 -> 00a8b5f1  d=11056625 (npts=2)
+   W14 raw 00000000 -> 030fec77  d=51375223 (npts=2)
+   W55 raw 00000000 -> 000000f0  d=240 (npts=2)
+   W15 raw 00000000 -> 76cff8a5  d=1993341093 (npts=2)  ⚠️ 单跑回卷 >1 次 ⇒ 只记 raw, delta 不可解
+   ⭐ U_board = dW22 − dW68 = 4447 (0.0402% of dW68)  [板侧: 收到但未推进的 TCP 帧]
+   区间: 总 247, 含帧 246
+   稳态区间 (fps >= 0.9×含帧中位): n=240 / 246
+   ⭐[稳态] fps      n=240 min=713752.5 med=783831.9 max=797044.7
+   ⭐[稳态] L_us     n=240 min=0.080389 med=0.172817 max=0.759835
+   ⭐[稳态] cap_sharen=240 min=0.914837 med=0.926807 max=0.935013
+   ⭐[稳态] 事件/帧  n=240 min=0.194755 med=0.215242 max=0.219399
+   --- 逐区间 (含帧) ---
+   fps        n=246 min=0.4 med=783164.4 max=797044.7
+   app_Mbps   n=245 min=48.9 med=9148.3 max=9309.5
+   L_us       n=245 min=0.080389 med=0.176251 max=1.752018
+   dW68>0 区间数 = 245 / 246
+   W69 (infl,eff) 直方 (仅 dW66>0): [((0, 0), 197), ((62780, 61440), 48)]
+   --- 全窗比率 ---
+   dW67/dW66 = 0.927673   (1-该值 = 对端侧占比)
+   dW68/dW20 = 0.215127 事件/帧   dW66/dW20 = 6.2911 拍/帧
+   三角核左腿 dW67<=dW66 (真牙): 违例 = 0/246
+====================================================================================================
+== Q11K  (snaps=256, snmp_points=6)
+   META | LF_META_TAG=Q11K LF_META_CONNS=1 LF_META_SECS=180 LF_META_RCVBUF=11680
+   LIMITS | SINK_LIMITS maxbytes=8000000000 poll_ms=5000 stall_n=3 rcvbuf=11680 conns=1 secs=180
+   CARRIER | CARRIER=1
+   GEOM | LF_GEOM_OK NW=63 BID=0x0000001a
+   BID_PRE | LF_META_BOARD_BID_PRE=0x0000001a
+   BID_END | LF_META_BOARD_BID_END=0x0000001a
+   SINK | SINK_SUM conns=1 fail_conns=0 bytes=8000000095 clean_conns=1 bad_conns=0 mismatch_bytes=0 stall_conns=0 err_conns=0 poll_tmo=0 wall_s=28.664 net_s=28.664 agg_Mbps=2232.766 THREADED=on full_push=4025836 full_pop=4025836 free_push=4025852 free_pop=4025836 slot_wait_spins=0 checked_bytes=8000000095 thr
+   GUARDS | 无 (0 命中)
+   --- 全窗 (a=Q11K_pre gen=1 -> b=Q11K_post gen=256) ---
+   W5   raw b6bdb558 -> e76b25d7  d=5111640191  k=1
+   W20  raw 00000000 -> 0053a2f7  d=5481207  k=0
+   W43  raw b6be408b -> e76b02f6  d=5111595627  k=1
+   W51  raw 00000000 -> dcd6617b  d=8000004475  k=1
+   W66  raw 00000000 -> 99e620a8  d=2581995688  k=0
+   W67  raw 00000000 -> 00000000  d=0  k=0
+   W68  raw 00000000 -> 003d6e34  d=4025908  k=0
+   W69  raw 00000000 -> 111c111c  (**锁存字, 无 delta 语义**)
+   TIME | dW5=5111640191 dW43=5111595627 equal=False | dt=32.714497 s
+   --- 独立分母 (对端 /proc/net/snmp; 全系统口径) ---
+   SNMP raw: pre_a out=700126651 pre_b out=700126724 post_a out=704157359 post_b out=704157403
+   dTcpOutSegs: lo(post_a-pre_b)=4030635  hi(post_b-pre_a)=4030752  (bracket 宽=117 = 0.0029%)
+   dTcpInSegs : lo=5482747  hi=5482805 | dTcpRetransSegs=0 | dDelayedACKs=0 | dDelayedACKLost=1459
+   t: pre_a=1791603219.373 pre_b=1791603219.646 post_a=1791603252.083 post_b=1791603252.357 | 快照窗(pre_b->post_a)=32.437 s
+   背景率见证 idle: dTcpOutSegs=11 / 5.017 s = 2.19 段/s (无连接空闲窗)
+   sshd 见证: pre_b sum=76670 -> post_a sum=79616  d_ssh=2946 (n_sock=3, 占全系统 0.0731%)
+   ⭐ dW68 / dTcpOutSegs = lo: 0.998827   hi: 0.998798
+   ⭐ L  (分母=W68)        = 4.104608 µs/事件
+   ⭐ L' (分母=TcpOutSegs) = lo: 4.099794  hi: 4.099675 µs/对端段
+   ⭐ L'/L = lo: 0.998827  hi: 0.998798  (={dTcpOutSegs 与 dW68 的相对大小})
+   分解: dTcpOutSegs_lo(4030635) − d_ssh(2946) = 本连接近似 4027689;  本连接 − dW68 = 1781 (0.0442% of dW68)
+   --- 补充字 (全窗 pre->post; 只对确定不回卷的字算 delta) ---
+   W22 raw 00000000 -> 003d7521  d=4027681 (npts=2)
+   W14 raw 00000000 -> 0053a2f1  d=5481201 (npts=2)
+   W55 raw 00000000 -> 00000237  d=567 (npts=2)
+   W15 raw 00000000 -> dcfd3607  d=3707581959 (npts=2)  ⚠️ 单跑回卷 >1 次 ⇒ 只记 raw, delta 不可解
+   ⭐ U_board = dW22 − dW68 = 1773 (0.0440% of dW68)  [板侧: 收到但未推进的 TCP 帧]
+   区间: 总 255, 含帧 252
+   稳态区间 (fps >= 0.9×含帧中位): n=183 / 252
+   ⭐[稳态] fps      n=183 min=180099.6 med=202735.5 max=211488.2
+   ⭐[稳态] L_us     n=183 min=3.267541 med=3.734699 max=5.340147
+   ⭐[稳态] cap_sharen=183 min=0.000000 med=0.000000 max=0.000000
+   ⭐[稳态] 事件/帧  n=183 min=0.605609 med=0.746902 max=0.789957
+   --- 逐区间 (含帧) ---
+   fps        n=252 min=36.8 med=200069.8 max=211488.2
+   app_Mbps   n=251 min=0.4 med=2338.5 max=2470.0
+   L_us       n=252 min=0.003200 med=3.837235 max=6205.977067
+   dW68>0 区间数 = 252 / 252
+   W69 (infl,eff) 直方 (仅 dW66>0): [((4380, 4380), 219), ((0, 0), 30), ((2920, 2920), 2), ((16060, 4380), 1)]
+   --- 全窗比率 ---
+   dW67/dW66 = 0.000000   (1-该值 = 对端侧占比)
+   dW68/dW20 = 0.734493 事件/帧   dW66/dW20 = 471.0633 拍/帧
+   三角核左腿 dW67<=dW66 (真牙): 违例 = 0/252
+   WARN UNWRAP_SUSPECT n=1: [(15, 255, 'Q11K_post', 3707581959)]
+====================================================================================================
+== Q5K  (snaps=370, snmp_points=6)
+   META | LF_META_TAG=Q5K LF_META_CONNS=1 LF_META_SECS=180 LF_META_RCVBUF=5840
+   LIMITS | SINK_LIMITS maxbytes=8000000000 poll_ms=5000 stall_n=3 rcvbuf=5840 conns=1 secs=180
+   CARRIER | CARRIER=1
+   GEOM | LF_GEOM_OK NW=63 BID=0x0000001a
+   BID_PRE | LF_META_BOARD_BID_PRE=0x0000001a
+   BID_END | LF_META_BOARD_BID_END=0x0000001a
+   SINK | SINK_SUM conns=1 fail_conns=0 bytes=8000000095 clean_conns=1 bad_conns=0 mismatch_bytes=0 stall_conns=0 err_conns=0 poll_tmo=0 wall_s=38.546 net_s=38.546 agg_Mbps=1660.370 THREADED=on full_push=4125594 full_pop=4125594 free_push=4125610 free_pop=4125594 slot_wait_spins=0 checked_bytes=8000000095 thr
+   GUARDS | 无 (0 命中)
+   --- 全窗 (a=Q5K_pre gen=257 -> b=Q5K_post gen=626) ---
+   W5   raw 6c64d2f4 -> f8af915d  d=6648675945  k=1
+   W20  raw 0053a2fe -> 00a742e4  d=5480422  k=0
+   W43  raw 6c646127 -> f8ae2edb  d=6648614324  k=1
+   W51  raw dcd6617b -> b9acbd42  d=8000003015  k=2
+   W66  raw 99e620a8 -> 90ee227b  d=4144497107  k=1
+   W67  raw 00000000 -> 00000000  d=0  k=0
+   W68  raw 003d6e34 -> 007c61d2  d=4125598  k=0
+   W69  raw 111c111c -> 0b680b68  (**锁存字, 无 delta 语义**)
+   TIME | dW5=6648675945 dW43=6648614324 equal=False | dt=42.551526 s
+   --- 独立分母 (对端 /proc/net/snmp; 全系统口径) ---
+   SNMP raw: pre_a out=704158127 pre_b out=704158201 post_a out=708289480 post_b out=708289554
+   dTcpOutSegs: lo(post_a-pre_b)=4131279  hi(post_b-pre_a)=4131427  (bracket 宽=148 = 0.0036%)
+   dTcpInSegs : lo=5482634  hi=5482708 | dTcpRetransSegs=0 | dDelayedACKs=0 | dDelayedACKLost=256
+   t: pre_a=1791603266.360 pre_b=1791603266.633 post_a=1791603308.908 post_b=1791603309.181 | 快照窗(pre_b->post_a)=42.275 s
+   背景率见证 idle: dTcpOutSegs=14 / 5.017 s = 2.79 段/s (无连接空闲窗)
+   sshd 见证: pre_b sum=76796 -> post_a sum=81049  d_ssh=4253 (n_sock=3, 占全系统 0.1029%)
+   ⭐ dW68 / dTcpOutSegs = lo: 0.998625   hi: 0.998589
+   ⭐ L  (分母=W68)        = 6.429318 µs/事件
+   ⭐ L' (分母=TcpOutSegs) = lo: 6.420477  hi: 6.420247 µs/对端段
+   ⭐ L'/L = lo: 0.998625  hi: 0.998589  (={dTcpOutSegs 与 dW68 的相对大小})
+   分解: dTcpOutSegs_lo(4131279) − d_ssh(4253) = 本连接近似 4127026;  本连接 − dW68 = 1428 (0.0346% of dW68)
+   --- 补充字 (全窗 pre->post; 只对确定不回卷的字算 delta) ---
+   W22 raw 003d7521 -> 007c6e51  d=4127024 (npts=2)
+   W14 raw 0053a2f1 -> 00a742d5  d=5480420 (npts=2)
+   W55 raw 00000237 -> 00000418  d=481 (npts=2)
+   W15 raw dcfd3607 -> b9e90036  d=3706440239 (npts=2)  ⚠️ 单跑回卷 >1 次 ⇒ 只记 raw, delta 不可解
+   ⭐ U_board = dW22 − dW68 = 1426 (0.0346% of dW68)  [板侧: 收到但未推进的 TCP 帧]
+   区间: 总 369, 含帧 367
+   稳态区间 (fps >= 0.9×含帧中位): n=301 / 367
+   ⭐[稳态] fps      n=301 min=126007.6 med=155236.0 max=172586.9
+   ⭐[稳态] L_us     n=301 min=4.603402 med=5.779328 max=8.281763
+   ⭐[稳态] cap_sharen=301 min=0.000000 med=0.000000 max=0.000000
+   ⭐[稳态] 事件/帧  n=301 min=0.654798 med=0.753080 max=0.826180
+   --- 逐区间 (含帧) ---
+   fps        n=367 min=36.8 med=139631.2 max=172586.9
+   app_Mbps   n=365 min=0.4 med=1631.3 max=2015.7
+   L_us       n=367 min=4.603402 med=6.403446 max=12732.032000
+   dW68>0 区间数 = 367 / 367
+   W69 (infl,eff) 直方 (仅 dW66>0): [((2920, 2920), 325), ((0, 0), 33), ((1460, 1460), 6), ((56940, 2920), 1), ((26280, 2920), 1), ((8760, 2920), 1)]
+   --- 全窗比率 ---
+   dW67/dW66 = 0.000000   (1-该值 = 对端侧占比)
+   dW68/dW20 = 0.752788 事件/帧   dW66/dW20 = 756.2369 拍/帧
+   三角核左腿 dW67<=dW66 (真牙): 违例 = 0/367
+   WARN UNWRAP_SUSPECT n=1: [(15, 369, 'Q5K_post', 3706440239)]
+====================================================================================================
+== Q2K  (snaps=717, snmp_points=6)
+   META | LF_META_TAG=Q2K LF_META_CONNS=1 LF_META_SECS=180 LF_META_RCVBUF=2920
+   LIMITS | SINK_LIMITS maxbytes=8000000000 poll_ms=5000 stall_n=3 rcvbuf=2920 conns=1 secs=180
+   CARRIER | CARRIER=1
+   GEOM | LF_GEOM_OK NW=63 BID=0x0000001a
+   BID_PRE | LF_META_BOARD_BID_PRE=0x0000001a
+   BID_END | LF_META_BOARD_BID_END=0x0000001a
+   SINK | SINK_SUM conns=1 fail_conns=0 bytes=8000000095 clean_conns=1 bad_conns=0 mismatch_bytes=0 stall_conns=0 err_conns=0 poll_tmo=0 wall_s=73.488 net_s=73.488 agg_Mbps=870.889 THREADED=on full_push=5479454 full_pop=5479454 free_push=5479470 free_pop=5479454 slot_wait_spins=0 checked_bytes=8000000095 thre
+   GUARDS | 无 (0 命中)
+   --- 全窗 (a=Q2K_pre gen=627 -> b=Q2K_post gen=1343) ---
+   W5   raw f287643f -> c4787cf7  d=12112173240  k=3
+   W20  raw 00a742ea -> 00fadfe8  d=5479678  k=0
+   W43  raw f285676f -> c474be58  d=12112058089  k=3
+   W51  raw b9acbd42 -> 96831355  d=8000001555  k=2
+   W66  raw 90ee227b -> 6010fb2c  d=7770134705  k=2
+   W67  raw 00000000 -> 00000000  d=0  k=0
+   W68  raw 007c61d2 -> 00cffdf1  d=5479455  k=0
+   W69  raw 0b680b68 -> 05b405b4  (**锁存字, 无 delta 语义**)
+   TIME | dW5=12112173240 dW43=12112058089 equal=False | dt=77.517909 s
+   --- 独立分母 (对端 /proc/net/snmp; 全系统口径) ---
+   SNMP raw: pre_a out=708290419 pre_b out=708290496 post_a out=713778321 post_b out=713778391
+   dTcpOutSegs: lo(post_a-pre_b)=5487825  hi(post_b-pre_a)=5487972  (bracket 宽=147 = 0.0027%)
+   dTcpInSegs : lo=5483932  hi=5483994 | dTcpRetransSegs=1 | dDelayedACKs=0 | dDelayedACKLost=0
+   t: pre_a=1791603335.732 pre_b=1791603336.009 post_a=1791603413.245 post_b=1791603413.519 | 快照窗(pre_b->post_a)=77.236 s
+   背景率见证 idle: dTcpOutSegs=13 / 5.017 s = 2.59 段/s (无连接空闲窗)
+   sshd 见证: pre_b sum=76965 -> post_a sum=85138  d_ssh=8173 (n_sock=3, 占全系统 0.1489%)
+   ⭐ dW68 / dTcpOutSegs = lo: 0.998475   hi: 0.998448
+   ⭐ L  (分母=W68)        = 9.075512 µs/事件
+   ⭐ L' (分母=TcpOutSegs) = lo: 9.061671  hi: 9.061428 µs/对端段
+   ⭐ L'/L = lo: 0.998475  hi: 0.998448  (={dTcpOutSegs 与 dW68 的相对大小})
+   分解: dTcpOutSegs_lo(5487825) − d_ssh(8173) = 本连接近似 5479652;  本连接 − dW68 = 197 (0.0036% of dW68)
+   --- 补充字 (全窗 pre->post; 只对确定不回卷的字算 delta) ---
+   W22 raw 007c6e51 -> 00d00b2f  d=5479646 (npts=2)
+   W14 raw 00a742d5 -> 00fadfcc  d=5479671 (npts=2)
+   W55 raw 00000418 -> 0000044b  d=51 (npts=2)
+   W15 raw b9e90036 -> 96c41ac1  d=3705346699 (npts=2)  ⚠️ 单跑回卷 >1 次 ⇒ 只记 raw, delta 不可解
+   ⭐ U_board = dW22 − dW68 = 191 (0.0035% of dW68)  [板侧: 收到但未推进的 TCP 帧]
+   区间: 总 716, 含帧 714
+   稳态区间 (fps >= 0.9×含帧中位): n=684 / 714
+   ⭐[稳态] fps      n=684 min=68435.5 med=75513.3 max=79164.7
+   ⭐[稳态] L_us     n=684 min=8.524809 med=8.936673 max=10.177632
+   ⭐[稳态] cap_sharen=684 min=0.000000 med=0.000000 max=0.000000
+   ⭐[稳态] 事件/帧  n=684 min=0.999613 med=1.000000 max=1.000139
+   --- 逐区间 (含帧) ---
+   fps        n=714 min=23.4 med=75420.0 max=79164.7
+   app_Mbps   n=712 min=0.2 med=881.1 max=924.6
+   L_us       n=714 min=8.524809 med=8.947197 max=10952.644000
+   dW68>0 区间数 = 714 / 714
+   W69 (infl,eff) 直方 (仅 dW66>0): [((1460, 1460), 634), ((0, 0), 78), ((33580, 1460), 1), ((21900, 1460), 1)]
+   --- 全窗比率 ---
+   dW67/dW66 = 0.000000   (1-该值 = 对端侧占比)
+   dW68/dW20 = 0.999959 事件/帧   dW66/dW20 = 1417.9911 拍/帧
+   三角核左腿 dW67<=dW66 (真牙): 违例 = 0/714
+   WARN UNWRAP_SUSPECT n=1: [(15, 716, 'Q2K_post', 3705346699)]
+====================================================================================================
+== Q1K  (snaps=166, snmp_points=6)
+   META | LF_META_TAG=Q1K LF_META_CONNS=1 LF_META_SECS=180 LF_META_RCVBUF=1460
+   LIMITS | SINK_LIMITS maxbytes=8000000000 poll_ms=5000 stall_n=3 rcvbuf=1460 conns=1 secs=180
+   CARRIER | CARRIER=1
+   GEOM | LF_GEOM_OK NW=63 BID=0x0000001a
+   BID_PRE | LF_META_BOARD_BID_PRE=0x0000001a
+   BID_END | LF_META_BOARD_BID_END=0x0000001a
+   SINK | SINK_SUM conns=1 fail_conns=0 bytes=14600 clean_conns=0 bad_conns=1 mismatch_bytes=0 stall_conns=1 err_conns=0 poll_tmo=3 wall_s=15.118 net_s=15.118 agg_Mbps=0.008 THREADED=on full_push=8 full_pop=8 free_push=24 free_pop=8 slot_wait_spins=0 checked_bytes=14600 threads=2 check=lane8
+   GUARDS | 无 (0 命中)
+   --- 全窗 (a=Q1K_pre gen=1344 -> b=Q1K_post gen=1509) ---
+   W5   raw 4ce287e9 -> ff39b690  d=2992058023  k=0
+   W20  raw 00fadfeb -> 00fae06e  d=131  k=0
+   W43  raw 4cde73e6 -> ff3532e3  d=2992029437  k=0
+   W51  raw 96831355 -> 96839681  d=33580  k=0
+   W66  raw 6010fb2c -> fc1e815b  d=2618132015  k=0
+   W67  raw 00000000 -> 00000000  d=0  k=0
+   W68  raw 00cffdf1 -> 00cffdfb  d=10  k=0
+   W69  raw 05b405b4 -> 4a240000  (**锁存字, 无 delta 语义**)
+   TIME | dW5=2992058023 dW43=2992029437 equal=False | dt=19.149171 s
+   --- 独立分母 (对端 /proc/net/snmp; 全系统口径) ---
+   SNMP raw: pre_a out=713779864 pre_b out=713779937 post_a out=713781902 post_b out=713781975
+   dTcpOutSegs: lo(post_a-pre_b)=1965  hi(post_b-pre_a)=2111  (bracket 宽=146 = 7.4300%)
+   dTcpInSegs : lo=1118  hi=1190 | dTcpRetransSegs=3 | dDelayedACKs=0 | dDelayedACKLost=0
+   t: pre_a=1791603427.891 pre_b=1791603428.167 post_a=1791603447.040 post_b=1791603447.313 | 快照窗(pre_b->post_a)=18.873 s
+   背景率见证 idle: dTcpOutSegs=16 / 5.017 s = 3.19 段/s (无连接空闲窗)
+   sshd 见证: pre_b sum=77181 -> post_a sum=79043  d_ssh=1862 (n_sock=3, 占全系统 94.7583%)
+   ⭐ dW68 / dTcpOutSegs = lo: 0.005089   hi: 0.004737
+   ⭐ L  (分母=W68)        = 1675604.489600 µs/事件
+   ⭐ L' (分母=TcpOutSegs) = lo: 8527.249311  hi: 7937.491661 µs/对端段
+   ⭐ L'/L = lo: 0.005089  hi: 0.004737  (={dTcpOutSegs 与 dW68 的相对大小})
+   分解: dTcpOutSegs_lo(1965) − d_ssh(1862) = 本连接近似 103;  本连接 − dW68 = 93 (930.0000% of dW68)
+   --- 补充字 (全窗 pre->post; 只对确定不回卷的字算 delta) ---
+   W22 raw 00d00b2f -> 00d00b94  d=101 (npts=2)
+   W14 raw 00fadfcc -> 00fae04a  d=126 (npts=2)
+   W55 raw 0000044b -> 00000456  d=11 (npts=2)
+   W15 raw 96c41ac1 -> 96c6e3a5  d=182500 (npts=2)  ⚠️ 单跑回卷 >1 次 ⇒ 只记 raw, delta 不可解
+   ⭐ U_board = dW22 − dW68 = 91 (910.0000% of dW68)  [板侧: 收到但未推进的 TCP 帧]
+   区间: 总 165, 含帧 6
+   稳态区间 (fps >= 0.9×含帧中位): n=3 / 6
+   ⭐[稳态] fps      n=3 min=21.9 med=181.3 max=859.4
+   ⭐[稳态] L_us     n=3 min=1084.420267 med=14893.053867 max=87863.955200
+   ⭐[稳态] cap_sharen=3 min=0.000000 med=0.000000 max=0.000000
+   ⭐[稳态] 事件/帧  n=3 min=0.058824 med=0.073171 max=0.107143
+   --- 逐区间 (含帧) ---
+   fps        n=6 min=0.8 med=16.3 max=859.4
+   app_Mbps   n=1 min=0.2 med=0.2 max=0.2
+   L_us       n=3 min=1084.420267 med=14893.053867 max=87863.955200
+   dW68>0 区间数 = 3 / 6
+   W69 (infl,eff) 直方 (仅 dW66>0): [((18980, 0), 4), ((29200, 832), 1), ((20440, 832), 1)]
+   --- 全窗比率 ---
+   dW67/dW66 = 0.000000   (1-该值 = 对端侧占比)
+   dW68/dW20 = 0.076336 事件/帧   dW66/dW20 = 19985740.5725 拍/帧
+   三角核左腿 dW67<=dW66 (真牙): 违例 = 0/6
+====================================================================================================
+== Q11KD  (snaps=233, snmp_points=6)
+   META | LF_META_TAG=Q11KD LF_META_CONNS=1 LF_META_SECS=180 LF_META_RCVBUF=11680
+   LIMITS | SINK_LIMITS maxbytes=8000000000 poll_ms=5000 stall_n=3 rcvbuf=11680 conns=1 secs=180
+   CARRIER | CARRIER=1
+   GEOM | LF_GEOM_OK NW=63 BID=0x0000001a
+   BID_PRE | LF_META_BOARD_BID_PRE=0x0000001a
+   BID_END | LF_META_BOARD_BID_END=0x0000001a
+   SINK | SINK_SUM conns=1 fail_conns=0 bytes=8000000095 clean_conns=1 bad_conns=0 mismatch_bytes=0 stall_conns=0 err_conns=0 poll_tmo=0 wall_s=26.172 net_s=26.171 agg_Mbps=2445.424 THREADED=on full_push=4065220 full_pop=4065220 free_push=4065236 free_pop=4065220 slot_wait_spins=7376 checked_bytes=8000000095 
+   GUARDS | 无 (0 命中)
+   --- 全窗 (a=Q11KD_pre gen=1 -> b=Q11KD_post gen=233) ---
+   W5   raw b139eae5 -> ca2673e6  d=4713122049  k=1
+   W20  raw 00000000 -> 00539f9a  d=5480346  k=0
+   W43  raw b13a7929 -> ca26622b  d=4713081090  k=1
+   W51  raw 00000000 -> dcd6617b  d=8000004475  k=1
+   W66  raw 00000000 -> 89f06efa  d=2314235642  k=0
+   W67  raw 00000000 -> 00000000  d=0  k=0
+   W68  raw 00000000 -> 003e087d  d=4065405  k=0
+   W69  raw 00000000 -> 111c111c  (**锁存字, 无 delta 语义**)
+   TIME | dW5=4713122049 dW43=4713081090 equal=False | dt=30.163981 s
+   --- 独立分母 (对端 /proc/net/snmp; 全系统口径) ---
+   SNMP raw: pre_a out=713784061 pre_b out=713784134 post_a out=717853335 post_b out=717853411
+   dTcpOutSegs: lo(post_a-pre_b)=4069201  hi(post_b-pre_a)=4069350  (bracket 宽=149 = 0.0037%)
+   dTcpInSegs : lo=5481746  hi=5481821 | dTcpRetransSegs=0 | dDelayedACKs=0 | dDelayedACKLost=452
+   t: pre_a=1791603634.271 pre_b=1791603634.542 post_a=1791603664.432 post_b=1791603664.713 | 快照窗(pre_b->post_a)=29.890 s
+   背景率见证 idle: dTcpOutSegs=22 / 5.017 s = 4.39 段/s (无连接空闲窗)
+   sshd 见证: pre_b sum=77614 -> post_a sum=80306  d_ssh=2692 (n_sock=3, 占全系统 0.0662%)
+   ⭐ dW68 / dTcpOutSegs = lo: 0.999067   hi: 0.999031
+   ⭐ L  (分母=W68)        = 3.643206 µs/事件
+   ⭐ L' (分母=TcpOutSegs) = lo: 3.639807  hi: 3.639674 µs/对端段
+   ⭐ L'/L = lo: 0.999067  hi: 0.999031  (={dTcpOutSegs 与 dW68 的相对大小})
+   分解: dTcpOutSegs_lo(4069201) − d_ssh(2692) = 本连接近似 4066509;  本连接 − dW68 = 1104 (0.0272% of dW68)
+   --- 补充字 (全窗 pre->post; 只对确定不回卷的字算 delta) ---
+   W22 raw 00000000 -> 003e0cc4  d=4066500 (npts=2)
+   W14 raw 00000000 -> 00539f94  d=5480340 (npts=2)
+   W55 raw 00000000 -> 00000111  d=273 (npts=2)
+   W15 raw 00000000 -> dcea07a3  d=3706324899 (npts=2)  ⚠️ 单跑回卷 >1 次 ⇒ 只记 raw, delta 不可解
+   ⭐ U_board = dW22 − dW68 = 1095 (0.0269% of dW68)  [板侧: 收到但未推进的 TCP 帧]
+   区间: 总 232, 含帧 230
+   稳态区间 (fps >= 0.9×含帧中位): n=171 / 230
+   ⭐[稳态] fps      n=171 min=189180.9 med=217592.0 max=258062.4
+   ⭐[稳态] L_us     n=171 min=2.516591 med=3.254067 max=4.503382
+   ⭐[稳态] cap_sharen=171 min=0.000000 med=0.000000 max=0.000000
+   ⭐[稳态] 事件/帧  n=171 min=0.704486 med=0.741465 max=0.784550
+   --- 逐区间 (含帧) ---
+   fps        n=230 min=39.2 med=209993.6 max=258062.4
+   app_Mbps   n=229 min=0.4 med=2452.7 max=3014.2
+   L_us       n=230 min=2.124800 med=3.660289 max=7486.222720
+   dW68>0 区间数 = 230 / 230
+   W69 (infl,eff) 直方 (仅 dW66>0): [((4380, 4380), 194), ((0, 0), 24), ((2920, 2920), 10), ((61320, 61320), 1), ((29200, 4380), 1)]
+   --- 全窗比率 ---
+   dW67/dW66 = 0.000000   (1-该值 = 对端侧占比)
+   dW68/dW20 = 0.741815 事件/帧   dW66/dW20 = 422.2791 拍/帧
+   三角核左腿 dW67<=dW66 (真牙): 违例 = 0/230
+   WARN UNWRAP_SUSPECT n=1: [(15, 232, 'Q11KD_post', 3706324899)]
+====================================================================================================
+== Q5KD  (snaps=166, snmp_points=6)
+   META | LF_META_TAG=Q5KD LF_META_CONNS=1 LF_META_SECS=180 LF_META_RCVBUF=5840
+   LIMITS | SINK_LIMITS maxbytes=8000000000 poll_ms=5000 stall_n=3 rcvbuf=5840 conns=1 secs=180
+   CARRIER | CARRIER=1
+   GEOM | LF_GEOM_OK NW=63 BID=0x0000001a
+   BID_PRE | LF_META_BOARD_BID_PRE=0x0000001a
+   BID_END | LF_META_BOARD_BID_END=0x0000001a
+   SINK | SINK_SUM conns=1 fail_conns=0 bytes=24820 clean_conns=0 bad_conns=1 mismatch_bytes=0 stall_conns=1 err_conns=0 poll_tmo=3 wall_s=15.115 net_s=15.115 agg_Mbps=0.013 THREADED=on full_push=8 full_pop=8 free_push=24 free_pop=8 slot_wait_spins=0 checked_bytes=24820 threads=2 check=lane8
+   GUARDS | 无 (0 命中)
+   --- 全窗 (a=Q5KD_pre gen=234 -> b=Q5KD_post gen=399) ---
+   W5   raw 60418179 -> 129c22c2  d=2992283977  k=1
+   W20  raw 00539fa0 -> 0053a001  d=97  k=0
+   W43  raw 604116ea -> 129b4cc2  d=2992256472  k=1
+   W51  raw dcd6617b -> dcd6d93f  d=30660  k=0
+   W66  raw 89f06efa -> 26092f51  d=2618867799  k=1
+   W67  raw 00000000 -> 00000000  d=0  k=0
+   W68  raw 003e087d -> 003e0887  d=10  k=0
+   W69  raw 111c111c -> 00000000  (**锁存字, 无 delta 语义**)
+   TIME | dW5=2992283977 dW43=2992256472 equal=False | dt=19.150617 s
+   --- 独立分母 (对端 /proc/net/snmp; 全系统口径) ---
+   SNMP raw: pre_a out=717854108 pre_b out=717854181 post_a out=717856122 post_b out=717856195
+   dTcpOutSegs: lo(post_a-pre_b)=1941  hi(post_b-pre_a)=2087  (bracket 宽=146 = 7.5219%)
+   dTcpInSegs : lo=1084  hi=1158 | dTcpRetransSegs=3 | dDelayedACKs=0 | dDelayedACKLost=2
+   t: pre_a=1791603680.551 pre_b=1791603680.823 post_a=1791603699.701 post_b=1791603699.975 | 快照窗(pre_b->post_a)=18.879 s
+   背景率见证 idle: dTcpOutSegs=16 / 5.016 s = 3.19 段/s (无连接空闲窗)
+   sshd 见证: pre_b sum=77737 -> post_a sum=79602  d_ssh=1865 (n_sock=3, 占全系统 96.0845%)
+   ⭐ dW68 / dTcpOutSegs = lo: 0.005152   hi: 0.004792
+   ⭐ L  (分母=W68)        = 1676075.391360 µs/事件
+   ⭐ L' (分母=TcpOutSegs) = lo: 8635.112784  hi: 8031.027271 µs/对端段
+   ⭐ L'/L = lo: 0.005152  hi: 0.004792  (={dTcpOutSegs 与 dW68 的相对大小})
+   分解: dTcpOutSegs_lo(1941) − d_ssh(1865) = 本连接近似 76;  本连接 − dW68 = 66 (660.0000% of dW68)
+   --- 补充字 (全窗 pre->post; 只对确定不回卷的字算 delta) ---
+   W22 raw 003e0cc4 -> 003e0d0e  d=74 (npts=2)
+   W14 raw 00539f94 -> 00539ff3  d=95 (npts=2)
+   W55 raw 00000111 -> 0000011b  d=10 (npts=2)
+   W15 raw dcea07a3 -> dcec1fbb  d=137240 (npts=2)  ⚠️ 单跑回卷 >1 次 ⇒ 只记 raw, delta 不可解
+   ⭐ U_board = dW22 − dW68 = 64 (640.0000% of dW68)  [板侧: 收到但未推进的 TCP 帧]
+   区间: 总 165, 含帧 4
+   稳态区间 (fps >= 0.9×含帧中位): n=2 / 4
+   ⭐[稳态] fps      n=2 min=64.0 med=368.8 max=673.6
+   ⭐[稳态] L_us     n=2 min=14833.122133 med=51328.778667 max=87824.435200
+   ⭐[稳态] cap_sharen=2 min=0.000000 med=0.000000 max=0.000000
+   ⭐[稳态] 事件/帧  n=2 min=0.093750 med=0.130208 max=0.166667
+   --- 逐区间 (含帧) ---
+   fps        n=4 min=10.8 med=42.2 max=673.6
+   app_Mbps   n=1 min=0.2 med=0.2 max=0.2
+   L_us       n=3 min=943.942400 med=14833.122133 max=87824.435200
+   dW68>0 区间数 = 3 / 4
+   W69 (infl,eff) 直方 (仅 dW66>0): [((5840, 0), 2), ((26280, 2920), 1), ((8760, 2920), 1)]
+   --- 全窗比率 ---
+   dW67/dW66 = 0.000000   (1-该值 = 对端侧占比)
+   dW68/dW20 = 0.103093 事件/帧   dW66/dW20 = 26998637.1031 拍/帧
+   三角核左腿 dW67<=dW66 (真牙): 违例 = 0/4
+====================================================================================================
+== Q5KD2  (snaps=365, snmp_points=6)
+   META | LF_META_TAG=Q5KD2 LF_META_CONNS=1 LF_META_SECS=180 LF_META_RCVBUF=5840
+   LIMITS | SINK_LIMITS maxbytes=8000000000 poll_ms=5000 stall_n=3 rcvbuf=5840 conns=1 secs=180
+   CARRIER | CARRIER=1
+   GEOM | LF_GEOM_OK NW=63 BID=0x0000001a
+   BID_PRE | LF_META_BOARD_BID_PRE=0x0000001a
+   BID_END | LF_META_BOARD_BID_END=0x0000001a
+   SINK | SINK_SUM conns=1 fail_conns=0 bytes=8000000095 clean_conns=0 bad_conns=1 mismatch_bytes=7968752192 stall_conns=0 err_conns=0 poll_tmo=0 wall_s=39.599 net_s=39.599 agg_Mbps=1616.189 THREADED=on full_push=4285274 full_pop=4285274 free_push=4285290 free_pop=4285274 slot_wait_spins=0 checked_bytes=80000
+   GUARDS | 无 (0 命中)
+   --- 全窗 (a=Q5KD2_pre gen=400 -> b=Q5KD2_post gen=764) ---
+   W5   raw 1fb00cc3 -> b6768227  d=6824555876  k=1
+   W20  raw 0053a005 -> 00a74075  d=5480560  k=0
+   W43  raw 1fae91ea -> b6740aeb  d=6824491265  k=1
+   W51  raw dcd6d93f -> b9ad3506  d=8000003015  k=2
+   W66  raw 224b9f30 -> 2a2b76ed  d=4427077565  k=1
+   W67  raw 00000000 -> 00000000  d=0  k=0
+   W68  raw 003e0887 -> 007f6be4  d=4285277  k=0
+   W69  raw 16d00000 -> 0b680b68  (**锁存字, 无 delta 语义**)
+   TIME | dW5=6824555876 dW43=6824491265 equal=False | dt=43.677158 s
+   --- 独立分母 (对端 /proc/net/snmp; 全系统口径) ---
+   SNMP raw: pre_a out=717856765 pre_b out=717856838 post_a out=722148055 post_b out=722148131
+   dTcpOutSegs: lo(post_a-pre_b)=4291217  hi(post_b-pre_a)=4291366  (bracket 宽=149 = 0.0035%)
+   dTcpInSegs : lo=5482734  hi=5482809 | dTcpRetransSegs=1 | dDelayedACKs=0 | dDelayedACKLost=346
+   t: pre_a=1791603728.593 pre_b=1791603728.864 post_a=1791603772.269 post_b=1791603772.547 | 快照窗(pre_b->post_a)=43.405 s
+   背景率见证 idle: dTcpOutSegs=19 / 5.016 s = 3.79 段/s (无连接空闲窗)
+   sshd 见证: pre_b sum=77852 -> post_a sum=82027  d_ssh=4175 (n_sock=3, 占全系统 0.0973%)
+   ⭐ dW68 / dTcpOutSegs = lo: 0.998616   hi: 0.998581
+   ⭐ L  (分母=W68)        = 6.611777 µs/事件
+   ⭐ L' (分母=TcpOutSegs) = lo: 6.602625  hi: 6.602396 µs/对端段
+   ⭐ L'/L = lo: 0.998616  hi: 0.998581  (={dTcpOutSegs 与 dW68 的相对大小})
+   分解: dTcpOutSegs_lo(4291217) − d_ssh(4175) = 本连接近似 4287042;  本连接 − dW68 = 1765 (0.0412% of dW68)
+   --- 补充字 (全窗 pre->post; 只对确定不回卷的字算 delta) ---
+   W22 raw 003e0d0e -> 007f774e  d=4287040 (npts=2)
+   W14 raw 00539ff3 -> 00a7405d  d=5480554 (npts=2)
+   W55 raw 0000011b -> 0000037a  d=607 (npts=2)
+   W15 raw dcec1fbb -> b9daebd6  d=3706637339 (npts=2)  ⚠️ 单跑回卷 >1 次 ⇒ 只记 raw, delta 不可解
+   ⭐ U_board = dW22 − dW68 = 1763 (0.0411% of dW68)  [板侧: 收到但未推进的 TCP 帧]
+   区间: 总 364, 含帧 361
+   稳态区间 (fps >= 0.9×含帧中位): n=273 / 361
+   ⭐[稳态] fps      n=273 min=126631.0 med=144656.6 max=175150.9
+   ⭐[稳态] L_us     n=273 min=4.245234 med=5.903740 max=7.698960
+   ⭐[稳态] cap_sharen=273 min=0.000000 med=0.000000 max=0.000000
+   ⭐[稳态] 事件/帧  n=273 min=0.706414 med=0.781222 max=0.854281
+   --- 逐区间 (含帧) ---
+   fps        n=361 min=29.0 med=139677.2 max=175150.9
+   app_Mbps   n=360 min=0.3 med=1631.2 max=2045.7
+   L_us       n=361 min=4.245234 med=6.237060 max=397631.782400
+   dW68>0 区间数 = 361 / 361
+   W69 (infl,eff) 直方 (仅 dW66>0): [((2920, 2920), 317), ((0, 0), 33), ((1460, 1460), 5), ((2920, 1605), 3), ((4235, 2920), 2), ((16060, 0), 1)]
+   --- 全窗比率 ---
+   dW67/dW66 = 0.000000   (1-该值 = 对端侧占比)
+   dW68/dW20 = 0.781905 事件/帧   dW66/dW20 = 807.7783 拍/帧
+   三角核左腿 dW67<=dW66 (真牙): 违例 = 0/361
+   WARN UNWRAP_SUSPECT n=1: [(15, 364, 'Q5KD2_post', 3706637339)]
+====================================================================================================
+== Q2KD  (snaps=168, snmp_points=6)
+   META | LF_META_TAG=Q2KD LF_META_CONNS=1 LF_META_SECS=180 LF_META_RCVBUF=2920
+   LIMITS | SINK_LIMITS maxbytes=8000000000 poll_ms=5000 stall_n=3 rcvbuf=2920 conns=1 secs=180
+   CARRIER | CARRIER=1
+   GEOM | LF_GEOM_OK NW=63 BID=0x0000001a
+   BID_PRE | LF_META_BOARD_BID_PRE=0x0000001a
+   BID_END | LF_META_BOARD_BID_END=0x0000001a
+   SINK | SINK_SUM conns=1 fail_conns=0 bytes=40880 clean_conns=0 bad_conns=1 mismatch_bytes=0 stall_conns=1 err_conns=0 poll_tmo=3 wall_s=15.320 net_s=15.320 agg_Mbps=0.021 THREADED=on full_push=26 full_pop=26 free_push=42 free_pop=26 slot_wait_spins=0 checked_bytes=40880 threads=2 check=lane8
+   GUARDS | 无 (0 命中)
+   --- 全窗 (a=Q2KD_pre gen=765 -> b=Q2KD_post gen=932) ---
+   W5   raw 27c8bcc8 -> dc23f524  d=3025877084  k=0
+   W20  raw 00a7407b -> 00a74278  d=509  k=0
+   W43  raw 27c55ece -> dc202628  d=3025848154  k=0
+   W51  raw b9ad3506 -> b9ae248e  d=61320  k=0
+   W66  raw 2a2b76ed -> c819fb57  d=2649654378  k=0
+   W67  raw 00000000 -> 00000000  d=0  k=0
+   W68  raw 007f6be4 -> 007f6bff  d=27  k=0
+   W69  raw 0b680b68 -> 00000000  (**锁存字, 无 delta 语义**)
+   TIME | dW5=3025877084 dW43=3025848154 equal=False | dt=19.365613 s
+   --- 独立分母 (对端 /proc/net/snmp; 全系统口径) ---
+   SNMP raw: pre_a out=722150267 pre_b out=722150341 post_a out=722152682 post_b out=722152756
+   dTcpOutSegs: lo(post_a-pre_b)=2341  hi(post_b-pre_a)=2489  (bracket 宽=148 = 6.3221%)
+   dTcpInSegs : lo=1502  hi=1577 | dTcpRetransSegs=5 | dDelayedACKs=0 | dDelayedACKLost=0
+   t: pre_a=1791603811.923 pre_b=1791603812.199 post_a=1791603831.288 post_b=1791603831.561 | 快照窗(pre_b->post_a)=19.089 s
+   背景率见证 idle: dTcpOutSegs=19 / 5.017 s = 3.79 段/s (无连接空闲窗)
+   sshd 见证: pre_b sum=78060 -> post_a sum=79954  d_ssh=1894 (n_sock=3, 占全系统 80.9056%)
+   ⭐ dW68 / dTcpOutSegs = lo: 0.011534   hi: 0.010848
+   ⭐ L  (分母=W68)        = 628066.222933 µs/事件
+   ⭐ L' (分母=TcpOutSegs) = lo: 7243.822306  hi: 6813.092816 µs/对端段
+   ⭐ L'/L = lo: 0.011534  hi: 0.010848  (={dTcpOutSegs 与 dW68 的相对大小})
+   分解: dTcpOutSegs_lo(2341) − d_ssh(1894) = 本连接近似 447;  本连接 − dW68 = 420 (1555.5556% of dW68)
+   --- 补充字 (全窗 pre->post; 只对确定不回卷的字算 delta) ---
+   W22 raw 007f774e -> 007f790d  d=447 (npts=2)
+   W14 raw 00a7405d -> 00a74258  d=507 (npts=2)
+   W55 raw 0000037a -> 00000399  d=31 (npts=2)
+   W15 raw b9daebd6 -> b9e6319e  d=738760 (npts=2)  ⚠️ 单跑回卷 >1 次 ⇒ 只记 raw, delta 不可解
+   ⭐ U_board = dW22 − dW68 = 420 (1555.5556% of dW68)  [板侧: 收到但未推进的 TCP 帧]
+   区间: 总 167, 含帧 6
+   稳态区间 (fps >= 0.9×含帧中位): n=3 / 6
+   ⭐[稳态] fps      n=3 min=1223.6 med=1688.1 max=1774.5
+   ⭐[稳态] L_us     n=3 min=7955.439127 med=10901.823200 max=18067.366400
+   ⭐[稳态] cap_sharen=3 min=0.000000 med=0.000000 max=0.000000
+   ⭐[稳态] 事件/帧  n=3 min=0.030675 med=0.066265 max=0.070175
+   --- 逐区间 (含帧) ---
+   fps        n=6 min=10.5 med=705.9 max=1774.5
+   app_Mbps   n=1 min=0.4 med=0.4 max=0.4
+   L_us       n=5 min=1493.635200 med=10901.823200 max=89589.036800
+   dW68>0 区间数 = 5 / 6
+   W69 (infl,eff) 直方 (仅 dW66>0): [((0, 0), 2), ((58400, 1460), 1), ((51100, 1460), 1), ((21900, 1460), 1), ((20440, 0), 1)]
+   --- 全窗比率 ---
+   dW67/dW66 = 0.000000   (1-该值 = 对端侧占比)
+   dW68/dW20 = 0.053045 事件/帧   dW66/dW20 = 5205607.8153 拍/帧
+   三角核左腿 dW67<=dW66 (真牙): 违例 = 0/6
+====================================================================================================
+== Q1KD  (snaps=169, snmp_points=6)
+   META | LF_META_TAG=Q1KD LF_META_CONNS=1 LF_META_SECS=180 LF_META_RCVBUF=1460
+   LIMITS | SINK_LIMITS maxbytes=8000000000 poll_ms=5000 stall_n=3 rcvbuf=1460 conns=1 secs=180
+   CARRIER | CARRIER=1
+   GEOM | LF_GEOM_OK NW=63 BID=0x0000001a
+   BID_PRE | LF_META_BOARD_BID_PRE=0x0000001a
+   BID_END | LF_META_BOARD_BID_END=0x0000001a
+   SINK | SINK_SUM conns=1 fail_conns=0 bytes=54020 clean_conns=0 bad_conns=1 mismatch_bytes=53814 stall_conns=1 err_conns=0 poll_tmo=3 wall_s=15.400 net_s=15.400 agg_Mbps=0.028 THREADED=on full_push=35 full_pop=35 free_push=51 free_pop=35 slot_wait_spins=0 checked_bytes=54020 threads=2 check=lane8
+   GUARDS | 无 (0 命中)
+   --- 全窗 (a=Q1KD_pre gen=933 -> b=Q1KD_post gen=1101) ---
+   W5   raw 722d93a5 -> 277b47a2  d=3041768445  k=1
+   W20  raw 00a7427b -> 00a744c0  d=581  k=0
+   W43  raw 72296688 -> 2776a8aa  d=3041739298  k=1
+   W51  raw b9ae248e -> b9af2532  d=65700  k=0
+   W66  raw 54c2dc66 -> fe8c724d  d=2848560615  k=0
+   W67  raw 00000000 -> 0029da7e  d=2742910  k=0
+   W68  raw 007f6bff -> 007f6c22  d=35  k=0
+   W69  raw 4fd80000 -> 2da00000  (**锁存字, 无 delta 语义**)
+   TIME | dW5=3041768445 dW43=3041739298 equal=False | dt=19.467318 s
+   --- 独立分母 (对端 /proc/net/snmp; 全系统口径) ---
+   SNMP raw: pre_a out=722153305 pre_b out=722153378 post_a out=722155671 post_b out=722155744
+   dTcpOutSegs: lo(post_a-pre_b)=2293  hi(post_b-pre_a)=2439  (bracket 宽=146 = 6.3672%)
+   dTcpInSegs : lo=1510  hi=1582 | dTcpRetransSegs=11 | dDelayedACKs=0 | dDelayedACKLost=0
+   t: pre_a=1791603847.399 pre_b=1791603847.670 post_a=1791603866.865 post_b=1791603867.139 | 快照窗(pre_b->post_a)=19.195 s
+   背景率见证 idle: dTcpOutSegs=14 / 5.017 s = 2.79 段/s (无连接空闲窗)
+   sshd 见证: pre_b sum=78147 -> post_a sum=79980  d_ssh=1833 (n_sock=3, 占全系统 79.9389%)
+   ⭐ dW68 / dTcpOutSegs = lo: 0.015264   hi: 0.014350
+   ⭐ L  (分母=W68)        = 520879.655314 µs/事件
+   ⭐ L' (分母=TcpOutSegs) = lo: 7950.627098  hi: 7474.697801 µs/对端段
+   ⭐ L'/L = lo: 0.015264  hi: 0.014350  (={dTcpOutSegs 与 dW68 的相对大小})
+   分解: dTcpOutSegs_lo(2293) − d_ssh(1833) = 本连接近似 460;  本连接 − dW68 = 425 (1214.2857% of dW68)
+   --- 补充字 (全窗 pre->post; 只对确定不回卷的字算 delta) ---
+   W22 raw 007f790d -> 007f7ade  d=465 (npts=2)
+   W14 raw 00a74258 -> 00a74498  d=576 (npts=2)
+   W55 raw 00000399 -> 000003be  d=37 (npts=2)
+   W15 raw b9e6319e -> b9f3069e  d=840960 (npts=2)  ⚠️ 单跑回卷 >1 次 ⇒ 只记 raw, delta 不可解
+   ⭐ U_board = dW22 − dW68 = 430 (1228.5714% of dW68)  [板侧: 收到但未推进的 TCP 帧]
+   区间: 总 168, 含帧 10
+   稳态区间 (fps >= 0.9×含帧中位): n=5 / 10
+   ⭐[稳态] fps      n=5 min=95.8 med=1295.8 max=1781.0
+   ⭐[稳态] L_us     n=5 min=7129.509760 med=11015.689600 max=88083.942400
+   ⭐[稳态] cap_sharen=5 min=0.000000 med=0.000000 max=0.194610
+   ⭐[稳态] 事件/帧  n=5 min=0.054878 med=0.065574 max=0.111111
+   --- 逐区间 (含帧) ---
+   fps        n=10 min=10.5 med=65.1 max=1781.0
+   app_Mbps   n=2 min=0.2 med=0.3 max=0.4
+   L_us       n=5 min=7129.509760 med=11015.689600 max=88083.942400
+   dW68>0 区间数 = 5 / 10
+   W69 (infl,eff) 直方 (仅 dW66>0): [((11680, 0), 5), ((62780, 61440), 1), ((48180, 832), 1), ((35040, 832), 1), ((23360, 832), 1), ((13140, 832), 1)]
+   --- 全窗比率 ---
+   dW67/dW66 = 0.000963   (1-该值 = 对端侧占比)
+   dW68/dW20 = 0.060241 事件/帧   dW66/dW20 = 4902858.2014 拍/帧
+   三角核左腿 dW67<=dW66 (真牙): 违例 = 0/10
+====================================================================================================
+== Q2KD2  (snaps=167, snmp_points=6)
+   META | LF_META_TAG=Q2KD2 LF_META_CONNS=1 LF_META_SECS=180 LF_META_RCVBUF=2920
+   LIMITS | SINK_LIMITS maxbytes=8000000000 poll_ms=5000 stall_n=3 rcvbuf=2920 conns=1 secs=180
+   CARRIER | CARRIER=1
+   GEOM | LF_GEOM_OK NW=63 BID=0x0000001a
+   BID_PRE | LF_META_BOARD_BID_PRE=0x0000001a
+   BID_END | LF_META_BOARD_BID_END=0x0000001a
+   SINK | SINK_SUM conns=1 fail_conns=0 bytes=36500 clean_conns=0 bad_conns=1 mismatch_bytes=0 stall_conns=1 err_conns=0 poll_tmo=3 wall_s=15.257 net_s=15.257 agg_Mbps=0.019 THREADED=on full_push=24 full_pop=24 free_push=40 free_pop=24 slot_wait_spins=0 checked_bytes=36500 threads=2 check=lane8
+   GUARDS | 无 (0 命中)
+   --- 全窗 (a=Q2KD2_pre gen=1 -> b=Q2KD2_post gen=167) ---
+   W5   raw 9fc14db4 -> 53606ae7  d=3013549363  k=1
+   W20  raw 00000000 -> 00000118  d=280  k=0
+   W43  raw 9fc1e57c -> 53609de4  d=3013523560  k=1
+   W51  raw 00000000 -> 0000ab18  d=43800  k=0
+   W66  raw 00000000 -> 9d437983  d=2638444931  k=0
+   W67  raw 00000000 -> 00000000  d=0  k=0
+   W68  raw 00000000 -> 00000019  d=25  k=0
+   W69  raw 00000000 -> 1c840000  (**锁存字, 无 delta 语义**)
+   TIME | dW5=3013549363 dW43=3013523560 equal=False | dt=19.286716 s
+   --- 独立分母 (对端 /proc/net/snmp; 全系统口径) ---
+   SNMP raw: pre_a out=722159282 pre_b out=722159356 post_a out=722161474 post_b out=722161547
+   dTcpOutSegs: lo(post_a-pre_b)=2118  hi(post_b-pre_a)=2265  (bracket 宽=147 = 6.9405%)
+   dTcpInSegs : lo=1261  hi=1334 | dTcpRetransSegs=3 | dDelayedACKs=0 | dDelayedACKLost=0
+   t: pre_a=1791604039.124 pre_b=1791604039.397 post_a=1791604058.409 post_b=1791604058.681 | 快照窗(pre_b->post_a)=19.012 s
+   背景率见证 idle: dTcpOutSegs=11 / 5.017 s = 2.19 段/s (无连接空闲窗)
+   sshd 见证: pre_b sum=78547 -> post_a sum=80425  d_ssh=1878 (n_sock=3, 占全系统 88.6686%)
+   ⭐ dW68 / dTcpOutSegs = lo: 0.011804   hi: 0.011038
+   ⭐ L  (分母=W68)        = 675441.902336 µs/事件
+   ⭐ L' (分母=TcpOutSegs) = lo: 7972.638130  hi: 7455.208635 µs/对端段
+   ⭐ L'/L = lo: 0.011804  hi: 0.011038  (={dTcpOutSegs 与 dW68 的相对大小})
+   分解: dTcpOutSegs_lo(2118) − d_ssh(1878) = 本连接近似 240;  本连接 − dW68 = 215 (860.0000% of dW68)
+   --- 补充字 (全窗 pre->post; 只对确定不回卷的字算 delta) ---
+   W22 raw 00000000 -> 000000ee  d=238 (npts=2)
+   W14 raw 00000000 -> 00000112  d=274 (npts=2)
+   W55 raw 00000000 -> 00000019  d=25 (npts=2)
+   W15 raw 00000000 -> 00061aa8  d=400040 (npts=2)  ⚠️ 单跑回卷 >1 次 ⇒ 只记 raw, delta 不可解
+   ⭐ U_board = dW22 − dW68 = 213 (852.0000% of dW68)  [板侧: 收到但未推进的 TCP 帧]
+   区间: 总 166, 含帧 8
+   稳态区间 (fps >= 0.9×含帧中位): n=4 / 8
+   ⭐[稳态] fps      n=4 min=27.4 med=685.1 max=1161.7
+   ⭐[稳态] L_us     n=4 min=1548.268800 med=10041.048400 max=17728.896000
+   ⭐[稳态] cap_sharen=4 min=0.000000 med=0.000000 max=0.000000
+   ⭐[稳态] 事件/帧  n=4 min=0.057143 med=0.088346 max=0.147059
+   --- 逐区间 (含帧) ---
+   fps        n=8 min=10.6 med=19.1 max=1161.7
+   app_Mbps   n=1 min=0.3 med=0.3 max=0.3
+   L_us       n=4 min=1548.268800 med=10041.048400 max=17728.896000
+   dW68>0 区间数 = 4 / 8
+   W69 (infl,eff) 直方 (仅 dW66>0): [((7300, 0), 5), ((40880, 1460), 1), ((29200, 1460), 1), ((14600, 1460), 1)]
+   --- 全窗比率 ---
+   dW67/dW66 = 0.000000   (1-该值 = 对端侧占比)
+   dW68/dW20 = 0.089286 事件/帧   dW66/dW20 = 9423017.6107 拍/帧
+   三角核左腿 dW67<=dW66 (真牙): 违例 = 0/8
+====================================================================================================
+== Q2K2  (snaps=168, snmp_points=6)
+   META | LF_META_TAG=Q2K2 LF_META_CONNS=1 LF_META_SECS=180 LF_META_RCVBUF=2920
+   LIMITS | SINK_LIMITS maxbytes=8000000000 poll_ms=5000 stall_n=3 rcvbuf=2920 conns=1 secs=180
+   CARRIER | CARRIER=1
+   GEOM | LF_GEOM_OK NW=63 BID=0x0000001a
+   BID_PRE | LF_META_BOARD_BID_PRE=0x0000001a
+   BID_END | LF_META_BOARD_BID_END=0x0000001a
+   SINK | SINK_SUM conns=1 fail_conns=0 bytes=45260 clean_conns=0 bad_conns=1 mismatch_bytes=45090 stall_conns=1 err_conns=0 poll_tmo=3 wall_s=15.339 net_s=15.339 agg_Mbps=0.024 THREADED=on full_push=30 full_pop=30 free_push=46 free_pop=30 slot_wait_spins=0 checked_bytes=45260 threads=2 check=lane8
+   GUARDS | 无 (0 命中)
+   --- 全窗 (a=Q2K2_pre gen=168 -> b=Q2K2_post gen=335) ---
+   W5   raw 3bfca455 -> f0292ee5  d=3022817936  k=0
+   W20  raw 0000011e -> 000002f6  d=472  k=0
+   W43  raw 3bfc4f1c -> f0286d5e  d=3022790210  k=0
+   W51  raw 0000ab18 -> 00018984  d=56940  k=0
+   W66  raw 7755c082 -> 203df594  d=2833790226  k=1
+   W67  raw 00000000 -> 00000000  d=0  k=0
+   W68  raw 00000019 -> 00000038  d=31  k=0
+   W69  raw 1c840000 -> 00000000  (**锁存字, 无 delta 语义**)
+   TIME | dW5=3022817936 dW43=3022790210 equal=False | dt=19.346035 s
+   --- 独立分母 (对端 /proc/net/snmp; 全系统口径) ---
+   SNMP raw: pre_a out=722162099 pre_b out=722162172 post_a out=722164464 post_b out=722164540
+   dTcpOutSegs: lo(post_a-pre_b)=2292  hi(post_b-pre_a)=2441  (bracket 宽=149 = 6.5009%)
+   dTcpInSegs : lo=1466  hi=1541 | dTcpRetransSegs=3 | dDelayedACKs=0 | dDelayedACKLost=0
+   t: pre_a=1791604083.384 pre_b=1791604083.658 post_a=1791604102.728 post_b=1791604103.002 | 快照窗(pre_b->post_a)=19.071 s
+   背景率见证 idle: dTcpOutSegs=19 / 5.017 s = 3.79 段/s (无连接空闲窗)
+   sshd 见证: pre_b sum=78657 -> post_a sum=80547  d_ssh=1890 (n_sock=3, 占全系统 82.4607%)
+   ⭐ dW68 / dTcpOutSegs = lo: 0.013525   hi: 0.012700
+   ⭐ L  (分母=W68)        = 585040.562787 µs/事件
+   ⭐ L' (分母=TcpOutSegs) = lo: 7912.852289  hi: 7429.847377 µs/对端段
+   ⭐ L'/L = lo: 0.013525  hi: 0.012700  (={dTcpOutSegs 与 dW68 的相对大小})
+   分解: dTcpOutSegs_lo(2292) − d_ssh(1890) = 本连接近似 402;  本连接 − dW68 = 371 (1196.7742% of dW68)
+   --- 补充字 (全窗 pre->post; 只对确定不回卷的字算 delta) ---
+   W22 raw 000000ee -> 00000281  d=403 (npts=2)
+   W14 raw 00000112 -> 000002e9  d=471 (npts=2)
+   W55 raw 00000019 -> 0000003a  d=33 (npts=2)
+   W15 raw 00061aa8 -> 001098d4  d=687660 (npts=2)  ⚠️ 单跑回卷 >1 次 ⇒ 只记 raw, delta 不可解
+   ⭐ U_board = dW22 − dW68 = 372 (1200.0000% of dW68)  [板侧: 收到但未推进的 TCP 帧]
+   区间: 总 167, 含帧 5
+   稳态区间 (fps >= 0.9×含帧中位): n=3 / 5
+   ⭐[稳态] fps      n=3 min=1052.4 med=1585.9 max=1608.1
+   ⭐[稳态] L_us     n=3 min=8849.936000 med=8897.006720 max=14836.348800
+   ⭐[稳态] cap_sharen=3 min=0.000000 med=0.000000 max=0.000000
+   ⭐[稳态] 事件/帧  n=3 min=0.039216 med=0.066667 max=0.100000
+   --- 逐区间 (含帧) ---
+   fps        n=5 min=36.0 med=1052.4 max=1608.1
+   app_Mbps   n=1 min=0.4 med=0.4 max=0.4
+   L_us       n=5 min=8849.936000 med=14836.348800 max=599224.102400
+   dW68>0 区间数 = 5 / 5
+   W69 (infl,eff) 直方 (仅 dW66>0): [((54020, 1460), 1), ((45260, 1460), 1), ((30660, 1460), 1), ((16060, 1460), 1), ((11680, 0), 1)]
+   --- 全窗比率 ---
+   dW67/dW66 = 0.000000   (1-该值 = 对端侧占比)
+   dW68/dW20 = 0.065678 事件/帧   dW66/dW20 = 6003792.8517 拍/帧
+   三角核左腿 dW67<=dW66 (真牙): 违例 = 0/5
+====================================================================================================
+== Q2K3  (snaps=782, snmp_points=6)
+   META | LF_META_TAG=Q2K3 LF_META_CONNS=1 LF_META_SECS=180 LF_META_RCVBUF=2920
+   LIMITS | SINK_LIMITS maxbytes=8000000000 poll_ms=5000 stall_n=3 rcvbuf=2920 conns=1 secs=180
+   CARRIER | CARRIER=1
+   GEOM | LF_GEOM_OK NW=63 BID=0x0000001a
+   BID_PRE | LF_META_BOARD_BID_PRE=0x0000001a
+   BID_END | LF_META_BOARD_BID_END=0x0000001a
+   SINK | SINK_SUM conns=1 fail_conns=0 bytes=8000000095 clean_conns=1 bad_conns=0 mismatch_bytes=0 stall_conns=0 err_conns=0 poll_tmo=0 wall_s=78.666 net_s=78.665 agg_Mbps=813.572 THREADED=on full_push=5479412 full_pop=5479412 free_push=5479428 free_pop=5479412 slot_wait_spins=3444 checked_bytes=8000000095 t
+   GUARDS | 无 (0 命中)
+   --- 全窗 (a=Q2K3_pre gen=1 -> b=Q2K3_post gen=782) ---
+   W5   raw 9686cf43 -> 9883724d  d=12918235914  k=3
+   W20  raw 00000000 -> 00539c46  d=5479494  k=0
+   W43  raw 96876c77 -> 98824d33  d=12918120636  k=3
+   W51  raw 00000000 -> dcd65613  d=8000001555  k=1
+   W66  raw 00000000 -> ec7f8597  d=8262747543  k=1
+   W67  raw 00000000 -> 00000000  d=0  k=0
+   W68  raw 00000000 -> 00539c04  d=5479428  k=0
+   W69  raw 00000000 -> 05b405b4  (**锁存字, 无 delta 语义**)
+   TIME | dW5=12918235914 dW43=12918120636 equal=False | dt=82.676710 s
+   --- 独立分母 (对端 /proc/net/snmp; 全系统口径) ---
+   SNMP raw: pre_a out=722168042 pre_b out=722168116 post_a out=727656542 post_b out=727656620
+   dTcpOutSegs: lo(post_a-pre_b)=5488426  hi(post_b-pre_a)=5488578  (bracket 宽=152 = 0.0028%)
+   dTcpInSegs : lo=5484147  hi=5484222 | dTcpRetransSegs=0 | dDelayedACKs=1 | dDelayedACKLost=0
+   t: pre_a=1791604291.562 pre_b=1791604291.834 post_a=1791604374.235 post_b=1791604374.512 | 快照窗(pre_b->post_a)=82.401 s
+   背景率见证 idle: dTcpOutSegs=14 / 5.016 s = 2.79 段/s (无连接空闲窗)
+   sshd 见证: pre_b sum=79064 -> post_a sum=88032  d_ssh=8968 (n_sock=3, 占全系统 0.1634%)
+   ⭐ dW68 / dTcpOutSegs = lo: 0.998361   hi: 0.998333
+   ⭐ L  (分母=W68)        = 9.650931 µs/事件
+   ⭐ L' (分母=TcpOutSegs) = lo: 9.635109  hi: 9.634842 µs/对端段
+   ⭐ L'/L = lo: 0.998361  hi: 0.998333  (={dTcpOutSegs 与 dW68 的相对大小})
+   分解: dTcpOutSegs_lo(5488426) − d_ssh(8968) = 本连接近似 5479458;  本连接 − dW68 = 30 (0.0005% of dW68)
+   --- 补充字 (全窗 pre->post; 只对确定不回卷的字算 delta) ---
+   W22 raw 00000000 -> 00539c20  d=5479456 (npts=2)
+   W14 raw 00000000 -> 00539c3b  d=5479483 (npts=2)
+   W55 raw 00000000 -> 0000001b  d=27 (npts=2)
+   W15 raw 00000000 -> dcd6f00f  d=3705073679 (npts=2)  ⚠️ 单跑回卷 >1 次 ⇒ 只记 raw, delta 不可解
+   ⭐ U_board = dW22 − dW68 = 28 (0.0005% of dW68)  [板侧: 收到但未推进的 TCP 帧]
+   区间: 总 781, 含帧 779
+   稳态区间 (fps >= 0.9×含帧中位): n=750 / 779
+   ⭐[稳态] fps      n=750 min=63269.9 med=70276.3 max=72706.2
+   ⭐[稳态] L_us     n=750 min=9.027212 med=9.548780 max=10.828904
+   ⭐[稳态] cap_sharen=750 min=0.000000 med=0.000000 max=0.000000
+   ⭐[稳态] 事件/帧  n=750 min=0.999845 med=1.000000 max=1.000162
+   --- 逐区间 (含帧) ---
+   fps        n=779 min=36.8 med=70203.3 max=72706.2
+   app_Mbps   n=779 min=0.4 med=820.0 max=849.2
+   L_us       n=779 min=0.081694 med=9.555503 max=13.771944
+   dW68>0 区间数 = 779 / 779
+   W69 (infl,eff) 直方 (仅 dW66>0): [((1460, 1460), 711), ((0, 0), 67), ((51100, 51100), 1)]
+   --- 全窗比率 ---
+   dW67/dW66 = 0.000000   (1-该值 = 对端侧占比)
+   dW68/dW20 = 0.999988 事件/帧   dW66/dW20 = 1507.9399 拍/帧
+   三角核左腿 dW67<=dW66 (真牙): 违例 = 0/779
+   WARN UNWRAP_SUSPECT n=1: [(15, 781, 'Q2K3_post', 3705073679)]
+====================================================================================================
+JSON_SUM: [{"tag": "R1A", "snaps": 145, "n_iv": 141, "n_plateau": 140, "dW20": 51373371, "dW43": 10799690423, "dW51": 75000067565, "dW66": 233204913, "dW67": 215446058, "dW68": 14266393, "dW22": 14269288, "dW14": 51373364, "dW55": 169, "U_board": 2895, "cap_share": 0.9238487098254229, "ev_per_frm": 0.277700153256441, "W_eff": 61440, "fps_med_iv": 788251.9426584481, "fps_med_plat": 788309.9544729234, "L_med_iv": 0.11085139617546343, "L_med_plat": 0.11054923318392779, "cap_share_ovl": 0.9238487098254229, "snmp": {"d_out_lo": 14271061, "d_out_hi": 14271207, "L": 0.10461729486913755, "Lp_lo": 0.10458307502154185, "Lp_hi": 0.10458200509599504, "d_ssh": 1769}}, {"tag": "R1B", "snaps": 66, "n_iv": 64, "n_plateau": 62, "dW20": 51373512, "dW43": 10770372554, "dW51": 75000066105, "dW66": 208618961, "dW67": 192392627, "dW68": 12201666, "dW22": 12204754, "dW14": 51373501, "dW55": 169, "U_board": 3088, "cap_share": 0.9222202338549659, "ev_per_frm": 0.23750889368824932, "W_eff": 61440, "fps_med_iv": 789958.8957518218, "fps_med_plat": 790129.9258916891, "L_med_iv": 0.11646616453863921, "L_med_plat": 0.11485871351843231, "cap_share_ovl": 0.9222202338549659, "snmp": {"d_out_lo": 12205640, "d_out_hi": 12205792, "L": 0.10942451222644514, "Lp_lo": 0.10938888500725893, "Lp_hi": 0.10938752277607221, "d_ssh": 880}}, {"tag": "PRE_R1A", "snaps": 248, "n_iv": 246, "n_plateau": 240, "dW20": 51375234, "dW43": 10893072790, "dW51": 75000064645, "dW66": 323204794, "dW67": 299828501, "dW68": 11052178, "dW22": 11056625, "dW14": 51375223, "dW55": 240, "U_board": 4447, "cap_share": 0.9276734335815576, "ev_per_frm": 0.21512657246485728, "W_eff": 61440, "fps_med_iv": 783164.4097271818, "fps_med_plat": 783831.8972401209, "L_med_iv": 0.176250824486108, "L_med_plat": 0.17281697742665408, "cap_share_ovl": 0.9276734335815576, "snmp": {"d_out_lo": 11059512, "d_out_hi": 11059657, "L": 0.18715864706485907, "Lp_lo": 0.18703453476066575, "Lp_hi": 0.1870320826043701, "d_ssh": null}}, {"tag": "Q11K", "snaps": 256, "n_iv": 252, "n_plateau": 183, "dW20": 5481207, "dW43": 5111595627, "dW51": 8000004475, "dW66": 2581995688, "dW67": 0, "dW68": 4025908, "dW22": 4027681, "dW14": 5481201, "dW55": 567, "U_board": 1773, "cap_share": 0.0, "ev_per_frm": 0.7344929684283042, "W_eff": 4380, "fps_med_iv": 200069.83313886158, "fps_med_plat": 202735.52923728368, "L_med_iv": 3.837235137491506, "L_med_plat": 3.734699122106943, "cap_share_ovl": 0.0, "snmp": {"d_out_lo": 4030635, "d_out_hi": 4030752, "L": 4.104607557649107, "Lp_lo": 4.099793804995987, "Lp_hi": 4.099674800930447, "d_ssh": 2946}}, {"tag": "Q5K", "snaps": 370, "n_iv": 367, "n_plateau": 301, "dW20": 5480422, "dW43": 6648614324, "dW51": 8000003015, "dW66": 4144497107, "dW67": 0, "dW68": 4125598, "dW22": 4127024, "dW14": 5480420, "dW55": 481, "U_board": 1426, "cap_share": 0.0, "ev_per_frm": 0.7527883801648851, "W_eff": 2920, "fps_med_iv": 139631.1592332115, "fps_med_plat": 155235.98873124926, "L_med_iv": 6.403445751633987, "L_med_plat": 5.779328396672647, "cap_share_ovl": 0.0, "snmp": {"d_out_lo": 4131279, "d_out_hi": 4131427, "L": 6.429318000638938, "Lp_lo": 6.420476923683925, "Lp_hi": 6.420246923109134, "d_ssh": 4253}}, {"tag": "Q2K", "snaps": 717, "n_iv": 714, "n_plateau": 684, "dW20": 5479678, "dW43": 12112058089, "dW51": 8000001555, "dW66": 7770134705, "dW67": 0, "dW68": 5479455, "dW22": 5479646, "dW14": 5479671, "dW55": 51, "U_board": 191, "cap_share": 0.0, "ev_per_frm": 0.9999593041780922, "W_eff": 1460, "fps_med_iv": 75420.01109801454, "fps_med_plat": 75513.30920109889, "L_med_iv": 8.947197402597403, "L_med_plat": 8.936673116186896, "cap_share_ovl": 0.0, "snmp": {"d_out_lo": 5487825, "d_out_hi": 5487972, "L": 9.075512457352055, "Lp_lo": 9.06167053650581, "Lp_hi": 9.061427811949478, "d_ssh": 8173}}, {"tag": "Q1K", "snaps": 166, "n_iv": 6, "n_plateau": 3, "dW20": 131, "dW43": 2992029437, "dW51": 33580, "dW66": 2618132015, "dW67": 0, "dW68": 10, "dW22": 101, "dW14": 126, "dW55": 11, "U_board": 91, "cap_share": 0.0, "ev_per_frm": 0.07633587786259542, "W_eff": 832, "fps_med_iv": 16.342696624914627, "fps_med_plat": 181.34720508882276, "L_med_iv": 14893.053866666667, "L_med_plat": 14893.053866666667, "cap_share_ovl": 0.0, "snmp": {"d_out_lo": 1965, "d_out_hi": 2111, "L": 1675604.4896, "Lp_lo": 8527.249310941475, "Lp_hi": 7937.491660824254, "d_ssh": 1862}}, {"tag": "Q11KD", "snaps": 233, "n_iv": 230, "n_plateau": 171, "dW20": 5480346, "dW43": 4713081090, "dW51": 8000004475, "dW66": 2314235642, "dW67": 0, "dW68": 4065405, "dW22": 4066500, "dW14": 5480340, "dW55": 273, "U_board": 1095, "cap_share": 0.0, "ev_per_frm": 0.741815389028357, "W_eff": 4380, "fps_med_iv": 209993.62973881143, "fps_med_plat": 217592.00691678337, "L_med_iv": 3.6602886270850346, "L_med_plat": 3.2540667413213886, "cap_share_ovl": 0.0, "snmp": {"d_out_lo": 4069201, "d_out_hi": 4069350, "L": 3.6432060542061615, "Lp_lo": 3.639807448390974, "Lp_hi": 3.6396741761706415, "d_ssh": 2692}}, {"tag": "Q5KD", "snaps": 166, "n_iv": 4, "n_plateau": 2, "dW20": 97, "dW43": 2992256472, "dW51": 30660, "dW66": 2618867799, "dW67": 0, "dW68": 10, "dW22": 74, "dW14": 95, "dW55": 10, "U_board": 64, "cap_share": 0.0, "ev_per_frm": 0.10309278350515463, "W_eff": 2920, "fps_med_iv": 42.2147406695852, "fps_med_plat": 368.8244005653695, "L_med_iv": 14833.122133333334, "L_med_plat": 51328.77866666667, "cap_share_ovl": 0.0, "snmp": {"d_out_lo": 1941, "d_out_hi": 2087, "L": 1676075.39136, "Lp_lo": 8635.112783925812, "Lp_hi": 8031.027270531864, "d_ssh": 1865}}, {"tag": "Q5KD2", "snaps": 365, "n_iv": 361, "n_plateau": 273, "dW20": 5480560, "dW43": 6824491265, "dW51": 8000003015, "dW66": 4427077565, "dW67": 0, "dW68": 4285277, "dW22": 4287040, "dW14": 5480554, "dW55": 607, "U_board": 1763, "cap_share": 0.0, "ev_per_frm": 0.7819049513188433, "W_eff": 2920, "fps_med_iv": 139677.20923483043, "fps_med_plat": 144656.5805836402, "L_med_iv": 6.237059996642605, "L_med_plat": 5.90374039408867, "cap_share_ovl": 0.0, "snmp": {"d_out_lo": 4291217, "d_out_hi": 4291366, "L": 6.611777118725347, "Lp_lo": 6.602624946722573, "Lp_hi": 6.602395697780147, "d_ssh": 4175}}, {"tag": "Q2KD", "snaps": 168, "n_iv": 6, "n_plateau": 3, "dW20": 509, "dW43": 3025848154, "dW51": 61320, "dW66": 2649654378, "dW67": 0, "dW68": 27, "dW22": 447, "dW14": 507, "dW55": 31, "U_board": 420, "cap_share": 0.0, "ev_per_frm": 0.05304518664047151, "W_eff": 1460, "fps_med_iv": 705.9462851422073, "fps_med_plat": 1688.0684751824522, "L_med_iv": 10901.8232, "L_med_plat": 10901.8232, "cap_share_ovl": 0.0, "snmp": {"d_out_lo": 2341, "d_out_hi": 2489, "L": 628066.2229333334, "Lp_lo": 7243.822306364801, "Lp_hi": 6813.092816070711, "d_ssh": 1894}}, {"tag": "Q1KD", "snaps": 169, "n_iv": 10, "n_plateau": 5, "dW20": 581, "dW43": 3041739298, "dW51": 65700, "dW66": 2848560615, "dW67": 2742910, "dW68": 35, "dW22": 465, "dW14": 576, "dW55": 37, "U_board": 430, "cap_share": 0.0009629108770079657, "ev_per_frm": 0.060240963855421686, "W_eff": 832, "fps_med_iv": 65.12201906115732, "fps_med_plat": 1295.7912225260823, "L_med_iv": 11015.6896, "L_med_plat": 11015.6896, "cap_share_ovl": 0.0009629108770079657, "snmp": {"d_out_lo": 2293, "d_out_hi": 2439, "L": 520879.6553142857, "Lp_lo": 7950.627098124727, "Lp_hi": 7474.697800738008, "d_ssh": 1833}}, {"tag": "Q2KD2", "snaps": 167, "n_iv": 8, "n_plateau": 4, "dW20": 280, "dW43": 3013523560, "dW51": 43800, "dW66": 2638444931, "dW67": 0, "dW68": 25, "dW22": 238, "dW14": 274, "dW55": 25, "U_board": 213, "cap_share": 0.0, "ev_per_frm": 0.08928571428571429, "W_eff": 1460, "fps_med_iv": 19.09744214900767, "fps_med_plat": 685.1142519012683, "L_med_iv": 10041.0484, "L_med_plat": 10041.0484, "cap_share_ovl": 0.0, "snmp": {"d_out_lo": 2118, "d_out_hi": 2265, "L": 675441.902336, "Lp_lo": 7972.638129556185, "Lp_hi": 7455.208635055187, "d_ssh": 1878}}, {"tag": "Q2K2", "snaps": 168, "n_iv": 5, "n_plateau": 3, "dW20": 472, "dW43": 3022790210, "dW51": 56940, "dW66": 2833790226, "dW67": 0, "dW68": 31, "dW22": 403, "dW14": 471, "dW55": 33, "U_board": 372, "cap_share": 0.0, "ev_per_frm": 0.06567796610169492, "W_eff": 1460, "fps_med_iv": 1052.3574254373614, "fps_med_plat": 1585.8902959753402, "L_med_iv": 14836.3488, "L_med_plat": 8897.00672, "cap_share_ovl": 0.0, "snmp": {"d_out_lo": 2292, "d_out_hi": 2441, "L": 585040.5627870968, "Lp_lo": 7912.852289005235, "Lp_hi": 7429.847376648914, "d_ssh": 1890}}, {"tag": "Q2K3", "snaps": 782, "n_iv": 779, "n_plateau": 750, "dW20": 5479494, "dW43": 12918120636, "dW51": 8000001555, "dW66": 8262747543, "dW67": 0, "dW68": 5479428, "dW22": 5479456, "dW14": 5479483, "dW55": 27, "U_board": 28, "cap_share": 0.0, "ev_per_frm": 0.9999879550922037, "W_eff": 1460, "fps_med_iv": 70203.25628567011, "fps_med_plat": 70276.25174102659, "L_med_iv": 9.555503328509406, "L_med_plat": 9.548779789063241, "cap_share_ovl": 0.0, "snmp": {"d_out_lo": 5488426, "d_out_hi": 5488578, "L": 9.650931497813275, "Lp_lo": 9.635109278179208, "Lp_hi": 9.634842444655064, "d_ssh": 8968}}]

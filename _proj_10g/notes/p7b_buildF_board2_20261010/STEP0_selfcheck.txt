@@ -1,0 +1,65 @@
+=== STEP0_BEGIN 1791602483.146917800 2026-10-10T03:21:23Z
+--- ① 归档位流 sha256 ---
+89e89f31efb5f1450a1c39acfce587bb4e4b6347c5fdc2f470c91ff0d4400f45 */d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_buildF_build/F/wrapper_p4.bit
+BIT /d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_buildF_build/F/wrapper_p4.bit size=15431261 mtime=2026-10-10 10:11:54.238740500 +0800
+want 89e89f31efb5f1450a1c39acfce587bb4e4b6347c5fdc2f470c91ff0d4400f45
+--- ③ 本机工具副本 md5 ---
+ba2faf79f409302d1e542450db402975 */d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_buildF_board2_20261010/_tools/p7b_snap.deployed.sh
+8c8301aacc95ae5dc8760ef121def26c */d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_buildF_board2_20261010/_tools/lf_dl.base.sh
+22c402cae5245fc05c8701549c3f6a06 */d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_buildF_board2_20261010/_tools/lf_dl_snmp.sh
+--- 对端: 时间/工具 md5/身份/态 ---
+1791602485.148767601
+2026-10-10T03:21:25Z
+a-MS-7850
+7.0.0-38-generic
+8
+ba2faf79f409302d1e542450db402975  /tmp/p7b_biz/p7b_snap.sh
+8c8301aacc95ae5dc8760ef121def26c  /tmp/p7b_biz/lf_dl.sh
+c6b624205d64f1f4bd723d8fd5cc6414  /tmp/p7b_biz/p7b_tcp_sink
+03f19245c6fcf372acb40f2a2e6c8e46  /tmp/p7b_biz/wdump.sh
+22c402cae5245fc05c8701549c3f6a06  /tmp/p7b_board2/lf_dl_snmp.sh
+--- id ---
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x0000001a   (want 0x0000001A = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0xffffffff  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_OK 1791602485.168282359
+ID_RC=0
+--- 0x08 ---
+Read 32-bit value at address 0x8 (0x73eb3cf84008): 0x00000000
+--- carrier ---
+1
+--- COALESCE ---
+Adaptive RX: off  TX: n/a
+rx-usecs:	0
+rx-usecs-irq:	0
+rx-usecs-low:	n/a
+rx-usecs-high:	n/a
+--- 残留进程 ---
+(空 = 无残留)
+--- ss -s ---
+Total: 824
+TCP:   17 (estab 3, closed 1, orphaned 0, timewait 1)
+
+Transport Total     IP        IPv6
+RAW	  1         0         1        
+UDP	  9         6         3        
+TCP	  16        14        2        
+INET	  26        20        6        
+FRAG	  0         0         0        
+
+--- established (谁在用 TCP) ---
+Recv-Q Send-Q Local Address:Port Peer Address:Port Process
+0      0       192.168.0.38:22   192.168.0.12:59978       
+0      0       192.168.0.38:22   192.168.0.12:59357       
+0      0       192.168.0.38:22   192.168.0.12:59335       
+--- ⑤ SNMP 解析器 smoke ---
+SNMP s1 t=1791602486.167186062 TcpInSegs=2321554941 TcpOutSegs=662581697 TcpRetransSegs=3278 CurrEstab=3 DelayedACKs=2609 DelayedACKLost=767595 DelayedACKLocked=0
+SNMP s2 t=1791602488.174985621 TcpInSegs=2321554943 TcpOutSegs=662581701 TcpRetransSegs=3278 CurrEstab=3 DelayedACKs=2609 DelayedACKLost=767595 DelayedACKLocked=0
+MANUAL A=662581698 B=662581701 dB=3
+CHECK CurrEstab=3 ss_s_estab=3 match=yes
+SMOKE_DONE
+--- 对端 /proc/net/snmp 逐字 (基线) ---
+Tcp: RtoAlgorithm RtoMin RtoMax MaxConn ActiveOpens PassiveOpens AttemptFails EstabResets CurrEstab InSegs OutSegs RetransSegs InErrs OutRsts InCsumErrors
+Tcp: 1 200 120000 -1 648 780 5 496 3 2321554958 662581721 3278 22 1711 0
+=== STEP0_END 1791602487.956871000

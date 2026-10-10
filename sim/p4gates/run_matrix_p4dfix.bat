@@ -1,7 +1,9 @@
 @echo off
 REM ==========================================================================
 REM sim\p4gates\run_matrix_p4dfix.bat
-REM   P4 DEFAULT-BUILD REGRESSION MATRIX (16 gates) -- Windows-side runner.
+REM   P4 DEFAULT-BUILD REGRESSION MATRIX -- Windows-side runner.
+REM   The gate list is the 'call :gate' rows of this file (declared once); the
+REM   count printed in the log is DERIVED from those rows, never typed.
 REM
 REM   usage:  cmd //c 'sim\p4gates\run_matrix_p4dfix.bat' [/canonical]
 REM           cmd //c 'sim\p4gates\run_matrix_p4dfix.bat' /only chain+unit_vlan
@@ -88,7 +90,7 @@ if defined BADARG (
   echo           token ^(e.g. "C:/Program Files/Git/only"^) before cmd.exe sees
   echo           it -- use the -switch spelling, or the shim
   echo           sim\p4sim\run_matrix_p4dfix.sh
-  echo   gate names : the 16 'call :gate' rows of this file -- see p4gate.py table
+  echo   gate names : the 'call :gate' rows of this file -- see p4gate.py table
   exit /b 97
 )
 if defined ONLY_SEEN if not defined GATE_ONLY (
@@ -138,16 +140,35 @@ set "GATE_FAIL=0"
 set "GATE_RUN=0"
 set "DRIFT=0"
 
->"%MATRIX_LOG%" echo ==== P4 DEFAULT-BUILD REGRESSION MATRIX (16 gates) ====
+REM ---- gate count: DERIVED, never typed (no second list to drift) ----------
+REM   The count is the number of 'call :gate' rows in THIS file.  It used to be
+REM   the literal 16 in the header and the summary -- i.e. a second copy of the
+REM   declared list, which silently goes stale the moment a gate is added (the
+REM   very drift p4gate.py manifestcheck exists to prevent for file lists).
+REM   Counted with findstr /b /c: (literal, anchored -- the same idiom the
+REM   -only gate-name check below uses) and a counter, NOT with findstr /n:
+REM   /n prints the line number IN THE FILE, so "last number" gave 309 here
+REM   (measured 2026-10-10, first attempt) -- and a bare 'findstr "a b"' splits
+REM   on spaces and ORs the words.  NOT `find`: when this runner is launched
+REM   from Git Bash, MSYS find.exe comes first in PATH and `find /c` reads /c
+REM   as a path and traverses C: recursively.
+set "GATE_TOTAL=0"
+for /f "delims=" %%C in ('findstr /b /c:"call :gate " "%RUNNER_PATH%"') do set /a GATE_TOTAL+=1
+if "%GATE_TOTAL%"=="0" (
+  echo [P4GUARD FAIL] no 'call :gate' rows found in %RUNNER_NAME%
+  exit /b 97
+)
+
+>"%MATRIX_LOG%" echo ==== P4 DEFAULT-BUILD REGRESSION MATRIX (%GATE_TOTAL% gates) ====
 call :log "started     : %DATE% %TIME%"
 call :log "repo root   : %REPO_ROOT%"
 call :log "root source : %P4_SELF_ROOT%  (derived from this script's own location)"
 call :log "run mode    : %MODE%"
 call :log "work root   : %WORKROOT%"
 call :log "matrix log  : %MATRIX_LOG%"
-call :log "gate list   : the 16 'call :gate' rows in %RUNNER_NAME% (declared once)"
+call :log "gate list   : the %GATE_TOTAL% 'call :gate' rows in %RUNNER_NAME% (declared once)"
 set "GATE_FILTER=%GATE_ONLY%"
-if "%GATE_ONLY%"=="" set "GATE_FILTER=(none -- all 16)"
+if "%GATE_ONLY%"=="" set "GATE_FILTER=(none -- all %GATE_TOTAL%)"
 call :log "gate filter : %GATE_FILTER%"
 call :log "guard       : checkpaths + manifestcheck before, scanlog after each gate"
 call :log "note        : gates unit_retx / unit_fifo exit 0 unconditionally (their"
@@ -176,6 +197,18 @@ call :gate unit_retx   sim\retxsim\run_retx_tb.bat         retx_src.f  -        
 call :gate unit_fifo   sim\retxsim2\run_tb_frame_fifo.bat  fifo_src.f  -                           "%FRAME_FIFO%"
 call :gate unit_vlan   sim\vlansim\run_tb_vlan_strip.bat   vlan_src.f  -                           -
 call :gate unit_uart   sim\tbgate\run_tb_uart_dbg.bat      uart_src.f  -                           -
+REM ---- p5_wrapper (registered 2026-10-10; HANDOFF ledger #19) ---------------
+REM   The ONLY standing gate that compiles board\wrapper_p4.v AND
+REM   rtl\app_pattern.v through a real wrapper instance (module-level TBs and
+REM   the P4 chain never see either file).  It was RED for a real reason until
+REM   2026-10-10 (wrapper_p4.v:2771-2775 aliases reversed => TX undriven); the
+REM   fix landed before this registration.
+REM   ⚠️ CONFIG COVERAGE = `-d APP_MODE` ONLY (single-domain / legacy branch).
+REM   It does NOT cover the board wrapper configuration (DP_156MHZ), does not
+REM   compile PCIE_OBS / P7B_10G / UDP_TX_OVL, and with TCP_TX_OVL off the r6
+REM   tcp_tx_frame `ack_seen` start gate is NOT in it either.  Do not quote it
+REM   as a board-config wrapper gate -- see sim\p4gates\p5wrapper_src.f header.
+call :gate p5_wrapper  sim\p5sim\run_tb_p5_wrapper.bat     p5wrapper_src.f -                           -
 
 call :log "--- revision fingerprint (after) ---"
 "%PY%" "%P4GATE_PY%" fingerprint --root "%REPO_ROOT%" --out "%FP_AFTER%" --label after >>"%MATRIX_LOG%" 2>&1
@@ -187,7 +220,7 @@ if errorlevel 1 set "DRIFT=1"
 
 call :log "--- summary ---"
 call :log "gate filter : %GATE_FILTER%"
-call :log "gates run   : %GATE_RUN% / 16"
+call :log "gates run   : %GATE_RUN% / %GATE_TOTAL%"
 call :log "gates failed: %GATE_FAIL%"
 call :log "MATRIX DONE %DATE% %TIME%"
 echo ---- summary ----

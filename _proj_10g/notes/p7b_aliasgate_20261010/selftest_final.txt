@@ -1,0 +1,46 @@
+==========================================================================
+ alias gate self test -- NEG (mutant copy) / POS (repo copy)
+==========================================================================
+
+---- NEG: build the mutant copy, then run the gate on it ----
+MUTANT written: wrapper_p4_mutant.v (5 swaps restored the pre-fix direction)
+# port table : 220 modules from 214 source files (udp_hls_10g)
+# parser selfcheck: 18/18 port directions match the hand-verified table
+== sim/aliasgate/_selftest/wrapper_p4_mutant.v  (line endings: CRLF=4378 LF=0 CR=0)
+-- config A_appmode_only (macros=APP_MODE): aliases=30 ok=25 REVERSED=5 MULTI=0 unresolved=0 (insts=26)
+   REVERSED sim/aliasgate/_selftest/wrapper_p4_mutant.v:2773  assign txsrc_tdata = m_tx_tdata;   [X driven by: u_tx_arb.m_axis_tdata] [Y driven by: -]
+   REVERSED sim/aliasgate/_selftest/wrapper_p4_mutant.v:2774  assign txsrc_tkeep = m_tx_tkeep;   [X driven by: u_tx_arb.m_axis_tkeep] [Y driven by: -]
+   REVERSED sim/aliasgate/_selftest/wrapper_p4_mutant.v:2775  assign txsrc_tlast = m_tx_tlast;   [X driven by: u_tx_arb.m_axis_tlast] [Y driven by: -]
+   REVERSED sim/aliasgate/_selftest/wrapper_p4_mutant.v:2776  assign txsrc_tvalid = m_tx_tvalid;   [X driven by: u_tx_arb.m_axis_tvalid] [Y driven by: -]
+   REVERSED sim/aliasgate/_selftest/wrapper_p4_mutant.v:2777  assign m_tx_tready = txsrc_tready;   [X driven by: u_mac_tx.s_axis_tready] [Y driven by: -]
+   SUMMARY sim/aliasgate/_selftest/wrapper_p4_mutant.v A_appmode_only aliases=30 rev=5 multi=0 unresolved=0
+-- config G_appmode_dp156 (macros=APP_MODE,DP_156MHZ): aliases=17 ok=17 REVERSED=0 MULTI=0 unresolved=0 (insts=29)
+   SUMMARY sim/aliasgate/_selftest/wrapper_p4_mutant.v G_appmode_dp156 aliases=17 rev=0 multi=0 unresolved=0
+ALIAS-DIR FAIL: reversed / multi-driven pure alias found (see rows above)
+
+---- POS: the repository copy must be clean ----
+# port table : 220 modules from 214 source files (udp_hls_10g)
+# parser selfcheck: 18/18 port directions match the hand-verified table
+== board/wrapper_p4.v  (line endings: CRLF=4378 LF=0 CR=0)
+-- config A_appmode_only (macros=APP_MODE): aliases=30 ok=30 REVERSED=0 MULTI=0 unresolved=0 (insts=26)
+   SUMMARY board/wrapper_p4.v A_appmode_only aliases=30 rev=0 multi=0 unresolved=0
+-- config G_appmode_dp156 (macros=APP_MODE,DP_156MHZ): aliases=17 ok=17 REVERSED=0 MULTI=0 unresolved=0 (insts=29)
+   SUMMARY board/wrapper_p4.v G_appmode_dp156 aliases=17 rev=0 multi=0 unresolved=0
+ALIAS-DIR OK (board/wrapper_p4.v): no reversed / multi-driven pure alias in any requested config
+
+---- assertions ----
+[OK ] NEG exit code == 1
+[OK ] NEG has exactly 5 REVERSED rows
+[OK ] NEG rows name 5 distinct line numbers
+[OK ] NEG rows name the 5 nets
+[OK ] NEG config A rev=5 multi=0
+[OK ] NEG config G rev=0 (DP branch untouched)
+[OK ] NEG parser selfcheck 18/18
+[OK ] POS exit code == 0
+[OK ] POS config A rev=0
+[OK ] POS config G rev=0
+[OK ] POS has no REVERSED rows
+CONTROLS: 11/11 as expected
+==========================================================================
+ALIASGATE SELFTEST PASS -- negative control red, positive control green
+==========================================================================

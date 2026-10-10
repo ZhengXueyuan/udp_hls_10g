@@ -1,0 +1,23 @@
+diff --git a/board/wrapper_p4.v b/board/wrapper_p4.v
+index 70b24b4..85bc658 100644
+--- a/board/wrapper_p4.v
++++ b/board/wrapper_p4.v
+@@ -2768,11 +2768,13 @@ module wrapper_p4 (
+     assign txsrc_tready = ~tx_fifo_full;    // DP 侧反压 (本地组合, 不跨域)
+     assign m_tx_tvalid  = ~tx_fifo_empty;   // FWFT
+ `else
+-    assign txsrc_tdata = m_tx_tdata;        // 单域: 纯线名别名 (逐位不变)
+-    assign txsrc_tkeep = m_tx_tkeep;
+-    assign txsrc_tlast = m_tx_tlast;
+-    assign txsrc_tvalid= m_tx_tvalid;
+-    assign m_tx_tready = txsrc_tready;
++    // P7b 2026-10-10: 五行方向原写反 (tx_arb.m_axis 在 txsrc_*, mac_tx_64.s_axis 在 m_tx_*) ⇒
++    //   m_tx_tvalid / txsrc_tready 无驱动 (Z), 本配置 TX 全死; 仅 ifndef DP_156MHZ 分支, 板构建不编译。
++    assign m_tx_tdata   = txsrc_tdata;      // 单域: 纯线名别名 (逐位不变)
++    assign m_tx_tkeep   = txsrc_tkeep;
++    assign m_tx_tlast   = txsrc_tlast;
++    assign m_tx_tvalid  = txsrc_tvalid;
++    assign txsrc_tready = m_tx_tready;
+     assign tx_fifo_full  = 1'b0;
+     assign tx_fifo_empty = 1'b0;
+     assign txcdc_occ_w   = 9'd0;

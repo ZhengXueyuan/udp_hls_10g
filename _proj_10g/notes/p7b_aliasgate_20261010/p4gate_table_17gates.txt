@@ -1,0 +1,91 @@
+gate            bat                                     manifest       env                       args
+----------------------------------------------------------------------------------------------------------------------
+chain           sim\p4sim\run_tb_p4_chain.bat           chain_src.f    -                         -
+burst200        sim\p4sim\run_tb_p4_burst.bat           chain_src.f    -                         200
+trunc50         sim\p4sim\run_tb_p4_burst.bat           chain_src.f    TRUNC=50;TRUNCM=8         200
+trunc100        sim\p4sim\run_tb_p4_burst.bat           chain_src.f    TRUNC=100;TRUNCM=8        200
+halfdrop        sim\p4sim\run_tb_p4_burst.bat           chain_src.f    HALFDROP=100;HALFDROPK=990 200
+txdrop50        sim\p4sim\run_tb_p4_burst.bat           chain_src.f    -                         200 -1 0 4000 0 0 50
+gate4096        sim\p4sim\run_tb_p4_burst.bat           chain_src.f    -                         200 -1 0 10
+dupstorm        sim\p4sim\run_tb_p4_burst.bat           chain_src.f    -                         200 0 0 4000 608 dup
+pcackoob        sim\p4sim\run_tb_p4_burst.bat           chain_src.f    PCACKOOB=1                200
+vlanchain       sim\p4sim\run_tb_p4_chain_vlan.bat      chain_src.f    -                         -
+vlanburst       sim\p4sim\run_tb_p4_burst_vlan.bat      chain_src.f    -                         200
+stallgate       sim\p4sim\run_tb_p4_chain_stall.bat     chain_src.f    -                         -
+unit_retx       sim\retxsim\run_retx_tb.bat             retx_src.f     -                         -
+unit_fifo       sim\retxsim2\run_tb_frame_fifo.bat      fifo_src.f     -                         %FRAME_FIFO%
+unit_vlan       sim\vlansim\run_tb_vlan_strip.bat       vlan_src.f     -                         -
+unit_uart       sim\tbgate\run_tb_uart_dbg.bat          uart_src.f     -                         -
+p5_wrapper      sim\p5sim\run_tb_p5_wrapper.bat         p5wrapper_src.f -                         -
+
+per-manifest compile file list (this is the sensitivity surface):
+
+== chain_src.f  (20 files)  gates: chain, burst200, trunc50, trunc100, halfdrop, txdrop50, gate4096, dupstorm, pcackoob, vlanchain, vlanburst, stallgate
+     rtl/crc32_8b.v
+     rtl/fifo_sync.v
+     rtl/checksum16.v
+     rtl/frame_fifo.v
+     rtl/mac_rx_64.v
+     rtl/mac_tx_64.v
+     rtl/tcp_cam.v
+     rtl/tcb.v
+     rtl/tcp_rx.v
+     rtl/tcp_tx_frame.v
+     rtl/retx_ram.v
+     rtl/tcp_echo.v
+     rtl/axis_pipe.v
+     rtl/rx_classify.v
+     rtl/vlan_strip.v
+     rtl/slow_cfg_adp.v
+     rtl/slow_rx_adp.v
+     rtl/slow_tx_adp.v
+     rtl/tx_arb.v
+     tb/tb_p4_chain.v
+
+== retx_src.f  (2 files)  gates: unit_retx
+     rtl/retx_ram.v
+     tb/tb_retx_ram.v
+
+== fifo_src.f  (1 files)  gates: unit_fifo
+     tb/tb_frame_fifo.v
+
+== vlan_src.f  (2 files)  gates: unit_vlan
+     rtl/vlan_strip.v
+     tb/tb_vlan_strip.v
+
+== uart_src.f  (2 files)  gates: unit_uart
+     board/uart_dbg.v
+     tb/tb_uart_dbg.v
+
+== p5wrapper_src.f  (31 files)  gates: p5_wrapper
+     rtl/crc32_8b.v
+     rtl/fifo_sync.v
+     rtl/checksum16.v
+     rtl/frame_fifo.v
+     rtl/mac_rx_64.v
+     rtl/mac_tx_64.v
+     rtl/tcp_cam.v
+     rtl/tcb.v
+     rtl/tcp_rx.v
+     rtl/tcp_tx_frame.v
+     rtl/retx_ram.v
+     rtl/tcp_echo.v
+     rtl/axis_pipe.v
+     rtl/rx_classify.v
+     rtl/vlan_strip.v
+     rtl/slow_rx_adp.v
+     rtl/slow_cfg_adp.v
+     rtl/slow_tx_adp.v
+     rtl/udp_rx.v
+     rtl/udp_split.v
+     rtl/tx_arb.v
+     rtl/udp_tx_cfg.v
+     rtl/udp_tx_frame.v
+     rtl/app_ctrl.v
+     rtl/app_pattern.v
+     rtl/app_udp_pattern.v
+     rtl/app_status_uart.v
+     board/wrapper_p4.v
+     board/util_gmii_to_rgmii.v
+     board/uart_dbg.v
+     tb/tb_p5_wrapper.v

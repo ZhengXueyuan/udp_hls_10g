@@ -22,6 +22,16 @@ REM   vio_p7a   = the synthesis STUB (the VIO core is not delivered as RTL)
 set IP=%~dp0..\vivado_prj\p7a_prj.gen\sources_1\ip
 set GTHDL=%IP%\gt_10gbr\hdl
 
+REM ---- alias-direction face (P7b aliasgate 2026-10-10) ----------------------
+REM   A NEW face, not a new key: the five keys used above are structurally
+REM   blind to an UNDRIVEN net (measured 2026-10-10 -- the sibling entry
+REM   board\run_lint_p6e.bat compiles exactly the buggy wrapper branch and
+REM   still prints LINT-OK).  It runs BEFORE this entry's own preconditions on
+REM   purpose: they refuse (97) on a box without p7a_prj, and a face placed
+REM   behind them would never execute here -- residency that is not real.
+REM   Self-contained (text only, ~2 s).  exit 1 = a reversed/multi-driven alias.
+call "%~dp0..\..\sim\aliasgate\run_aliasgate.bat" || exit /b 1
+
 if not exist "%RTL%\p7a_top.v" (echo [PATHGUARD FAIL] missing p7a_top.v & exit /b 97)
 if not exist "%RTL%\p7a_counters.v" (echo [PATHGUARD FAIL] missing p7a_counters.v & exit /b 97)
 REM   the xelab face needs the generated IP; refuse (97) rather than pass blind

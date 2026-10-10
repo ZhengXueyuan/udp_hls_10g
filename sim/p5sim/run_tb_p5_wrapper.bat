@@ -1,22 +1,19 @@
 @echo off
-set "REPO_ROOT=%~dp0..\..\."
-for %%I in ("%REPO_ROOT%") do set "REPO_ROOT=%%~fI"
-if "%REPO_ROOT:~-1%"=="\" set "REPO_ROOT=%REPO_ROOT:~0,-1%"
-if not exist "%REPO_ROOT%\CLAUDE.md" (
-  echo [PATHGUARD FAIL] cannot locate this checkout from %~f0
-  echo   derived REPO_ROOT = %REPO_ROOT%
-  exit /b 1
-)
+REM ---- repo root + pathguard (2026-10-10 aliasgate round) -------------------
+REM   One source of truth, same as every other matrix gate: REPO_ROOT comes
+REM   from sim\p4gates\p4env.bat.  The old bespoke header derived REPO_ROOT
+REM   itself through a for-loop over its own directory, and p4gate.py
+REM   manifestcheck read that back as an UNRESOLVED for-loop literal => every
+REM   xvlog token stayed unresolved, the bat's file list compared as EMPTY,
+REM   and the gate could not be registered in the matrix with a non-empty
+REM   manifest.  (Measured 2026-10-10: manifestcheck against the old header
+REM   with this manifest printed "bat carries 0".)
+REM   NOTE FOR EDITORS: cmd expands percent-substitutions in REM lines too,
+REM   and an invalid one (a tilde-form referencing a non-argument letter) is
+REM   FATAL to the whole run -- keep percent-tilde patterns out of comments.
+call "%~dp0..\p4gates\p4env.bat" || exit /b 1
 rem --- pathguard tripwire: refuse to run if a LIVE line points outside ---
-set "P4PY=C:\Users\zhxue\anaconda3\python.exe"
-if exist "%P4PY%" goto :pg_py_ok
-set "P4PY="
-for %%P in (python.exe) do if not defined P4PY set "P4PY=%%~$PATH:P"
-:pg_py_ok
-if not defined P4PY goto :pg_sc_done
-if not exist "%REPO_ROOT%\sim\p4gates\p4gate.py" goto :pg_sc_done
-"%P4PY%" "%REPO_ROOT%\sim\p4gates\p4gate.py" selfcheck --root "%REPO_ROOT%" --bat "%~f0" --quiet || exit /b 1
-:pg_sc_done
+"%PY%" "%P4GATE_PY%" selfcheck --root "%REPO_ROOT%" --bat "%~f0" --quiet || exit /b 1
 
 REM run_tb_p5_wrapper.bat -- wrapper-level APP_MODE gate (P5a review W1)
 REM instantiates wrapper_p4 with -d APP_MODE, presets TCB/CAM by hierarchical
@@ -28,13 +25,19 @@ REM Step 1 (static):  xvlog/xelab with -d APP_MODE, log warnings grepped for
 REM                   multi-driven / undriven / unconnected evidence.
 REM Step 2 (dynamic): simulate + checkwrapper.
 cd /d %~dp0
+REM ---- matrix hook (2026-10-10 #19): private cwd + declared manifest --------
+REM   The matrix runner exports P4_WORKDIR (its per-gate private directory, so
+REM   stale xsim.dir locks / .memh files cannot cross-contaminate -- pit 7 of
+REM   this project).  Standalone runs keep the historical behaviour (cwd =
+REM   sim\p5sim).  checkpaths refuses a foreign/absent manifest entry.
+if not "%P4_WORKDIR%"=="" cd /d "%P4_WORKDIR%"
+"%PY%" "%P4GATE_PY%" checkpaths --root "%REPO_ROOT%" --manifest "%GATES%\p5wrapper_src.f" --path "%CD%" --quiet || exit /b 1
 set PY=C:\Users\zhxue\anaconda3\python.exe
 set XV=C:\AMDDesignTools\2025.2\Vivado\bin
 set RTL=%REPO_ROOT%\rtl
 set TB=%REPO_ROOT%\tb
 set BD=%REPO_ROOT%\board
 set TOOL=%REPO_ROOT%\tools
-set SIM=%REPO_ROOT%\sim\p5sim
 set HLS=%REPO_ROOT%\hls\slowstack_prj\solution1\syn\verilog
 
 if exist resp_p5_wrapper.memh del /q resp_p5_wrapper.memh
@@ -59,4 +62,8 @@ call %XV%\xelab.bat -debug typical -L unisims_ver xil_defaultlib.tb_p5_wrapper x
 findstr /C:"multi" /C:"driv" /C:"unconnected" /C:"not connected" xelab_w.log > warn_w.txt
 call %XV%\xsim.bat tb_p5_wrapper -runall -log xsim_w.log > NUL 2>&1 || (type xsim_w.log & exit /b 1)
 
-%PY% %TOOL%\gen_stim_p5_app.py %SIM% checkwrapper
+REM   criteria read the CURRENT directory, not sim\p5sim: under the matrix the
+REM   run happens in P4_WORKDIR, and a checker pointed at the historical
+REM   sim\p5sim would read a stale resp_p5_wrapper.memh from an earlier run (a
+REM   silent wrong-file read).  Standalone, both are the same directory.
+%PY% %TOOL%\gen_stim_p5_app.py "%CD%" checkwrapper
