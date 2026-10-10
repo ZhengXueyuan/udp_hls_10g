@@ -4,7 +4,10 @@
 #
 # 每一条对照都是"gate 必须翻红"的输入 (全局纪律: 每加一条判据配一个该被抓住的反例):
 #   P   正对照  = 工作树现件                    期望 RC 0
-#   N0  否定对照 = git HEAD 版 (修复前)          期望 RC 1   <- 旧缺陷形态
+#   N0  否定对照 = **修复前版 (钉死)**            期望 RC 1   <- 旧缺陷形态
+#        (2026-10-10 收尾: 取件曾是 `git show HEAD:` —— HEAD 被并行 session 推到修复后
+#         (a03d227) 之后 N0 恒绿 ⇒ 常红/常绿的判据都没有判别力。现改按提交 61cc107 +
+#         内容 md5 5b6d757b… **双钉**, 见 fetch_pre_fix_pinned(); 语义与期望一字未变)
 #   M1  突变    = 两个 guard 对调 (落点翻面)     期望 RC 1
 #   M2  突变    = 默认值 true (默认退回旧行为)   期望 RC 1
 #   M3  突变    = 删掉见证了 printf 的 5 行      期望 RC 1
@@ -31,7 +34,8 @@
 #     X1 goto 绕过 (结构完好、修复不可达) —— 本门判结构, 不判可达性
 #
 # 用法: python run_gate_controls.py
-# 退出码: 0 = 全部对照按期望; 1 = 有对照不符 (含追加块); 9 = 追加块前置拒跑 (锚点漂移)
+# 退出码: 0 = 全部对照按期望; 1 = 有对照不符 (含追加块);
+#         2 = 修复前版取件失败/锚点漂移 (拒跑 —— 不许拿错件当对照)
 # ===========================================================================
 import hashlib
 import os
@@ -100,6 +104,28 @@ _CALL = "setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));"
 _CALLSITE = "        int fd = sink_connect_rcvbuf(host, port, 5, rcvbuf, rcvbuf_after_connect, &why);"
 PIN_N0 = "61cc107"                              # 修复提交 a03d227 的父 (= 历史 aaf17dc 同内容)
 PIN_N0_MD5 = "5b6d757b17ed9b49db77c34494319264"  # 与 REVIEW.md 附录记录的历史值一致
+
+
+def fetch_pre_fix_pinned():
+    """修复前版取件 (N0 与 N0pin **共用**): 按提交 + 内容 md5 **双钉**。
+    返回 (src, None) 或 (None, 错误串)。
+
+    ⛔ 2026-10-10 收尾 (门加固 agent): 本函数替代既有 N0 原先的 `git show HEAD:` ——
+       那个写法在写下时成立 (当时 HEAD = aaf17dc = 修复前), 但 HEAD 已被并行 session 推到
+       **修复后** (`a03d227` 台架 sink 时序修复…) ⇒ `git show HEAD:` 取到修复后文件 ⇒ N0 恒绿
+       ⇒ `GATE_CONTROLS cases=7 mismatch=1` **常红** —— **常红的判据等于没有判据**
+       (会训练下游忽略红灯)。
+    钉死之后: 输入**内容恒等** (md5 硬核), 不随 HEAD 漂移, 且强度**只增不减** (原版无内容校验)。
+    N0 的**语义与期望一字未变**: 仍是"修复前全文, 期望 RC=1 / fired=C1..C10"。
+    """
+    p = subprocess.run(["git", "-C", REPO, "show", PIN_N0 + ":" + RELPATH], capture_output=True)
+    if p.returncode != 0:
+        return None, "git show %s 失败: %s" % (PIN_N0, p.stderr.decode("utf-8", "replace"))
+    got = hashlib.md5(p.stdout).hexdigest()
+    if got != PIN_N0_MD5:
+        return None, ("锚点漂移拒跑: %s 的 .cpp md5=%s != 历史 %s (不许拿错件当对照)"
+                      % (PIN_N0, got, PIN_N0_MD5))
+    return p.stdout.decode("utf-8"), None
 
 
 def _must(s, old, new, n=1):
@@ -249,8 +275,10 @@ def mutant_X1_goto_skip(s):
     return t
 
 
-def run_harden_controls(new_src):
-    """加固轮追加块驱动器: 返回 mismatch 数 (0 = 全部按期望; 9 = 前置拒跑)。"""
+def run_harden_controls(new_src, pin_src):
+    """加固轮追加块驱动器: 返回 mismatch 数 (0 = 全部按期望)。
+    pin_src = 主块已取、已 md5 硬核过的修复前版 (2026-10-10 收尾: N0pin 与 N0 **共用同一份取件**,
+    不再各取一次; md5 硬门的强度由 fetch_pre_fix_pinned 承担 —— 未通过就进不到这里)。"""
     tmp = tempfile.mkdtemp(prefix="sinkfix_gate_harden_")
 
     def run_gate_h(path):
@@ -265,25 +293,13 @@ def run_harden_controls(new_src):
         fired = [ln.split()[0] for ln in p.stdout.splitlines() if " VIOLATION " in ln]
         return p.returncode, fired, p.stdout
 
-    pin = subprocess.run(["git", "-C", REPO, "show", PIN_N0 + ":" + RELPATH],
-                         capture_output=True)
-    if pin.returncode != 0:
-        sys.stderr.write("[HARDEN] git show %s 失败: %s\n"
-                         % (PIN_N0, pin.stderr.decode("utf-8", "replace")))
-        return 9
-    pin_md5 = hashlib.md5(pin.stdout).hexdigest()
-    if pin_md5 != PIN_N0_MD5:
-        sys.stderr.write("[HARDEN] 拒跑: %s 的 .cpp md5=%s != 历史 %s => 不许拿错件当对照\n"
-                         % (PIN_N0, pin_md5, PIN_N0_MD5))
-        return 9
-    pin_src = pin.stdout.decode("utf-8")
-
     head = subprocess.run(["git", "-C", REPO, "show", "HEAD:" + RELPATH], capture_output=True)
     head_md5 = hashlib.md5(head.stdout).hexdigest() if head.returncode == 0 else "n/a"
-    print("[HARDEN-NOTE] legacy N0 anchor drifted: git show HEAD:<file> md5=%s (post-fix) != historical %s (pre-fix)"
-          % (head_md5, PIN_N0_MD5))
-    print("[HARDEN-NOTE]   => in-script N0 is now equivalent to P (RC=0); this run did NOT touch it (dispatch: no edits to the first 7)")
-    print("[HARDEN-NOTE]   => compensation = appended N0pin case (pinned to pre-fix commit %s, md5 verified)" % PIN_N0)
+    print("[ANCHOR] N0/N0pin share ONE pinned fetch: commit %s, md5=%s verified (== historical pre-fix value)"
+          % (PIN_N0, PIN_N0_MD5))
+    print("[ANCHOR]   why pinned: HEAD advanced to the post-fix commit a03d227; the old `git show HEAD:` fetch")
+    print("[ANCHOR]   made N0 permanently green (a control that never turns red = no control).")
+    print("[ANCHOR]   current HEAD md5=%s (diagnostic only; NOT what N0 reads)" % head_md5)
 
     OLD10 = ("C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9", "C10")
     hcases = [
@@ -324,17 +340,19 @@ def run_harden_controls(new_src):
 def main():
     with open(NEW, "r", encoding="utf-8", newline="") as f:
         new_src = f.read()
-    old = subprocess.run(["git", "-C", REPO, "show", "HEAD:" + RELPATH],
-                         capture_output=True)
-    if old.returncode != 0:
-        sys.stderr.write("git show 失败: %s\n" % old.stderr.decode("utf-8", "replace"))
+    # 2026-10-10 (gate harden 收尾): N0 取件由 `git show HEAD:` 改为**钉死**
+    #   (提交 61cc107 + 内容 md5 硬核; 见 fetch_pre_fix_pinned 头注释)。
+    #   ⚠️ N0 的期望与判定字段一字未变 (want=1 / fired=C1..C10); 仅**取件路径**与**名字**变了
+    #   (名字同步为钉死形态 —— 判据的名字必须与它的取件一致, 否则就是下一个"措辞被下游照抄"的坑)。
+    old_src, err = fetch_pre_fix_pinned()
+    if err:
+        sys.stderr.write(err + "\n")
         return 2
-    old_src = old.stdout.decode("utf-8")
 
     tmp = tempfile.mkdtemp(prefix="sinkfix_gate_")
     cases = [
         ("P  working_tree_now", new_src, 0),
-        ("N0 HEAD_version_pre_fix", old_src, 1),
+        ("N0 pre_fix_pinned_61cc107", old_src, 1),
         ("M1 guards_swapped", mutant_swap_guards(new_src), 1),
         ("M2 default_true", mutant_default_true(new_src), 1),
         ("M3 witness_removed", mutant_drop_witness(new_src), 1),
@@ -355,9 +373,9 @@ def main():
             print(out)
     print("GATE_CONTROLS cases=%d mismatch=%d tmp=%s" % (len(cases), bad, tmp))
     # ---- 2026-10-10 (gate harden) 追加块 (上面 7 条的生成/期望一字未动; 见文件头注释) ----
-    bad_h = run_harden_controls(new_src)
+    bad_h = run_harden_controls(new_src, old_src)
     if bad_h:
-        return 1 if bad_h != 9 else 9
+        return 1
     return 0 if bad == 0 else 1
 
 

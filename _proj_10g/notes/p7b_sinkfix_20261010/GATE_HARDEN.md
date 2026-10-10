@@ -14,14 +14,14 @@
 2. 【事实】C1–C10 与 `extract_fn_body` **零行改动**：git diff 显示我方改动 = 469 insertions / **3 deletions（全是头注释行）**（§5）。
 3. 【事实】REVIEW §D.1 四个逃逸件现在**全红**，且 fired 集合**恰好**是对应那条：`A→{C11}` · `C→{C11}` · `B2→{C12}` · `F→{C13}`（§2.4）。
 4. 【事实】正件（工作树 .cpp）仍绿：**14/14 OK、violations=0、RC=0**（§2.2）。
-5. 【事实】既有 7 对照里 **P/M1/M2/M3/M4/M5 六条与 `gate_controls.txt` 逐字相同**；**N0 一条不同** —— 原因是 HEAD 已被并行 session 推进到修复后（§2.3），**不是本次加固造成的**。
+5. 【事实】既有 7 对照里 **P/M1/M2/M3/M4/M5 六条与 `gate_controls.txt` 逐字相同**；**N0 一条不同** —— 原因是 HEAD 已被并行 session 推进到修复后（§2.3），**不是本次加固造成的**。（⛔ **收尾已修：见 §9** —— N0 改钉死取件后 `mismatch=0`。）
 6. 【事实】代偿：追加 **N0pin**（锚定修复前提交 `61cc107`，md5 硬核 `5b6d757b…`），它复现出历史 N0 的 fired 集合 **恰为 C1..C10**（新判据在它上面是空判据 —— §2.4 给了为什么这不构成放水的组合论证）。
 7. 【事实】5 个"应当绿"的等价小改全部**仍绿**（G1..G5）；其中 **G3/G5 在首版 C11 下曾是红的** ⇒ 抓到一次**过度敏感**，当日修（§4.1）。
 8. 【事实】另 7 条边界探针里 6 条按语义红（else 形态 / 括号内多语句 / 括号不配平 / 见证换变量 / CLI 写 false / shadow 声明），1 条走既有 C2 假红（guard 空白改写，**既有脆性、未改 C2**）（§4.2）。
 9. 【事实】探针还抓到一次**静默空判据**：helper 内花括号不配平时 C11 曾判空 ⇒ 已收紧（guard 字面量在 + body 配不平 ⇒ 判红）（§4.3）。
 10. 【事实】**加固后仍逃逸**的实测形状 2 个：`X1_goto_skip`（结构完好但不可达，RC=0）、`P_EQ8`（经指针别名间接写 flag，RC=0，与 F 同语义）。
 11. 【事实】`_proj_pcie/p7b_biz/p7b_tcp_sink.cpp` 逐字节未动：加固前 md5 = 加固后 md5 = `8d02ef6426d4ef6ad5fd2c514965c1e8`（§5）。
-12. 【事实】`run_gate_controls.py` 整体退出码 = **1** —— 由上面第 5 条的既有 N0 失效单独造成；追加块自身 `mismatch=0`（§2.3 + §2.4）。
+12. 【事实】`run_gate_controls.py` 整体退出码 = **1** —— 由上面第 5 条的既有 N0 失效单独造成；追加块自身 `mismatch=0`（§2.3 + §2.4）。（⛔ **收尾已修：见 §9** —— 整体 RC 现为 **0**。）
 13. 【推断】C11/C12/C13 的"锚点缺失 ⇒ 空判据"不会变成"锚点没了还全绿"：三个锚点各自被既有判据钉住（C2/C6/C9）—— 组合论证，未穷举反例。
 14. 【推断】控制流可达性（goto/提前 return）与间接写（别名）这两族是**结构门原则上判不到**的，不是本刀的漏改；要盖它们需要另外一类判据（§6 给了形状，未实施）。
 15. 【事实】本件可复算：三条命令 + 两个证据文件（`gate_harden_positive.txt` / `gate_harden_controls.txt`）+ `%TEMP%` 探针脚本（不落仓）。
@@ -63,7 +63,7 @@ P RC=0 / N0 RC=0 want=1 MISMATCH / M1..M5 各按期望 / GATE_CONTROLS cases=7 m
   `61cc107` = 历史 `aaf17dc` 同内容）。⇒ `git show HEAD:` 现在取到的是**修复后**文件
   （md5 `8d02ef64…`），于是 N0 ≡ P ⇒ RC=0。**这是脚本的锚点漂移，不是门的问题，也不是本次加固造成的**
   （第一次运行即如此，此时我尚未改任何文件）。
-- ② 因此 `run_gate_controls.py` 的 **mismatch=1 / RC=1 是加固前的既存状态**，不是回归。
+- ② 因此 `run_gate_controls.py` 的 **mismatch=1 / RC=1 是加固前的既存状态**，不是回归。（⛔ **收尾已修：见 §9**。）
 - ③ 派单里"7 对照 mismatch=0"在**写下派单时**成立（`gate_controls.txt` 就是那个记录）；
   现在不再成立，原因见 ①。【推断】该 commit 与我方是并行 session（REVIEW §F.8 亦登记"此刻仓库里有别人在写"）。
 
@@ -99,10 +99,11 @@ DIFF  | GATE_CONTROLS cases=7 mismatch=0 tmp=<TMP>  ||  cases=7 mismatch=1 tmp=<
 
 【事实】**6/7 逐字相同**（新判据没有改变它们的任何一条结果）；唯一差异是 N0，原因是 §2.1①。
 `tmp=` 字段每次运行都不同（历史件里也如此），故比对时归一。
+（⛔ **收尾后见 §9**：N0 改钉死取件，判定字段与历史件 **8/8 逐字相同**（只有名字令牌与其 `%-26s` 补齐空格不同）。）
 
 ### 2.4 追加块（新对照，逐条 fired 集合）
 
-原件 = `gate_harden_controls.txt` 后半：
+原件 = `gate_harden_controls.txt` 后半（⛔ **收尾后**：这里的三行 `[HARDEN-NOTE]` 已改成四行 `[ANCHOR]` 并**移到追加块之前**，追加块其余逐字不变 —— 见 §9）：
 
 ```bash
 $ /c/Users/zhxue/anaconda3/python.exe run_gate_controls.py
@@ -131,7 +132,8 @@ GATE_CONTROLS_HARDEN cases=14 mismatch=0
 对照的**精确性要求**：每条红案的期望是"RC=1 **且 fired 集合精确等于**该表"（`tuple(fired)==tuple(want_fired)`），
 偏一条即 MISMATCH —— 即"不许靠全红蒙混"。
 `N0pin` 的取值有**前置硬门**：`git show 61cc107:` 的 md5 必须 `== 5b6d757b17ed9b49db77c34494319264`，
-不符则拒跑（`return 9`），不许拿错件当对照。
+不符则拒跑，不许拿错件当对照。（⛔ **收尾后**该硬门与 `N0` **共用** `fetch_pre_fix_pinned()`，
+拒跑退出码由 `9` 统一为 `2` —— 见 §9.3/§9.4。）
 
 **为什么新判据在 N0pin 上是空判据而不算放水**（组合论证，【推断】级、未穷举反例）：
 C11 的锚点 = `if (!rcvbuf_after_connect)` 字面量 = C2 的 `gb`；C12 的锚点 = 见证 printf 标记 = C6 的字面量；
@@ -284,3 +286,80 @@ cd /d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_sinkfix_20261010
 /c/Users/zhxue/anaconda3/python.exe run_gate_controls.py                                          # 追加块 mismatch=0; 整体 RC=1 (N0 漂移, 见 §2.1)
 md5sum ../../../_proj_pcie/p7b_biz/p7b_tcp_sink.cpp                                               # 8d02ef6426d4ef6ad5fd2c514965c1e8
 ```
+
+---
+
+## 9. 收尾（2026-10-10，同一门加固 agent）：N0 锚改钉死
+
+**背景（照实复述派单）**：§0-5/§2.1 报的 N0 锚漂移属实 ⇒ `GATE_CONTROLS` 常红
+（`mismatch=1` / 整体 `RC=1`）。**常红的判据等于没有判据**（一个永远失败的对照会训练下游忽略红灯），
+所以必须修 —— 理由不是"它错了"，而是它**不再有判别力**。
+
+**选路（二选一）：选 ①「让 N0 走同一条钉死取件路径」，不选 ②「标 superseded 只跑 N0pin」。**
+理由：① 保留 N0 在既有块**原位**（`cases` 仍是 7 条、期望仍是 `RC=1 / fired=C1..C10`），
+把"取哪份文件"从随 `HEAD` 漂移改为**提交 `61cc107` + 内容 md5 `5b6d757b…` 双钉**
+⇒ 判定字段与历史件**逐字相同**（§9.2），且**强度只增不减**（原版无内容校验）；
+② 会让既有块少一条、`cases=7` 变 6、历史可比性下降，收益为零。
+
+### 9.1 改前 / 改后（原始末行，逐字）
+
+```text
+# 改前（本收尾轮起点；加固轮收口时的原始输出末两行 + RC）
+GATE_CONTROLS cases=7 mismatch=1 tmp=C:\Users\zhxue\AppData\Local\Temp\sinkfix_gate_tm9odh4b
+GATE_CONTROLS_HARDEN cases=14 mismatch=0 tmp=C:\Users\zhxue\AppData\Local\Temp\sinkfix_gate_harden_zydrr6bs
+RC=1
+
+# 改后（本次落盘证据 gate_harden_controls.txt 的原始末行，逐字）
+GATE_CONTROLS cases=7 mismatch=0 tmp=C:\Users\zhxue\AppData\Local\Temp\sinkfix_gate_6jpmdob8
+[ANCHOR] N0/N0pin share ONE pinned fetch: commit 61cc107, md5=5b6d757b17ed9b49db77c34494319264 verified (== historical pre-fix value)
+[ANCHOR]   why pinned: HEAD advanced to the post-fix commit a03d227; the old `git show HEAD:` fetch
+[ANCHOR]   made N0 permanently green (a control that never turns red = no control).
+[ANCHOR]   current HEAD md5=8d02ef6426d4ef6ad5fd2c514965c1e8 (diagnostic only; NOT what N0 reads)
+GATE_CONTROLS_HARDEN cases=14 mismatch=0 tmp=C:\Users\zhxue\AppData\Local\Temp\sinkfix_gate_harden_4es9l3ly
+RC=0
+```
+
+（`[ANCHOR]` 四行**在追加块之前**、旧汇总行**之后** ⇒ 旧块的前 8 行仍与历史件对齐。）
+
+### 9.2 与历史件 `gate_controls.txt` 的逐字比对（收尾后）
+
+```text
+N0 raw:  old = N0 HEAD_version_pre_fix    RC=1 want=1 OK fired=C1,C2,C3,C4,C5,C6,C7,C8,C9,C10
+N0 raw:  new = N0 pre_fix_pinned_61cc107  RC=1 want=1 OK fired=C1,C2,C3,C4,C5,C6,C7,C8,C9,C10
+判定字段逐字比对 (N0 名字归一 + 空白折叠): lines=8 diff=0
+```
+
+【事实】8 行（P/N0/M1..M5/旧汇总）**判定字段 8/8 相同**：唯一不同的只有 **N0 的名字令牌**
+（`HEAD_version_pre_fix` → `pre_fix_pinned_61cc107`）与它带出的 `%-26s` 补齐空格。
+**名字改的理由（不是美化）**：判据的名字必须与它的取件一致 —— 留 "HEAD" 而实际不读 HEAD，
+就是本工程反复抓过的那类"措辞被下游当权威照抄"的坑。
+
+### 9.3 N0pin 强度（派单要求：不许降低）
+
+- 【事实】`N0pin` 的期望未动：`fired` 仍**恰为 C1..C10**（§9.1 原始行 + §2.4）。
+- 【事实】md5 硬核**仍在**，且从"追加块自己的前置门（`return 9`）"上移到**共用取件函数**
+  `fetch_pre_fix_pinned()`（提交 + md5 双钉，不符即 `return 2` 拒跑）—— **N0 也因此第一次有了内容校验**
+  ⇒ 相对加固前/收尾前**只增不减**。
+- 【事实】`N0pin` 与 `N0` 现在共用同一份取件（不再各取一次），`hcases` 仍 14 条、全部 mismatch=0。
+
+### 9.4 本轮改了什么 / 没改什么
+
+| 项 | 状态 |
+|---|---|
+| `gate_sinkfix.py` | **未动**（本收尾轮一字未碰；正件复跑仍 14/14、violations=0、RC=0） |
+| `_proj_pcie/p7b_biz/p7b_tcp_sink.cpp` | **未动**：md5 收尾前 = 收尾后 = `8d02ef6426d4ef6ad5fd2c514965c1e8` |
+| `gate_controls.txt` | **未覆盖**（加固前历史记录，原样保留） |
+| `gate_harden_controls.txt` | **重写**（新文件头注明"本次改动 = N0 锚改钉死；历史记录见 `gate_controls.txt`"） |
+| `run_gate_controls.py` 的 7 条对照 | 期望/生成器/循环**未动**；只改 N0 的**取件路径**与**名字** |
+| `run_gate_controls.py` 的 14 条追加对照 | **未动**（逐条 fired 集合与 §2.4 相同） |
+| 退出码语义 | `9`（追加块前置拒跑）取消 ⇒ 取件失败统一为 `2`（纯代码路径简化，**无期望被放宽**） |
+
+【事实】本轮 `git diff` 的全部删除行 = 被我**替换掉的实现**：旧 `git show HEAD:` 取件块（main 4 行 +
+追加块 11 行）、3 行 `[HARDEN-NOTE]`、旧 case 名 1 行、旧 `9` 退出码 1 行、两处头注释行 —— **没有删除任何
+一条对照的期望或断言**。
+
+### 9.5 收尾后仍未收口（与 §6 同，重申不扩大）
+
+- 【事实·实测】`X1_goto_skip`（结构完好但不可达）与 `P_EQ8`（指针别名间接写 flag）**仍逃逸**（RC=0）。
+- 【事实·实测】`P_EQ1`（guard 等价空白改写）仍走**既有 C2** 假红（按派单"不改 C1–C10 语义"，未改 C2）。
+- 【推断】本件仍**不含**任何 PASS/FAIL 裁定；本门的判/不判声明（顶部）继续有效。
