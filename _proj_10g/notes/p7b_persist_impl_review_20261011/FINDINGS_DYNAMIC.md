@@ -198,3 +198,85 @@ S2 等价门自检: 三条负对照都有牙
 | D-10 | `sim/p7b_stagec_tx_regress/author_gate/s2_equiv_persist.py`（新）· `run_s2_equiv_persist.bat`（新，CRLF） | 已建 + 实跑（PASS + 三负对照全红） |
 | D-1 | 本文件 §D-1（读数登记） | 已做（只读） |
 | 未执行 | D-2/D-3/D-7 的 TB 编辑（§预案）· xsim 全臂 · 板级 | **等放行** |
+
+---
+
+# §执行轮 2（2026-10-11 · xsim 臂 D-7 → D-3 → D-2；TL 放行 + 授写权）
+
+> 写权口径：只动 `tb/tb_tcp_tx_ovl.v`（+ 本目录/author_gate 自有文件）；**所有 TB 改动都做成 `-d <宏>` 守卫的默认关形态**；跑前已存 before 快照；**收尾已 `git checkout -- tb/tb_tcp_tx_ovl.v`（`git status --porcelain` 该文件 = 干净）**；完整 diff 已存 `runs/tb_edit_D7_D3_D2.diff`（9,904 B，sha256 `94cb0348388e154939ce4fbacd918d58b0cbf3e64f4809f91836f87bf1af2671`，`git apply --check` = OK，**可一键重放**）。
+> 并发：板级轮在本轮期间未造成任何异常红（6 臂全部一次通过、无重跑；每臂 ~7 s）。⛔ 全程未动 `rtl/`。
+
+## §D-7 结果：**P-1 可达 = 已观测（第一手证据）** —— episode 保留为常驻新增
+
+| 臂 | defs | RC/reds | 关键读数（逐字） |
+|---|---|---|---|
+| **D7A**（主变体） | `-d TCP_TX_OVL -d ARM_PERSIST -d PE_E4B` | reds=5 | `PS7 E4B fire=1 @319390 rdy_survive=7 @319393` · `[FAIL] PS j10b: cfg_up 落在读流水内但捕获仍落地 (rdy 存活 7 拍, 首拍 @319393)` |
+| **D7B_NOUP**（正控） | 同上 + `-d PE_E4B_NOUP`（不打 cfg_up） | reds=4 | `PS7 E4B fire=1 @319390 rdy_survive=7 @319393`（**与主变体逐字相同**）· 无 j10b 红（判据按设计翻转） |
+
+**判读**：
+- 构造 = E4 同款（关 conn1 窗 + 按住 conn0 启动门 + 源持续呈交），**唯一差别** = 看 `ps_fire` 的同一拍就打 `cfg_up`（⇒ cfg_up 生效于 fire+1，落在读流水 T+1..T+2 内；捕获在 fire+3 落地）。
+- 主变体 rdy **存活 7 拍（fire+3 起）**；正控（同构造、无 cfg_up）读数**逐字相同** ⇒ ①采样链活着（不是空判据）②**cfg_up 对在飞捕获的 rdy 影响 = 零** ⇒ §3.4b/j10 的「cfg_up(同 id) ⇒ rdy<=0」在"cfg_up 落在捕获落地之前"的窗口上**不成立** ⇒ **P-1 从"结构上可构造"升为"已观测"**。
+- 两臂其余红（payload conn=0 / RETXFIX jump / PS j9 / PS j6）= 与基线 S 同款既有族（非本臂引入）。
+- **常驻新增（按 TL 指示保留）**：episode = `tb` 内 `ifdef PE_E4B` 段（默认关 ⇒ 既有臂逐字不变；本轮的 6 臂里只有 D7A/D7B 定义它）。**它判什么**：`[FAIL] PS j10b` = "cfg_up 生效于 fire+1 时暂存仍落地（rdy 存活）" = **P-1 可达的正证据**（判据语义 = 设计意图「cfg_up 应清掉在飞捕获」；红 = 意图被违反）。**正控** = `-d PE_E4B_NOUP`（同构造不打 cfg_up）⇒ 该子句翻转为"rdy 必须落地"，且 fire 见证（`w_e4b_fired<1` ⇒ 空判据红）两变体共有。
+- ⚠️ 边界：本臂只证"**rdy 存活**"（清位落空）；"存活之后是否会真的发出一条第旧字节的探询" **本臂未验**（本臂构造下源持续呈交 ⇒ ds_guard=0 ⇒ 探询在窗内被压住；要验需再等一个源空档，另立臂）。
+
+## §D-3 结果：**删 `ds_guard` 的撞车破坏第一次被专用仪器见证（`e_coll_bad=1`）**
+
+改动（`ifdef PE_E7B`，只在 :1686 一带）：E7 的 hold 释放触发 **`u_dut.ps_rd_d2` → `u_dut.ps_rd_d1`**（提前一拍发命令 ⇒ 经 `pe_holdb→ack_seen_tb→tx_blk_sid` 两级寄存后，门恰在 fire+3 = 捕获落地拍放开）。
+
+| 臂 | defs | RC/reds | 关键读数（逐字） |
+|---|---|---|---|
+| **D3S**（干净臂） | `-d TCP_TX_OVL -d ARM_PERSIST -d PE_E7B` | reds=4（= 与基线 S **同集合**） | `PS3 … E7wit=2` · `PS4 … coll=0` · E7 逐拍 `t=0 rdy=0 blk=1` → `t=1 rdy=1 blk=0 coll=1` → t≥2 `rdy=1 recv_first=0`（守卫压住、数据帧照常启动） |
+| **D3W**（删 ds_guard） | 同上（RTL = `mut_ps_nodsg`） | **reds=112** | `PS3 … E7wit=1` · **`[FAIL] PS j13: E7 相撞窗内出现跨连接数据帧 =1`** · `[FAIL] seq_mono rev conn=0 val=0004f14c was=000e6971 una=000e696a @319577` · `[FAIL] ghost conn=1 seq=0004eb98 plen=1460 tail=0004f14c whi=00000000 @319773` · `[FAIL] payload conn=1 seq=0004eb98 off=0 got=67 exp=94 @319773` · E7 逐拍 `t=0 rdy=0 blk=1`（**无早跑**）→ `t=1 rdy=1 blk=0 coll=1`（**撞车拍**）→ t≥2 `rdy=0 busy=1 recv_first=0`（探询消费暂存 + 数据帧同拍启动） |
+
+**判读**：
+- **D3W 的破坏 = REVIEW2 ①-2 预测的原形**：数据帧带上 **conn1 的四元组与 seq**（`ghost conn=1 … plen=1460` = 探询段本该 plen=1）⇒ conn0 的 `snd_nxt` 被写成 conn1 的值（`0004f14c`）⇒ 后续 `seqcont=64 / seqmono=41` 的雪崩。**这是"跨连接错帧 + 按错 seq 写 ring"的直接见证**（不是借道通用监视器的间接推论）。
+- **D3S 同构造不受影响**（红集合与基线逐字同）⇒ 该构造**有判别力**：同一刺激下"守卫在 ⇒ 干净 / 守卫删 ⇒ 破坏"。
+- ⇒ **H2(b)「摘掉 `ds_guard` ⇒ 必红」现已成立为"特定红"**（`j13`/`e_coll_bad` 直接发火，1/1 数据点，且机制可解释）；**但注意它的成立条件 = `PE_E7B` 这条刺激修正**（现行默认构造下该破坏**结构性不可达**，见 `FINDINGS.md` §2-P2 的逐拍证据）。⇒ **建议**：把 PE_E7B 作为 W 臂的**配对构造**登记（做"必红"论证时必须带它；否则只有空判据红）。
+
+## §D-2 结果：旧刺激档（5200）**未能复现** fd671b6 代的 W 破坏；两臂**同时退化**（= 刺激档效应，非突变效应）
+
+改动（`-d PE_HOLD_5200`，默认关 ⇒ 16000 不动）：`tb` 的 `PE_HOLD_SHORT` 一处分档。
+
+| 臂 | defs | RC/reds | 关键读数（逐字） |
+|---|---|---|---|
+| **D2S**（干净臂 @5200） | `-d TCP_TX_OVL -d ARM_PERSIST -d PE_HOLD_5200` | reds=11 | `PS3 E2=0 E3=2 E4=0 … E7wit=2` · `PS4 … blocked=0 rdy=0 posctrl=0 coll=0` · `[FAIL] RETXFIX jump: session end snd_nxt=000466e8 < retx_hi=00047258 conn=1 @236017` |
+| **D2W**（删 ds_guard @5200） | 同上（RTL = `mut_ps_nodsg`） | reds=12 | 同上 + **唯一专属差 = `[FAIL] PS j13 空判据: 相撞条件从未成立 (wit=0)`** · `PS3 … E7wit=0` · E7 逐拍与现行档**同机制**（`t=1 rdy=0 busy=1` 早一拍消费） |
+
+**判读（如实）**：
+- 5200 档下 **E2/E4/E7 三个 episode 观察窗 < fire 的 visit 时间** ⇒ 空判据族红（`blocked=0/rdy=0/posctrl=0`）——**两臂同款** ⇒ 是**刺激档**造成的退化（非突变）。
+- 5200 档下 W 的**专属红仍只有"见证=0（空判据）"**，**没有**撞车破坏的特定红 ⇒ **不能声称"复现了 fd671b6 代的 W 破坏"**；`000466e8` 这个数值两臂都出现（载体 = RETXFIX jump，与那代的 `seq_mono rev conn=0` 是不同判据）⇒ **同名数值 ≠ 同一现象**。
+- ⇒ 修正 `FINDINGS.md` §2-P2 的口径：**"W 的破坏签名是刺激档函数"这句话应读作"现行/旧档都做不出特定红，能做出来的 = PE_E7B 构造"**；fd671b6 代那次的确切对齐条件**仍未定**（登记不动）。
+
+## §本轮文件清单 + 臂日志路径（全部相对仓根 `udp_hls_10g/`）
+
+**改动/新增**：
+| 文件 | 性质 | sha256 / 备注 |
+|---|---|---|
+| `tb/tb_tcp_tx_ovl.v` | 本轮 D-7/D-3/D-2 三处 `-d` 守卫编辑 | **已 `git checkout --` 恢复干净**；改动全文 = `_proj_10g/notes/p7b_persist_impl_review_20261011/runs/tb_edit_D7_D3_D2.diff`（9,904 B / `94cb0348…f2671` / `git apply --check` OK） |
+| `sim/p7b_stagec_tx_regress/author_gate/static_check_persist.py` | D-9（前一轮，已授权） | 改动全文 = 本文件 §D-9；`git status` 显示 M |
+| `sim/p7b_stagec_tx_regress/author_gate/s2_equiv_persist.py` | D-10 新文件 | `6628a72042b95b4a0576e796a461e946d29cc9a30d763fbee5e8562fca9a4812` |
+| `sim/p7b_stagec_tx_regress/author_gate/run_s2_equiv_persist.bat` | D-10 新文件（CRLF） | `e0f1caabb42207645cdcddbc3745a98d0ce2479f5408fc2f08ef19790a16cd02` |
+| `_proj_10g/notes/p7b_persist_impl_review_20261011/FINDINGS.md` | 静态面全文 | `4f217a37…a9017bf8` |
+| `_proj_10g/notes/p7b_persist_impl_review_20261011/FINDINGS_DYNAMIC.md` | 本文件 | 见文末 |
+| `_proj_10g/notes/p7b_persist_impl_review_20261011/runs/` | 臂运行器 + 全部原始日志 | 见下 |
+
+**每条臂的原始日志（`xs.log` = xsim 判决日志；`xv_out.log`/`xe_out.log` = 编译/链接）**：
+```
+_proj_10g/notes/p7b_persist_impl_review_20261011/runs/
+├── run_arm.bat · d7a.bat · d7b.bat · d3s.bat · d3w.bat · d2s.bat · d2w.bat
+├── tb_edit_BEFORE.diff (0 B) · tb_edit_D7_D3_D2.diff (9,904 B / sha256 94cb0348…)
+├── D7A/       {xs.log, xv_out.log, xe_out.log}   # P-1 主变体  (reds=5)
+├── D7B_NOUP/  {…}                                 # P-1 正控    (reds=4)
+├── D3S/       {…}                                 # D-3 干净臂  (reds=4)
+├── D3W/       {…}                                 # D-3 突变臂  (reds=112, e_coll_bad=1)
+├── D2S/       {…}                                 # D-2 干净臂  (reds=11)
+└── D2W/       {…}                                 # D-2 突变臂  (reds=12)
+```
+**重放命令**（工作树干净时）：`git apply _proj_10g/notes/p7b_persist_impl_review_20261011/runs/tb_edit_D7_D3_D2.diff`，然后 `cd _proj_10g/notes/p7b_persist_impl_review_20261011/runs && cmd //c '.\d7a.bat'`（其余臂同法；⚠️ 本机已设 `NoDefaultCurrentDirectoryInExePath=1` ⇒ cmd 里必须写 `.\xxx.bat`）。
+
+## §未定项更新
+
+1. **P-1**：可达性 = **已观测**（D7A；正控 D7B 同读数）。**"存活的暂存会不会真的漏出一条第旧字节的探询" = 未验**（D-7 构造下探询被 ds_guard 压住；需另立"源空档"臂）。
+2. **P-2**：机制 = 已现证（早一拍消费 + 守卫生效拍逐拍可读）；**PE_E7B 构造下"摘 ds_guard ⇒ 特定红"= 1/1 成立**；fd671b6 代那次的确切对齐条件**仍未定**；**5200 档不能复现**（本轮到 D2 为止）。
+3. 新增未定：**PE_E7B 是否应升格为门臂**（现为我的实验 patch，未进 `run_tx_ovl_gate.bat` 的契约）；**D-7 episode 的"漏出探询"延伸臂**。

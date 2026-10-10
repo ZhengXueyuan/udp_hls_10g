@@ -1,0 +1,104 @@
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Sun Oct 11 00:58:22 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source {C:\Users\zhxue\AppData\Local\Temp\p7b_0x1C_query\q_0x1C.tcl}
+# set dcp [lindex $argv 0]
+# set out [lindex $argv 1]
+# file mkdir $out
+# open_checkpoint $dcp
+Command: open_checkpoint {D:\repo\XCKU5PMini\udp_hls_10g\vivado_prj\p7b_ku5p_prj.runs\impl_1\wrapper_p4_routed.dcp}
+
+Starting open_checkpoint Task
+
+Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.027 . Memory (MB): peak = 325.805 ; gain = 4.195
+INFO: [Device 21-403] Loading part xcku5p-ffvb676-1-e
+Netlist sorting complete. Time (s): cpu = 00:00:01 ; elapsed = 00:00:00.834 . Memory (MB): peak = 1676.051 ; gain = 0.000
+INFO: [Netlist 29-17] Analyzing 7579 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 1 CPU seconds
+INFO: [Project 1-479] Netlist was created with Vivado 2025.2
+INFO: [Project 1-570] Preparing netlist for logic optimization
+Read ShapeDB Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.217 . Memory (MB): peak = 1888.773 ; gain = 39.062
+INFO: [Timing 38-478] Restoring timing data from binary archive.
+INFO: [Timing 38-479] Binary timing data restore complete.
+INFO: [Project 1-856] Restoring constraints from binary archive.
+INFO: [Constraints 18-5170] The checkpoint was created with non-default parameter values which do not match the current Vivado settings.  Mismatching parameters are:
+  general.maxThreads
+INFO: [Project 1-853] Binary constraint restore complete.
+INFO: [Designutils 20-5722] Start Reading Physical Databases.
+Reading placement.
+Read Netlist Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.107 . Memory (MB): peak = 4123.520 ; gain = 0.000
+Reading placer database...
+Read Device Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.024 . Memory (MB): peak = 4123.520 ; gain = 0.000
+Read PlaceDB: Time (s): cpu = 00:00:03 ; elapsed = 00:00:03 . Memory (MB): peak = 4123.520 ; gain = 0.000
+Read PulsedLatchDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 4123.520 ; gain = 0.000
+Reading routing.
+Read RouteStorage: Time (s): cpu = 00:00:02 ; elapsed = 00:00:01 . Memory (MB): peak = 4123.520 ; gain = 0.000
+Read Physdb Files: Time (s): cpu = 00:00:06 ; elapsed = 00:00:05 . Memory (MB): peak = 4123.520 ; gain = 0.000
+Restored from archive | CPU: 6.000000 secs | Memory: 0.000000 MB |
+Finished XDEF File Restore: Time (s): cpu = 00:00:06 ; elapsed = 00:00:05 . Memory (MB): peak = 4123.520 ; gain = 0.000
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.045 . Memory (MB): peak = 4123.520 ; gain = 0.000
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 1353 instances were transformed.
+  DSP48E2 => DSP48E2 (DSP_ALU, DSP_A_B_DATA, DSP_C_DATA, DSP_MULTIPLIER, DSP_M_DATA, DSP_OUTPUT, DSP_PREADD, DSP_PREADD_DATA): 4 instances
+  IBUF => IBUF (IBUFCTRL, INBUF): 1 instance 
+  IBUFDS => IBUFDS (DIFFINBUF, IBUFCTRL): 1 instance 
+  RAM16X1D => RAM32X1D (RAMD32(x2)): 20 instances
+  RAM16X1S => RAM32X1S (RAMS32): 224 instances
+  RAM256X1S => RAM256X1S (MUXF7(x2), MUXF8, RAMS64E(x4)): 8 instances
+  RAM32M => RAM32M (RAMD32(x6), RAMS32(x2)): 40 instances
+  RAM32M16 => RAM32M16 (RAMD32(x14), RAMS32(x2)): 154 instances
+  RAM32X1D => RAM32X1D (RAMD32(x2)): 14 instances
+  RAM64M => RAM64M (RAMD64E(x4)): 241 instances
+  RAM64M8 => RAM64M8 (RAMD64E(x8)): 518 instances
+  RAM64X1D => RAM64X1D (RAMD64E(x2)): 128 instances
+
+INFO: [Project 1-604] Checkpoint was created with Vivado v2025.2 (64-bit) build 6299465
+WARNING: [Vivado 12-23575] Critical violations of the methodology design rules detected. Critical violations may contribute to timing failures or cause functional issues in hardware. Run report_methodology for more information.
+open_checkpoint: Time (s): cpu = 00:01:05 ; elapsed = 00:00:56 . Memory (MB): peak = 4123.520 ; gain = 3811.305
+# set n1 [get_nets -hier -quiet -filter {NAME =~ *ring_restore1}]
+# set n2 [get_nets -hier -quiet -filter {NAME =~ *ring_restore2}]
+# set n3 [get_nets -hier -quiet -filter {NAME =~ *ring_restore11*}]
+# set tag n1
+# foreach nl [list $n1 $n2 $n3] {
+#   foreach n $nl {
+#     set full [get_property NAME $n]
+#     set drv [get_pins -quiet -of $n -filter {DIRECTION == OUT}]
+#     set loads [get_pins -quiet -of $n -filter {DIRECTION == IN}]
+#     puts "N $tag net=$full drivers=[llength $drv] loads=[llength $loads]"
+#     foreach d $drv { puts "N $tag   driver=[get_property NAME $d] ref=[get_property REF_NAME [get_cells -quiet -of $d]]" }
+#     set k 0
+#     foreach l $loads {
+#       incr k
+#       if {$k <= 6} { puts "N $tag   load$k=[get_property NAME $l] ref=[get_property REF_NAME [get_cells -quiet -of $l]]" }
+#     }
+#   }
+#   set tag n2b
+# }
+N n1 net=u_tcp_tx/ring_restore1 drivers=1 loads=1
+N n1   driver=u_tcp_tx/fc_rr_reg[3]_i_10/CO[2] ref=CARRY8
+N n1   load1=u_tcp_tx/fc_rr[3]_i_7/I4 ref=LUT5
+N n2b net=u_tcp_tx/ring_restore2 drivers=1 loads=1
+N n2b   driver=u_tcp_tx/fc_rr_reg[3]_i_9/CO[2] ref=CARRY8
+N n2b   load1=u_tcp_tx/fc_rr[3]_i_7/I3 ref=LUT5
+N n2b net=u_tcp_tx/ring_restore11_out[31] drivers=1 loads=1
+N n2b   driver=u_tcp_tx/fc_rr_reg[3]_i_8/O[7] ref=CARRY8
+N n2b   load1=u_tcp_tx/fc_rr[3]_i_7/I2 ref=LUT5
+# catch {report_timing -group g_hw.clk_out0 -delay_type max -max_paths 50 -sort_by slack -file $out/dp_top50.rpt}
+INFO: [Timing 38-91] UpdateTimingParams: Speed grade: -1, Temperature grade: E, Delay Type: max.
+INFO: [Timing 38-191] Multithreading enabled for timing update using a maximum of 2 CPUs
+INFO: [Timing 38-78] ReportTimingParams: -max_paths 50 -nworst 1 -delay_type max -sort_by slack.
+report_timing: Time (s): cpu = 00:00:50 ; elapsed = 00:00:27 . Memory (MB): peak = 4159.332 ; gain = 35.812
+# puts "N dp_top50 written"
+N dp_top50 written
+# set p50 [get_timing_paths -max_paths 50 -delay_type max -sort_by slack -quiet -from [get_cells -hier -quiet u_tcp_tx/*]]
+# puts "N misc_probe=[llength $p50]"
+N misc_probe=0
+# puts "N_DONE"
+N_DONE
+INFO: [Common 17-206] Exiting Vivado at Sun Oct 11 00:59:51 2026...

@@ -1,0 +1,25 @@
+=== 现读行号 (grep -n) —— 供人核对 EDITS 注释里的 '现读 :NN' ===
+_proj_10g/notes/p7b_affinity/j6_r6fix.sh:76:EXPECT_BID=${EXPECT_BID:-0x0000001A}   # 2026-10-10 构建 F (70 字; 原 0x00000019 = 构建 E / 0x18 = 构建 D / 0x17 = 构建 C)
+_proj_10g/notes/p7b_affinity/j6_r6fix.sh:82:  "70|0x0000001A|61 62|构建 F (2026-10-10) 70 字 / BID 0x1A (W67/W68/W69 = 三个纯观测仪器)"
+_proj_10g/notes/p7b_biz_tcpreg/tcpreg_j6.sh:70:EXPECT_BID=${EXPECT_BID:-0x0000001A}   # 2026-10-10 构建 F (70 字; 原 0x00000019 = 构建 E / 0x18 = 构建 D / 0x09 = WU 二轮)
+_proj_10g/notes/p7b_biz_tcpreg/tcpreg_j6.sh:77:  "70|0x0000001A|61 62|构建 F (2026-10-10) 70 字 / BID 0x1A (W67/W68/W69 = 三个纯观测仪器)"
+_proj_pcie/p7b_biz/p7b_snap.sh:2:# p7b_snap.sh -- 板侧快照窗口取数器 (**现役 = 70 字 / BID 0x1A**; 标题原文 = "板侧 **63** 字
+_proj_pcie/p7b_biz/p7b_snap.sh:51:EXPECT_BID=${EXPECT_BID:-0x0000001A}
+_proj_pcie/p6e_snap_check.sh:60:EXPECT_BID=${EXPECT_BID:-0x0000001A}       # ⛔ 2026-10-10 构建 F: 原默认 0x00000019 (构建 E 67 字) / 0x18 (构建 D) / 0x0A (Stage C)
+_proj_pcie/p7b_gate4_accept.sh:131:EXPECT_BID=${EXPECT_BID:-0x0000001A}      # 构建 F = 0x1A (源码 board/wrapper_p4.v 的 BUILD_ID_V; 原 0x19 = 构建 E / 0x18 = 构建 D)
+_proj_pcie/p7b_gate4_selftest.sh:132:  #    而"正例必须 0 FAIL"是本脚本的断言⑤)。现役 = **0x1A** (构建 F 70 字 —— ⛔ 2026-10-10 同步轮: 原 0x19 = 构建 E 67 字 /
+_proj_pcie/p7b_gate4_selftest.sh:137:  0X04) V=\${FAKE_BID:-0x0000001A};;
+_proj_pcie/p7b_gate4_negctrl.sh:31:# 几何: **70 字 (W0..W69)** —— 构建 F (2026-10-10, BID=0x1A / 未实现 0x138);
+_proj_pcie/p7b_gate4_negctrl.sh:58:    echo "MAGIC 0x50360001"; echo "BID 0x0000001A"; echo "MARKER 0xdeadbeef"   # 构建 F: 原 0x19 = 构建 E / 0x18 = 构建 D / 0x0A = Stage C
+_proj_pcie/p7b_gate4_livefake.sh:118:    #   ⛔ 2026-10-10 (构建 F): 加 **70 字那一代 = 0x1A**; 兜底值同改 0x1A (现役代)。
+_proj_pcie/p7b_gate4_livefake.sh:119:    bid = {70: "0x0000001A", 67: "0x00000019", 66: "0x00000018", 65: "0x00000017", 63: "0x0000000A", 61: "0x00000008", 51: "0x00000007"}.get(nw, "0x0000001A")
+_proj_pcie/p6e_snap_selftest_fix2.sh:77:  0X04) V=\${FAKE_BID:-0x0000001A};;   # 构建 F = 0x1A (⛔ 原 0x19 = 构建 E / 0x18 = 构建 D / 0x0A = Stage C);
+_proj_10g/notes/p7b_gate4_3/final_state.sh:29:EXPECT_BID=${EXPECT_BID:-0x0000001A}   # ⛔ 2026-10-10 构建 F (70 字); 原 0x17 = 构建 C
+_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py:10:         ⚠️ 几何 = **70 字 / BID 0x1A** (P7b 构建 F, 2026-10-10 同步轮从 67 字/BID 0x19 同步)
+_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py:39:# 现应读作 "不同代 ⇒ 假红": 本夹具现 = **70 字 / BID 0x1A**, accept 默认也已是 70 字 / BID 0x1A
+_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py:41:# 66 字/0x18 (构建 D) → 67 字/0x19 (构建 E) → **70 字/0x1A (构建 F, 未实现地址 0x138)**。
+_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py:43:BID_FIX = 0x0000001A       # 位流身份 (P7b 构建 F) —— ⛔ 2026-10-10: 原值 0x00000019 (构建 E)
+sim/p6e_pcie/tb_p6e_pcie_counters.v:206:        u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("0b BUILD_ID (构建 F 70-word = 0x1A; 原 67-word=0x19 / 66-word=0x18 / 63-word=9)", v, 32'h0000001A);
+sim/p6e_pcie/tb_p6e_pcie_wrapper.v:149:        u_dut.u_pcie_xdma.axil_read(32'h04, v); chk("2  BUILD_ID (构建 F 70 字=0x1A; 原 67 字=0x19 / 66 字=0x18 / 63 字=9)", v, 32'h0000001A);
+_proj_10g/notes/p7b_a3_negctl_20261010/step0_selfcheck.sh:4:#     (i)  缺省档 (NW=70 / 0x138 / BID 0x1A) 对 D **响亮失败** (且失败点只在 BID = 档位错, 不是板错);
+_proj_10g/notes/p7b_a3_negctl_20261010/step0_selfcheck.sh:46:echo "### C-a) 默认档 (NW=70 / 0x138 / BID 0x1A) —— 对 D 位流: 期望 ID_FAIL 且失败点=身份不符 (BID 0x18 != 0x1A)"

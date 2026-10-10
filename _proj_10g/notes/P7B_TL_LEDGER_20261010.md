@@ -382,3 +382,26 @@
 - D-9：L1 diff 基钉 `cfd3b1a..fd671b6` ⇒ **空判据已消除**（109 行 / 0 越界 / 0 净新增；selfcheck 三负对照有牙）。
 - D-10：新建 `s2_equiv_persist.py` + `run_s2_equiv_persist.bat` ⇒ `S2_EQUIV_PERSIST: PASS`（正文 sha256 两边同 `f542dfbb…`；三负对照全红）。
 - 预案（未执行，已写进 DYNAMIC）：D-2（`PE_HOLD_SHORT 16000→5200` 一行）· **D-3（按新机制重写：让释放拍前 `ds_guard≡1` ⇒ 目标 `e_coll_bad ≥1` 首次发火）** · D-7（`-d PE_E4B` 新 episode：cfg_up 落 T+1 ⇒ 判 P-1 可达性）。
+
+---
+
+## §10-7 2026-10-11 01:12：**六臂结果 + 三支新在飞**（最新续接点）
+
+### §10-7-1 ⭐ persist 动态面（A4，六臂 D-7→D-3→D-2 全部完成）
+- **D-7 = P-1【已观测】**：`D7A`（cfg_up 打 fire+1）`reds=5` / `[FAIL] PS j10b … 捕获仍落地 (rdy_survive=7 @319393)`；正控 `D7B_NOUP`（同构造不打 cfg_up）`reds=4`、`rdy_survive=7 @319393` **逐字相同** ⇒ 采样链活、cfg_up 对在飞捕获**零影响** ⇒ P-1 从"结构可构造"升为**已观测**。episode 以 patch 常驻（`-d PE_E4B`，默认关）。
+- **D-3 = 撞车见证首次发火**：`PE_E7B`（释放提前一拍）下 `D3W`（删 ds_guard）`reds=112` + **`[FAIL] PS j13 相撞窗内出现跨连接数据帧 =1`（`e_coll_bad` 第一次非 0）** + `seq_mono rev` + `ghost conn=1 seq=… plen=1460`（数据帧带上 conn1 四元组）；`D3S`（干净臂同构造）`reds=4` = 基线 S 同集合 ⇒ **同刺激"守卫在⇒干净 / 守卫删⇒破坏"** ⇒ **H2(b) 现成立为"特定红"**（须带该刺激修正；默认构造下结构性不可达）。
+- **D-2 = 未复现**（旧刺激 5200 档 ⇒ 两臂同时退化成"观察窗空判据族"；**不能声称复现了 fd6716 代的 W 破坏**——如实登记）。
+- 交付：TB 改动 = `runs/tb_edit_D7_D3_D2.diff`（9,904 B / `git apply --check` OK / sha `94cb0348…`）；臂日志 `runs/{D7A,D7B_NOUP,D3S,D3W,D2S,D2W}/`；`FINDINGS_DYNAMIC.md` 追加 §执行轮 2（sha `f6571201…`）；TB 已恢复干净（构造以 patch 交付）。
+
+### §10-7-2 新在飞（三支）
+| # | 任务 | 备注 |
+|---|---|---|
+| 1 | **P-1 修复实施**（persist 刀）：apply TB patch → 改前复现 D7A 红 → 最小修法（重排 or 清 `ps_rd_d1/d2`，**两分支论证**）→ 改后 D7A 不红 + D7B_NOUP 仍 `rdy_survive=7` + S/T/D3S 无回归 + 全量门 | 写 `rtl/tcp_tx_frame.v` + `tb/tb_tcp_tx_ovl.v` + author_gate |
+| 2 | **snd_wnd 守卫实施**（**独立 git worktree**，避开主树 RTL 冻结）：按审查 F3/F1/F2/F9/腿 A 承重件/腿 C 三条件落 + 三腿两臂 + 变异负对照 + 提交到 worktree 分支 | 只动 `rtl/tcp_rx.v` + `tools/gen_stim_tcp_rx.py` + `tb/tb_tcp_rx.v` |
+| 3 | **板级 S-0**（F 位流 + abort RST 构型）—— 已出首跑 `S0A`（01:08），构造轮继续 | 写 `p7b_defect_board_20261011/` |
+
+### §10-7-3 其它已收口
+- **读侧同步脚本事就绪**：`_proj_10g/notes/p7b_readside_bid1c_20261011/apply_readside_bid1c.py`（默认 dry-run / `--apply` 落盘 / `--rehearse` 全绿 / 4 负对照有牙；**24 处 edit / 14 文件 / 0 miss**）。⚠️ 目录已由 TL 从 `p7b_build0x1C` **改名**（防与 `p7b_build_0x1C/` 差一个下划线撞名）；改名后干跑复验 = **搜索面 246 文件 / 未登记 0**。**等 S-0 结束即 apply**。
+- **0x1C 取证目录已落盘**：`_proj_10g/notes/p7b_build_0x1C/`（14 件：bit + routed dcp + `query/` 8 件 + F 开工清单 + SHA256SUMS）；`REPORT.md` 由 **TL 代落盘**（构建 agent 的写被平台拒 = harness 第 4/5 例；本会话已两次由 TL 代落盘：`p7b_build_0x1C/REPORT.md` 与 `p7b_sndwnd_review_20261011/FINDINGS.md`）。
+- **PCIe 设计件 v2 完成**（872 行；v1 逐字保留 + v2 修订块 232 行）：S1–S13 全处置（S1 具名 localparam + 六条双向门断言；S2 取 (a) `K%4==0` 前置；S10 加第三宏 `DP_156MHZ`；⑩ enable/clear 纳入 M1）。**实施前清单** = 4 建（`tb_app_rx_mirror.v` 单元门 / p6e wrapper 门新断言组 + 两条几何常量 / `tb_fifo_async` 第 5 case / 读侧重生成）+ 6 定（地址五件套含 `MIR_CTRL` ⇒ 未实现地址 **0x148** / 控制位语义 / STATUS 32 位拼法 / drop_bytes 语义 / 发端工具规格 / tie-off 常量表 / clear 实现）。⭐ 它另立两条：**⑤ mmap/pread 读法必须先定再选 K**（否则带宽掉三个数量级）· ⑥ `cleared_sticky` 位（可选，登记 N4）。
+- **snd_wnd 审查落盘**（`p7b_sndwnd_review_20261011/FINDINGS.md`，TL 代落盘）：真实缺陷成立（RFC 支逐字+页码一手复核）；修法零窗恢复**未找到反例**；⭐ **阻断项 F3**（腿 B2 照字面必假红）· F2（PCWND1K 被 gate4096 用）· F1（`tcp_synp.v:85` 第二上游写者）· F9（"必须同批改模型"论证倒置）等。
