@@ -1,0 +1,29 @@
+INTERP=3.13.5
+TSHARK=C:\Program Files\Wireshark\tshark.exe
+IFACE=\Device\NPF_Loopback
+
+---- ARM A_before (server port 49765, client port 49768, --rcvbuf 2920, getsockopt(effective)=2920) ----
+  tshark capture stderr/stdout: Capturing on 'Adapter for loopback traffic capture'
+10 packets captured
+  cli->srv SYN      win=2920   wscale=0   len=0    
+  srv->cli SYN-ACK  win=65535  wscale=8   len=0    
+  cli->srv ACK      win=2920   wscale=-   len=0    
+  cli->srv ACK      win=2920   wscale=-   len=0    
+  cli->srv ACK      win=2920   wscale=-   len=0    
+  cli->srv ACK      win=568    wscale=-   len=0    
+  cli->srv ACK      win=0      wscale=-   len=0    
+  ==> CLIENT_SYN_WIN=2920  CLIENT_FIRST_ACK_WIN=2920
+
+---- ARM B_after (server port 54649, client port 54652, --rcvbuf 2920, getsockopt(effective)=2920) ----
+  tshark capture stderr/stdout: Capturing on 'Adapter for loopback traffic capture'
+6 packets captured
+  cli->srv SYN      win=65535  wscale=8   len=0    
+  srv->cli SYN-ACK  win=65535  wscale=8   len=0    
+  cli->srv ACK      win=255    wscale=-   len=0    
+  cli->srv ACK      win=223    wscale=-   len=0    
+  cli->srv ACK      win=0      wscale=-   len=0    
+  ==> CLIENT_SYN_WIN=65535  CLIENT_FIRST_ACK_WIN=255
+
+==== 汇总 (Windows 栈; 机制演示, 非 Linux 判据) ====
+ARM A_before SO_RCVBUF=2920 (effective=2920) : SYN.win=2920  first_ack.win=2920
+ARM B_after  SO_RCVBUF=2920 (effective=2920) : SYN.win=65535  first_ack.win=255
