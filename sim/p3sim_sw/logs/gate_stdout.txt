@@ -1,0 +1,50 @@
+MUTGEN OK src=D:\repo\XCKU5PMini\udp_hls_10g\.claude\worktrees\agent-adbace7bf67a3753c\rtl\tcp_rx.v sha256=7517c94951598c7e
+MUTGEN OUT D:\repo\XCKU5PMini\udp_hls_10g\.claude\worktrees\agent-adbace7bf67a3753c\sim\p3sim_sw\mut\mut_acckadv.v sha256=d2dd2098521c88cc changed_lines=[526, 536]
+MUTGEN SUBST (s_axis_tcrs && (ackok_l | !SNDWND_GUARD))
+MUTGEN SUBST (s_axis_tcrs && (ack_adv_l | !SNDWND_GUARD))
+==================== SUMMARY ====================
+  A FIXED  runA_fixed  RC=0   (expect 0)
+  B LEGACY runB_legacy RC=0  (expect 0)
+  M MUTANT runM_mut   RC=0   (expect 0: mechanism OK, verdicts as designed)
+  D DROPA  runD_drop  RC=0   (expect 0: mechanism OK, leg A red as designed)
+  [PASS] FIXED arm: SNDWND ALL PASS in xs1/xs2/xs3, zero [FAIL] SNDWND
+nostall: 297 lines, stats {'pss': 24, 'nonmatch': 7, 'ipcsum': 1, 'crc': 1, 'seq': 4, 'ack': 17, 'bytes': 1843}, mac [37, 1, 0, 4233] OK
+stall: 297 lines, stats {'pss': 24, 'nonmatch': 7, 'ipcsum': 1, 'crc': 1, 'seq': 4, 'ack': 17, 'bytes': 1843}, mac [37, 1, 0, 4233] OK
+  [PASS] LEGACY arm: legA XFAIL-REPRODUCED + LEGACY OK in xs1/xs2/xs3
+nostall: 297 lines, stats {'pss': 24, 'nonmatch': 7, 'ipcsum': 1, 'crc': 1, 'seq': 4, 'ack': 17, 'bytes': 1843}, mac [37, 1, 0, 4233] OK
+stall: 297 lines, stats {'pss': 24, 'nonmatch': 7, 'ipcsum': 1, 'crc': 1, 'seq': 4, 'ack': 17, 'bytes': 1843}, mac [37, 1, 0, 4233] OK
+  [PASS] MUTANT arm: LEGB1 red with accept witness, legA green -- leg B has teeth
+[FAIL] SNDWND LEGB1 wnd_zero=0000 (exp 0000) wnd=0000 (exp 4000) passd=1 fendd=1
+[FAIL] SNDWND FIXED arm: legA=1 legB1=0 legB2=1
+  [PASS] DROP arm: LEGA red with passd=0 -- accept witness has teeth
+[FAIL] SNDWND LEGA wnd1=2000 (exp 2000) wnd2=2000 (exp 2000) base=2000 passd=0 fendd=0 pass_d2=0
+  [PASS] hard-mode: known pre-existing divergence signature unchanged, LINE 63
+  [PASS] arm-mismatch negative control: check fixed vs LEGACY resp reported MISMATCH
+---- key readings ----
+  [runA_fixed xs1]
+SNDWND ARM=FIXED (SNDWND_GUARD=1)
+P4b7 DIRECTED PASS rcv_nxt=0000044c snd_una=00001770 snd_wnd=4000
+SNDWND LEGA PASS wnd1=2000 wnd2=2000 base=2000 passd=2 fendd=2
+SNDWND LEGB1 PASS wnd_zero=0000 wnd=4000 passd=1 fendd=1
+SNDWND LEGB2 PASS wnd=1234 snd_una=00001488 passd=1 fendd=1
+SNDWND ALL PASS
+  [runB_legacy xs1]
+SNDWND ARM=LEGACY (SNDWND_GUARD=0)
+P4b7 DIRECTED PASS rcv_nxt=0000044c snd_una=00001770 snd_wnd=4000
+SNDWND LEGA XFAIL-REPRODUCED wnd1=0100 wnd2=1100 passd=2 fendd=2
+SNDWND LEGB1 PASS wnd_zero=0000 wnd=4000 passd=1 fendd=1
+SNDWND LEGB2 PASS wnd=1234 snd_una=00001488 passd=1 fendd=1
+SNDWND LEGACY OK (legA defect reproduced + B1/B2 green + accept deltas ok)
+  [runM_mut xs1]
+SNDWND ARM=FIXED (SNDWND_GUARD=1)
+P4b7 DIRECTED PASS rcv_nxt=0000044c snd_una=00001770 snd_wnd=4000
+SNDWND LEGA PASS wnd1=2000 wnd2=2000 base=2000 passd=2 fendd=2
+[FAIL] SNDWND LEGB1 wnd_zero=0000 (exp 0000) wnd=0000 (exp 4000) passd=1 fendd=1
+SNDWND LEGB2 PASS wnd=1234 snd_una=00001488 passd=1 fendd=1
+  [runD_drop xs1]
+SNDWND ARM=FIXED (SNDWND_GUARD=1)
+P4b7 DIRECTED PASS rcv_nxt=0000044c snd_una=00001770 snd_wnd=4000
+[FAIL] SNDWND LEGA wnd1=2000 (exp 2000) wnd2=2000 (exp 2000) base=2000 passd=0 fendd=0 pass_d2=0
+SNDWND LEGB1 PASS wnd_zero=0000 wnd=4000 passd=1 fendd=1
+SNDWND LEGB2 PASS wnd=1234 snd_una=00001488 passd=1 fendd=1
+SNDWND-GATE: PASS 

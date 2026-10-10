@@ -9,6 +9,18 @@
 // 收尾自检: rcv_nxt=0x44C / snd_una=0x1770 / snd_wnd=0x4000 (旧 drain 实现丢推进)。
 module tb_tcp_rx;
 
+    // ======== ⭐ P7B-SNDWND-GUARD 两臂 (`-d SNDWND_LEGACY` 选遗留臂) ========
+    //   FIXED  (默认) : DUT SNDWND_GUARD=1 —— 腿 A 期望绿 (陈旧/越界 ACK 不覆盖窗)
+    //   LEGACY (-d)   : DUT SNDWND_GUARD=0 —— 腿 A **期望红** (缺陷复现 = 腿 C
+    //                   的机器证明), 腿 B 两臂都必须绿 (守卫没打死零窗恢复)
+    //   ⚠️ 期望红的表达 = 专标记 `SNDWND LEGA XFAIL-REPRODUCED` (不是把判据放宽;
+    //      先例 sim/p5e_udp 的 neglearn"期望 exit 1")
+`ifdef SNDWND_LEGACY
+    localparam SNDWND_ARM = 1'b0;
+`else
+    localparam SNDWND_ARM = 1'b1;
+`endif
+
     reg        clk, rst_n;
     reg [7:0]  rx_d;
     reg        rx_dv, rx_er;
@@ -34,6 +46,27 @@ module tb_tcp_rx;
     reg [2:0]  cfg_upd_sel;
     reg [31:0] cfg_upd_val;
     reg        gnt_hold;   // P4b-7-P6 定向段: 模拟真实仲裁 TX 占写口 (upd_gnt 长挂起)
+
+    // ---- ⭐ P7B-SNDWND-GUARD 三腿快照机制 -------------------------------------
+    //   字节位置由 tools/gen_stim_tcp_rx.py 写入 sw_legs.memh (与激励同源 ⇒
+    //   不会与帧表漂移; 格式 9 值, 见生成器 sw_legs.memh):
+    //     [0] SW_CFG2  = 腿相位前的全 6 字段基线重配窗口起点 (6 字节)
+    //     [1] SW_ZERO  = B1 前置的 snd_wnd=0 单字节慢路径写点
+    //     [2] SNAP_DIR = 定向段终态快照点 (drain 已完成)
+    //     [3] SNAP_A0  = 腿 A 前 (重配后基线)  [4] SNAP_A1 = A1 后
+    //     [5] SNAP_A2  = A2 后               [6] SNAP_Z  = 零窗写后
+    //     [7] SNAP_B1  = B1 后               [8] SNAP_B2 = B2 后 (终态)
+    //   每点均在"最后一帧字节 +30 字节"之后 ⇒ 该帧 fend/drain 已完成;
+    //   腿帧 = 真实 60B 纯 ACK (S_PAD→fend_pad, 取本帧 wnd_l) —— 不用 w6-tlast
+    //   短帧 (那里 wnd_f 取上一帧值, 注入的 wnd 到不了 TCB = 假阴性温床)。
+    reg [31:0] sw_pos [0:8];
+    integer    swi;
+    integer    fend_cnt;
+    reg [31:0] pass_dir, pass_a0, pass_a1, pass_a2, pass_z, pass_b1, pass_b2;
+    integer    fnd_dir, fnd_a0, fnd_a1, fnd_a2, fnd_z, fnd_b1, fnd_b2;
+    reg [15:0] wnd_dir, wnd_a0, wnd_a1, wnd_a2, wnd_z, wnd_b1, wnd_b2;
+    reg [31:0] una_dir, rcv_dir, una_b2;
+    reg        lega_ok, legb1_ok, legb2_ok;
 
     wire [63:0] s_tdata;
     wire [7:0]  s_tkeep;
@@ -110,7 +143,10 @@ module tb_tcp_rx;
         .stat_drop(m_drop), .stat_bytes(m_bytes)
     );
 
-    tcp_rx u_rx (
+    tcp_rx #(
+        // ⭐ P7B-SNDWND-GUARD 两臂 (宏选, 见文件头注): 1 = 修后 / 0 = 遗留行为
+        .SNDWND_GUARD   (SNDWND_ARM)
+    ) u_rx (
         .clk(clk), .rst_n(rst_n),
         // P5d H-fix: ACC_MARGIN 由参数改为端口。默认构建显式传 0 ⇒
         // acc_wnd = {1'b0,ra_rcv_wnd} ⇒ 与旧参数版逐位等价 (C12: 参数→端口必须补全)
@@ -165,6 +201,14 @@ module tb_tcp_rx;
 
     always #4 clk = ~clk;     // 125 MHz
 
+    // ⭐ SNDWND 腿的承重件: "帧被收下 + fend" 计数 (防空判据 —— 若注入帧被静默
+    //   丢弃, "窗不变"在两臂同为真 = 腿结构安静退化)。fend_cnt 由本 TB 侧独立
+    //   计数 (不引用 DUT 的 stat 线以外的东西)。
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) fend_cnt <= 0;
+        else if (fend) fend_cnt <= fend_cnt + 1;
+    end
+
     // ---- 时钟化激励驱动 + 配置阶段 (非阻塞, 无 TB/DUT 竞争) ----
     always @(posedge clk) begin
         if (!rst_n) begin
@@ -217,6 +261,22 @@ module tb_tcp_rx;
                         cfg_upd_id  <= 4'd0;
                         cfg_upd_sel <= (i - D_CFG2) % 6;
                         cfg_upd_val <= tcbc[i - D_CFG2];
+                    end else if (i >= sw_pos[0] && i < sw_pos[0] + 6) begin
+                        // ⭐ SNDWND 腿相位前置: 全 6 字段基线重配 conn0 = TCB0
+                        //   (snd_una=5000 snd_nxt=6000 ⇒ 可接受区间 [5000,6000];
+                        //    F3: 腿 B2 的 ack=snd_una+0x100 只有在此区间内才有判别力
+                        //    —— 定向段结束时 snd_una=snd_nxt=6000, 不重配则 B2 必假红)
+                        cfg_upd_wr <= 1;
+                        cfg_upd_id  <= 4'd0;
+                        cfg_upd_sel <= (i - sw_pos[0]) % 6;
+                        cfg_upd_val <= tcbc[i - sw_pos[0]];
+                    end else if (i == sw_pos[1]) begin
+                        // ⭐ 腿 B1 前置: 慢路径单字节写 conn0 snd_wnd = 0
+                        //   (零窗现场; B1 的零推进 ACK 必须把窗重开成 0x4000)
+                        cfg_upd_wr <= 1;
+                        cfg_upd_id  <= 4'd0;
+                        cfg_upd_sel <= 3'd4;
+                        cfg_upd_val <= 32'h0;
                     end else begin
                         cfg_upd_wr <= 0;
                     end
@@ -224,6 +284,40 @@ module tb_tcp_rx;
                     // 全部落窗内 → drain 挂起, 重复纯 ACK 的 fend 打到未完成的
                     // 推进 (板上 TX 优先仲裁的 gnt-hold 复现)
                     gnt_hold <= (i >= D_HOLD0 && i < D_HOLD1);
+                    // ---- ⭐ SNDWND 三腿快照 (位置来自 sw_legs.memh; 每点在最后一帧
+                    //      字节 +30 之后 ⇒ 该帧 fend/drain 已完成; 采样为 posedge
+                    //      非阻塞 ⇒ 取该时刻已落盘值) ----
+                    if (i == sw_pos[2]) begin
+                        pass_dir <= stat_pass; fnd_dir <= fend_cnt;
+                        wnd_dir <= u_tcb.snd_wnd_r[0];
+                        una_dir <= u_tcb.snd_una_r[0];
+                        rcv_dir <= u_tcb.rcv_nxt_r[0];
+                    end
+                    if (i == sw_pos[3]) begin
+                        pass_a0 <= stat_pass; fnd_a0 <= fend_cnt;
+                        wnd_a0  <= u_tcb.snd_wnd_r[0];
+                    end
+                    if (i == sw_pos[4]) begin
+                        pass_a1 <= stat_pass; fnd_a1 <= fend_cnt;
+                        wnd_a1  <= u_tcb.snd_wnd_r[0];
+                    end
+                    if (i == sw_pos[5]) begin
+                        pass_a2 <= stat_pass; fnd_a2 <= fend_cnt;
+                        wnd_a2  <= u_tcb.snd_wnd_r[0];
+                    end
+                    if (i == sw_pos[6]) begin
+                        pass_z  <= stat_pass; fnd_z  <= fend_cnt;
+                        wnd_z   <= u_tcb.snd_wnd_r[0];
+                    end
+                    if (i == sw_pos[7]) begin
+                        pass_b1 <= stat_pass; fnd_b1 <= fend_cnt;
+                        wnd_b1  <= u_tcb.snd_wnd_r[0];
+                    end
+                    if (i == sw_pos[8]) begin
+                        pass_b2 <= stat_pass; fnd_b2 <= fend_cnt;
+                        wnd_b2  <= u_tcb.snd_wnd_r[0];
+                        una_b2  <= u_tcb.snd_una_r[0];
+                    end
                 end else begin
                     cfg_upd_wr <= 0; gnt_hold <= 0;
                     rx_dv <= 0; rx_er <= 0; done <= 1;
@@ -250,6 +344,15 @@ module tb_tcp_rx;
             hardstall = 1;
             $readmemh("hardwin.memh", hw);
         end
+        // ⭐ SNDWND 三腿位置表 (与激励同源; 先填 0 确保 readmemh 失败时可见:
+        //    位置为 0 ⇒ 快照永不触发 ⇒ 腿判据全红 = 响亮失败, 不是静默通过)
+        for (swi = 0; swi < 9; swi = swi + 1) sw_pos[swi] = 32'd0;
+        $readmemh("sw_legs.memh", sw_pos);
+        if (SNDWND_ARM) $display("SNDWND ARM=FIXED (SNDWND_GUARD=1)");
+        else            $display("SNDWND ARM=LEGACY (SNDWND_GUARD=0)");
+        $display("SNDWND sw_pos cfg2=%0d zero=%0d dir=%0d a0=%0d a1=%0d a2=%0d z=%0d b1=%0d b2=%0d",
+                 sw_pos[0], sw_pos[1], sw_pos[2], sw_pos[3], sw_pos[4],
+                 sw_pos[5], sw_pos[6], sw_pos[7], sw_pos[8]);
         if ($test$plusargs("STALL")) fd = $fopen("resp_tcp_rx_stall.memh", "w");
         else if ($test$plusargs("HARD")) fd = $fopen("resp_tcp_rx_hard.memh", "w");
         else fd = $fopen("resp_tcp_rx.memh", "w");
@@ -268,13 +371,66 @@ module tb_tcp_rx;
         $fclose(fd);
         // ---- P4b-7-P6 定向段自检: 3 重复纯 ACK fend 落在 gnt 抢占窗内时,
         //      推进 (rcv_nxt/snd_una) 与窗口 (snd_wnd) 都必须最终落盘 ----
-        if (u_tcb.rcv_nxt_r[0]  == D_RCVX && u_tcb.snd_una_r[0] == D_UNAX &&
-            u_tcb.snd_wnd_r[0] == 16'h4000)
+        // ⚠️ 检查点 = SNAP_DIR 快照 (定向段终态), 不再是"仿真终态" —— 判据值一字
+        //    未改 (0x44C / 0x1770 / 0x4000), 只因其后新增了 SNDWND 腿相位 (会再写
+        //    snd_una/snd_wnd), 终态已不代表定向段收口。
+        if (rcv_dir == D_RCVX && una_dir == D_UNAX && wnd_dir == 16'h4000)
             $display("P4b7 DIRECTED PASS rcv_nxt=%08h snd_una=%08h snd_wnd=%04h",
-                     u_tcb.rcv_nxt_r[0], u_tcb.snd_una_r[0], u_tcb.snd_wnd_r[0]);
+                     rcv_dir, una_dir, wnd_dir);
         else
             $display("P4b7 DIRECTED FAIL rcv_nxt=%08h (exp 0000044c) snd_una=%08h (exp 00001770) snd_wnd=%04h (exp 4000)",
-                     u_tcb.rcv_nxt_r[0], u_tcb.snd_una_r[0], u_tcb.snd_wnd_r[0]);
+                     rcv_dir, una_dir, wnd_dir);
+        // ================= ⭐ P7B-SNDWND-GUARD 三腿判据 =========================
+        //   腿 A (判别): 陈旧/越界 ACK 不得覆盖 snd_wnd。⚠️ 承重件 = "帧被收下 + fend"
+        //     的增量断言 (pass/fend +2) —— 否则"窗没变"可能只是"帧没被收下"= 空判据。
+        //   腿 B (正对照): B1 = 零推进窗口更新 (零窗重开) / B2 = 推进 + 窗变小。
+        //     两臂都必须绿 (守卫不许打死零窗恢复 / 不许误伤"变小照收")。
+        //   腿 C = 用 `SNDWND_LEGACY` 编译的遗留臂: 腿 A **期望红** (专标记
+        //     XFAIL-REPRODUCED = 缺陷复现的机器证明), 腿 B 仍必须绿。
+        //   ⚠️ 判据值域 (与 gen_stim_tcp_rx.py 的帧表同源):
+        //     A 基线重配后 snd_wnd=0x2000; A1 陈旧窗=0x0100 / A2 越界窗=0x1100;
+        //     B1 窗=0x4000 (零推进 ACK); B2 窗=0x1234 + snd_una 5000→5256 (0x1488;
+        //     B2 的 ack = snd_una + 0x100 = 5000+256, 与 gen_stim_tcp_rx.py 同源)
+        lega_ok  = (pass_a2 - pass_a0) == 2 && (fnd_a2 - fnd_a0) == 2 &&
+                   ((SNDWND_ARM) ? (wnd_a1 == 16'h2000 && wnd_a2 == 16'h2000)
+                                 : (wnd_a1 == 16'h0100 && wnd_a2 == 16'h1100));
+        legb1_ok = (wnd_z == 16'h0000) && (wnd_b1 == 16'h4000) &&
+                   (pass_b1 - pass_z) == 1 && (fnd_b1 - fnd_z) == 1;
+        legb2_ok = (wnd_b2 == 16'h1234) && (una_b2 == 32'h00001488) &&
+                   (pass_b2 - pass_b1) == 1 && (fnd_b2 - fnd_b1) == 1;
+        if (!SNDWND_ARM && lega_ok)
+            $display("SNDWND LEGA XFAIL-REPRODUCED wnd1=%04h wnd2=%04h passd=%0d fendd=%0d",
+                     wnd_a1, wnd_a2, pass_a2 - pass_a0, fnd_a2 - fnd_a0);
+        else if (!lega_ok)
+            $display("[FAIL] SNDWND LEGA wnd1=%04h (exp %04h) wnd2=%04h (exp %04h) base=%04h passd=%0d fendd=%0d pass_d2=%0d",
+                     wnd_a1, SNDWND_ARM ? 16'h2000 : 16'h0100, wnd_a2,
+                     SNDWND_ARM ? 16'h2000 : 16'h1100, wnd_a0,
+                     pass_a2 - pass_a0, fnd_a2 - fnd_a0, pass_a2 - pass_a0);
+        else
+            $display("SNDWND LEGA PASS wnd1=%04h wnd2=%04h base=%04h passd=%0d fendd=%0d",
+                     wnd_a1, wnd_a2, wnd_a0, pass_a2 - pass_a0, fnd_a2 - fnd_a0);
+        if (legb1_ok)
+            $display("SNDWND LEGB1 PASS wnd_zero=%04h wnd=%04h passd=%0d fendd=%0d",
+                     wnd_z, wnd_b1, pass_b1 - pass_z, fnd_b1 - fnd_z);
+        else
+            $display("[FAIL] SNDWND LEGB1 wnd_zero=%04h (exp 0000) wnd=%04h (exp 4000) passd=%0d fendd=%0d",
+                     wnd_z, wnd_b1, pass_b1 - pass_z, fnd_b1 - fnd_z);
+        if (legb2_ok)
+            $display("SNDWND LEGB2 PASS wnd=%04h snd_una=%08h passd=%0d fendd=%0d",
+                     wnd_b2, una_b2, pass_b2 - pass_b1, fnd_b2 - fnd_b1);
+        else
+            $display("[FAIL] SNDWND LEGB2 wnd=%04h (exp 1234) snd_una=%08h (exp 00001488) passd=%0d fendd=%0d",
+                     wnd_b2, una_b2, pass_b2 - pass_b1, fnd_b2 - fnd_b1);
+        if (SNDWND_ARM) begin
+            if (lega_ok && legb1_ok && legb2_ok) $display("SNDWND ALL PASS");
+            else $display("[FAIL] SNDWND FIXED arm: legA=%b legB1=%b legB2=%b",
+                          lega_ok, legb1_ok, legb2_ok);
+        end else begin
+            if (lega_ok && legb1_ok && legb2_ok)
+                $display("SNDWND LEGACY OK (legA defect reproduced + B1/B2 green + accept deltas ok)");
+            else $display("[FAIL] SNDWND LEGACY arm: legA=%b legB1=%b legB2=%b",
+                          lega_ok, legb1_ok, legb2_ok);
+        end
         // ⭐ 构建 F: W68 判据 (双边等式 + 非空见证; 形状与 tb_tcp_tx_ovl 的 W66/W67 同款)
         //   ⚠️ 本门的整体口径另有既存红 (HARD 臂的 python 期望失配), 与本判据无关;
         //      本判据只保证"dut 与 TB 独立复算逐字相等, 且非空"。

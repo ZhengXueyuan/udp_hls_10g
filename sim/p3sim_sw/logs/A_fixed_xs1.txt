@@ -1,0 +1,26 @@
+
+****** xsim v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Sun Oct 11 01:49:10 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source xsim.dir/tb_tcp_rx/xsim_script.tcl
+# xsim {tb_tcp_rx} -autoloadwcfg -tclbatch {run.tcl}
+Time resolution is 1 ps
+source run.tcl
+## run all 
+SNDWND ARM=FIXED (SNDWND_GUARD=1)
+SNDWND sw_pos cfg2=5057 zero=5387 dir=5027 a0=5093 a1=5225 a2=5357 z=5407 b1=5549 b2=5681
+P4b7 DIRECTED PASS rcv_nxt=0000044c snd_una=00001770 snd_wnd=4000
+SNDWND LEGA PASS wnd1=2000 wnd2=2000 base=2000 passd=2 fendd=2
+SNDWND LEGB1 PASS wnd_zero=0000 wnd=4000 passd=1 fendd=1
+SNDWND LEGB2 PASS wnd=1234 snd_una=00001488 passd=1 fendd=1
+SNDWND ALL PASS
+W68ADV dut=9 tb=9
+DONE pass=24 nonmatch=7 ipcsum=1 crc=1 seq=4 ack=17 bytes=1843 | mac fr=37 crc=1 drop=0
+$finish called at time : 53092 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/.claude/worktrees/agent-adbace7bf67a3753c/tb/tb_tcp_rx.v" Line 444
+## quit 
+INFO: [Common 17-206] Exiting xsim at Sun Oct 11 01:49:12 2026...

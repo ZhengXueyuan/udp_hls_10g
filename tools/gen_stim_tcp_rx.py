@@ -51,6 +51,64 @@ DIR_HOLD0    = DIR_GAP_BASE + 100  # upd_gnt 抢占窗 [DIR_HOLD0, DIR_HOLD1)
 DIR_HOLD1    = DIR_GAP_BASE + 480  #   模拟 TX 优先仲裁 (帧 1..4 fend 全落窗内)
 DIR_TAIL     = 120                # 定向段后空闲字节 (抢占窗在字节流内释放)
 
+# ---- ⭐ P7B-SNDWND-GUARD 三腿相位 (TB tb_tcp_rx.v 自检同源; 期望值见其 localparam)
+#   布局 (全部由本生成器算字节位置 ⇒ 位置经 sw_legs.memh 交给 TB, 无硬编码漂移):
+#     [200B 空闲] [6B 全字段重配窗] [60B 间隙] A1 [60B] A2 [30B]
+#     [1B snd_wnd=0 写] [30B] B1 [60B] B2 [120B 尾]
+#   每帧 = 8(PRE)+60(fb)+4(FCS) = 72 字节; 各快照点 = 该帧末字节 +30 ⇒ fend/drain
+#   均已完成, 且与下一帧拉开 ≥30 字节。
+SW_PAD0 = 200                     # 定向段尾 → 腿相位的额外空隙 (drain 收口 + SNAP_DIR)
+SW_LEG_FRAME_BYTES = 8 + 60 + 4   # 腿帧总字节数 (真实 60B 纯 ACK, pad=True)
+SW_SNAP_LAG = 30                  # 快照点 = 帧末字节 + 本值
+
+
+def build_sndwnd_legs():
+    """P7B-SNDWND-GUARD 三腿帧 (腿前由 TB/模型做全 6 字段基线重配 ⇒ 可接受区间
+    = [snd_una, snd_nxt] = [5000, 6000], ack_hi = snd_nxt (ra_retx_active 恒 0)):
+
+      腿 A (判别): sw_a1_stale ack=4744=snd_una-0x100 (陈旧, 区间外) / win=0x0100;
+                   sw_a2_oob   ack=10096=snd_nxt+0x1000 (越界, 区间外) / win=0x1100;
+                   修复臂: 窗不得被覆盖 (保持重配值 0x2000); 遗留臂: 被写成 0x0100/0x1100。
+      腿 B (正对照): sw_b1_zeroopen ack=5000==snd_una (零推进; 区间含等号) / win=0x4000
+                   (零窗重开后必须被写回); sw_b2_advshr ack=5256=snd_una+0x100 (推进)、
+                   win=0x1234 (变小) —— 两臂都必须照收。
+       全部用真实 60B 纯 ACK (pad=True ⇒ S_PAD→fend_pad, 取本帧 wnd_l) ——
+       ⛔ 不用 w6-tlast 短帧 (那里 wnd_f 取上一帧的 wnd_l, 注入的窗到不了 TCB)。
+    """
+    F = []
+    # ⭐ SW_LEGDROP_A=1 (环境变量, 仅供门做"承重件有牙"对照): 把腿 A 两帧的 seq 挪到
+    #   窗口外 (rcv_nxt + 0x3000 > rcv_wnd 0x2000) ⇒ 帧被 S_DROP 静默丢弃、不 fend
+    #   ⇒ TB 的"帧被收下 + fend"断言 (passd/fendd) 必须变红 —— 若只挂"窗值不变",
+    #   这类注入会安静地退化成空判据 (审查 §3.1 的承重件)。默认关 = 零行为改动。
+    a_seq = TCB0['rcv_nxt'] + (0x3000 if os.environ.get('SW_LEGDROP_A') == '1' else 0)
+    spec = [
+        ('sw_a1_stale',    (TCB0['snd_una'] - 0x100) & 0xFFFFFFFF, 0x0100),
+        ('sw_a2_oob',      (TCB0['snd_nxt'] + 0x1000) & 0xFFFFFFFF, 0x1100),
+        ('sw_b1_zeroopen', TCB0['snd_una'] & 0xFFFFFFFF,           0x4000),
+        ('sw_b2_advshr',   (TCB0['snd_una'] + 0x100) & 0xFFFFFFFF, 0x1234),
+    ]
+    for i, (nm, ack, wnd) in enumerate(spec):
+        seq = a_seq if i < 2 else TCB0['rcv_nxt']
+        fb, fcs = mk_tcp_frame(SPORT0, DPORT0, seq, ack, 0x10, 0,
+                               wnd=wnd, pad=True)
+        F.append((nm, fb, fcs))
+    return F
+
+
+def check_leg_intervals():
+    """F3 不变量 (写死): 腿 A 两条在 [snd_una, ack_hi] 之外 (判别力前提); 腿 B 两条
+    在区间之内 (含零推进等号)。腿前必须做全 6 字段基线重配 (TB/模型同点), 否则
+    定向段终态 snd_una=snd_nxt=6000 会让 B2 的 ack=snd_una+0x100 越界 ⇒ 修复臂假红。
+    """
+    lo, hi = TCB0['snd_una'], TCB0['snd_nxt']
+
+    def acc(a):
+        return ((a - lo) & 0xFFFFFFFF) <= ((hi - lo) & 0xFFFFFFFF)
+    assert not acc((lo - 0x100) & 0xFFFFFFFF), 'A1 (stale) must be OUT of [snd_una, ack_hi]'
+    assert not acc((hi + 0x1000) & 0xFFFFFFFF), 'A2 (oob) must be OUT of [snd_una, ack_hi]'
+    assert acc(lo), 'B1 (zero-advance) must be IN (interval includes the equals sign)'
+    assert acc((lo + 0x100) & 0xFFFFFFFF), 'B2 (advancing) must be IN'
+
 # CAM 配置 (与 TB 配置阶段一致): 条目 0/1/2
 CAM_CFG = [
     (0x0A000001, 0xC0A86402, 0x3039, 0x1F90),
@@ -197,6 +255,8 @@ def build_directed():
 def generate(simdir):
     base = build_frames()
     directed = build_directed()
+    legs = build_sndwnd_legs()
+    check_leg_intervals()
     segs = []
     for nm, fb, fcs in base:
         segs += [(0, b, 1) for b in (PRE + fb + fcs)]
@@ -210,7 +270,52 @@ def generate(simdir):
         segs += [(0, b, 1) for b in (PRE + fb + fcs)]
         segs += [(0, b, 0) for b in IFG]
     segs += [(0, 0x07, 0)] * DIR_TAIL
-    frames = base + directed
+
+    # ---- ⭐ SNDWND 腿相位 (位置 = 唯一真值源; TB 经 sw_legs.memh 读取) ----
+    def leg_frame(f):
+        return [(0, b, 1) for b in (PRE + f[1] + f[2])]   # 72 字节 (无 IFG 拖尾)
+
+    segs += [(0, 0x07, 0)] * SW_PAD0
+    sw_cfg2 = len(segs)                 # 6 字段重配窗 (慢路径写; 字节内容无关)
+    segs += [(0, 0x07, 0)] * 6
+    snap_a0 = len(segs) + 30            # 重配后基线 (窗末 +30)
+    segs += [(0, 0x07, 0)] * 60         # → sw_a1 = 窗末 +60 (SNAP_A0 落在其前 30B)
+    sw_a1 = len(segs)
+    segs += leg_frame(legs[0])
+    snap_a1 = len(segs) + SW_SNAP_LAG
+    segs += [(0, 0x07, 0)] * 60
+    sw_a2 = len(segs)
+    segs += leg_frame(legs[1])
+    snap_a2 = len(segs) + SW_SNAP_LAG
+    segs += [(0, 0x07, 0)] * 60
+    sw_zero = len(segs)                 # 单字节慢路径写 conn0 snd_wnd = 0
+    segs += [(0, 0x07, 0)] * 1
+    snap_z = sw_zero + 20               # 零窗写见证 (写后 19 字节)
+    segs += [(0, 0x07, 0)] * 59         # → sw_b1 = sw_zero + 60
+    sw_b1 = len(segs)
+    segs += leg_frame(legs[2])
+    snap_b1 = len(segs) + SW_SNAP_LAG
+    segs += [(0, 0x07, 0)] * 60
+    sw_b2 = len(segs)
+    segs += leg_frame(legs[3])
+    snap_b2 = len(segs) + SW_SNAP_LAG
+    segs += [(0, 0x07, 0)] * 120
+    sw = dict(cfg2=sw_cfg2, zero=sw_zero)
+    sw_pos = [sw_cfg2, sw_zero, sw_cfg2 - 30, snap_a0, snap_a1, snap_a2,
+              snap_z, snap_b1, snap_b2]
+    snap_dir = sw_pos[2]
+    # 结构性自检 (布局不变量; 任一条不成立 = 生成即硬失败, 防"位置漂了但门还绿")
+    assert sw_a1 == sw_cfg2 + 6 + 60 and sw_a2 == sw_a1 + SW_LEG_FRAME_BYTES + 60
+    assert sw_b1 == sw_zero + 60 and sw_b2 == sw_b1 + SW_LEG_FRAME_BYTES + 60
+    assert snap_a0 == sw_cfg2 + 6 + 30
+    assert snap_a1 == sw_a1 + SW_LEG_FRAME_BYTES + 30
+    assert snap_a2 == sw_a2 + SW_LEG_FRAME_BYTES + 30
+    assert snap_z == sw_zero + 20 and snap_b1 == sw_b1 + SW_LEG_FRAME_BYTES + 30
+    assert snap_b2 == sw_b2 + SW_LEG_FRAME_BYTES + 30
+    assert snap_dir >= DIR_HOLD1 + 40, ('SNAP_DIR must follow gnt release', snap_dir)
+    assert snap_b2 + 40 < len(segs), ('tail too short for SNAP_B2', snap_b2, len(segs))
+
+    frames = base + directed + legs
     nstim = len(segs)
     data = [s[1] for s in segs]
     dv = [s[2] for s in segs]
@@ -239,7 +344,10 @@ def generate(simdir):
                 fh.write('%X\n' % t[fld])
     with open(os.path.join(simdir, 'hardwin.memh'), 'w') as fh:
         fh.write('%X\n%X\n' % (hw0, hw1))
-    return frames, hw0, hw1
+    # ⭐ SNDWND 三腿位置表 (TB tb_tcp_rx.v 读; 顺序见其头部注)
+    with open(os.path.join(simdir, 'sw_legs.memh'), 'w') as fh:
+        fh.write('\n'.join('%X' % p for p in sw_pos) + '\n')
+    return frames, hw0, hw1, sw
 
 
 # ---------------- 周期精确参考模型 ----------------
@@ -273,8 +381,12 @@ def ipc_ok(w1_lo, w2r, ipc_s9, w4):
 FIELDS = ('rcv_nxt', 'snd_nxt', 'snd_una', 'rcv_wnd', 'snd_wnd', 'state')
 
 
-def model(simdir, mode):
-    frames, hw0, hw1 = generate(simdir)
+def model(simdir, mode, guard=True):
+    """guard 必须与 DUT 臂同参 (F9): True = SNDWND_GUARD=1 (修复/默认),
+    False = 遗留臂 (-d SNDWND_LEGACY)。两臂的判据线 (FEND/STATS/TCBF) 在该语料里
+    本该逐字相同 —— 腿的判别力**不**来自模型比对, 而来自 TB 的显式终态断言与腿 C
+    (本工程纪律: 同源 oracle 一致 ≠ 正确)。"""
+    frames, hw0, hw1, sw = generate(simdir)
     data = [int(x, 16) for x in open(os.path.join(simdir, 'stim_data.memh'))]
     dv = [int(x) for x in open(os.path.join(simdir, 'stim_dv.memh'))]
     nstim = len(data)
@@ -307,6 +419,7 @@ def model(simdir, mode):
     cam_hit_l = False
     conn_id_l = 0
     acc_l = ackresp_l = ack_adv_l = False
+    ackok_l = False            # ⭐ P7B-SNDWND-GUARD: ack_ok 锁存 (镜像 RTL :691)
     ack32_l = seq32_l = rcv_nxt_l = 0
     plen_l = wnd_l = 0
     drop_ack = False
@@ -344,7 +457,7 @@ def model(simdir, mode):
     def tcp_cycle(w, m_tready, gnt):
         nonlocal st, wcnt, w1_lo, w2r, w3r, ipc_s9
         nonlocal src_ip_r, src_port_r, seq_hi_r, cam_hit_l, conn_id_l
-        nonlocal acc_l, ackresp_l, ack_adv_l, ack32_l, seq32_l, rcv_nxt_l, plen_l, wnd_l
+        nonlocal acc_l, ackresp_l, ack_adv_l, ackok_l, ack32_l, seq32_l, rcv_nxt_l, plen_l, wnd_l
         nonlocal drop_ack, hold16, pcount, ev, ed, ek, el, eu, tail_stage, td, tk, tu
         nonlocal pend_rcv, pend_una, pend_wnd, pend_id
         nonlocal pend_rcv_val, pend_una_val, pend_wnd_val, drn
@@ -367,6 +480,7 @@ def model(simdir, mode):
         td_n, tk_n, tu_n = td, tk, tu
         cam_hit_l_n, conn_id_l_n = cam_hit_l, conn_id_l
         acc_l_n, ackresp_l_n, ack_adv_l_n = acc_l, ackresp_l, ack_adv_l
+        ackok_l_n = ackok_l
         ack32_l_n, seq32_l_n, rcv_nxt_l_n, plen_l_n = ack32_l, seq32_l, rcv_nxt_l, plen_l
         w1_lo_n, w2r_n, w3r_n, ipc_s9_n = w1_lo, w2r, w3r, ipc_s9
         src_ip_r_n, src_port_r_n, seq_hi_r_n = src_ip_r, src_port_r, seq_hi_r
@@ -454,6 +568,7 @@ def model(simdir, mode):
                             ackresp = (base_ok and not seq_eq and
                                        (win_ok or seq_lt) and plen_w != 0)
                             acc_l_n, ackresp_l_n, ack_adv_l_n = acc, ackresp, ack_adv
+                            ackok_l_n = ack_ok   # ⭐ SNDWND-GUARD: 镜像 RTL :691
                             ack32_l_n, seq32_l_n = ack32, seq32
                             plen_l_n = plen_w
                             rcv_nxt_l_n = t['rcv_nxt']
@@ -604,14 +719,17 @@ def model(simdir, mode):
             crs = bool(w[4])
             pend_rcv_n = (acc_l and plen_l != 0 and crs) or pend_rcv
             pend_una_n = (ack_adv_l and crs) or pend_una
-            pend_wnd_n = crs or pend_wnd
+            # ⭐ P7B-SNDWND-GUARD: 窗口更新按"可接受 ACK"门控 (镜 RTL :509/:518;
+            #   guard=False = 遗留行为臂 —— 任何 FCS-OK 的 fend 帧都写)
+            wnd_ok_l = ackok_l or not guard
+            pend_wnd_n = (crs and wnd_ok_l) or pend_wnd
             if acc_l and plen_l != 0 and crs:
                 pend_rcv_val_n = (rcv_nxt_l + plen_l) & 0xFFFFFFFF
                 pend_id_n = conn_id_l
             if ack_adv_l and crs:
                 pend_una_val_n = ack32_l
                 pend_id_n = conn_id_l
-            if crs:
+            if crs and wnd_ok_l:
                 pend_wnd_val_n = ((w[0] >> 48) & 0xFFFF) if fend_w6 else wnd_l
                 pend_id_n = conn_id_l
             drn_n = 1
@@ -643,6 +761,7 @@ def model(simdir, mode):
         src_ip_r, src_port_r, seq_hi_r = src_ip_r_n, src_port_r_n, seq_hi_r_n
         cam_hit_l, conn_id_l = cam_hit_l_n, conn_id_l_n
         acc_l, ackresp_l, ack_adv_l = acc_l_n, ackresp_l_n, ack_adv_l_n
+        ackok_l = ackok_l_n
         ack32_l, seq32_l, rcv_nxt_l, plen_l = ack32_l_n, seq32_l_n, rcv_nxt_l_n, plen_l_n
         wnd_l = wnd_l_n
         drop_ack = drop_ack_n
@@ -709,6 +828,11 @@ def model(simdir, mode):
         # ---- 定向段基线重配 (TB 于字节 [DIR_CFG2, DIR_CFG2+6) 重写 conn0 = TCB0) ----
         if DIR_CFG2 <= j < DIR_CFG2 + 6:
             tcb[0][FIELDS[j - DIR_CFG2]] = TCB0[FIELDS[j - DIR_CFG2]]
+        # ---- ⭐ SNDWND 腿: TB 的两个慢路径写点 (全 6 字段重配 + snd_wnd=0), 同点镜像 ----
+        if sw['cfg2'] <= j < sw['cfg2'] + 6:
+            tcb[0][FIELDS[j - sw['cfg2']]] = TCB0[FIELDS[j - sw['cfg2']]]
+        if j == sw['zero']:
+            tcb[0]['snd_wnd'] = 0
         # ---- mac_rx_64 每周期 (字节 j 于周期 j+67 进入) ----
         wr = False
         din = None
@@ -820,8 +944,8 @@ def model(simdir, mode):
     return lines, stats, mstat, tcb
 
 
-def check(simdir, mode):
-    exp_lines, exp_stats, exp_mstat, exp_tcb = model(simdir, mode)
+def check(simdir, mode, guard=True):
+    exp_lines, exp_stats, exp_mstat, exp_tcb = model(simdir, mode, guard)
     fn = 'resp_tcp_rx.memh' if mode == 'nostall' else 'resp_tcp_rx_%s.memh' % mode
     with open(os.path.join(simdir, fn)) as fh:
         resp = [l.strip() for l in fh if l.strip()]
@@ -864,12 +988,22 @@ if __name__ == '__main__':
     if len(sys.argv) > 2 and sys.argv[2] == 'check':
         # P4b-7-P6: 补上 check 分发 (此前 bat 已传 'check' 但 __main__ 未分发,
         #        跑完即退 0 = 假绿 — 与 gen_stim_tcp_echo.py 等一致)
+        # ⭐ SNDWND-GUARD (F9): 第三参 = 臂, 模型必须与 DUT **同臂同参**;
+        #   默认 fixed (缺省 = 既有 p3sim 门的行为, 逐字兼容)。
+        #   第四参 = 模式子集 (缺省全三模) —— 供新门把已知既有红 (hard 模式模型
+        #   保真度缺口, HEAD 基线同样红, 见 sim/p3sim_sw) 单独记录。
+        arm = sys.argv[3] if len(sys.argv) > 3 else 'fixed'
+        assert arm in ('fixed', 'legacy'), ('unknown arm', arm)
+        modes = sys.argv[4].split(',') if len(sys.argv) > 4 else ['nostall', 'stall', 'hard']
+        for m in modes:
+            assert m in ('nostall', 'stall', 'hard'), ('unknown mode', m)
         ok = True
-        for mode in ('nostall', 'stall', 'hard'):
-            ok = check(simdir, mode) and ok
+        for mode in modes:
+            ok = check(simdir, mode, guard=(arm == 'fixed')) and ok
         sys.exit(0 if ok else 1)
-    frames, hw0, hw1 = generate(simdir)
-    print('%d frames, hardwin=[%d,%d)' % (len(frames), hw0, hw1))
+    frames, hw0, hw1, sw = generate(simdir)
+    print('%d frames, hardwin=[%d,%d), sw cfg2=%d zero=%d' %
+          (len(frames), hw0, hw1, sw['cfg2'], sw['zero']))
     for mode in ('nostall', 'stall', 'hard'):
         lines, stats, mstat, tcb = model(simdir, mode)
         print('%s: %d lines, stats %s, mac %s' % (mode, len(lines), stats, mstat))

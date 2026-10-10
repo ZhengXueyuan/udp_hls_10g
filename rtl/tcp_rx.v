@@ -14,7 +14,22 @@
 // snd_una/snd_wnd, 绝不回 ACK (防 ACK 环)。TCP 校验和 cut-through 无法验证, 不查。
 // 填充帧: pop8(TLAST) 允许 > 剩余载荷 (60B 最小帧填充), 多余字节按填充忽略。
 // 坏 FCS 段: 载荷照发 (tuser[0]=0 标记) 但不回 ACK、不推进 rcv_nxt (对端重传)。
-module tcp_rx (
+module tcp_rx #(
+    // ⭐ P7B-SNDWND-GUARD (2026-10-11): snd_wnd 写入守卫。
+    //   1 = 修后: 窗口更新按"可接受 ACK"门控 (RFC 793 p.72 —— 陈旧/越界 ACK
+    //       不得更新发送窗; 模块自身合同 :83-87"值寄存器只在对应条件成立时更新").
+    //   0 = 修前: 任何 FCS-OK 且走到 fend 的帧都写 snd_wnd (仅 A/B 复现历史行为;
+    //       板构建必须为 1).
+    //   谓词 = ackok_l (`ack_ok` 的 r6-fix 锁存, :691, = snd_una <= ack <= ack_hi,
+    //   含等号 ⇒ 零推进的窗口更新 ACK 放行 —— 零窗恢复必需). ⛔ 不许换 ack_adv_l
+    //   (打死零推进 ACK ⇒ 零窗恢复退化到等下一轮 persist 探测; RFC 1122 §4.2.2.17)
+    //   / dup_l (含"有在飞"⇒ 零窗静置态恒假; r6 板级死锁同坑 :586-591).
+    //   置位门 (:509) 与值锁存 (:518) 必须成对改, 否则留下"旧值/新 flags"错配.
+    //   注: 用逻辑非 `!SNDWND_GUARD` 而非按位 `~SNDWND_GUARD` —— 调用方若传宽位
+    //   常量 (如十进制 `1`), `~` 会产生非零值 ⇒ 静默禁用守卫 (安静失效族);
+    //   `!` 对任意宽度都语义正确.
+    parameter SNDWND_GUARD = 1'b1
+) (
     // ---- P5d H-fix: 接受裕度 ACC_MARGIN 由**参数**改为**输入端口** ----------
     // 语义 (P5b C16-修订) 不变: 接受界 = 通告界 + ACC_MARGIN。
     //   W = max(0, winq - occ) 是"我还能收多少"; 但对端在收到新窗口之前按**旧窗口**
@@ -506,7 +521,9 @@ module tcp_rx (
                 pend_rcv <= (acc_l && (adv_cnt != 16'd0) && s_axis_tcrs &&
                              !fend_trunc) || pend_rcv;
                 pend_una <= (ack_adv_l && s_axis_tcrs) || pend_una;
-                pend_wnd <= s_axis_tcrs || pend_wnd;
+                // ⭐ P7B-SNDWND-GUARD: 窗口更新按"可接受 ACK"门控 (RFC 793 p.72;
+                //   见模块头 SNDWND_GUARD 注)。置位门与下方值锁存成对改。
+                pend_wnd <= (s_axis_tcrs && (ackok_l | !SNDWND_GUARD)) || pend_wnd;
                 if (acc_l && (adv_cnt != 16'd0) && s_axis_tcrs && !fend_trunc) begin
                     pend_rcv_val <= rcv_nxt_l + {16'b0, adv_cnt};
                     pend_id <= conn_id_l;
@@ -515,7 +532,8 @@ module tcp_rx (
                     pend_una_val <= ack32_l;
                     pend_id <= conn_id_l;
                 end
-                if (s_axis_tcrs) begin
+                // ⭐ P7B-SNDWND-GUARD: 值锁存与上方置位门同款 (成对改)。
+                if (s_axis_tcrs && (ackok_l | !SNDWND_GUARD)) begin
                     pend_wnd_val <= wnd_ws;
                     pend_id <= conn_id_l;
                 end
