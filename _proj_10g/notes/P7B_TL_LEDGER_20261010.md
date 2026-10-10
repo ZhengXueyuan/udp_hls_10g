@@ -274,3 +274,53 @@
 **⛔ 它不许做的**：烧录 / 连 JTAG / 碰板卡 / ssh 对端 / 改 `rtl`·`tb`·`sim` / 走 GUI 或 `vivado_prj`（那份 wrapper 是 BID `0xA` 旧版 = "永久禁发"陷阱）。
 
 **构建回来后的下一步**：读侧同步 `EXPECT_BID` `0x1A→0x1C`（~75 处）→ 板级轮（burn + 按 **abort RST** 构型触发；⚠️ 每次测量前必重烧 + 核 sha256 ↔ 板侧 BID）。
+
+---
+
+## §10 2026-10-11 凌晨：**用户新指令 + 自主推进计划**（本节是**最新的续接点**，时点晚于 §9）
+
+### §10-0 用户逐字（2026-10-11 00:36）
+> 「我要离开几个小时，你们自主推进**直到所有缺陷都修复完毕**。然后**研究一下：打通 sfp+ -> 板上IP协议栈 -> pcie -> 驱动程序 -> pc程序接收经过处理的tcp载荷 这条数据通路，并实现一个逻辑简单但是功能齐备的小功能打通所有环节**」
+> 随后逐字补充：「**不一定是TCP，还可以是UDP或者其他协议的数据**」
+
+### §10-1 在飞清单（00:45 时点，六支）
+| # | 任务 | 写权（互斥） | 备注 |
+|---|---|---|---|
+| 1 | **缺陷刀构建**（§9-8 四步） | `board/wrapper_p4.v` · `board/p7b_ku5p_stdout.txt` · `sim/p4sim/matrix_p4dfix.log` · `notes/p7b_build_archive/` | Vivado 已到 Phase 2.4；**0x1C 的四行改动已落** |
+| 2 | **新里程碑侦察+设计**：SFP+→板上栈→PCIe→驱动→PC | **新建** `notes/P7B_PCIE_DATAPATH_DESIGN.md` | 含"小功能"推荐 + 三通道候选 (a)XDMA C2H ST (b)user BAR 窗口搬运 (c)AXI-MM BRAM |
+| 3 | 文档行号订正批（真值 `2779-2783`） | `PORT_NOTES.md` · `p7b_p5wrapper_diag_20261010/REPORT.md` · `p7b_aliasgate_20261010/REPORT.md` | 余 2 处（`sim/aliasgate/alias_dir_check.py:7` · `sim/p4gates/run_matrix_p4dfix.bat:204`）**等构建结束** |
+| 4 | 台架族收尾 | `p7b_tcp_sink_rate.cpp` · `notes/p7b_affinity/BUILD.md` · 2×`lf_dl.deployed.sh`（a7/buildE `_tools/`） | ⚠️ 对端编译**只在 `/tmp/p7b_biz_refresh/`**，不覆盖现役 `/tmp/p7b_biz/` |
+| 5 | persist 实施件**静态**对抗审查 | **新建** `notes/p7b_persist_impl_review_20261011/FINDINGS.md` | 动态臂（xsim）**待放行**（Vivado 结束前禁跑） |
+| 6 | `snd_wnd` 无守卫：现核+设计件 | **新建** `notes/P7B_SNDWND_GUARD_DESIGN.md` | ⚠️ 设计必须保住**零窗恢复**（同 ack、win 0→非 0 的窗口更新 ACK 必须照收） |
+
+### §10-2 缺陷总账（"所有缺陷修复完毕"的口径 = 本表逐条收口）
+| 缺陷 | 00:45 状态 | 收口路径 |
+|---|---|---|
+| **重放越界**（`§0-28`） | RTL 已修 · **构建在飞** | 构建 → §9-8 验收 → 读侧同步 `0x1A→0x1C` → 板级轮 |
+| **五行反向别名**（`§0-8`） | 已修（`faee172`） | 文档批（在飞）→ 余 2 处 sim/ 等构建完 |
+| **`snd_wnd` 无守卫** | 设计件在飞 | 设计 → 审查 → 实施 → **缺陷批构建**（⛔ 不与 persist 捆绑） |
+| **F-3（MMCM 失锁重锁）**（`§0-17`） | 未修（潜伏） | 小改（事件脉冲清）→ 缺陷批构建 |
+| **RFC 偏离 `seq_lt`**（`§0-9`） | 设计 v2 待回写（`§0-25`） | Build G v2 → 实施（单列，另议） |
+| **mdio 两潜伏项**（`§0-18`） | ⭐ **RTL 已修**（tool_debt 轮：守卫 + TB 双腿 + 编译级见证；pristine 保全）**未重建位流/未上板** ⇒ **OPEN_ITEMS #18 的"未修/待查"要订正** | 重建 `_proj_mdio` 位流（另立，低优）；MDIO 0/1 应答**需板** |
+| **矩阵对 app/wrapper 空证据**（`§0-19`） | 未改 | manifest 扩（sim/ 编辑，构建完做） |
+| **`e_j9`/`e_f1_ring` 双计**（tot_red） | 登记不修 | 构建完处置：修或正式登记（TB 记账） |
+| **`analyze.py` 右腿假牙**（`§0-27`） | 未改 | 工具口径改（零构建） |
+| **R1–R5 残留**（缺陷刀） | 已登记 | R1 板不可达（用户裁"最小版"）；R2/R4/R5 登记不修 |
+| **vivado_prj 四份旧 wrapper**（`§3-13`） | 未动 | ⚠️ **构建期间严禁碰 `vivado_prj`**；构建完核 |
+| 14 份陈旧变异件（`§3-6`）· `_selftest/`（`§3-8`）· `app_pattern.v:33` 注释（`§3-7`） | 未动 | 构建完小批（sim/ 与 rtl 注释；⚠️ 动 rtl 前先看下一条） |
+| **persist W 臂 H2(b)**（`§8-3`/`§9-6`） | 未覆盖 | 看 #5 审查报告后定（动态臂待放行） |
+
+⛔ **纪律（本轮自主推进期间逐条照办）**：不许改 `D:\repo\perfv`；密码不落盘；不许写 QSPI；**构建期间不许动 rtl/tb/sim/board**（#57）；**不许 xsim 与 Vivado 并跑**（#47 前科）；git 只有 TL 写；每支 agent 中文+不下 PASS/FAIL+不写"时序已解决"+不把"未观测到"写成"不存在"。
+
+### §10-3 执行序（构建返回后照此走）
+1. **按 §9-8 验收构建**（位流 sha256/字节数 · `WNS/WHS/WPWS` + 三类失败端点**原始行** · ⭐ **DP setup WNS + 前 10 最差端点有无本刀新族** · 归档完整性与 §0-26 的 dcp 是否已随本轮归档收走）→ **TL 提交**。
+2. **放行 #5 的动态臂**（xsim，只在 Vivado 结束后）。
+3. 读侧同步 `EXPECT_BID 0x1A→0x1C`（~75 处）→ **派板级轮**：burn 0x1C + 核 sha256↔BID + 身份（BID/70 字/`0x138`）+ 冒烟 + abort RST 构型触发。
+4. **persist 刀**：按 #5 审查结论补 W 臂 → 构建 `0x1D`（`.PERSIST_EN(1'b1)`）→ 板级 A/B（⚠️ 板级正控 = 零窗造法两条都要跑：P-A 伪造 ACK 注入 + P-C 历史小窗，后者必须显式 `--rcvbuf-after-connect`）。
+5. **缺陷批构建**（`snd_wnd` 守卫 + F-3 + …）在 persist 之后另开 —— ⛔ 不许与 persist 捆绑。
+6. **新里程碑**（PCIe 数据通路）：#2 设计件 → 对抗审查 → 实施 → 构建 → 板级（"小功能"端到端逐字节判据）。
+
+### §10-4 本轮新开的两支的**写权红线**（它们汇报后由 TL 核，不许自称完成）
+- #2 只许写 `P7B_PCIE_DATAPATH_DESIGN.md`；⛔ 不碰 rtl/board/sim/驱动。
+- #6 只许写 `P7B_SNDWND_GUARD_DESIGN.md`。
+- #4 **不许覆盖对端 `/tmp/p7b_biz/`**（现役部署，板上轮要用）。
