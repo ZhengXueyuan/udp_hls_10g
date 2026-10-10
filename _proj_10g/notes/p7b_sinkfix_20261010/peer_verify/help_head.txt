@@ -1,0 +1,19 @@
+PIN_RULE=avoid-nic PIN_DEGRADED=none PIN_CPU=5 PIN_CORES_ONLINE=0-7 PIN_NIC_IFACE=enp1s0f0np0,enp1s0f1np1 PIN_NIC_CPUS=0,1,2,3,4,5 PIN_NIC_EXCLUDED=none PIN_CORE_LOAD=175408629 PIN_ALLOWED_MASK=20 PIN_GETCPU_START=5 PIN_FREQ_START_KHZ=3728203 PIN_GOV=schedutil PIN_NIC_IRQLINES=12 PIN_NIC_IFACE_SRC=auto PIN_TUPLE_ORDER=own_sib_t PIN_PAIR_RULE=load-only PIN_PAIR_DEGRADED=nic0-0 PIN_CPU_IO=4 PIN_CPU_WORK=7 PIN_PC_IO=0 PIN_PC_WORK=3 PIN_PAIR_EXCL=1 PIN_PAIR_REQ=want
+p7b_tcp_sink --host H --port P [--conns N] [--seconds S] [--rcvbuf B] [--maxbytes B]
+             [--poll-ms 5000] [--stall-n 3] [--no-thread] [--slots 16] [--slot-bytes 65536]
+             [--rcvbuf-after-connect] [--check seq|lane8]
+  逐连接: connect(非阻塞+poll) -> 收流(poll LT) -> 逐字节复算图案(偏移0起) -> 报告
+  ⛔ 不写盘 (载荷只在内存); 校验 = 按 p7b_pattern.h 规则增量复算
+  --poll-ms/--stall-n: 连续 stall-n 次 poll 超时 => 该连接 STALL 并中止 (计入 bad_conns)
+  ⭐ 默认**双线程**: I/O 线程 (poll+recv 进槽) 与校验线程 (逐字节比) 经两条 SPSC 无锁
+     有界队列交接 (槽池 = --slots x --slot-bytes; 基偏移随元素走 ⇒ first_mismatch
+     仍是**连接内流偏移**); 两线程各绑一颗**不同物理核** (--pin-pair/--no-pin-pair)
+  --no-thread: **旧单线程路径原样** (A/B 的另一只手)
+  --rcvbuf-after-connect: 旧行为逐字复现 (SO_RCVBUF 在 connect **之后**才设
+     => 首个窗口通告 = 默认大窗 [实测 64240] 再塌; 默认 = connect **之前**设
+     [修复后]; 两臂见证行 = SINK_RCVBUF_ORDER = before_connect|after_connect_LEGACY)
+  --check seq|lane8: 图案复算路径 (**默认 seq** = 已上板验过的逐字节版;
+     lane8 = M^8 8 字节/步, 逐位等价, 见 p7b_pattern.h 头注释)
+  输出行以 SINK_ 前缀, 便于机器解析; 汇总行 SINK_SUM_*; 新字段一律**追加行尾**
+  --selftest: 只跑图案自检向量; --selftest-equiv: 跑 seq/lane8 逐位等价自检
+PIN_GETCPU_END=5 PIN_FREQ_END_KHZ=3728203

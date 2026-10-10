@@ -1,0 +1,135 @@
+RUN_TAG=SFVNONCE_20261010_193700_a1b2c3
+WHOAMI=root UID=0 HOST=a-MS-7850
+=== kernel ===
+Linux a-MS-7850 7.0.0-38-generic #38~24.04.4-Ubuntu SMP PREEMPT_DYNAMIC Mon Sep 14 16:37:11 UTC 2 x86_64 x86_64 x86_64 GNU/Linux
+=== sysctl (窗口语义上下文) ===
+net.ipv4.tcp_rmem = 4096	131072	33554432
+net.core.rmem_default = 212992
+net.core.rmem_max = 4194304
+net.ipv4.tcp_window_scaling = 1
+net.ipv4.tcp_adv_win_scale = 1
+net.ipv4.tcp_moderate_rcvbuf = 1
+=== port check (期望空) ===
+=== 编译件指纹 ===
+6d9b14f24725fa326ffe5b169f77e30f  /tmp/sinkfix_verify/p7b_tcp_sink
+8d02ef6426d4ef6ad5fd2c514965c1e8  /tmp/sinkfix_verify/p7b_tcp_sink.cpp
+=== pin gate probe (--help 也会先过绑核硬门; RC=2 => 需要 --no-pin) ===
+HELP_RC=0
+PIN_RULE=avoid-nic PIN_DEGRADED=none PIN_CPU=5 PIN_CORES_ONLINE=0-7 PIN_NIC_IFACE=enp1s0f0np0,enp1s0f1np1 PIN_NIC_CPUS=0,1,2,3,4,5 PIN_NIC_EXCLUDED=none PIN_CORE_LOAD=175408629 PIN_ALLOWED_MASK=20 PIN_GETCPU_START=5 PIN_FREQ_START_KHZ=3728203 PIN_GOV=schedutil PIN_NIC_IRQLINES=12 PIN_NIC_IFACE_SRC=auto PIN_TUPLE_ORDER=own_sib_t PIN_PAIR_RULE=load-only PIN_PAIR_DEGRADED=nic0-0 PIN_CPU_IO=4 PIN_CPU_WORK=7 PIN_PC_IO=0 PIN_PC_WORK=3 PIN_PAIR_EXCL=1 PIN_PAIR_REQ=want
+p7b_tcp_sink --host H --port P [--conns N] [--seconds S] [--rcvbuf B] [--maxbytes B]
+             [--poll-ms 5000] [--stall-n 3] [--no-thread] [--slots 16] [--slot-bytes 65536]
+             [--rcvbuf-after-connect] [--check seq|lane8]
+  逐连接: connect(非阻塞+poll) -> 收流(poll LT) -> 逐字节复算图案(偏移0起) -> 报告
+  ⛔ 不写盘 (载荷只在内存); 校验 = 按 p7b_pattern.h 规则增量复算
+  --poll-ms/--stall-n: 连续 stall-n 次 poll 超时 => 该连接 STALL 并中止 (计入 bad_conns)
+  ⭐ 默认**双线程**: I/O 线程 (poll+recv 进槽) 与校验线程 (逐字节比) 经两条 SPSC 无锁
+     有界队列交接 (槽池 = --slots x --slot-bytes; 基偏移随元素走 ⇒ first_mismatch
+     仍是**连接内流偏移**); 两线程各绑一颗**不同物理核** (--pin-pair/--no-pin-pair)
+  --no-thread: **旧单线程路径原样** (A/B 的另一只手)
+  --rcvbuf-after-connect: 旧行为逐字复现 (SO_RCVBUF 在 connect **之后**才设
+     => 首个窗口通告 = 默认大窗 [实测 64240] 再塌; 默认 = connect **之前**设
+     [修复后]; 两臂见证行 = SINK_RCVBUF_ORDER = before_connect|after_connect_LEGACY)
+  --check seq|lane8: 图案复算路径 (**默认 seq** = 已上板验过的逐字节版;
+     lane8 = M^8 8 字节/步, 逐位等价, 见 p7b_pattern.h 头注释)
+  输出行以 SINK_ 前缀, 便于机器解析; 汇总行 SINK_SUM_*; 新字段一律**追加行尾**
+  --selftest: 只跑图案自检向量; --selftest-equiv: 跑 seq/lane8 逐位等价自检
+PIN_GETCPU_END=5 PIN_FREQ_END_KHZ=3728203
+--- help stderr ---
+
+################ ARM A  (SFVNONCE_20261010_193700_a1b2c3) ################
+SERVER_LISTENING port=39017 hold=8.0
+tcpdump: listening on lo, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+SINK_RC_A=1
+--- arm A stdout ---
+PIN_RULE=avoid-nic PIN_DEGRADED=none PIN_CPU=5 PIN_CORES_ONLINE=0-7 PIN_NIC_IFACE=enp1s0f0np0,enp1s0f1np1 PIN_NIC_CPUS=0,1,2,3,4,5 PIN_NIC_EXCLUDED=none PIN_CORE_LOAD=175408629 PIN_ALLOWED_MASK=20 PIN_GETCPU_START=5 PIN_FREQ_START_KHZ=3718641 PIN_GOV=schedutil PIN_NIC_IRQLINES=12 PIN_NIC_IFACE_SRC=auto PIN_TUPLE_ORDER=own_sib_t PIN_PAIR_RULE=load-only PIN_PAIR_DEGRADED=nic0-0 PIN_CPU_IO=4 PIN_CPU_WORK=7 PIN_PC_IO=0 PIN_PC_WORK=3 PIN_PAIR_EXCL=1 PIN_PAIR_REQ=want
+SINK_CHECK check=seq
+SINK_LIMITS maxbytes=4194304 poll_ms=5000 stall_n=3 rcvbuf=2920 conns=1 secs=6
+SINK_RCVBUF_ORDER RCVBUF_ORDER=before_connect rcvbuf=2920
+PIN_THREAD name=io PIN_TID_IO=3738240 PIN_CPU_IO=4 PIN_ALLOWED_MASK_IO=10 PIN_GETCPU_IO=4 CPU_FREQ_IO_KHZ=3873972
+PIN_THREAD name=work PIN_TID_WORK=3738241 PIN_CPU_WORK=7 PIN_ALLOWED_MASK_WORK=80 PIN_GETCPU_WORK=7 CPU_FREQ_WORK_KHZ=3894182
+SINK_CONN 0 OK bytes=0 first_mismatch=-1 mism_bytes=0 conn_ms=0.060 dur_ms=8000.282 Mbps=0.000 reads=0 poll_tmo=1 CPU_FREQ_KHZ=3899787 THREADED=on q_full_push=1 q_full_pop=1 q_free_push=17 q_free_pop=1 slot_wait_spins=0 checked_bytes=0
+SINK_SUM conns=1 fail_conns=0 bytes=0 clean_conns=1 bad_conns=0 mismatch_bytes=0 stall_conns=0 err_conns=0 poll_tmo=1 wall_s=8.000 net_s=8.000 agg_Mbps=0.000 THREADED=on full_push=1 full_pop=1 free_push=17 free_pop=1 slot_wait_spins=0 checked_bytes=0 threads=2 check=seq
+SINK_DONE
+PIN_GETCPU_END=5 PIN_FREQ_END_KHZ=3856398
+--- arm A stderr ---
+--- 见证行检查 (缺见证按未测读) ---
+4:SINK_RCVBUF_ORDER RCVBUF_ORDER=before_connect rcvbuf=2920
+--- arm A tcpdump 文本 ---
+reading from file /tmp/sinkfix_verify/arm_A.pcap, link-type EN10MB (Ethernet), snapshot length 262144
+19:37:01.178612 IP (tos 0x0, ttl 64, id 1906, offset 0, flags [DF], proto TCP (6), length 60)
+    127.0.0.1.38160 > 127.0.0.1.39017: Flags [S], cksum 0xfe30 (incorrect -> 0x7bfe), seq 1608151521, win 2920, options [mss 65495,sackOK,TS val 3774867524 ecr 0,nop,wscale 0], length 0
+19:37:01.178622 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 60)
+    127.0.0.1.39017 > 127.0.0.1.38160: Flags [S.], cksum 0xfe30 (incorrect -> 0x6d7d), seq 244565698, ack 1608151522, win 65483, options [mss 65495,sackOK,TS val 2559028260 ecr 3774867524,nop,wscale 10], length 0
+19:37:01.178631 IP (tos 0x0, ttl 64, id 1907, offset 0, flags [DF], proto TCP (6), length 52)
+    127.0.0.1.38160 > 127.0.0.1.39017: Flags [.], cksum 0xfe28 (incorrect -> 0x8ad4), seq 1, ack 1, win 2920, options [nop,nop,TS val 3774867524 ecr 2559028260], length 0
+--- arm A 裸字段解析 (自写解析器, 绕开显示层歧义) ---
+PCAP_HDR linktype=1 snap=262144 version=2.4 nano=False
+PKT 1 t=1791632221.178612 :38160 > :39017 flags=[SYN] win_raw=2920 (0x0b68) seq=1608151521 ack=0 wscale=0 mss=65495 sackOK=True tsval=3774867524 datalen=0 orig=74
+PKT 2 t=1791632221.178622 :39017 > :38160 flags=[ACK,SYN] win_raw=65483 (0xffcb) seq=244565698 ack=1608151522 wscale=10 mss=65495 sackOK=True tsval=2559028260 datalen=0 orig=74
+PKT 3 t=1791632221.178631 :38160 > :39017 flags=[ACK] win_raw=2920 (0x0b68) seq=1608151522 ack=244565699 wscale=None mss=None sackOK=False tsval=3774867524 datalen=0 orig=66
+PCAP_A_BYTES=286
+PCAP_A_SHA256=26fc652aef0776c8a99fe05dd3a76d2a951d0a147f1eef0b48f533874aa0bb46
+
+################ ARM B  (SFVNONCE_20261010_193700_a1b2c3) ################
+SERVER_LISTENING port=39017 hold=8.0
+tcpdump: listening on lo, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+SINK_RC_B=1
+--- arm B stdout ---
+PIN_RULE=avoid-nic PIN_DEGRADED=none PIN_CPU=5 PIN_CORES_ONLINE=0-7 PIN_NIC_IFACE=enp1s0f0np0,enp1s0f1np1 PIN_NIC_CPUS=0,1,2,3,4,5 PIN_NIC_EXCLUDED=none PIN_CORE_LOAD=175408632 PIN_ALLOWED_MASK=20 PIN_GETCPU_START=5 PIN_FREQ_START_KHZ=3773294 PIN_GOV=schedutil PIN_NIC_IRQLINES=12 PIN_NIC_IFACE_SRC=auto PIN_TUPLE_ORDER=own_sib_t PIN_PAIR_RULE=load-only PIN_PAIR_DEGRADED=nic0-0 PIN_CPU_IO=4 PIN_CPU_WORK=7 PIN_PC_IO=0 PIN_PC_WORK=3 PIN_PAIR_EXCL=1 PIN_PAIR_REQ=want
+SINK_CHECK check=seq
+SINK_LIMITS maxbytes=4194304 poll_ms=5000 stall_n=3 rcvbuf=2920 conns=1 secs=6
+SINK_RCVBUF_ORDER RCVBUF_ORDER=after_connect_LEGACY rcvbuf=2920
+PIN_THREAD name=work PIN_TID_WORK=3738268 PIN_CPU_WORK=7 PIN_ALLOWED_MASK_WORK=80 PIN_GETCPU_WORK=7 CPU_FREQ_WORK_KHZ=3701325
+PIN_THREAD name=io PIN_TID_IO=3738267 PIN_CPU_IO=4 PIN_ALLOWED_MASK_IO=10 PIN_GETCPU_IO=4 CPU_FREQ_IO_KHZ=3789523
+SINK_CONN 0 OK bytes=0 first_mismatch=-1 mism_bytes=0 conn_ms=0.058 dur_ms=8003.316 Mbps=0.000 reads=0 poll_tmo=1 CPU_FREQ_KHZ=3899788 THREADED=on q_full_push=1 q_full_pop=1 q_free_push=17 q_free_pop=1 slot_wait_spins=0 checked_bytes=0
+SINK_SUM conns=1 fail_conns=0 bytes=0 clean_conns=1 bad_conns=0 mismatch_bytes=0 stall_conns=0 err_conns=0 poll_tmo=1 wall_s=8.003 net_s=8.003 agg_Mbps=0.000 THREADED=on full_push=1 full_pop=1 free_push=17 free_pop=1 slot_wait_spins=0 checked_bytes=0 threads=2 check=seq
+SINK_DONE
+PIN_GETCPU_END=5 PIN_FREQ_END_KHZ=2600000
+--- arm B stderr ---
+--- 见证行检查 (缺见证按未测读) ---
+4:SINK_RCVBUF_ORDER RCVBUF_ORDER=after_connect_LEGACY rcvbuf=2920
+--- arm B tcpdump 文本 ---
+reading from file /tmp/sinkfix_verify/arm_B.pcap, link-type EN10MB (Ethernet), snapshot length 262144
+19:37:09.835740 IP (tos 0x0, ttl 64, id 49648, offset 0, flags [DF], proto TCP (6), length 60)
+    127.0.0.1.54984 > 127.0.0.1.39017: Flags [S], cksum 0xfe30 (incorrect -> 0xa827), seq 1223112301, win 65495, options [mss 65495,sackOK,TS val 1462985245 ecr 0,nop,wscale 10], length 0
+19:37:09.835750 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 60)
+    127.0.0.1.39017 > 127.0.0.1.54984: Flags [S.], cksum 0xfe30 (incorrect -> 0x1a41), seq 1247173578, ack 1223112302, win 65483, options [mss 65495,sackOK,TS val 1420268313 ecr 1462985245,nop,wscale 10], length 0
+19:37:09.835758 IP (tos 0x0, ttl 64, id 49649, offset 0, flags [DF], proto TCP (6), length 52)
+    127.0.0.1.54984 > 127.0.0.1.39017: Flags [.], cksum 0xfe28 (incorrect -> 0x42c0), seq 1, ack 1, win 64, options [nop,nop,TS val 1462985245 ecr 1420268313], length 0
+--- arm B 裸字段解析 (自写解析器, 绕开显示层歧义) ---
+PCAP_HDR linktype=1 snap=262144 version=2.4 nano=False
+PKT 1 t=1791632229.835740 :54984 > :39017 flags=[SYN] win_raw=65495 (0xffd7) seq=1223112301 ack=0 wscale=10 mss=65495 sackOK=True tsval=1462985245 datalen=0 orig=74
+PKT 2 t=1791632229.835750 :39017 > :54984 flags=[ACK,SYN] win_raw=65483 (0xffcb) seq=1247173578 ack=1223112302 wscale=10 mss=65495 sackOK=True tsval=1420268313 datalen=0 orig=74
+PKT 3 t=1791632229.835758 :54984 > :39017 flags=[ACK] win_raw=64 (0x0040) seq=1223112302 ack=1247173579 wscale=None mss=None sackOK=False tsval=1462985245 datalen=0 orig=66
+PCAP_B_BYTES=286
+PCAP_B_SHA256=efb594e6ffb55c2e1b1f949ded4ab910d1abc4a1260f092eb547c78bed7056b8
+
+ALL_DONE SFVNONCE_20261010_193700_a1b2c3
+total 1252
+drwxrwxr-x  2 a       a         4096 Oct 10 19:37 .
+drwxrwxrwt 30 root    root    884736 Oct 10 19:36 ..
+-rw-r--r--  1 root    root         0 Oct 10 19:37 arm_A.err
+-rw-r--r--  1 root    root      1424 Oct 10 19:37 arm_A.out
+-rw-r--r--  1 tcpdump tcpdump    286 Oct 10 19:37 arm_A.pcap
+-rw-r--r--  1 root    root         0 Oct 10 19:37 arm_B.err
+-rw-r--r--  1 root    root      1430 Oct 10 19:37 arm_B.out
+-rw-r--r--  1 tcpdump tcpdump    286 Oct 10 19:37 arm_B.pcap
+-rw-rw-r--  1 a       a          161 Oct 10 19:36 compile_recipe.log
+-rw-rw-r--  1 a       a         8352 Oct 10 19:36 diff_deployed_vs_sinkfix.txt
+-rw-r--r--  1 root    root         0 Oct 10 19:37 help_err.txt
+-rw-r--r--  1 root    root      2047 Oct 10 19:37 help_head.txt
+-rw-r--r--  1 a       a         1218 Oct 10 19:36 mini_server.py
+-rw-rw-r--  1 a       a        65142 Oct 10 19:36 p7b_affinity.h
+-rw-rw-r--  1 a       a         9515 Oct 10 19:36 p7b_io.h
+-rw-rw-r--  1 a       a        21578 Oct 10 19:36 p7b_pattern.h
+-rw-rw-r--  1 a       a         4696 Oct 10 19:36 p7b_spsc.h
+-rwxrwxr-x  1 a       a       169392 Oct 10 19:36 p7b_tcp_sink
+-rw-rw-r--  1 a       a        29226 Oct 10 19:36 p7b_tcp_sink.cpp
+-rw-r--r--  1 a       a         4879 Oct 10 19:36 parse_pcap_tcp.py
+-rwxr-xr-x  1 a       a         3208 Oct 10 19:36 run_ab.sh
+-rw-rw-r--  1 a       a            0 Oct 10 19:36 selftest.err
+-rw-rw-r--  1 a       a          813 Oct 10 19:36 selftest.out
+-rw-r--r--  1 root    root        86 Oct 10 19:37 server_A.log
+-rw-r--r--  1 root    root        86 Oct 10 19:37 server_B.log
+-rw-r--r--  1 root    root       161 Oct 10 19:37 tcpdump_A.log
+-rw-r--r--  1 root    root       161 Oct 10 19:37 tcpdump_B.log

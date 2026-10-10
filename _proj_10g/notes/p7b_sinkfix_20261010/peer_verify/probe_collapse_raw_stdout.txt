@@ -1,0 +1,97 @@
+PROBE_C_TAG=PROBEC_20261010_193854_c9d1
+
+#### PROBE ARM A2 ####
+SERVER_LISTENING port=39019 hold=6.0
+SINK_RC_A2=1
+--- 见证行 ---
+4:SINK_RCVBUF_ORDER RCVBUF_ORDER=before_connect rcvbuf=2920
+--- sink stdout (SINK_CONN/SINK_SUM) ---
+SINK_CONN 0 OK bytes=4 first_mismatch=0 mism_bytes=4 conn_ms=0.080 dur_ms=6503.691 Mbps=0.000 reads=1 poll_tmo=1 CPU_FREQ_KHZ=3899786 THREADED=on q_full_push=2 q_full_pop=2 q_free_push=18 q_free_pop=2 slot_wait_spins=0 checked_bytes=4
+SINK_SUM conns=1 fail_conns=0 bytes=4 clean_conns=0 bad_conns=1 mismatch_bytes=4 stall_conns=0 err_conns=0 poll_tmo=1 wall_s=6.504 net_s=6.504 agg_Mbps=0.000 THREADED=on full_push=2 full_pop=2 free_push=18 free_pop=2 slot_wait_spins=0 checked_bytes=4 threads=2 check=seq
+--- server log ---
+SERVER_LISTENING port=39019 hold=6.0
+SERVER_ACCEPTED peer=127.0.0.1:59126
+SERVER_SENT_4B
+SERVER_DONE
+--- tcpdump stats ---
+tcpdump: listening on lo, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+8 packets captured
+16 packets received by filter
+0 packets dropped by kernel
+--- tcpdump text ---
+reading from file /tmp/sinkfix_verify/pc_A2.pcap, link-type EN10MB (Ethernet), snapshot length 262144
+19:38:54.814805 IP (tos 0x0, ttl 64, id 7773, offset 0, flags [DF], proto TCP (6), length 60)
+    127.0.0.1.59126 > 127.0.0.1.39019: Flags [S], cksum 0xfe30 (incorrect -> 0xf62d), seq 1973665751, win 2920, options [mss 65495,sackOK,TS val 4135756522 ecr 0,nop,wscale 0], length 0
+19:38:54.814816 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 60)
+    127.0.0.1.39019 > 127.0.0.1.59126: Flags [S.], cksum 0xfe30 (incorrect -> 0x98aa), seq 3423751910, ack 1973665752, win 65483, options [mss 65495,sackOK,TS val 1657203524 ecr 4135756522,nop,wscale 10], length 0
+19:38:54.814827 IP (tos 0x0, ttl 64, id 7774, offset 0, flags [DF], proto TCP (6), length 52)
+    127.0.0.1.59126 > 127.0.0.1.39019: Flags [.], cksum 0xfe28 (incorrect -> 0xb601), seq 1, ack 1, win 2920, options [nop,nop,TS val 4135756522 ecr 1657203524], length 0
+19:38:55.315056 IP (tos 0x0, ttl 64, id 25763, offset 0, flags [DF], proto TCP (6), length 56)
+    127.0.0.1.39019 > 127.0.0.1.59126: Flags [P.], cksum 0xfe2c (incorrect -> 0x218b), seq 1:5, ack 1, win 64, options [nop,nop,TS val 1657204025 ecr 4135756522], length 4
+19:38:55.315064 IP (tos 0x0, ttl 64, id 7775, offset 0, flags [DF], proto TCP (6), length 52)
+    127.0.0.1.59126 > 127.0.0.1.39019: Flags [.], cksum 0xfe28 (incorrect -> 0xb217), seq 1, ack 5, win 2916, options [nop,nop,TS val 4135757023 ecr 1657204025], length 0
+19:39:01.315189 IP (tos 0x0, ttl 64, id 25764, offset 0, flags [DF], proto TCP (6), length 52)
+    127.0.0.1.39019 > 127.0.0.1.59126: Flags [F.], cksum 0xfe28 (incorrect -> 0xa5ca), seq 5, ack 1, win 64, options [nop,nop,TS val 1657210025 ecr 4135757023], length 0
+19:39:01.318553 IP (tos 0x0, ttl 64, id 7776, offset 0, flags [DF], proto TCP (6), length 52)
+    127.0.0.1.59126 > 127.0.0.1.39019: Flags [F.], cksum 0xfe28 (incorrect -> 0x8332), seq 1, ack 6, win 2916, options [nop,nop,TS val 4135763026 ecr 1657210025], length 0
+19:39:01.318577 IP (tos 0x0, ttl 64, id 25765, offset 0, flags [DF], proto TCP (6), length 52)
+    127.0.0.1.39019 > 127.0.0.1.59126: Flags [.], cksum 0xfe28 (incorrect -> 0x8e53), seq 6, ack 2, win 64, options [nop,nop,TS val 1657210028 ecr 4135763026], length 0
+--- 裸字段 ---
+PCAP_HDR linktype=1 snap=262144 version=2.4 nano=False
+PKT 1 t=1791632334.814805 :59126 > :39019 flags=[SYN] win_raw=2920 (0x0b68) seq=1973665751 ack=0 wscale=0 mss=65495 sackOK=True tsval=4135756522 datalen=0 orig=74
+PKT 2 t=1791632334.814816 :39019 > :59126 flags=[ACK,SYN] win_raw=65483 (0xffcb) seq=3423751910 ack=1973665752 wscale=10 mss=65495 sackOK=True tsval=1657203524 datalen=0 orig=74
+PKT 3 t=1791632334.814827 :59126 > :39019 flags=[ACK] win_raw=2920 (0x0b68) seq=1973665752 ack=3423751911 wscale=None mss=None sackOK=False tsval=4135756522 datalen=0 orig=66
+PKT 4 t=1791632335.315056 :39019 > :59126 flags=[ACK,PSH] win_raw=64 (0x0040) seq=3423751911 ack=1973665752 wscale=None mss=None sackOK=False tsval=1657204025 datalen=4 orig=70
+PKT 5 t=1791632335.315064 :59126 > :39019 flags=[ACK] win_raw=2916 (0x0b64) seq=1973665752 ack=3423751915 wscale=None mss=None sackOK=False tsval=4135757023 datalen=0 orig=66
+PKT 6 t=1791632341.315189 :39019 > :59126 flags=[ACK,FIN] win_raw=64 (0x0040) seq=3423751915 ack=1973665752 wscale=None mss=None sackOK=False tsval=1657210025 datalen=0 orig=66
+PKT 7 t=1791632341.318553 :59126 > :39019 flags=[ACK,FIN] win_raw=2916 (0x0b64) seq=1973665752 ack=3423751916 wscale=None mss=None sackOK=False tsval=4135763026 datalen=0 orig=66
+PKT 8 t=1791632341.318577 :39019 > :59126 flags=[ACK] win_raw=64 (0x0040) seq=3423751916 ack=1973665753 wscale=None mss=None sackOK=False tsval=1657210028 datalen=0 orig=66
+
+#### PROBE ARM B2 ####
+SERVER_LISTENING port=39019 hold=6.0
+SINK_RC_B2=1
+--- 见证行 ---
+4:SINK_RCVBUF_ORDER RCVBUF_ORDER=after_connect_LEGACY rcvbuf=2920
+--- sink stdout (SINK_CONN/SINK_SUM) ---
+SINK_CONN 0 OK bytes=4 first_mismatch=0 mism_bytes=4 conn_ms=0.077 dur_ms=6503.835 Mbps=0.000 reads=1 poll_tmo=1 CPU_FREQ_KHZ=3899791 THREADED=on q_full_push=2 q_full_pop=2 q_free_push=18 q_free_pop=2 slot_wait_spins=0 checked_bytes=4
+SINK_SUM conns=1 fail_conns=0 bytes=4 clean_conns=0 bad_conns=1 mismatch_bytes=4 stall_conns=0 err_conns=0 poll_tmo=1 wall_s=6.504 net_s=6.504 agg_Mbps=0.000 THREADED=on full_push=2 full_pop=2 free_push=18 free_pop=2 slot_wait_spins=0 checked_bytes=4 threads=2 check=seq
+--- server log ---
+SERVER_LISTENING port=39019 hold=6.0
+SERVER_ACCEPTED peer=127.0.0.1:43068
+SERVER_SENT_4B
+SERVER_DONE
+--- tcpdump stats ---
+tcpdump: listening on lo, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+8 packets captured
+16 packets received by filter
+0 packets dropped by kernel
+--- tcpdump text ---
+reading from file /tmp/sinkfix_verify/pc_B2.pcap, link-type EN10MB (Ethernet), snapshot length 262144
+19:39:04.573242 IP (tos 0x0, ttl 64, id 23488, offset 0, flags [DF], proto TCP (6), length 60)
+    127.0.0.1.43068 > 127.0.0.1.39019: Flags [S], cksum 0xfe30 (incorrect -> 0x5843), seq 1967553803, win 65495, options [mss 65495,sackOK,TS val 4011971999 ecr 0,nop,wscale 10], length 0
+19:39:04.573253 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 60)
+    127.0.0.1.39019 > 127.0.0.1.43068: Flags [S.], cksum 0xfe30 (incorrect -> 0xab63), seq 2248342038, ack 1967553804, win 65483, options [mss 65495,sackOK,TS val 222568317 ecr 4011971999,nop,wscale 10], length 0
+19:39:04.573263 IP (tos 0x0, ttl 64, id 23489, offset 0, flags [DF], proto TCP (6), length 52)
+    127.0.0.1.43068 > 127.0.0.1.39019: Flags [.], cksum 0xfe28 (incorrect -> 0xd3e2), seq 1, ack 1, win 64, options [nop,nop,TS val 4011971999 ecr 222568317], length 0
+19:39:05.073476 IP (tos 0x0, ttl 64, id 37458, offset 0, flags [DF], proto TCP (6), length 56)
+    127.0.0.1.39019 > 127.0.0.1.43068: Flags [P.], cksum 0xfe2c (incorrect -> 0x3445), seq 1:5, ack 1, win 64, options [nop,nop,TS val 222568817 ecr 4011971999], length 4
+19:39:05.073481 IP (tos 0x0, ttl 64, id 23490, offset 0, flags [DF], proto TCP (6), length 52)
+    127.0.0.1.43068 > 127.0.0.1.39019: Flags [.], cksum 0xfe28 (incorrect -> 0xcff6), seq 1, ack 5, win 64, options [nop,nop,TS val 4011972499 ecr 222568817], length 0
+19:39:11.073606 IP (tos 0x0, ttl 64, id 37459, offset 0, flags [DF], proto TCP (6), length 52)
+    127.0.0.1.39019 > 127.0.0.1.43068: Flags [F.], cksum 0xfe28 (incorrect -> 0xb885), seq 5, ack 1, win 64, options [nop,nop,TS val 222574817 ecr 4011972499], length 0
+19:39:11.077123 IP (tos 0x0, ttl 64, id 23491, offset 0, flags [DF], proto TCP (6), length 52)
+    127.0.0.1.43068 > 127.0.0.1.39019: Flags [F.], cksum 0xfe28 (incorrect -> 0xa110), seq 1, ack 6, win 64, options [nop,nop,TS val 4011978503 ecr 222574817], length 0
+19:39:11.077135 IP (tos 0x0, ttl 64, id 37460, offset 0, flags [DF], proto TCP (6), length 52)
+    127.0.0.1.39019 > 127.0.0.1.43068: Flags [.], cksum 0xfe28 (incorrect -> 0xa10c), seq 6, ack 2, win 64, options [nop,nop,TS val 222574821 ecr 4011978503], length 0
+--- 裸字段 ---
+PCAP_HDR linktype=1 snap=262144 version=2.4 nano=False
+PKT 1 t=1791632344.573242 :43068 > :39019 flags=[SYN] win_raw=65495 (0xffd7) seq=1967553803 ack=0 wscale=10 mss=65495 sackOK=True tsval=4011971999 datalen=0 orig=74
+PKT 2 t=1791632344.573253 :39019 > :43068 flags=[ACK,SYN] win_raw=65483 (0xffcb) seq=2248342038 ack=1967553804 wscale=10 mss=65495 sackOK=True tsval=222568317 datalen=0 orig=74
+PKT 3 t=1791632344.573263 :43068 > :39019 flags=[ACK] win_raw=64 (0x0040) seq=1967553804 ack=2248342039 wscale=None mss=None sackOK=False tsval=4011971999 datalen=0 orig=66
+PKT 4 t=1791632345.073476 :39019 > :43068 flags=[ACK,PSH] win_raw=64 (0x0040) seq=2248342039 ack=1967553804 wscale=None mss=None sackOK=False tsval=222568817 datalen=4 orig=70
+PKT 5 t=1791632345.073481 :43068 > :39019 flags=[ACK] win_raw=64 (0x0040) seq=1967553804 ack=2248342043 wscale=None mss=None sackOK=False tsval=4011972499 datalen=0 orig=66
+PKT 6 t=1791632351.073606 :39019 > :43068 flags=[ACK,FIN] win_raw=64 (0x0040) seq=2248342043 ack=1967553804 wscale=None mss=None sackOK=False tsval=222574817 datalen=0 orig=66
+PKT 7 t=1791632351.077123 :43068 > :39019 flags=[ACK,FIN] win_raw=64 (0x0040) seq=1967553804 ack=2248342044 wscale=None mss=None sackOK=False tsval=4011978503 datalen=0 orig=66
+PKT 8 t=1791632351.077135 :39019 > :43068 flags=[ACK] win_raw=64 (0x0040) seq=2248342044 ack=1967553805 wscale=None mss=None sackOK=False tsval=222574821 datalen=0 orig=66
+
+PROBE_C_DONE

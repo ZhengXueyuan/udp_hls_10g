@@ -1,0 +1,31 @@
+=== HEAD ç‰ˆç¼ºç‚¹ç°æ ¸ (git show HEAD | sed -n 293,308p, å¸¦è¡Œå·) ===
+   293	    for (int c = 0; c < conns; c++) {
+   294	        if (p7b_io_now_s() - t_start > secs) break;
+   295	        double t0 = p7b_io_now_s();
+   296	        int why = 0;
+   297	        int fd = p7b_io_connect_to(host, port, 5, &why);
+   298	        double t1 = p7b_io_now_s();
+   299	        if (fd < 0) {
+   300	            fail_conns++;
+   301	            printf("SINK_CONN %d FAIL_CONNECT why=%d (%s) (t=%.6f)\n", c, why, strerror(why), t1 - t_start);
+   302	            if (fail_conns > 5) break;
+   303	            continue;
+   304	        }
+   305	        if (c == 0) first_conn_at = t1;
+   306	        setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
+   307	        long long got = 0, mism_bytes = 0, first_mis = -1;
+   308	        long long nread_calls = 0, conn_tmo = 0;
+
+=== æœ¬æœºç¼–è¯‘å°è¯• 1: mingw64 g++ å¹³å‡¡æ–‡ä»¶ ===
+trivial_RC=1
+=== å°è¯• 2: cc1plus --version ===
+cc1plus_RC=127
+=== å°è¯• 3: æœ¬ä»“ä»¶ -fsyntax-only ===
+syntax_RC=1
+=== ç¼ºå¤´è¯æ® ===
+ls: cannot access '/c/msys64/mingw64/x86_64-w64-mingw32/include/sys/socket.h': No such file or directory
+=== Git Bash æ—  g++ ===
+which: no g++ in (/c/Users/zhxue/bin:/mingw64/bin:/usr/local/bin:/usr/bin:/bin:/mingw64/bin:/usr/bin:/c/Users/zhxue/bin:/c/Program Files/Common Files/Oracle/Java/javapath:/c/Windows/system32:/c/Windows:/c/Windows/System32/Wbem:/c/Windows/System32/WindowsPowerShell/v1.0:/c/Windows/System32/OpenSSH:/cmd:/c/Program Files/dotnet:/c/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit:/c/Program Files/nodejs:/c/Users/zhxue/.kimi-code/bin:/c/Users/zhxue/AppData/Local/Microsoft/WindowsApps:/c/Users/zhxue/AppData/Local/Programs/Microsoft VS Code/bin:/c/Users/zhxue/.dotnet/tools:/c/Users/zhxue/AppData/Roaming/npm:/c/intelFPGA_pro/18.1/modelsim_ase/win32aloem:/c/Users/zhxue/.dotnet/tools:/usr/bin/vendor_perl:/usr/bin/core_perl)
+=== WSL ===
+*g‰[Åˆ(uN Linux „v Windows P[û|ß~0ïSÇĞLˆ  wsl.exe --install  ÛLˆ‰[Åˆ0
+	gsQæ‹Æ~áOo`ÿ÷‹¿‹î• https://aka.ms/wslinstall

@@ -1,0 +1,90 @@
+PROBE2_TAG=PROBE2_20261010_194049_d4e5
+
+#### PROBE2 ARM A3 (rcvbuf=2920 ) ####
+--- ss -tinme 抽样 (+1.2s, 连接存活中) ---
+State Recv-Q Send-Q Local Address:Port  Peer Address:Port Process                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+ESTAB 0      0          127.0.0.1:39021    127.0.0.1:35956 uid:1000 ino:4079309 sk:17 cgroup:/user.slice/user-1000.slice/session-1286.scope <->
+	 skmem:(r0,rb131072,t0,tb2626560,f0,w0,o0,bl0,d0) ts sack cubic wscale:0,10 rto:201 rtt:0.014/0.006 mss:1460 pmtu:65535 rcvmss:536 advmss:65483 cwnd:10 bytes_sent:4 bytes_acked:4 segs_out:1 segs_in:3 data_segs_out:1 send 8342857143bps lastsnd:696 lastrcv:1196 lastack:696 pacing_rate 15704201680bps delivery_rate 834285712bps delivered:2 app_limited rcv_space:65483 rcv_ssthresh:65483 minrtt:0.014 snd_wnd:2916
+ESTAB 0      0          127.0.0.1:35956    127.0.0.1:39021 uid:1000 ino:4079331 sk:18 cgroup:/user.slice/user-1000.slice/session-1286.scope <->
+	 skmem:(r0,rb5840,t0,tb2626560,f0,w0,o0,bl0,d0) ts sack cubic wscale:10,0 rto:200 rtt:0.021/0.01 ato:40 mss:32768 pmtu:65535 rcvmss:536 advmss:65483 cwnd:10 bytes_acked:1 bytes_received:4 segs_out:3 segs_in:2 data_segs_in:1 send 124830476190bps lastsnd:1199 lastrcv:699 lastack:699 pacing_rate 249455238088bps delivered:1 app_limited rcv_space:2920 rcv_ssthresh:2920 minrtt:0.021 snd_wnd:65536                 
+SINK_RC_A3=1
+--- 见证行 ---
+4:SINK_RCVBUF_ORDER RCVBUF_ORDER=before_connect rcvbuf=2920
+--- sink stdout (SINK_CONN/SUM) ---
+SINK_CONN 0 OK bytes=4 first_mismatch=0 mism_bytes=4 conn_ms=0.063 dur_ms=6503.751 Mbps=0.000 reads=1 poll_tmo=1 CPU_FREQ_KHZ=3897867 THREADED=on q_full_push=2 q_full_pop=2 q_free_push=18 q_free_pop=2 slot_wait_spins=0 checked_bytes=4
+SINK_SUM conns=1 fail_conns=0 bytes=4 clean_conns=0 bad_conns=1 mismatch_bytes=4 stall_conns=0 err_conns=0 poll_tmo=1 wall_s=6.504 net_s=6.504 agg_Mbps=0.000 THREADED=on full_push=2 full_pop=2 free_push=18 free_pop=2 slot_wait_spins=0 checked_bytes=4 threads=2 check=seq
+--- tcpdump stats ---
+tcpdump: listening on lo, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+8 packets captured
+16 packets received by filter
+0 packets dropped by kernel
+--- 裸字段 ---
+PCAP_HDR linktype=1 snap=262144 version=2.4 nano=False
+PKT 1 t=1791632449.613196 :35956 > :39021 flags=[SYN] win_raw=2920 (0x0b68) seq=3139667551 ack=0 wscale=0 mss=65495 sackOK=True tsval=3940249341 datalen=0 orig=74
+PKT 2 t=1791632449.613204 :39021 > :35956 flags=[ACK,SYN] win_raw=65483 (0xffcb) seq=12224778 ack=3139667552 wscale=10 mss=65495 sackOK=True tsval=1182660081 datalen=0 orig=74
+PKT 3 t=1791632449.613213 :35956 > :39021 flags=[ACK] win_raw=2920 (0x0b68) seq=3139667552 ack=12224779 wscale=None mss=None sackOK=False tsval=3940249341 datalen=0 orig=66
+PKT 4 t=1791632450.113456 :39021 > :35956 flags=[ACK,PSH] win_raw=64 (0x0040) seq=12224779 ack=3139667552 wscale=None mss=None sackOK=False tsval=1182660581 datalen=4 orig=70
+PKT 5 t=1791632450.113464 :35956 > :39021 flags=[ACK] win_raw=2916 (0x0b64) seq=3139667552 ack=12224783 wscale=None mss=None sackOK=False tsval=3940249841 datalen=0 orig=66
+PKT 6 t=1791632456.113582 :39021 > :35956 flags=[ACK,FIN] win_raw=64 (0x0040) seq=12224783 ack=3139667552 wscale=None mss=None sackOK=False tsval=1182666581 datalen=0 orig=66
+PKT 7 t=1791632456.116988 :35956 > :39021 flags=[ACK,FIN] win_raw=2916 (0x0b64) seq=3139667552 ack=12224784 wscale=None mss=None sackOK=False tsval=3940255844 datalen=0 orig=66
+PKT 8 t=1791632456.117001 :39021 > :35956 flags=[ACK] win_raw=64 (0x0040) seq=12224784 ack=3139667553 wscale=None mss=None sackOK=False tsval=1182666584 datalen=0 orig=66
+
+#### PROBE2 ARM B3 (rcvbuf=2920 --rcvbuf-after-connect) ####
+--- ss -tinme 抽样 (+1.2s, 连接存活中) ---
+State Recv-Q Send-Q Local Address:Port  Peer Address:Port Process                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
+ESTAB 0      0          127.0.0.1:39021    127.0.0.1:39024 uid:1000 ino:4086304 sk:19 cgroup:/user.slice/user-1000.slice/session-1286.scope <->
+	 skmem:(r0,rb131072,t0,tb2626560,f0,w0,o0,bl0,d0) ts sack cubic wscale:10,10 rto:201 rtt:0.018/0.008 mss:32768 pmtu:65535 rcvmss:536 advmss:65483 cwnd:10 bytes_sent:4 bytes_acked:4 segs_out:1 segs_in:3 data_segs_out:1 send 145635555556bps lastsnd:696 lastrcv:1197 lastack:696 pacing_rate 287281095888bps delivery_rate 20164923072bps delivered:2 app_limited rcv_space:65483 rcv_ssthresh:65483 minrtt:0.013 snd_wnd:65536
+ESTAB 0      0          127.0.0.1:39024    127.0.0.1:39021 uid:1000 ino:4079365 sk:1a cgroup:/user.slice/user-1000.slice/session-1286.scope <->
+	 skmem:(r0,rb5840,t0,tb2626560,f0,w0,o0,bl0,d0) ts sack cubic wscale:10,10 rto:200 rtt:0.027/0.013 ato:40 mss:32768 pmtu:65535 rcvmss:536 advmss:65483 cwnd:10 bytes_acked:1 bytes_received:4 segs_out:3 segs_in:2 data_segs_in:1 send 97090370370bps lastsnd:1197 lastrcv:696 lastack:696 pacing_rate 194020740736bps delivered:1 app_limited rcv_space:65495 rcv_ssthresh:65495 minrtt:0.027 snd_wnd:65536                      
+SINK_RC_B3=1
+--- 见证行 ---
+4:SINK_RCVBUF_ORDER RCVBUF_ORDER=after_connect_LEGACY rcvbuf=2920
+--- sink stdout (SINK_CONN/SUM) ---
+SINK_CONN 0 OK bytes=4 first_mismatch=0 mism_bytes=4 conn_ms=0.078 dur_ms=6500.413 Mbps=0.000 reads=1 poll_tmo=1 CPU_FREQ_KHZ=3899788 THREADED=on q_full_push=2 q_full_pop=2 q_free_push=18 q_free_pop=2 slot_wait_spins=0 checked_bytes=4
+SINK_SUM conns=1 fail_conns=0 bytes=4 clean_conns=0 bad_conns=1 mismatch_bytes=4 stall_conns=0 err_conns=0 poll_tmo=1 wall_s=6.501 net_s=6.500 agg_Mbps=0.000 THREADED=on full_push=2 full_pop=2 free_push=18 free_pop=2 slot_wait_spins=0 checked_bytes=4 threads=2 check=seq
+--- tcpdump stats ---
+tcpdump: listening on lo, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+8 packets captured
+16 packets received by filter
+0 packets dropped by kernel
+--- 裸字段 ---
+PCAP_HDR linktype=1 snap=262144 version=2.4 nano=False
+PKT 1 t=1791632459.367846 :39024 > :39021 flags=[SYN] win_raw=65495 (0xffd7) seq=1693057185 ack=0 wscale=10 mss=65495 sackOK=True tsval=3027842844 datalen=0 orig=74
+PKT 2 t=1791632459.367857 :39021 > :39024 flags=[ACK,SYN] win_raw=65483 (0xffcb) seq=2418883443 ack=1693057186 wscale=10 mss=65495 sackOK=True tsval=1765332521 datalen=0 orig=74
+PKT 3 t=1791632459.367868 :39024 > :39021 flags=[ACK] win_raw=64 (0x0040) seq=1693057186 ack=2418883444 wscale=None mss=None sackOK=False tsval=3027842844 datalen=0 orig=66
+PKT 4 t=1791632459.868096 :39021 > :39024 flags=[ACK,PSH] win_raw=64 (0x0040) seq=2418883444 ack=1693057186 wscale=None mss=None sackOK=False tsval=1765333022 datalen=4 orig=70
+PKT 5 t=1791632459.868102 :39024 > :39021 flags=[ACK] win_raw=64 (0x0040) seq=1693057186 ack=2418883448 wscale=None mss=None sackOK=False tsval=3027843345 datalen=0 orig=66
+PKT 6 t=1791632465.868229 :39021 > :39024 flags=[ACK,FIN] win_raw=64 (0x0040) seq=2418883448 ack=1693057186 wscale=None mss=None sackOK=False tsval=1765339022 datalen=0 orig=66
+PKT 7 t=1791632465.868305 :39024 > :39021 flags=[ACK,FIN] win_raw=64 (0x0040) seq=1693057186 ack=2418883449 wscale=None mss=None sackOK=False tsval=3027849345 datalen=0 orig=66
+PKT 8 t=1791632465.868317 :39021 > :39024 flags=[ACK] win_raw=64 (0x0040) seq=2418883449 ack=1693057187 wscale=None mss=None sackOK=False tsval=1765339022 datalen=0 orig=66
+
+#### PROBE2 ARM C3 (rcvbuf=204800 --rcvbuf-after-connect) ####
+--- ss -tinme 抽样 (+1.2s, 连接存活中) ---
+State Recv-Q Send-Q Local Address:Port  Peer Address:Port Process                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
+ESTAB 0      0          127.0.0.1:57920    127.0.0.1:39021 uid:1000 ino:4079400 sk:7016 cgroup:/user.slice/user-1000.slice/session-1286.scope <->
+	 skmem:(r0,rb409600,t0,tb2626560,f0,w0,o0,bl0,d0) ts sack cubic wscale:10,10 rto:200 rtt:0.025/0.012 ato:40 mss:32768 pmtu:65535 rcvmss:536 advmss:65483 cwnd:10 bytes_acked:1 bytes_received:4 segs_out:3 segs_in:2 data_segs_in:1 send 104857600000bps lastsnd:1193 lastrcv:692 lastack:692 pacing_rate 209542400000bps delivered:1 app_limited rcv_space:65495 rcv_ssthresh:65495 minrtt:0.025 snd_wnd:65536
+ESTAB 0      0          127.0.0.1:39021    127.0.0.1:57920 uid:1000 ino:4086398 sk:7017 cgroup:/user.slice/user-1000.slice/session-1286.scope <->
+	 skmem:(r0,rb131072,t0,tb2626560,f0,w0,o0,bl0,d0) ts sack cubic wscale:10,10 rto:201 rtt:0.018/0.008 mss:32768 pmtu:65535 rcvmss:536 advmss:65483 cwnd:10 bytes_sent:4 bytes_acked:4 segs_out:1 segs_in:3 data_segs_out:1 send 145635555556bps lastsnd:694 lastrcv:1195 lastack:694 pacing_rate 285326802720bps delivery_rate 18724571424bps delivered:2 app_limited rcv_space:65483 rcv_ssthresh:65483 minrtt:0.014 snd_wnd:65536
+SINK_RC_C3=1
+--- 见证行 ---
+4:SINK_RCVBUF_ORDER RCVBUF_ORDER=after_connect_LEGACY rcvbuf=204800
+--- sink stdout (SINK_CONN/SUM) ---
+SINK_CONN 0 OK bytes=4 first_mismatch=0 mism_bytes=4 conn_ms=0.076 dur_ms=6500.359 Mbps=0.000 reads=1 poll_tmo=1 CPU_FREQ_KHZ=3899787 THREADED=on q_full_push=2 q_full_pop=2 q_free_push=18 q_free_pop=2 slot_wait_spins=0 checked_bytes=4
+SINK_SUM conns=1 fail_conns=0 bytes=4 clean_conns=0 bad_conns=1 mismatch_bytes=4 stall_conns=0 err_conns=0 poll_tmo=1 wall_s=6.500 net_s=6.500 agg_Mbps=0.000 THREADED=on full_push=2 full_pop=2 free_push=18 free_pop=2 slot_wait_spins=0 checked_bytes=4 threads=2 check=seq
+--- tcpdump stats ---
+tcpdump: listening on lo, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+8 packets captured
+16 packets received by filter
+0 packets dropped by kernel
+--- 裸字段 ---
+PCAP_HDR linktype=1 snap=262144 version=2.4 nano=False
+PKT 1 t=1791632469.120862 :57920 > :39021 flags=[SYN] win_raw=65495 (0xffd7) seq=2248216274 ack=0 wscale=10 mss=65495 sackOK=True tsval=3949325210 datalen=0 orig=74
+PKT 2 t=1791632469.120873 :39021 > :57920 flags=[ACK,SYN] win_raw=65483 (0xffcb) seq=795983368 ack=2248216275 wscale=10 mss=65495 sackOK=True tsval=2857943462 datalen=0 orig=74
+PKT 3 t=1791632469.120883 :57920 > :39021 flags=[ACK] win_raw=64 (0x0040) seq=2248216275 ack=795983369 wscale=None mss=None sackOK=False tsval=3949325210 datalen=0 orig=66
+PKT 4 t=1791632469.621068 :39021 > :57920 flags=[ACK,PSH] win_raw=64 (0x0040) seq=795983369 ack=2248216275 wscale=None mss=None sackOK=False tsval=2857943963 datalen=4 orig=70
+PKT 5 t=1791632469.621074 :57920 > :39021 flags=[ACK] win_raw=64 (0x0040) seq=2248216275 ack=795983373 wscale=None mss=None sackOK=False tsval=3949325711 datalen=0 orig=66
+PKT 6 t=1791632475.621185 :39021 > :57920 flags=[ACK,FIN] win_raw=64 (0x0040) seq=795983373 ack=2248216275 wscale=None mss=None sackOK=False tsval=2857949963 datalen=0 orig=66
+PKT 7 t=1791632475.621266 :57920 > :39021 flags=[ACK,FIN] win_raw=64 (0x0040) seq=2248216275 ack=795983374 wscale=None mss=None sackOK=False tsval=3949331711 datalen=0 orig=66
+PKT 8 t=1791632475.621279 :39021 > :57920 flags=[ACK] win_raw=64 (0x0040) seq=795983374 ack=2248216276 wscale=None mss=None sackOK=False tsval=2857949963 datalen=0 orig=66
+
+PROBE2_DONE
