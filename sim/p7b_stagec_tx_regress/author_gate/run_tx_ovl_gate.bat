@@ -28,7 +28,11 @@ REM       (same stimulus, DUT PERSIST_EN=0)             expect RC!=0 (negative c
 REM   U = M-PS1  mut_ps_noarmfin (drop !fin_sent_r from ps_arm)      expect RC!=0
 REM   V = M-PS2  mut_ps_noarmrst (drop !rst_sent_r from ps_arm)      expect RC!=0
 REM   W = M-PS3  mut_ps_nodsg    (drop ds_guard from probe_sel)     expect RC!=0
-REM Contract: A/B/O/S RC==0; C..R + T..W RC!=0 except J (KNOWN GAP, not counted).
+REM   --- P7B-RETXHI-GHOST (2026-10-10 impl round) ---
+REM   X = M-GHOST-3  ring_hi := retx_hi (defect semantics) expect RC!=0 (e_ghost teeth)
+REM   Y = M-GHOST-4  no ring_restore (drop drain restore) expect RC!=0 (e_replay_jump fires)
+REM   Z = M-GHOST-5  no ring_hi clamp + stale whi      expect RC!=0 (e_ringhi fires)
+REM Contract: A/B/O/S RC==0; C..R + T..Z RC!=0 except J (KNOWN GAP, not counted).
 REM =====================================================================
 set "HERE=%~dp0"
 if "%HERE:~-1%"=="\" set "HERE=%HERE:~0,-1%"
@@ -91,6 +95,13 @@ call :run V "%HERE%\mut\mut_ps_noarmrst.v" "-d TCP_TX_OVL -d ARM_PERSIST"
 set RCV=%errorlevel%
 call :run W "%HERE%\mut\mut_ps_nodsg.v" "-d TCP_TX_OVL -d ARM_PERSIST"
 set RCW=%errorlevel%
+REM --- P7B-RETXHI-GHOST (2026-10-10 impl round) ---
+call :run X "%HERE%\mut\mut_ghost_m3.v" "-d TCP_TX_OVL -d ARM_PERSIST"
+set RCX=%errorlevel%
+call :run Y "%HERE%\mut\mut_ghost_norestore.v" "-d TCP_TX_OVL -d ARM_PERSIST"
+set RCY=%errorlevel%
+call :run Z "%HERE%\mut\mut_ghost_noclamp.v" "-d TCP_TX_OVL -d ARM_PERSIST"
+set RCZ=%errorlevel%
 
 echo ==================== SUMMARY ====================
 echo   A default serial  RC=%RCA%  (expect 0)
@@ -116,6 +127,9 @@ echo   T PERSIST negctl        RC=%RCT% (expect nonzero; PERSIST_EN=0)
 echo   U M-PS1 no !fin_sent_r  RC=%RCU% (expect nonzero; ARM_PERSIST)
 echo   V M-PS2 no !rst_sent_r  RC=%RCV% (expect nonzero; ARM_PERSIST)
 echo   W M-PS3 no ds_guard     RC=%RCW% (expect nonzero; ARM_PERSIST)
+echo   X M-GHOST-3 ring:=retx  RC=%RCX% (expect nonzero; e_ghost teeth)
+echo   Y M-GHOST-4 no restore  RC=%RCY% (expect nonzero; e_replay_jump)
+echo   Z M-GHOST-5 no clamp    RC=%RCZ% (expect nonzero; e_ringhi)
 
 set FAILS=0
 if not "%RCA%"=="0" set /a FAILS+=1
@@ -140,6 +154,9 @@ if "%RCT%"=="0" set /a FAILS+=1
 if "%RCU%"=="0" set /a FAILS+=1
 if "%RCV%"=="0" set /a FAILS+=1
 if "%RCW%"=="0" set /a FAILS+=1
+if "%RCX%"=="0" set /a FAILS+=1
+if "%RCY%"=="0" set /a FAILS+=1
+if "%RCZ%"=="0" set /a FAILS+=1
 
 echo   ---- B key readings ----
 findstr /C:"FRAMES" /C:"COV " /C:"MINGAP" /C:"CYCRX" /C:"CYCTX" /C:"FRAMEPERIOD" /C:"OVL " /C:"REDS" /C:"T8 " /C:"W66" /C:"W67" /C:"W69" /C:"TB_TCP_TX_OVL" "runB\xs.log"
@@ -149,8 +166,12 @@ echo   ---- arm S key readings (P7B-PERSIST clean arm) ----
 findstr /C:"PS1" /C:"PS2" /C:"PS3" /C:"PS4" /C:"PS5" /C:"PS6" /C:"REDS " /C:"FRAMES" /C:"TB_TCP_TX_OVL" "runS\xs.log"
 echo   ---- arm T key readings (P7B-PERSIST negative control) ----
 findstr /C:"PS2" /C:"PS3" /C:"PS6" /C:"REDS " /C:"TB_TCP_TX_OVL" "runT\xs.log"
+echo   ---- arms X/Y/Z key readings (RETXHI-GHOST mutant teeth) ----
+findstr /C:"REDS " /C:"TB_TCP_TX_OVL" /C:"ghost " /C:"ringhi" "runX\xs.log"
+findstr /C:"REDS " /C:"TB_TCP_TX_OVL" /C:"RETXFIX jump" "runY\xs.log"
+findstr /C:"REDS " /C:"TB_TCP_TX_OVL" /C:"ringhi" "runZ\xs.log"
 echo   ---- mutant verdicts (REDS line + verdict + first FAIL lines) ----
-for %%M in (C D E F G H I J K L M N O P Q R S T U V W) do (
+for %%M in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (
   echo   [%%M]:
   findstr /C:"REDS " /C:"TB_TCP_TX_OVL:" /C:"T8 " "run%%M\xs.log"
 )

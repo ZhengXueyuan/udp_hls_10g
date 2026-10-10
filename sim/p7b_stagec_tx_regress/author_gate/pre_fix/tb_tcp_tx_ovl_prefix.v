@@ -195,9 +195,6 @@ module tb_tcp_tx_ovl;
     // ⭐ r6 (L-A, 2026-10-08): ARM_ACKGATE 专项臂 (ack_seen 数据启动门) 计数器
     integer e_ag_block, e_ag_resume;
     integer cov_jump_ev;   // 跳写事件数 (覆盖见证: 预算被撞到时 replay_jump 拍数)
-`ifdef GHOST_DBG
-    integer g_dbg_rest, g_dbg_drain;   // ⭐ RETXHI-GHOST 调试 (仅 -d GHOST_DBG)
-`endif
     reg     rep_full;      // ⭐ r4: 本会话 = RTO 全会话 (replay_full) ⇒ 跨度判据豁免
     reg     stuck_r;                        // 自锁会话去重 (每会话只计一次)
     reg     win_prev, c6_hold;              // 窗口上升沿检测 / 窗口内持请求
@@ -233,9 +230,6 @@ module tb_tcp_tx_ovl;
     initial begin dbg_d=0; dbg_c=0; dbg_s=0; dbg_n=0; dbg_ar=0; dbg_w=0; dbg_e=0; dbg_p=0; dbg_q=0; end
     integer e_parse, e_csum, e_payload, e_seqcont, e_seqmono, e_ctrl, e_ctrl_to,
             e_onehot, e_pendbusy, e_replay, e_replay_stuck, e_ovf, e_ackf, e_replay_gap;
-    // ⭐ RETXHI-GHOST (P7B_RETXHI_GHOST_DESIGN.md §5.4): 两个定向仪器,
-    //   **都必须进 tot_red 白名单和式** (否则再红也不影响末行 = 全局 #53 哑门).
-    integer e_ghost, e_ringhi;
     integer n_frames, n_data, n_ctrl, n_dead_skip;
     integer cov_replay_sessions, cov_replay_frames, cov_plen0, cov_singlebeat,
             cov_ctrlblock, cov_conns, cov_fin_min, min_fin_gap, cov_rewinds;
@@ -266,7 +260,6 @@ module tb_tcp_tx_ovl;
         c6_req_win=0; e_c6=0; e_c6_grant=0; win_prev=1'b0; c6_hold=1'b0;
         e_f1_delta=0; e_f1_cyc=0; stuck_r=1'b0;
         e_replay_span=0; e_replay_jump=0; e_c2_resv=0; cov_c2_resv=0;
-        e_ghost=0; e_ringhi=0;   // ⭐ RETXHI-GHOST (T1 只声明; 这里清零)
         e_ag_block=0; e_ag_resume=0;
         rep_f0=0; rep_smax=0; cov_jump_ev=0; rep_full=1'b0;
         n_frames=0; n_data=0; n_ctrl=0; n_dead_skip=0;
@@ -720,34 +713,6 @@ module tb_tcp_tx_ovl;
                     if (flags !== 8'h18) begin
                         e_parse = e_parse + 1;
                         $display("[FAIL] data flags=%h @%0d", flags, cyc); end
-`ifdef TCP_TX_OVL
-                    // ⚠️ 本判据**只在 OVL 支成立** (实施轮实测): 默认 (串行) 支的推进写落在
-                    //   **S_DONE = 该帧自己的尾拍** ⇒ 帧尾直读必然读到"上一帧的高水位"
-                    //   ⇒ 每条活帧必误报 (实测 arm A: e_ghost=346, 全部呈 tail=本帧尾 / whi=上帧尾).
-                    //   OVL 支的推进写在 RX_FIN (比上线尾拍早 ~180+ 拍) ⇒ 帧尾读安全 (下条注释).
-                    // ⭐ RETXHI-GHOST §5.4-②: e_ghost = 定向仪器 (半区判据, **帧尾直读**).
-                    //   口径 = 帧尾越过该连接**当前已写高水位** (DUT `whi_r`, 不锁存).
-                    //   为什么帧尾读安全: ① 活帧自抑制 (活帧的 whi 在其 RX_FIN 落地, 而该
-                    //   帧上线尾拍要再等 ~180+ 拍 ⇒ tail - whi <= 0); ② 会话期 whi 冻结 (会话期无
-                    //   活帧) ⇒ 帧尾读 == 帧首读, 没有"可漏". (改前计数预测 = 2, 设计件 N1;
-                    //   变异臂 M-3 (ring_hi := retx_hi) 必须 > 0 ⇒ 有牙.)
-                    if ((((fseq + {20'b0, plen}) - u_dut.whi_r[t_conn]) < 32'h8000_0000) &&
-                        (((fseq + {20'b0, plen}) - u_dut.whi_r[t_conn]) != 32'd0)) begin
-                        e_ghost = e_ghost + 1;
-                        if (e_ghost < 6)
-`ifdef GHOST_DBG
-                            $display("[FAIL] ghost conn=%0d seq=%h plen=%0d tail=%h whi=%h @%0d PROBE=%b shuna=%h sndnxt=%h snduna=%h ract=%b rid=%0d",
-                                     t_conn, fseq, plen, fseq + {20'b0, plen},
-                                     u_dut.whi_r[t_conn], cyc, is_probe, sh_una[t_conn],
-                                     u_tcb.snd_nxt_r[t_conn], u_tcb.snd_una_r[t_conn],
-                                     u_dut.retx_active, u_dut.retx_id_r);
-`else
-                            $display("[FAIL] ghost conn=%0d seq=%h plen=%0d tail=%h whi=%h @%0d",
-                                     t_conn, fseq, plen, fseq + {20'b0, plen},
-                                     u_dut.whi_r[t_conn], cyc);
-`endif
-                    end
-`endif
 `ifdef ARM_PERSIST
                     // ---- ⭐ P7B-PERSIST: 探询段逐帧取证 (计数归观察块所有 ⇒ 本处只
                     //      **记录事件**并累加事件数; 单写者规则与 sh_una/stat_drop_len 同款) --
@@ -1962,19 +1927,6 @@ module tb_tcp_tx_ovl;
                     $display("[FAIL] onehot0 data=%b ctrl=%b rew=%b @%0d",
                              d_upd_wr_data, d_upd_wr_ctrl, d_upd_wr_rew, cyc);
             end
-`ifdef TCP_TX_OVL
-            // ⭐ RETXHI-GHOST §8.2-R2: `ring_restore` = OVL 支的**第 4 个** TCB 写源 —— 它已
-            //   被上面的 `d_upd_wr_rew` 盖住 (ring_restore ⊆ upd_wr_rew), 这里再加一条**定向**
-            //   检查: 它与其它写源 (含同一 mux 里的 replay_jump/svc_rewind) 不得同拍.
-            if (u_dut.ring_restore && (d_upd_wr_data || d_upd_wr_ctrl ||
-                u_dut.replay_jump || u_dut.svc_rewind)) begin
-                e_onehot = e_onehot + 1;
-                if (e_onehot < 10)
-                    $display("[FAIL] onehot0 ring_restore collision d=%b c=%b rj=%b sw=%b @%0d",
-                             d_upd_wr_data, d_upd_wr_ctrl, u_dut.replay_jump,
-                             u_dut.svc_rewind, cyc);
-            end
-`endif
             if (d_upd_wr_data) cnt_wsrc[0] = cnt_wsrc[0] + 1;
             if (d_upd_wr_data && u_dut.retx_active) begin
                 rep_wcnt = rep_wcnt + 1;
@@ -2184,15 +2136,6 @@ module tb_tcp_tx_ovl;
                 $display("[FAIL] RETXFIX jump: session end snd_nxt=%h < retx_hi=%h conn=%0d @%0d",
                          u_tcb.snd_nxt_r[j9_conn], rep_hi_w, j9_conn, cyc);
             end
-`ifdef GHOST_DBG
-            // ⭐ RETXHI-GHOST 临时调试钩子 (仅在 -d GHOST_DBG 时编译):
-            //   会话结束拍打印 本会话内的 ring_restore / 排空拍计数 + 相关状态.
-            $display("GDBG sessend @%0d c=%0d snd=%h ring_hi=%h retx_hi=%h ovf=%b estab=%b re=%b rest=%0d drain=%0d",
-                     cyc, j9_conn, u_tcb.snd_nxt_r[j9_conn], u_dut.ring_hi, rep_hi_w,
-                     u_dut.ring_ovf, u_dut.scan_estab, u_dut.retx_active,
-                     g_dbg_rest, g_dbg_drain);
-            g_dbg_rest = 0; g_dbg_drain = 0;
-`endif
             // J9 (审查 B4 口径): 会话结束后 60k 拍内, 该连接的对端前沿必须达到 retx_hi
             //   —— 这是"覆盖由构造保证"的**可切分**形式 (与 exp_new 对齐, 不依赖会话窗口)
             if (j9_dl != 0) begin
@@ -2278,51 +2221,6 @@ module tb_tcp_tx_ovl;
     endfunction
 `endif
 
-    // ⭐ RETXHI-GHOST §5.4-③: e_ringhi = A4 不变式门 (ring_hi <= retx_hi, 回绕安全).
-    //   口径 = **下一拍直读 DUT 的实际锁存值** (不复算表达式 —— 复算的话"拆钳位"变异
-    //   打不中 = 哑门). 豁免 R4 角: (钳位判假 ∧ FIN 支) 时不计 (设计件 §3.2-(5)/§9.1-R4).
-    //   改前它是**空判据** (信号不存在) ⇒ 牙只能挂变异臂 M-5.
-`ifdef TCP_TX_OVL
-    wire        d_svc_tap = u_dut.svc_x;
-`else
-    wire        d_svc_tap = u_dut.svc;    // 默认支: 同一个会话载载拍的触发信号
-`endif
-`ifdef GHOST_DBG
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin g_dbg_rest <= 0; g_dbg_drain <= 0; end
-        else begin
-            if (u_dut.ring_restore) g_dbg_rest <= g_dbg_rest + 1;
-            if (u_dut.ring_eval && !u_dut.ring_start) g_dbg_drain <= g_dbg_drain + 1;
-            // ⭐ RETXHI-GHOST 调试: 活帧推进写被会话期挡掉 (whi 不刷新的候选成因)
-            if (u_dut.upd_wr_data && u_dut.retx_active)
-                $display("GDBG skipadv @%0d c=%0d val=%h", cyc, u_dut.f_conn[u_dut.rx_bank],
-                         u_dut.f_seq[u_dut.rx_bank] + {20'b0, u_dut.f_plen[u_dut.rx_bank]});
-            if (u_dut.upd_wr_data && !u_dut.retx_active)
-                $display("GDBG whiwr @%0d c=%0d val=%h", cyc, u_dut.f_conn[u_dut.rx_bank],
-                         u_dut.f_seq[u_dut.rx_bank] + {20'b0, u_dut.f_plen[u_dut.rx_bank]});
-            if (u_dut.cfg_up) $display("GDBG cfgup @%0d id=%0d", cyc, u_dut.cfg_up_id);
-        end
-    end
-`endif
-    reg  rh_pend, rh_exempt;
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            rh_pend <= 1'b0; rh_exempt <= 1'b0; e_ringhi <= 0;
-        end else begin
-            if (rh_pend && !rh_exempt) begin
-                if ((u_dut.retx_hi - u_dut.ring_hi) >= 32'h8000_0000) begin
-                    e_ringhi = e_ringhi + 1;
-                    if (e_ringhi < 6)
-                        $display("[FAIL] ringhi: ring_hi=%h > retx_hi=%h @%0d",
-                                 u_dut.ring_hi, u_dut.retx_hi, cyc);
-                end
-            end
-            rh_pend   <= d_svc_tap;
-            rh_exempt <= d_svc_tap && (u_dut.fin_sent_r[u_dut.svc_id] && u_dut.svc_rewind)
-                         && !((u_dut.rb_snd_nxt - u_dut.whi_r[u_dut.svc_id]) < 32'h8000_0000);
-        end
-    end
-
     // ===================== 汇总 =====================
     integer tot_red;
     task summary_and_exit;
@@ -2331,7 +2229,7 @@ module tb_tcp_tx_ovl;
                       e_ctrl_to + e_onehot + e_pendbusy + e_replay + e_replay_stuck +
                       e_ovf + e_ackf + e_f1_ring + e_j9 + e_c6 + e_f1_delta + e_f1_cyc +
                       e_replay_span + e_replay_jump + e_c2_resv +
-                      e_ag_block + e_ag_resume + e_ghost + e_ringhi;   // ⭐ RETXHI-GHOST
+                      e_ag_block + e_ag_resume;
             // ⭐ P7B-PERSIST 本臂判决: 与既有判据同款 —— 每条 `tot_red = tot_red + 1`
             //    直接落在下面对应判据里 (计数器只为显示, 不重复计入)。
             $display("---------------- TB_TCP_TX_OVL SUMMARY ----------------");
@@ -2366,10 +2264,10 @@ module tb_tcp_tx_ovl;
             $display("OVL RETXFIX span_max=%0d span_over=%0d jump_bad=%0d c2resv_n=%0d c2resv_bad=%0d jump_ev=%0d",
                      rep_smax, e_replay_span, e_replay_jump, cov_c2_resv, e_c2_resv, cov_jump_ev);
 `endif
-            $display("REDS parse=%0d csum=%0d payload=%0d seqcont=%0d seqmono=%0d ctrl=%0d ctrl_to=%0d onehot=%0d pendbusy=%0d replay=%0d stuck=%0d ovf=%0d ackf=%0d ghost=%0d ringhi=%0d",
+            $display("REDS parse=%0d csum=%0d payload=%0d seqcont=%0d seqmono=%0d ctrl=%0d ctrl_to=%0d onehot=%0d pendbusy=%0d replay=%0d stuck=%0d ovf=%0d ackf=%0d",
                      e_parse, e_csum, e_payload, e_seqcont, e_seqmono, e_ctrl,
                      e_ctrl_to, e_onehot, e_pendbusy, e_replay, e_replay_stuck,
-                     e_ovf, e_ackf, e_ghost, e_ringhi);
+                     e_ovf, e_ackf);
             $display("REDS2 replay_gap=%0d below_una_during_retx=%0d replay_tail_short=%0d (info) F1_ring=%0d J9=%0d",
                      e_replay_gap, e_below_retx, e_replay_tail, e_f1_ring, e_j9);
             if (n_data < NF_TGT) begin tot_red = tot_red + 1;
