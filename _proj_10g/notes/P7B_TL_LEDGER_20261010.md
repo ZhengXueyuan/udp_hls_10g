@@ -324,3 +324,38 @@
 - #2 只许写 `P7B_PCIE_DATAPATH_DESIGN.md`；⛔ 不碰 rtl/board/sim/驱动。
 - #6 只许写 `P7B_SNDWND_GUARD_DESIGN.md`。
 - #4 **不许覆盖对端 `/tmp/p7b_biz/`**（现役部署，板上轮要用）。
+
+---
+
+## §10-5 2026-10-11 01:15 更新（wave-1 收口 + 缺陷刀构建读数 + 新在飞）
+
+### §10-5-1 已收口（提交 `13e2153` + `349b0ef`）
+- **#3 文档行号订正**：⛔ **真值不是 `2779-2783`，现工作树 = `:2784-2788`**（+5 位移来源 = 构建轮的 `board/wrapper_p4.v` 注释块重写 28 ins/13 del，非"四行同行替换"）；三份文档 21 处已订正（保留原句 + 就地标注）。**遗留**：`CLAUDE.md` 置顶块 ⑤ / `P7B_OPEN_ITEMS.md` 仍写 `2779-2783`（= fd671b6 态）⇒ **待下一批订正**；doc B `:1282` 未复现（现全态 `:1274`）；`run_lint_p7a.bat` 现 `:55/:68`（旧引用 `:45/:58`）。
+- **#4 台架族**：`p7b_board_stagec/p7b_tcp_sink_rate.cpp` 同族修复（+42/−5，16/16 自检，对端 selftest OK）；BUILD.md §3 指纹整表刷新（8 失配全解释 + §3b；新坑 = **源文件名是产物的一部分**）；§0-22 两处 deployed.sh 已对齐（第三目录 3 处残留已报未改）。
+- **#6 snd_wnd 设计件**：**是真缺陷**（违反本模块成文合同 + RFC 793 p.72；现役构型未见自然触发且无仪器在看）；修法 = `ackok_l` 守卫（**不许用 `ack_adv_l`** ⇒ 会打死零窗恢复）+ `SNDWND_GUARD` 参数，0 FF/≈1-2 LUT；TB 三腿 + 板级复用既有字；`tcp_tx_frame.v` 的 `` `else `` 现核 = `:1554`。
+- **#2 PCIe 数据通路设计件**（`P7B_PCIE_DATAPATH_DESIGN.md` ≈480 行）：⭐ **端点 = XDMA 4.2 AXI-MM，1×H2C + 1×C2H 引擎本就在 IP 里、被 wrapper 钉死（`:3995-4013`）⇒ 走 C2H 不用重生成 IP、不动 BAR、无许可缺口**；候选 (B) user BAR 窗口 ≈4–10 MB/s（推荐阶段一）· (A) C2H DMA ≈1.7 GB/s（阶段二）；推荐小功能 M1 = "TCP 载荷镜像窗"（tap `app_rx_*` → XOR 0xA5 → fifo_async → axi_regs 新读口 → PC 轮询落盘 + 逐字节/计数对账）；⚠️ 对我派单的三处订正（无 AXIS 通道 / `app_pattern` 也有 8 路 / tap 点 = `app_rx_*` 不是 `tcp_pay_*`）。**已派对抗审查（在飞）**。
+- **#5 persist 实施件静态审查**：落点 13+3 **零漏项**；真问题 = **P-1（`cfg_up`×T+2 捕获清位窗，注释与代码相反、TB 结构不覆盖）**· **P-2（W 臂 `e_coll_bad` 从未发火 + 曾"破坏在、见证哑"）**· P-3（门现状 `FAIL count=1`，S 臂 4 红待契约裁定）· P-4（`PS6 BAD` 行结构性打印 0）· P-5（静态件 L1 空判据，但断言本体已复跑成立）· P-6（S2 门未建）· P-7（互核未实现）。**动态臂 D-1…D-10 已列表**（D-2/D-3/D-7 = 与 H2(b)/P-1 直接相关）；**放行中**（D-1/D-9/D-10 无 xsim；xsim 臂等板级轮烧录后放行）。报告全文 = 待重试落盘（首写被 harness 拒）。
+
+### §10-5-2 ⭐ 缺陷刀构建（0x1C）读数 —— **TL 独立现读**（构建 agent 报告未回，回来后逐条对账）
+- 位流 `vivado_prj/p7b_ku5p_prj.runs/impl_1/wrapper_p4.bit` = **sha256 `09c280e4…b308ecbf` / 15,431,261 B**（Vivado 00:49:37 退出）。
+- **三类失败端点 `0/0/0`**；WNS `+0.262`（`txoutclk_out[0]_3` = MAC TX 域）/ WHS `+0.010` / WPWS `0.000`。
+- **DP 域（`g_hw.clk_out0` = 156.25 MHz MMCM 输出）= `+0.300`（F 归档同表 = `+0.281`）**；⭐ **DP 最差路径（该域 WNS 那条）确实穿过本刀新锥**：`u_tcp_tx/ring_restore1` 在路径上，宿 = `u_tcb/snd_nxt_r_reg[5][28]/D`（14 级 / logic 1.482 / route 4.461 = 布线主导）；全报告仅此 1 处提及新族名。
+- 其它域 vs F（归档 `20261011_002044/p7b_ku5p_timing.rpt`）：`pcie_axi_aclk` `+0.297→+0.339`；`rxoutclk_out[0]_3` `+0.362→+0.701`；`txoutclk_out[0]_3` `+0.364→+0.262`；⭐ **F 的全局 WNS = `+0.111`（`pcie_axi_aclk` async_default Recovery）→ 本轮该组 = `+1.117`**（+1.0 ns 改善，**机理未查** ⇒ 记入待核）。
+- 布线 `0` 错（132,930/132,930 fully routed）；DRC 69 条全 Warning（DPIP-2×4/DPOP-3×2/DPOP-4×4/DPOR-2×18/REQP-1858×41）。
+- **矩阵 `17/17` 全过 / 0 fail / `VERDICT: FROZEN`**（257 文件逐字节不变；GIT_HEAD=`50828c9`）。归档 `20261011_002044/` 已含 **F 的全套（含 `wrapper_p4_routed.dcp` 60 MB）** ⇒ **§0-26 那笔欠账（F 档无 dcp）已随构建脚本自身归档步收走**（待构建 agent 对账确认）。
+- ⚠️ **待构建 agent 报告对账的**：定向时序查询（§9-8 要求的前 10 端点族）· `P7B_*` 读数行 · 归档核对原话 · 矩阵门清单细节。
+
+### §10-5-3 在飞（01:15 时点）
+| # | 任务 | 备注 |
+|---|---|---|
+| 1 | **构建 agent 报告**（未回；工具已全部退出、机器空闲） | 回来后 TL 对账 → 提交 |
+| 2 | **板级轮 A = S-0 臂**（在**修复前 F 位流**上造 abort RST 构型） | 写 `notes/p7b_defect_board_20261011/` |
+| 3 | persist 实施件审查 **动态面**（D-1/D-9/D-10 先做，xsim 臂待放行） | 报告待落盘 |
+| 4 | PCIe 数据通路设计件**对抗审查** | 写 `notes/p7b_pcie_datapath_review_20261011/` |
+
+### §10-5-4 执行序更新（承 §10-3）
+1. 构建 agent 报告回来 → 对账 §10-5-2 → **提交**（含 `board/*` + `sim/p4sim/matrix_p4dfix.log` + `board/wrapper_p4.v`）。
+2. S-0 回来（观测到/未观测到）→ **读侧同步 `0x1A→0x1C`**（照 F 轮 `p7b_buildF/apply_readside.py` 形状；**BID-only、NW 仍 70**）→ 烧 0x1C 归档副本 → **S-1 臂**（同构型）。
+3. 板级轮结束后：放行 persist 审查的 xsim 臂 → 按结论补 W 臂/P-1 → persist 构建 `0x1D`。
+4. 缺陷批（snd_wnd 守卫 + F-3 + …）另开（⛔ 不与 persist 捆绑）。
+5. 新里程碑：PCIe 审查回来 → 按订正实施 M1（阶段一 = user BAR 窗口）→ 构建 → 板级。
