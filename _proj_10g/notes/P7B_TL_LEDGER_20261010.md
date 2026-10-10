@@ -480,5 +480,26 @@
 
 **⇒ persist 刀（功能 + P-1 修复）的板级正/负 A/B 完成；两位流均无 snd_wnd 守卫（复核成立）。**
 
-### §10-10-1 总订正轮（已派，在飞）
-覆盖：`P7B_OPEN_ITEMS.md`（#28/#18/#19/#22/#26 逐条订正 + 新增 persist/snd_wnd/S-0/微窗/M1 条目）· `CLAUDE.md` 置顶块（构建史 …→F→0x1C→0x1D；板上现役 0x1D）· `PORT_NOTES.md` 新节 · `~/.claude/fpga_net_dev.md` 新知识（候选：网名归并产物=同名不同物需定向网查询 · 前置门对"插入型编辑"的假 FAIL · 结构性缺席≠不存在 · 相位错≠尾部少量失配 · tick_cnt 大移位无拆刀判不了）。
+### §10-10-1 总订正轮（已收口，提交 `0b0d20e`）
+覆盖：`P7B_OPEN_ITEMS.md`（+107/−13：#28/#18/#19/#22/#26 逐条订正 + 新增 6 行/6 细则：persist 板级 A/B · snd_wnd · 微窗触发=台架竞态 · S-0 相位错新形态 · `tick_cnt` 大移位 · `ctrl_probe` NOCELL）· `CLAUDE.md`（+20/−6：八档构建史 →0x1C→0x1D；缺陷刀板级口径 + 跳烧 + M1 风险；persist 板级；snd_wnd；**新里程碑 M1**；别名行号订正现读 `:2788-2792`；未收口 6 条）· `PORT_NOTES.md`（+39：新节）· `~/.claude/fpga_net_dev.md`（845→901 行：**#90 网名≠RTL 信号 · #91 插入型编辑前置门用 new_hits≥1 · #92 结构性缺席⇒空判据 · #93 相位错≠尾部少量失配 · #94 改常量位移可超历史带**）+ `~/.claude/CLAUDE.md` 指针 24–89→**24–94**。
+
+---
+
+## §10-11 2026-10-11 04:50：**snd_wnd 守卫构建 0x1E 收口**（提交 `29a7aa9`；报告 = `p7b_build_0x1E/REPORT.md`，TL 代落盘第 5 例）
+
+| 项 | 值 |
+|---|---|
+| 位流 | **`e489ae4a…d342be1a` / 15,431,261 B**（`BUILD_ID_V = 0x1E`） |
+| 构建 | `WNS +0.034 / WHS +0.010`；三类失败端点 **0/0/0**；`Slack (VIOLATED)=0`；硬门 0 |
+| 矩阵 | **17/17 EXIT=0 / 0 红 / FROZEN**（`DIGEST_ALL(content)=7fbccb04…`；`GIT_HEAD` BEFORE=AFTER=`0b0d20e`） |
+| ⚠️ DP 域 | setup WNS = **`+0.034`**（0x1D `+0.067`）⇒ **余量 0.53%**；全局最差源族**第 3 次整体换位**（`u_fifo_a/rptr_reg[6]_replica` → `u_tcb/rcv_wnd_r_reg[2][9]/CE`；无拆刀臂 ⇒ 不归因）；`u_tcp_rx` 首次以**中间 cell** 进 DP 前 50（登记） |
+| ⭐ 守卫结构证据 | `ackok_l → pend_wnd_val CE` 定向连通 **n=5 条**（1 级 LUT = `s_axis_tcrs && ackok_l`）⇒ 谓词**确入网表**；守卫族**不在** DP 前 10/前 50。⛔ 反事实（`GUARD=0` 网表）**未做** |
+| 门-构建绑定 | ⭐ `sim/p3sim_sw/logs/frozen_revision_sha256.txt` == 构建输入**逐字相同**；⚠️ 但 `sim/p3sim_sw/` **不在**矩阵 manifest/17 门/257 指纹面 ⇒ **矩阵对本刀专项门是空证据**；`tcp_rx.v` 在 `chain_src.f`+`p5wrapper_src.f` ⇒ 12 chain 门 + p5_wrapper 跑的是带守卫件 |
+| 时间线核实 | 守卫入主树 = 02:41:30（committer）> 0x1D 位流 02:30:34 ⇒ **0x1D 位流确不含守卫**；相对 0x1D RTL 功能差 = 且只 = 守卫 |
+| 订正一条 | 0x1D REPORT 的 `unit_fifo C=606302` vs 全仓基线 `616302`（本轮实测 = 基线）⇒ 上轮疑似转写笔误 |
+
+### §10-11-1 此刻状态与剩余队列
+- **板子现役 = 0x1D（BID `0x1d`）**——**0x1E 未烧**（本轮禁烧）。
+- 已推送至 `0b0d20e`；本轮后续提交（`29c333b`→`29a7aa9` 一带）**待推**。
+- 队列：① **0x1E 的板级轮**（先做两件：读侧 `EXPECT_BID 0x1D→0x1E` 同步 + **按审查 U7 改注入器 ack 字段**；构型 = 陈旧 ACK 注入 + 窗观测，注意 0x1E 位流**含守卫**）；② **M1 实施**（4 建 6 定；"⑤ mmap/pread 先定"）；③ F-3 / Build G v2 / `tick_cnt`、`ctrl_probe` 未定位项；④ `p3sim` 既存红（新门已把其写成"签名不变"断言）。
+- ⚠️ **余量提醒（给 M1）**：DP setup 余量 0.53% ⇒ 任何新 RTL（尤其落 DP 域）先看它。
