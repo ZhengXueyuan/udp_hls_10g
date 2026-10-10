@@ -430,3 +430,34 @@
 | 1 | **persist 构建 0x1D**（矩阵 → 构建 → 归档 `p7b_build_0x1D/`） | 矩阵跑动中（chain/burst200/trunc50/trunc100 已 EXIT=0） |
 | 2 | **snd_wnd 守卫实施**（worktree `agent-adbace7bf67a3753c`） | 在飞 |
 | 3 | 读侧同步 | ✅ 就绪（两步演练全绿 + 8 负对照 + 负彩排；**待 0x1D 收口后链式 apply**） |
+
+---
+
+## §10-9 2026-10-11 03:00：**0x1D 收口 + snd_wnd 并入主树 + 读侧同步落盘 + persist 板级 A/B 在飞**
+
+### §10-9-1 0x1D 构建（提交 `49564a7`；报告 = `p7b_build_0x1D/REPORT.md`，TL 代落盘，含 `SHA256SUMS.txt` 补条）
+- 位流 **`b48dc7ee…ee0b1f` / 15,431,261 B**；`P7B_WNS 0.067 / WHS 0.010`；**三类失败端点 0/0/0**；`Slack (VIOLATED)=0`；硬门 12 键全 0。
+- 矩阵 **17/17 EXIT=0 / 0 红 / FROZEN**（`DIGEST_ALL(content)=b6f52171…`；两静默门有牙；env 警告 14 行/4 组 = 既存显示瑕疵）。构建一次收口无停滞；预归档 `20261011_015829`（内 0x1C 位流逐字核对 = 第二重保险）。
+- ⭐ **全局 WNS 宿主换成 DP 域**（`tick_cnt_reg[2] → snd_wnd_r_reg[4][12]/CE`，lvl=16）⇒ **DP setup `+0.067`**（0x1C `+0.300`）；与 0x1C 全局对象按 #66 逐条"不是同一对象"（组/源/宿全不同 + 组名集合都不同）。
+- persist 新族：**前 10/前 50 全 0 命中**；族内最紧 `ps_phase to=0.703` / `ps_stage from=0.557`（与全局 WNS 同宿、非最差项）；`ps_rd_d1/d2` 在网表；`ctrl_probe` **NOCELL（未定位）**；`ps_rd_d2` 名出现在 `u_slow_cfg` 下（= 命名/归并产物，不许当新族）。缺陷刀族 `whi_r/ring_hi` 移位但仍远高于临界（最紧 1.128）。大移位登记：`tick_cnt` 源族 0x1C top50 **0 命中** → 本轮 **141 命中**（无拆刀 ⇒ 判不了）。资源 +716 LUT/+293 FF；route 0 错；DRC 逐字相同。
+- ⚠️ 顺带订正：0x1C 版注释"回退点改回 `1'b1`"是笔误（该版值本就是 `1'b0`）⇒ 0x1D 版改为"改回 `1'b0`"。
+
+### §10-9-2 snd_wnd 守卫**已并入主树**（cherry-pick = 提交 `a38d4a4`）
+- worktree 分支 `worktree-agent-adbace7bf67a3753c` / commit `f6b78bc0`（25 文件 +1995/−21）已 cherry-pick 到 master（在 0x1D 构建**结束之后**做的 ⇒ 0x1D 位流**不含**守卫）。
+- 内容：`rtl/tcp_rx.v` +21/−3（`SNDWND_GUARD=1'b1` + `:526`/`:536` 两处成对守卫）；TB 两臂 + 9 点快照；`gen_stim_tcp_rx.py` 三腿 + F3 不变量；新门 `sim/p3sim_sw/`（`run_sndwnd_gate.bat` + 变异器 + 16 份日志）。
+- 读数：门 **RC=0**（四臂×三模式）；FIXED 全绿 / LEGACY `XFAIL-REPRODUCED`（`wnd1=0100 wnd2=1100`）/ **MUTANT（守卫改 `ack_adv_l`）⇒ 腿 B1 红（腿 B 有牙）** / DROPA ⇒ 腿 A 红（收下断言有牙）；worktree 内矩阵 **12/12 EXIT=0 + gate4096 + FROZEN**。
+- ⚠️ **已知边界**：① `p3sim` 门在 HEAD 就 RC=1（**既存红**，非本刀；新门把它写成"签名不变"断言）；② 矩阵指纹/manifest **不含** `tb_tb_tcp_rx.v`/`gen_stim_tcp_rx.py` ⇒ "12/12 绿 ≠ 本刀全量回归通过"；③ 审查的 B2 ack 值 5100 是笔误（按 0x100 应为 **5256=0x1488**，已按 0x100 钉死）；④ 有意偏离设计件：用 `!SNDWND_GUARD` 而非 `~`（防宽位实参下静默禁守卫）。
+- ⚠️ **排批后果（审查 U7）**：守卫默认=1 ⇒ **任何含它的后续构建**都要先把 persist 板级注入器（`stall_probe.py` 的 ack 字段）按"注入时刻的 `snd_una..snd_nxt`"改掉 —— **0x1C/0x1D 位流无守卫 ⇒ 本轮注入器不受影响**（但已要求 persist 板级轮**记下注入的 (ack,win) 原始值**备将来用）。
+
+### §10-9-3 读侧同步**链式落盘**（提交 `1d28539`）
+- 两阶段各 `APPLY_READSIDE_BID OK (24 edits / 0 fail)`（14 文件）；GEOM_TIERS 70 字代现 3 行（0x1A 构建 F / 0x1C 缺陷刀 / 0x1D persist 刀）。
+- ⭐ **发现并修复同步脚本自身一处假 FAIL**：前置门假设"旧串必须消失"，而 GEOM_TIERS 是"**插入新行 + 逐字保留旧行**"型编辑 ⇒ 必然假红；TL 订正 = 判"前置已落盘"的充分条件改为 `new_hits ≥ 1`（old_hits 只作信息打印）。
+
+### §10-9-4 在飞 + 队列
+| # | 任务 | 状态 |
+|---|---|---|
+| 1 | **persist 板级 A/B 轮**（0x1C 负臂 P-A → 0x1D 正臂 J-P1…J-P7 → P-C (c1)/(c2)） | ⭐ 在飞（本晚最后一块大活） |
+| 2 | snd_wnd 的**构建**（守卫进位流） | 待排（0x1E；可与 F-3 同批，⛔ 不与 persist 混） |
+| 3 | 新里程碑 M1 实施（PCIe 数据通路；v2 已给"4 建 6 定"清单） | 待排（**⑤ mmap/pread 读法先定**） |
+| 4 | OPEN_ITEMS / CLAUDE.md 置顶块 / PORT_NOTES 的**总订正轮**（含：0x1C/0x1D 位流状态、S-0 否定结果、mdio 结项、snd_wnd 状态、别名门 `:2784-2788` 现树值、微窗族） | 待排（收尾必做） |
+| 5 | `_proj_10g/notes/P7B_TL_LEDGER_20261010.md` → 本台账即续接点；**未推送**（待推） | |
