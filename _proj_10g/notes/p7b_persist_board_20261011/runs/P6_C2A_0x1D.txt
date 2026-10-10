@@ -1,0 +1,90 @@
+### RUN_BEGIN tag=P6_C2A mode=c2a secs=60 rcvbuf=2920 inject_at=3.0 n=3 1791659189.141317316
+### KW='5 14 15 20 43 51 55 57 58 66 67 68 69' STALL_N=3 POLL_MS=5000 SNAP_MAX=700 SNAPGAP=0.1
+### SNAP_MD5 ba2faf79f409302d1e542450db402975  SINK_MD5 6d9b14f24725fa326ffe5b169f77e30f  CLIENT_MD5 3fef080c9a80e02d0b793cbb7919f920  PROBE_MD5 2274c15975e78307dc9d9b286da03ffb
+### EXPECT_BID=0x0000001D NW=70
+--- 板侧身份闸 (跑前) ---
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x0000001d   (want 0x0000001D = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0xffffffff  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_OK 1791659189.162635888
+ID_RC=0
+BID=Read 32-bit value at address 0x4 (0x78da0239e004): 0x0000001d
+SCRATCH_0x08=Read 32-bit value at address 0x8 (0x77c0e1c06008): 0x00000000
+CARRIER=1
+NETADDR=inet 192.168.100.100/32
+ROUTE=192.168.100.2 dev enp1s0f1np1 src 192.168.100.100 uid 0 
+--- 抓包 A: 板->对端 小帧 (<=100B, 全程) ---
+--- 抓包 B: 双向 小帧 (<=100B, -c 400000 限深) ---
+CAPA=4012321 CAPB=4012323
+--- 抓包 C: 板->对端 大帧 (>100B, -c 400 限深) = 初突发/恢复段的数据帧序 (算 snd_nxt 用) ---
+CAPC=4012325
+--- 板侧快照环 (后台; 0.1s/点; 上限 700 点) ---
+SNAP_PID=4012327
+--- 侧信道: ss 采样 (0.5s/点; 本连接的 rcv_space/Recv-Q/rwnd_limited/bytes_received) ---
+SS_PID=4012328
+--- 对端内核计数 (跑前) ---
+TcpInSegs                       2515465010         0.0
+TcpOutSegs                      732686152          0.0
+TcpRetransSegs                  6190               0.0
+TcpExtTCPFastRetrans            4062               0.0
+TcpExtTCPBacklogDrop            68                 0.0
+TcpExtTCPOFOQueue               16726              0.0
+TcpExtTCPZeroWindowDrop         98                 0.0
+TcpExtTCPRcvQDrop               61                 0.0
+--- 主跑 (c2a) ---
+### CLIENT_RC=0
+### MAIN_DONE T0=1791659190.175644706 T1=1791659250.211193253 dur=60.035548547
+--- 对端内核计数 (跑后) ---
+TcpInSegs                       2515465115         0.0
+TcpOutSegs                      732686310          0.0
+TcpRetransSegs                  6199               0.0
+TcpExtTCPFastRetrans            4068               0.0
+TcpExtTCPBacklogDrop            68                 0.0
+TcpExtTCPOFOQueue               16726              0.0
+TcpExtTCPZeroWindowDrop         98                 0.0
+TcpExtTCPRcvQDrop               61                 0.0
+--- 收尾: 停快照环 + ss 采样 + 抓包 ---
+--- 抓包自报 (丢包 = 判据污染的见证) ---
+[capA]
+6 packets captured
+6 packets received by filter
+0 packets dropped by kernel
+[capB]
+16 packets captured
+17 packets received by filter
+0 packets dropped by kernel
+[capC]
+5 packets captured
+5 packets received by filter
+0 packets dropped by kernel
+-rw-r--r-- 1 tcpdump tcpdump  480 Oct 11 03:07 /tmp/persist_P6_C2A_capA.pcap
+-rw-r--r-- 1 tcpdump tcpdump 1200 Oct 11 03:07 /tmp/persist_P6_C2A_capB.pcap
+-rw-r--r-- 1 tcpdump tcpdump 7674 Oct 11 03:06 /tmp/persist_P6_C2A_capC.pcap
+--- 探针日志 (注入的 (ack,win) 原始值) ---
+--- sink 摘要 (逐字) ---
+--- client (不读档) ---
+CLIENT_START order=before rcvbuf_req=2920 t=1791659190.204734
+CLIENT_SO_RCVBUF_PRE_CONNECT 5840
+CLIENT_CONNECT_OK local=('192.168.100.100', 55824) remote=('192.168.100.2', 8080) dt=0.000111
+CLIENT_SO_RCVBUF_AFTER_CONNECT 5840
+CLIENT_TICK t=1791659195.207 elapsed=5.002 noread=1
+CLIENT_TICK t=1791659200.210 elapsed=10.005 noread=1
+CLIENT_TICK t=1791659205.212 elapsed=15.007 noread=1
+CLIENT_TICK t=1791659210.215 elapsed=20.010 noread=1
+CLIENT_TICK t=1791659215.217 elapsed=25.012 noread=1
+CLIENT_TICK t=1791659220.220 elapsed=30.015 noread=1
+CLIENT_TICK t=1791659225.222 elapsed=35.017 noread=1
+CLIENT_TICK t=1791659230.224 elapsed=40.020 noread=1
+CLIENT_TICK t=1791659235.227 elapsed=45.022 noread=1
+CLIENT_TICK t=1791659240.229 elapsed=50.024 noread=1
+CLIENT_TICK t=1791659245.232 elapsed=55.027 noread=1
+CLIENT_TICK t=1791659250.205 elapsed=60.000 noread=1
+CLIENT_NOREAD_DONE elapsed=60.000 t=1791659250.205045
+CLIENT_CLOSE t=1791659250.205112
+--- 板侧态 (跑后) ---
+BID=Read 32-bit value at address 0x4 (0x736c90fd5004): 0x0000001d
+SCRATCH_0x08=Read 32-bit value at address 0x8 (0x7db84d69d008): 0x00000000
+CARRIER=1
+(空=无残留进程)
+### RUN_END tag=P6_C2A 1791659251.681636754

@@ -1,0 +1,86 @@
+### RUN_BEGIN tag=N4_C2B mode=c2b secs=40 rcvbuf=2920 inject_at=3.0 n=3 1791659426.902907039
+### KW='5 14 15 20 43 51 55 57 58 66 67 68 69' STALL_N=3 POLL_MS=5000 SNAP_MAX=200 SNAPGAP=0.1
+### SNAP_MD5 ba2faf79f409302d1e542450db402975  SINK_MD5 6d9b14f24725fa326ffe5b169f77e30f  CLIENT_MD5 3fef080c9a80e02d0b793cbb7919f920  PROBE_MD5 2274c15975e78307dc9d9b286da03ffb
+### EXPECT_BID=0x0000001C NW=70
+--- 板侧身份闸 (跑前) ---
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x0000001c   (want 0x0000001C = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0xffffffff  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_OK 1791659426.924435276
+ID_RC=0
+BID=Read 32-bit value at address 0x4 (0x738aee1d7004): 0x0000001c
+SCRATCH_0x08=Read 32-bit value at address 0x8 (0x76e1bf5f4008): 0x00000000
+CARRIER=1
+NETADDR=inet 192.168.100.100/32
+ROUTE=192.168.100.2 dev enp1s0f1np1 src 192.168.100.100 uid 0 
+--- 抓包 A: 板->对端 小帧 (<=100B, 全程) ---
+--- 抓包 B: 双向 小帧 (<=100B, -c 400000 限深) ---
+CAPA=4071173 CAPB=4071175
+--- 抓包 C: 板->对端 大帧 (>100B, -c 400 限深) = 初突发/恢复段的数据帧序 (算 snd_nxt 用) ---
+CAPC=4071177
+--- 板侧快照环 (后台; 0.1s/点; 上限 200 点) ---
+SNAP_PID=4071179
+--- 侧信道: ss 采样 (0.5s/点; 本连接的 rcv_space/Recv-Q/rwnd_limited/bytes_received) ---
+SS_PID=4071180
+--- 对端内核计数 (跑前) ---
+TcpInSegs                       2515467852         0.0
+TcpOutSegs                      732689162          0.0
+TcpRetransSegs                  6202               0.0
+TcpExtTCPFastRetrans            4070               0.0
+TcpExtTCPBacklogDrop            68                 0.0
+TcpExtTCPOFOQueue               16727              0.0
+TcpExtTCPZeroWindowDrop         98                 0.0
+TcpExtTCPRcvQDrop               61                 0.0
+--- 主跑 (c2b) ---
+### CLIENT_RC=0
+### MAIN_DONE T0=1791659427.938148208 T1=1791659467.989957730 dur=40.051809522
+--- 对端内核计数 (跑后) ---
+TcpInSegs                       2515467961         0.0
+TcpOutSegs                      732689308          0.0
+TcpRetransSegs                  6204               0.0
+TcpExtTCPFastRetrans            4072               0.0
+TcpExtTCPBacklogDrop            68                 0.0
+TcpExtTCPOFOQueue               16727              0.0
+TcpExtTCPZeroWindowDrop         98                 0.0
+TcpExtTCPRcvQDrop               62                 0.0
+--- 收尾: 停快照环 + ss 采样 + 抓包 ---
+--- 抓包自报 (丢包 = 判据污染的见证) ---
+[capA]
+1 packet captured
+1 packet received by filter
+0 packets dropped by kernel
+[capB]
+51 packets captured
+52 packets received by filter
+0 packets dropped by kernel
+[capC]
+48 packets captured
+48 packets received by filter
+0 packets dropped by kernel
+-rw-r--r-- 1 tcpdump tcpdump   100 Oct 11 03:10 /tmp/persist_N4_C2B_capA.pcap
+-rw-r--r-- 1 tcpdump tcpdump  3620 Oct 11 03:10 /tmp/persist_N4_C2B_capB.pcap
+-rw-r--r-- 1 tcpdump tcpdump 73464 Oct 11 03:10 /tmp/persist_N4_C2B_capC.pcap
+--- 探针日志 (注入的 (ack,win) 原始值) ---
+--- sink 摘要 (逐字) ---
+--- client (不读档) ---
+CLIENT_START order=after rcvbuf_req=2920 t=1791659427.967844
+CLIENT_SO_RCVBUF_PRE_CONNECT 131072
+CLIENT_CONNECT_OK local=('192.168.100.100', 51222) remote=('192.168.100.2', 8080) dt=0.000196
+CLIENT_SO_RCVBUF_SET_AFTER_CONNECT req=2920 now=5840
+CLIENT_TICK t=1791659432.971 elapsed=5.002 noread=1
+CLIENT_TICK t=1791659437.973 elapsed=10.005 noread=1
+CLIENT_TICK t=1791659442.975 elapsed=15.007 noread=1
+CLIENT_TICK t=1791659447.978 elapsed=20.010 noread=1
+CLIENT_TICK t=1791659452.980 elapsed=25.012 noread=1
+CLIENT_TICK t=1791659457.983 elapsed=30.015 noread=1
+CLIENT_TICK t=1791659462.986 elapsed=35.018 noread=1
+CLIENT_TICK t=1791659467.968 elapsed=40.000 noread=1
+CLIENT_NOREAD_DONE elapsed=40.000 t=1791659467.968333
+CLIENT_CLOSE t=1791659467.968446
+--- 板侧态 (跑后) ---
+BID=Read 32-bit value at address 0x4 (0x781d375f8004): 0x0000001c
+SCRATCH_0x08=Read 32-bit value at address 0x8 (0x740d511ff008): 0x00000000
+CARRIER=1
+(空=无残留进程)
+### RUN_END tag=N4_C2B 1791659469.460747598

@@ -1,0 +1,90 @@
+### RUN_BEGIN tag=N2_PA mode=pa secs=45 rcvbuf=1460 inject_at=3.0 n=3 1791658577.018443468
+### KW='5 14 15 20 43 51 55 57 58 66 67 68 69' STALL_N=3 POLL_MS=5000 SNAP_MAX=2000 SNAPGAP=0.1
+### SNAP_MD5 ba2faf79f409302d1e542450db402975  SINK_MD5 6d9b14f24725fa326ffe5b169f77e30f  CLIENT_MD5 3fef080c9a80e02d0b793cbb7919f920  PROBE_MD5 2274c15975e78307dc9d9b286da03ffb
+### EXPECT_BID=0x0000001C NW=70
+--- 板侧身份闸 (跑前) ---
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x0000001c   (want 0x0000001C = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0xffffffff  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_OK 1791658577.039833209
+ID_RC=0
+BID=Read 32-bit value at address 0x4 (0x74aed2f94004): 0x0000001c
+SCRATCH_0x08=Read 32-bit value at address 0x8 (0x794094842008): 0x00000000
+CARRIER=1
+NETADDR=inet 192.168.100.100/32
+ROUTE=192.168.100.2 dev enp1s0f1np1 src 192.168.100.100 uid 0 
+--- 抓包 A: 板->对端 小帧 (<=100B, 全程) ---
+--- 抓包 B: 双向 小帧 (<=100B, -c 400000 限深) ---
+CAPA=3791809 CAPB=3791811
+--- 抓包 C: 板->对端 大帧 (>100B, -c 400 限深) = 初突发/恢复段的数据帧序 (算 snd_nxt 用) ---
+CAPC=3791813
+--- 板侧快照环 (后台; 0.1s/点; 上限 2000 点) ---
+SNAP_PID=3791815
+--- 侧信道: ss 采样 (0.5s/点; 本连接的 rcv_space/Recv-Q/rwnd_limited/bytes_received) ---
+SS_PID=3791816
+--- 对端内核计数 (跑前) ---
+TcpInSegs                       2511612864         0.0
+TcpOutSegs                      730844682          0.0
+TcpRetransSegs                  6123               0.0
+TcpExtTCPFastRetrans            4028               0.0
+TcpExtTCPBacklogDrop            19                 0.0
+TcpExtTCPOFOQueue               16713              0.0
+TcpExtTCPZeroWindowDrop         64                 0.0
+TcpExtTCPRcvQDrop               55                 0.0
+--- 注入器 (stall_probe; PROBE_WIN=0; 等 SYN 后 3.0s 注入 3 个) ---
+PROBE_PID=3791827
+PROBE_ARMED (已给注入器 2 s 绑套接字窗口) 1791658580.055274731
+--- 主跑 (pa) ---
+### SINK_RC=1
+### MAIN_DONE T0=1791658580.056428574 T1=1791658598.407128279 dur=18.350699705
+--- 对端内核计数 (跑后) ---
+TcpInSegs                       2511613453         0.0
+TcpOutSegs                      730845216          0.0
+TcpRetransSegs                  6125               0.0
+TcpExtTCPFastRetrans            4029               0.0
+TcpExtTCPBacklogDrop            24                 0.0
+TcpExtTCPOFOQueue               16714              0.0
+TcpExtTCPZeroWindowDrop         67                 0.0
+TcpExtTCPRcvQDrop               56                 0.0
+--- 收尾: 停快照环 + ss 采样 + 抓包 ---
+--- 抓包自报 (丢包 = 判据污染的见证) ---
+[capA]
+1 packet captured
+1 packet received by filter
+0 packets dropped by kernel
+[capB]
+481 packets captured
+483 packets received by filter
+0 packets dropped by kernel
+[capC]
+400 packets captured
+431 packets received by filter
+0 packets dropped by kernel
+-rw-r--r-- 1 tcpdump tcpdump    100 Oct 11 02:56 /tmp/persist_N2_PA_capA.pcap
+-rw-r--r-- 1 tcpdump tcpdump  33720 Oct 11 02:56 /tmp/persist_N2_PA_capB.pcap
+-rw-r--r-- 1 tcpdump tcpdump 612024 Oct 11 02:56 /tmp/persist_N2_PA_capC.pcap
+--- 探针日志 (注入的 (ack,win) 原始值) ---
+PROBE_START win=0 inject_at=3.0s n=3 gap=0.15 t=1791658578.071727
+SNIFF_SYN lport=38484 isn=1508195998 t=1791658580.060333
+PROBE_TARGET lport=38484 isn=1508195998 last_ack=305453477 last_win=0 (SYN+3.04s)
+PROBE_INJECT i=0 ack=305453477 win=0 t=1791658583.099262 (SYN+3.04s)
+PROBE_INJECT i=1 ack=305453477 win=0 t=1791658583.249487 (SYN+3.19s)
+PROBE_INJECT i=2 ack=305453477 win=0 t=1791658583.399707 (SYN+3.34s)
+PROBE_DONE board_frames_after_inject=0 t=5.094455
+--- sink 摘要 (逐字) ---
+PIN_RULE=avoid-nic PIN_DEGRADED=none PIN_CPU=5 PIN_CORES_ONLINE=0-7 PIN_NIC_IFACE=enp1s0f0np0,enp1s0f1np1 PIN_NIC_CPUS=0,1,2,3,4,5 PIN_NIC_EXCLUDED=none PIN_CORE_LOAD=175548277 PIN_ALLOWED_MASK=20 PIN_GETCPU_START=5 PIN_FREQ_START_KHZ=3701147 PIN_GOV=schedutil PIN_NIC_IRQLINES=12 PIN_NIC_IFACE_SRC=auto PIN_TUPLE_ORDER=own_sib_t PIN_PAIR_RULE=load-only PIN_PAIR_DEGRADED=nic0-0 PIN_CPU_IO=4 PIN_CPU_WORK=7 PIN_PC_IO=0 PIN_PC_WORK=3 PIN_PAIR_EXCL=1 PIN_PAIR_REQ=want
+SINK_LIMITS maxbytes=400000000 poll_ms=5000 stall_n=3 rcvbuf=1460 conns=1 secs=45
+SINK_RCVBUF_ORDER RCVBUF_ORDER=after_connect_LEGACY rcvbuf=1460
+PIN_THREAD name=work PIN_TID_WORK=3791954 PIN_CPU_WORK=7 PIN_ALLOWED_MASK_WORK=80 PIN_GETCPU_WORK=7 CPU_FREQ_WORK_KHZ=3760716
+PIN_THREAD name=io PIN_TID_IO=3791953 PIN_CPU_IO=4 PIN_ALLOWED_MASK_IO=10 PIN_GETCPU_IO=4 CPU_FREQ_IO_KHZ=800000
+SINK_CONN 0 POLL_TIMEOUT 3 x 5000 ms 无数据 (got=51100) => 中止本连接
+SINK_CONN 0 STALL bytes=51100 first_mismatch=0 mism_bytes=50906 conn_ms=0.167 dur_ms=18345.092 Mbps=0.022 reads=35 poll_tmo=3 CPU_FREQ_KHZ=3897776 THREADED=on q_full_push=35 q_full_pop=35 q_free_push=51 q_free_pop=35 slot_wait_spins=0 checked_bytes=51100
+SINK_SUM conns=1 fail_conns=0 bytes=51100 clean_conns=0 bad_conns=1 mismatch_bytes=50906 stall_conns=1 err_conns=0 poll_tmo=3 wall_s=18.345 net_s=18.345 agg_Mbps=0.022 THREADED=on full_push=35 full_pop=35 free_push=51 free_pop=35 slot_wait_spins=0 checked_bytes=51100 threads=2 check=lane8
+PIN_GETCPU_END=5 PIN_FREQ_END_KHZ=2600000
+--- 板侧态 (跑后) ---
+BID=Read 32-bit value at address 0x4 (0x79a32cf3a004): 0x0000001c
+SCRATCH_0x08=Read 32-bit value at address 0x8 (0x700810e10008): 0x00000000
+CARRIER=1
+(空=无残留进程)
+### RUN_END tag=N2_PA 1791658599.876589104

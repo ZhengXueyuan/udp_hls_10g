@@ -1,0 +1,79 @@
+### RUN_BEGIN tag=P4_HEALTHY mode=healthy secs=30 rcvbuf=2080000 inject_at=3.0 n=3 1791659120.208018539
+### KW='5 14 15 20 43 51 55 57 58 66 67 68 69' STALL_N=3 POLL_MS=5000 SNAP_MAX=400 SNAPGAP=0.1
+### SNAP_MD5 ba2faf79f409302d1e542450db402975  SINK_MD5 6d9b14f24725fa326ffe5b169f77e30f  CLIENT_MD5 3fef080c9a80e02d0b793cbb7919f920  PROBE_MD5 2274c15975e78307dc9d9b286da03ffb
+### EXPECT_BID=0x0000001D NW=70
+--- 板侧身份闸 (跑前) ---
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x0000001d   (want 0x0000001D = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0xffffffff  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_OK 1791659120.229661123
+ID_RC=0
+BID=Read 32-bit value at address 0x4 (0x7db7f8117004): 0x0000001d
+SCRATCH_0x08=Read 32-bit value at address 0x8 (0x7fb582143008): 0x00000000
+CARRIER=1
+NETADDR=inet 192.168.100.100/32
+ROUTE=192.168.100.2 dev enp1s0f1np1 src 192.168.100.100 uid 0 
+--- 抓包 A: 板->对端 小帧 (<=100B, 全程) ---
+--- 抓包 B: 双向 小帧 (<=100B, -c 400000 限深) ---
+CAPA=3975766 CAPB=3975768
+--- 抓包 C: 板->对端 大帧 (>100B, -c 400 限深) = 初突发/恢复段的数据帧序 (算 snd_nxt 用) ---
+CAPC=3975770
+--- 板侧快照环 (后台; 0.1s/点; 上限 400 点) ---
+SNAP_PID=3975772
+--- 侧信道: ss 采样 (0.5s/点; 本连接的 rcv_space/Recv-Q/rwnd_limited/bytes_received) ---
+SS_PID=3975773
+--- 对端内核计数 (跑前) ---
+TcpInSegs                       2512168038         0.0
+TcpOutSegs                      731430236          0.0
+TcpRetransSegs                  6184               0.0
+TcpExtTCPFastRetrans            4059               0.0
+TcpExtTCPBacklogDrop            30                 0.0
+TcpExtTCPOFOQueue               16726              0.0
+TcpExtTCPZeroWindowDrop         77                 0.0
+TcpExtTCPRcvQDrop               59                 0.0
+--- 主跑 (healthy) ---
+### SINK_RC=0
+### MAIN_DONE T0=1791659121.242743013 T1=1791659127.557933071 dur=6.315190058
+--- 对端内核计数 (跑后) ---
+TcpInSegs                       2514914553         0.0
+TcpOutSegs                      732113716          0.0
+TcpRetransSegs                  6185               0.0
+TcpExtTCPFastRetrans            4060               0.0
+TcpExtTCPBacklogDrop            30                 0.0
+TcpExtTCPOFOQueue               16726              0.0
+TcpExtTCPZeroWindowDrop         77                 0.0
+TcpExtTCPRcvQDrop               59                 0.0
+--- 收尾: 停快照环 + ss 采样 + 抓包 ---
+--- 抓包自报 (丢包 = 判据污染的见证) ---
+[capA]
+2 packets captured
+2 packets received by filter
+0 packets dropped by kernel
+[capB]
+400000 packets captured
+401129 packets received by filter
+0 packets dropped by kernel
+[capC]
+400 packets captured
+571 packets received by filter
+0 packets dropped by kernel
+-rw-r--r-- 1 tcpdump tcpdump      176 Oct 11 03:05 /tmp/persist_P4_HEALTHY_capA.pcap
+-rw-r--r-- 1 tcpdump tcpdump 28000056 Oct 11 03:05 /tmp/persist_P4_HEALTHY_capB.pcap
+-rw-r--r-- 1 tcpdump tcpdump   612024 Oct 11 03:05 /tmp/persist_P4_HEALTHY_capC.pcap
+--- 探针日志 (注入的 (ack,win) 原始值) ---
+--- sink 摘要 (逐字) ---
+PIN_RULE=avoid-nic PIN_DEGRADED=none PIN_CPU=5 PIN_CORES_ONLINE=0-7 PIN_NIC_IFACE=enp1s0f0np0,enp1s0f1np1 PIN_NIC_CPUS=0,1,2,3,4,5 PIN_NIC_EXCLUDED=none PIN_CORE_LOAD=175549245 PIN_ALLOWED_MASK=20 PIN_GETCPU_START=5 PIN_FREQ_START_KHZ=3699816 PIN_GOV=schedutil PIN_NIC_IRQLINES=12 PIN_NIC_IFACE_SRC=auto PIN_TUPLE_ORDER=own_sib_t PIN_PAIR_RULE=load-only PIN_PAIR_DEGRADED=nic0-0 PIN_CPU_IO=4 PIN_CPU_WORK=7 PIN_PC_IO=0 PIN_PC_WORK=3 PIN_PAIR_EXCL=1 PIN_PAIR_REQ=want
+SINK_LIMITS maxbytes=4000000000 poll_ms=5000 stall_n=3 rcvbuf=2080000 conns=1 secs=30
+SINK_RCVBUF_ORDER RCVBUF_ORDER=before_connect rcvbuf=2080000
+PIN_THREAD name=io PIN_TID_IO=3975792 PIN_CPU_IO=4 PIN_ALLOWED_MASK_IO=10 PIN_GETCPU_IO=4 CPU_FREQ_IO_KHZ=3788160
+PIN_THREAD name=work PIN_TID_WORK=3975793 PIN_CPU_WORK=7 PIN_ALLOWED_MASK_WORK=80 PIN_GETCPU_WORK=7 CPU_FREQ_WORK_KHZ=3765424
+SINK_CONN 0 OK bytes=4000003770 first_mismatch=-1 mism_bytes=0 conn_ms=0.123 dur_ms=6310.061 Mbps=5071.271 reads=675675 poll_tmo=0 CPU_FREQ_KHZ=3799792 THREADED=on q_full_push=675675 q_full_pop=675675 q_free_push=675691 q_free_pop=675675 slot_wait_spins=0 checked_bytes=4000003770
+SINK_SUM conns=1 fail_conns=0 bytes=4000003770 clean_conns=1 bad_conns=0 mismatch_bytes=0 stall_conns=0 err_conns=0 poll_tmo=0 wall_s=6.310 net_s=6.310 agg_Mbps=5071.271 THREADED=on full_push=675675 full_pop=675675 free_push=675691 free_pop=675675 slot_wait_spins=0 checked_bytes=4000003770 threads=2 check=lane8
+PIN_GETCPU_END=5 PIN_FREQ_END_KHZ=3739345
+--- 板侧态 (跑后) ---
+BID=Read 32-bit value at address 0x4 (0x74b4b605e004): 0x0000001d
+SCRATCH_0x08=Read 32-bit value at address 0x8 (0x791064f76008): 0x00000000
+CARRIER=1
+(空=无残留进程)
+### RUN_END tag=P4_HEALTHY 1791659129.027712330
