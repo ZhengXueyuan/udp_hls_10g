@@ -46,7 +46,8 @@
 2. ⭐ **台架 sink 修复**（在飞，零构建）。
 3. **附带发现（未修）**：**`snd_wnd` 写入无守卫** —— `rtl/tcp_rx.v:509` `pend_wnd <= s_axis_tcrs || pend_wnd;`（**任何 FCS-OK 的 TCP 帧都写**）对比 `:508` `pend_una` 有 `ack_adv_l` 守卫 ⇒ **陈旧/乱序 ACK 的 `win` 会覆盖当前窗口**（"最后一个 ACK 说了算"）。
 4. **`board/run_lint_p6e.bat` 加别名门那一行**（`call "%~dp0..\..\sim\aliasgate\run_aliasgate.bat" || exit /b 1`）—— **那正是编坏分支的入口**（上一轮被写边界挡住）。
-5. **行号订正**：`wrapper_p4.v:2771-2775` → **`2773-2777`**（凡引用处：`CLAUDE.md` 置顶块 · `P7B_OPEN_ITEMS.md` · 板级一轮 `REPORT.md` · `P7B_BUILDG_RFC_SEQ_DESIGN.md`）。
+5. **行号订正**：那五行反向别名的**真值 = `board/wrapper_p4.v:2779-2783`**（**2026-10-10 深夜现核**：`:2777-2778` = 两行订正注释、`:2779-2783` = 那五行 `assign`）。⚠️ **此前流传的 `2771-2775` 与 `2773-2777` 都是错靶子** —— 位移成因 = `faee172`（+2 注释行）+ **`fd671b6`（本轮 persist 的 `board/wrapper_p4.v` +6 行）** = 同一 **+8**。⚠️ **且该 5 行已由 `faee172` 修好** ⇒ 现读这几行看到的是**正确方向**（"方向全反"指修复前原状）。
+   **已完成**：`P7B_OPEN_ITEMS.md`（3 处）· `CLAUDE.md` 置顶块 ⑤ · 台账 §5。**⛔ 未改（授权外，待下一轮）**：`PORT_NOTES.md:5965` · `p7b_p5wrapper_diag_20261010/REPORT.md`（8 处）· `p7b_aliasgate_20261010/REPORT.md`（5 处，含**现已过时的"应改为 `2773-2777`"**）· `sim/aliasgate/alias_dir_check.py:7` · `sim/p4gates/run_matrix_p4dfix.bat:204`。
 6. `sim/p7b_stagec_tx/mut/` 的 **14 个已入库陈旧变异件**（低危；消费门每次先重生成）⇒ 清或重生成。
 7. `rtl/app_pattern.v:33` 注释里还留着旧数 **71**（`P7B_LONGSEND_DESIGN.md:102` 是它的逐字引文，改注释要同时改引文）。
 8. `sim/aliasgate/_selftest/` ⇒ 加 ignore 或删。
@@ -85,6 +86,7 @@
 | `_proj_10g/notes/p7b_aliasgate_20261010/REPORT.md` | 五行修复 + `#19` 矩阵 16→17 + **别名方向常驻门**（假阳性 0）+ 工具面三条 |
 | `_proj_10g/notes/p7b_readside_harden_20261010/`（⛔ **该目录里没有 `REPORT.md`** —— 见 §4-4） | 读侧加固：穷举 771 条/149 文件 · **三条断言** · 负对照 4 条全红。证据 = `FULL_TABLE.tsv`(771 行/149 文件) · `assert_run1/2.txt` · `check_mode.txt` · `negctl_{table,bid,face,oldkey}.txt` · `face_table.txt` · `mktable.py`；权威叙述 = `udp_hls_10g/CLAUDE.md` 构建 F 块 ⑦ |
 | `_proj_10g/notes/p7b_tool_debt_20261010/REPORT.md` | 变异器地雷**纯核实**（0713a13 已修）+ mdio 两潜伏项改造（2×2 判据） |
+| `_proj_10g/notes/p7b_persist_impl/` | ⭐ **重放越界缺陷取证目录**（persist 轮）：**缺陷发现 + 机制到行 + 机制关死**的证据都在这里 —— 探针日志 `ev/or{S,T}_oracle{,_v5,_v6}_xs.log` · 探针生成器 `patch_oracle_v{4,5,6}.py` / `make_v{5,6}.py` / `rerun_oracle.bat`；提交 = `fd880e2`（发现）/ `9d6554e`（机制到行）/ `68bb98c`（机制关死 = (a)）。（同目录还含 persist 实施阶段 1 的门日志与变异器补丁） |
 | `_proj_10g/notes/P7B_OPEN_ITEMS.md` | ⭐ 用户的**未解决项汇总表**（本轮订正 13 格 + 新增 6） |
 | `~/.claude/fpga_net_dev.md` §六 **#84–#89** | 本轮新知识：标记≠行为 · 既存红养 11 天 · 恒等式新形态 · 表尾第三次 · 回卷展开数两次 · 转述二手数字 |
 | `udp_hls_10g/CLAUDE.md` 置顶块 · `PORT_NOTES.md:5932` | 构建 F 里程碑（下一步读这两处） |
@@ -149,7 +151,7 @@
   2. **persist 实施**（设计审查回来后；单一主题、不捆绑、门 + 负对照、一次构建收口）—— 构建前先看 `WNS +0.111` / **DP setup `+0.281`**。
   3. **BUILD.md §3 指纹整表刷新**（下次构建时做；已被四处独立复现失配）。
   4. 同族第二实例 `p7b_tcp_sink_rate.cpp` 的处置 + 其历史读数是否加注。
-- ⛔ **§3-3…§3-13 全部仍然有效**（`snd_wnd` 无守卫 · `run_lint_p6e` 加别名门 · 行号订正 `2773-2777` · 14 份陈旧变异件 · `app_pattern.v:33` 旧数 71 · `_selftest/` · Build G v2 · 微窗未定位项 · `analyze.py` 假牙 · `routed.dcp` 归档 · `vivado_prj` 四份反向别名）。
+- ⛔ **§3-3…§3-13 全部仍然有效**（`snd_wnd` 无守卫 · `run_lint_p6e` 加别名门 · 行号订正 **`2779-2783`**（⚠️ §3-5 已订正；原写的 `2773-2777` 是**错靶子**） · 14 份陈旧变异件 · `app_pattern.v:33` 旧数 71 · `_selftest/` · Build G v2 · 微窗未定位项 · `analyze.py` 假牙 · `routed.dcp` 归档 · `vivado_prj` 四份反向别名）。
 
 ---
 
