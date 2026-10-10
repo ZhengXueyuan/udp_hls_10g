@@ -28,6 +28,7 @@ if "%WHICH%"=="PRE2" call :run2 PRE2 "%PRTL%" "%PTB%" "-d TCP_TX_OVL -d ARM_PERS
 if "%WHICH%"=="S"    call :run2 S    "%RTL%"  "%TB%"  "-d TCP_TX_OVL -d ARM_PERSIST" & goto :done
 if "%WHICH%"=="SDBG" call :run2 SDBG "%RTL%"  "%TB%"  "-d TCP_TX_OVL -d ARM_PERSIST -d GHOST_DBG" & goto :done
 if "%WHICH%"=="T"    call :run2 T    "%RTL%"  "%TB%"  "-d TCP_TX_OVL -d ARM_PERSIST -d PERSIST_NEGCTL" & goto :done
+if "%WHICH%"=="TDBG" call :run2 TDBG "%RTL%"  "%TB%"  "-d TCP_TX_OVL -d ARM_PERSIST -d PERSIST_NEGCTL -d GHOST_DBG" & goto :done
 if "%WHICH%"=="M3"   call :run2 M3   "%HERE%\mut\mut_ghost_m3.v"         "%TB%" "-d TCP_TX_OVL -d ARM_PERSIST" & goto :done
 if "%WHICH%"=="M4"   call :run2 M4   "%HERE%\mut\mut_ghost_norestore.v"  "%TB%" "-d TCP_TX_OVL -d ARM_PERSIST" & goto :done
 if "%WHICH%"=="M5"   call :run2 M5   "%HERE%\mut\mut_ghost_noclamp.v"    "%TB%" "-d TCP_TX_OVL -d ARM_PERSIST" & goto :done

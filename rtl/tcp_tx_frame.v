@@ -2179,6 +2179,12 @@ module tcp_tx_frame (
             //   拍, 而那拍 `upd_val` 取 `rb_snd_una` (非数据支) ⇒ 会用**上一帧的 `seq_r+plen_r`**
             //   刷 `whi_r[cur_id]` (与"环里真写出过的最高 seq"语义不符)。
             //   ring 重放帧亦置 `is_data_r=1` ⇒ 仍靠 `!retx_active` 门掉 (会话期无活帧)。
+            // ⚠️ 登记 (TL 裁定③, 2026-10-10): 本支的 `whi_r` **没有任何判据** —— `e_ghost` 已
+            //   限定在 OVL 支 (默认支的推进写落在 **S_DONE = 该帧自己的尾拍**, 帧尾直读会结构性
+            //   误报: 实测 arm A `e_ghost=346`, 全部呈 `tail=本帧尾 / whi=上帧尾`).
+            //   收益 = 镜像一致性 + 防未来 (设计件 §4.4 本就承认"镜像对幽灵无门可测").
+            //   ⛔ **若将来本支被启用, 或本支的 `whi_r` 语义/写者被改, 这是它的第一个未覆盖面**
+            //   (届时要么补一条 S_DONE 口径的等价判据, 要么维持"无判据"并重新登记).
             if ((state == S_DONE) && is_data_r && m_axis_tvalid && m_axis_tready &&
                 !retx_active)
                 whi_r[cur_id] <= seq_r + {20'b0, plen_r};

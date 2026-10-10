@@ -210,7 +210,7 @@
                  rst_sent_r[cfg_up_id]    <= 1'b0;
                  fin_retx_pend[cfg_up_id] <= 1'b0;
                  // ---- P5c-T1 G4+G6: 跨会话残留清理 (事件脉冲, 坑 9) ----
-@@ -2116,6 +2173,15 @@
+@@ -2116,6 +2173,21 @@
              // ⭐ 构建 F: W67 (板帽侧那一份) + W69 (操作点锁存)
              if (stat_winstall_cap_ev) stat_winstall_cap <= stat_winstall_cap + 32'd1;
              if (stat_winstall_ev) o_win_at_winstall <= {win_inflight, win_wnd_eff};
@@ -220,13 +220,19 @@
 +            //   拍, 而那拍 `upd_val` 取 `rb_snd_una` (非数据支) ⇒ 会用**上一帧的 `seq_r+plen_r`**
 +            //   刷 `whi_r[cur_id]` (与"环里真写出过的最高 seq"语义不符)。
 +            //   ring 重放帧亦置 `is_data_r=1` ⇒ 仍靠 `!retx_active` 门掉 (会话期无活帧)。
++            // ⚠️ 登记 (TL 裁定③, 2026-10-10): 本支的 `whi_r` **没有任何判据** —— `e_ghost` 已
++            //   限定在 OVL 支 (默认支的推进写落在 **S_DONE = 该帧自己的尾拍**, 帧尾直读会结构性
++            //   误报: 实测 arm A `e_ghost=346`, 全部呈 `tail=本帧尾 / whi=上帧尾`).
++            //   收益 = 镜像一致性 + 防未来 (设计件 §4.4 本就承认"镜像对幽灵无门可测").
++            //   ⛔ **若将来本支被启用, 或本支的 `whi_r` 语义/写者被改, 这是它的第一个未覆盖面**
++            //   (届时要么补一条 S_DONE 口径的等价判据, 要么维持"无判据"并重新登记).
 +            if ((state == S_DONE) && is_data_r && m_axis_tvalid && m_axis_tready &&
 +                !retx_active)
 +                whi_r[cur_id] <= seq_r + {20'b0, plen_r};
              // svc 优先编码寄存器化 (P6 时序, 见 svc_id 声明注释): 每拍刷新,
              // svc 拍消费上拍编码 — rto_pend 置位到 svc 至少隔 1 拍 (扫描拍
              // 置位, 下一 S_IDLE 拍 svc), retx_req 电平期间 retx_id 稳定
-@@ -2161,6 +2227,9 @@
+@@ -2161,6 +2233,9 @@
                          // retx_hi >= rb_snd_nxt ⇒ 下溢结构性不可能 (与 ① 双重保险)。
                          retx_hi <= (fin_sent_r[svc_id] && svc_rewind) ? fin_seq_r[svc_id] :
                                     rb_snd_nxt;
