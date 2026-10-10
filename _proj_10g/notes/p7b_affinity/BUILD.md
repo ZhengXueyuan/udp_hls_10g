@@ -89,15 +89,19 @@ done
 该文件是**负对照臂**、派单明令"不改该文件"，**故未动**（**编译它用的仍是 `-O3 -pthread` 部署口径**，
 只是它自己的注释没跟着换）。**这一处分叉已显式登记，请裁定是否要补改**。
 
-## 3. 产物指纹（7 个二进制 + 1 个仪器；**2026-10-09 R1/R2/R4 轮 / `-O3 -pthread` 构建**）
+## 3. 产物指纹（7 个二进制 + 1 个仪器；**2026-10-11 整表刷新：现树源码 / `-O3 -pthread` / 编译于对端 `/tmp/p7b_biz_refresh/`**）
+
+> ⚠️ 本表 **2026-10-11** 由「台架工具族收尾」轮**整表刷新**（方法 + 失配逐条解释见 **§3b**）。
+> 上一版 = 2026-10-09 R1/R2/R4 轮（sink `e56cb8bd…` / sink_rate `3161889f…`）—— 旧值保留在 §3b 的失配表里。
+> ⛔ **本表描述「现树源码 + §2 命令」的重编产物，不是现役 `/tmp/p7b_biz/` 的逐条快照**（现役核对见 §3b 末段）。
 
 | # | 产物 | 字节数 | md5 |
 |---|---|---|---|
-| 1 | `p7b_tcp_sink` | 169,392 | `e56cb8bdbf28e0fef34e5fc40b1ffbef` |
+| 1 | `p7b_tcp_sink` | 169,392 | `6d9b14f24725fa326ffe5b169f77e30f` |
 | 2 | `p7b_tcp_src` | 119,488 | `48d066a04684fbd6b901679120d88c3c` |
 | 3 | `p7b_udp_src` | 128,048 | `a3faafd37ed2e21e0acd3cc925e9c98c` ⚠️ **未变** |
 | 4 | `p7b_tcp_src_fix` | 119,496 | `d1ca0c288efe6723488e4c1a6960d1b5` |
-| 5 | `p7b_tcp_sink_rate` | 119,296 | `3161889f6e5f73d86935ad5ef2eac306` |
+| 5 | `p7b_tcp_sink_rate` | 127,488 | `ca6900fd54036be7fe1d337ca9ef83b8` |
 | 6 | `p7b_tcp_src_rate` | 119,496 | `a76b2b4b1e44d6c9edcaa301d90aabcb` |
 | 7 | `p7b_tcp_src_diag` | 123,592 | `430ed36ade4ec64ba6f5cb52e5f4f335` |
 | 8 | `p7b_rate2_bench`（**仪器**, 非部署判据链） | 171,040 | `1e956072f30a25f3e547e8c42107afb3` |
@@ -116,7 +120,7 @@ done
 > （`ae52e70a…`/`cc04c98f…`/`8141185c…`/`81ca5a3a…`/`29277540…`/`ead6c118…`/`c223859c…`/`275f96fc…`）
 > **全部作废** —— 换旗标（`-O2`→`-O3`）就会换二进制。⚠️ **"大小变了"本身不是判据**（见 §4 末条）：只认 md5。
 
-**输入指纹**（部署件 == 仓库件，逐字节相同；md5 由 `md5sum(1)` 现算，2026-10-09 R1/R2/R4 轮）：
+**输入指纹**（现树（= HEAD）逐字节；md5 由 `md5sum(1)` 现算，**2026-10-11 刷新**；⚠️ 现役 `/tmp/p7b_biz/` 的核对见 §3b 末段）：
 
 | 输入 | 仓库出处 | md5 |
 |---|---|---|
@@ -125,13 +129,13 @@ done
 | `p7b_io.h` | `_proj_pcie/p7b_biz/`（**未动**） | `62b1257d69c40f24bfa9a799593073b7` |
 | `p7b_spsc.h` | `_proj_pcie/p7b_biz/`（**未动**） | `3132db495c29ab85b7f6a5617803644f` |
 | `p7b_pattern.h` | `_proj_pcie/p7b_biz/`（⭐ **本轮改**: M^8 lane8 + 开关 + 等价自检） | `b2f2e9627bac53bf3b4ab2b565afe872` |
-| `p7b_tcp_sink.cpp` | `_proj_pcie/p7b_biz/`（⭐ `--check`/`--selftest-equiv`/tick/见证） | `0574eca85cdb9060ac461e0270a365ee` |
+| `p7b_tcp_sink.cpp` | `_proj_pcie/p7b_biz/`（⭐ `--check`/`--selftest-equiv`/tick/见证 + **2026-10-10 sinkfix**: `SO_RCVBUF` 落点 `sink_connect_rcvbuf` + `--rcvbuf-after-connect` + `SINK_RCVBUF_ORDER`） | `8d02ef6426d4ef6ad5fd2c514965c1e8` |
 | `p7b_tcp_src.cpp` | `_proj_pcie/p7b_biz/`（**行为未动** —— 只被新头重新编译） | `e73309a9f85a628c85ba4eef0e74a0d7` |
 | `p7b_udp_src.cpp` | `_proj_pcie/p7b_biz/`（**行为未动**） | `074321cfbb31827c84a30cd86abeab84` |
 | `p7b_tcp_src_fix.cpp` | `_proj_10g/notes/p7b_biz_tcpreg/`（**行为未动**） | `21ca7fa995fae7dc06675b64ff24dc36` |
-| `p7b_tcp_src_diag.cpp` | `_proj_10g/notes/p7b_biz_tcpreg/`（⛔ **负对照臂, 一个字节没动**） | `c44129fc7dcd48c14fc570949d15795c` |
+| `p7b_tcp_src_diag.cpp` | `_proj_10g/notes/p7b_biz_tcpreg/`（⛔ **负对照臂**: 代码零改动; `e20b5bf` 只改过**注释**（编译行）+ 3 行说明 ⇒ 产物 `430ed36a…` **未变**，2026-10-11 复现逐字节相同） | `217a0e48191e02f9fc120cf5fa42a49e` |
 | `p7b_tcp_src_rate.cpp` | `_proj_10g/notes/p7b_board_stageb/`（**行为未动**） | `c3b9b01c42dae1ef3e098893d839f986` |
-| `p7b_tcp_sink_rate.cpp` | `_proj_10g/notes/p7b_board_stagec/`（**行为未动** —— 它**没有** `--check` ⇒ 仍是 seq 一路） | `5935bc51f3b7f746d7449e79f118db4a` |
+| `p7b_tcp_sink_rate.cpp` | `_proj_10g/notes/p7b_board_stagec/`（⭐ **2026-10-11 sinkfix 同族修复**：`sink_connect_rcvbuf` + `--rcvbuf-after-connect` + `SINK_RCVBUF_ORDER` 见证行；它**没有** `--check` ⇒ 仍是 seq 一路；**既有输出字段名/顺序零改动**） | `92ef5b458043179a432e1515546b585a` |
 | `p7b_rate2_bench.cpp`（⭐ 仪器源, 本轮改） | `_proj_pcie/p7b_biz/` | `b9c18a7695480a24f60169313034c0fd` |
 
 ⭐ **旧调用点未破（"只加不破"的实测证据）**：未改的发送族用**新** `p7b_affinity.h` + `-O3 -pthread` 重编后，
@@ -146,13 +150,14 @@ done
 旧件 `CPU_FREQ_KHZ=2000000/800000`（**空闲主线程核**）vs 新件 `3875395/3889822`（**干活核**）；
 其余字段（bytes / first_mismatch / 队列恒等式）逐字相同。
 
-**台架/门脚本指纹**（本轮改过或新增；部署位置 = `/tmp/p7b_biz/`）：
+**台架/门脚本指纹**（⭐ **2026-10-11 刷成现树值**；⚠️ 三行标注"部署件滞后"的现役 `/tmp/p7b_biz/` 副本**仍是旧值**，
+下轮重部署时一并更新 —— 现役逐条核对见 §3b 末段）：
 
-| 脚本 | 仓库出处 | md5 |
+| 脚本 | 仓库出处 | md5（现树） |
 |---|---|---|
-| `stc_dl.sh` | `_proj_10g/notes/p7b_board_stagec/` | `4273c6f8620d5ff051967fafa8c4f7e3` |
-| `j6_stagec.sh` | `_proj_10g/notes/p7b_board_stagec/` | `7afce3a533dacd87a15c7781cfe1e91e` |
-| `tcpreg_j6.sh` | `_proj_10g/notes/p7b_biz_tcpreg/` | `997f67d80839ce26717fe036e25f9781` |
+| `stc_dl.sh`（⚠️ **部署件滞后** = 上一版 `4273c6f8…`；树在 `15defaf` 前进） | `_proj_10g/notes/p7b_board_stagec/` | `a9b4a0c2691fa47be2365ddd9d6a5726` |
+| `j6_stagec.sh`（⚠️ **部署件滞后** = 上一版 `7afce3a5…`；树在 `15defaf` 前进） | `_proj_10g/notes/p7b_board_stagec/` | `3b248ece038b01e2df7483b5aa25efe5` |
+| `tcpreg_j6.sh`（⚠️ **部署件滞后** = 上一版 `997f67d8…`；树在 `15defaf`→`dcf2bb6`→`70d5d59` 三代前进） | `_proj_10g/notes/p7b_biz_tcpreg/` | `158454d4e9cc25bcd9645adeb399e5b1` |
 | `pcap_off_dryrun.sh` | `_proj_10g/notes/p7b_board_stagec/` | `3be0e9d757e00286a29efceb151de0a9` |
 | `p7b_selftest.sh`（**未动**；本轮实跑 PASS=30） | `_proj_pcie/p7b_biz/` | `40c3f658b504b874c0df51037fa68f3a` |
 | `aff_selftest.sh`（**未动**；本轮实跑全过, 含 CASE Q 的 END_MISMATCH 硬门） | `_proj_pcie/p7b_biz/` | `19cb9f2d9781e8a338246960e3c340ff` |
@@ -161,6 +166,61 @@ done
 | `p7baff_faultinject.cpp`（**上一轮的仪器, 本轮重新部署**；供新门做 R2 的确定性注入） | `_proj_10g/notes/p7b_affinity/` | `23a01d88b6acd01587f70692e421b476`（与 §5a 逐字相同） |
 | `s2_setup.sh`（三条编译行 → `-O3 -pthread`） | `_proj_10g/notes/p7b_biz_s2/` | `c011336cb6c38afd2826fe4fe3b8c541` |
 | `win_tcp_sink.py`（R1 改非阻塞；⚠️ **Windows 侧**，等待原语 = `selectors.DefaultSelector`，**不能用 `select.poll`** —— Windows 上不存在，实测 `AttributeError`） | `_proj_10g/notes/p7b_biz_tcpreg/` | `4393db310ad76c8edeaa35552b8a0bab` |
+
+### 3b. 2026-10-11 整表刷新记录（**失配逐条 + 方法**；「台架工具族收尾」轮落笔，零板卡 / 零 Vivado）
+
+**方法（可照抄）**：把**现树**的 8 个 `.cpp` + 4 个头（`p7b_affinity.h` / `p7b_io.h` / `p7b_pattern.h` / `p7b_spsc.h`）
+经 `tools/peer_ssh.py --put` 传到对端**新建独立目录** `/tmp/p7b_biz_refresh/`（⛔ 全程未碰现役 `/tmp/p7b_biz/`）：
+
+```bash
+cd /tmp/p7b_biz_refresh && for n in p7b_tcp_sink p7b_tcp_src p7b_udp_src p7b_tcp_src_fix \
+    p7b_tcp_sink_rate p7b_tcp_src_rate p7b_tcp_src_diag p7b_rate2_bench; do g++ -O3 -pthread -o $n $n.cpp; done
+```
+⇒ **8/8 RC=0、stderr 全空（零告警）**；g++ 13.3.0。上载后**逐件 md5 与现树相同**（12/12）。
+
+⭐ **新坑（本次实测，必须登记）：源文件名是产物的一部分** —— 二进制 `.symtab` 里有每个编译单元的
+`STT_FILE` 符号（= 命令行的文件名）⇒ **同一份内容换个文件名重编就换 md5**
+（实测：同源改名 `p7b_tcp_sink_longsend.cpp` 重编 ⇒ 169,392→169,400 B、md5 全变；**改回原名 ⇒ 逐字节复现**）。
+⇒ **复现指纹必须保持原文件名**（= 与产物同名的 `<name>.cpp`），否则会得到"不可复现"的**假警报**（本刷新第一遍就踩到）。
+
+**失配逐条（旧表值 → 现树值）**：
+
+| # | 项 | 旧值（上一版表） | 现树值 | 差在哪 / 能否解释 |
+|---|---|---|---|---|
+| 1 | 输入 `p7b_tcp_sink.cpp` | `0574eca8…` | `8d02ef64…` | ✅ **可解释**：`0574eca8` = `e20b5bf`（R1/R2/R4 轮）；`aaf17dc`（LONGSEND 轮）加 `SINK_LIMITS` 见证行 ⇒ `5b6d757b`；`a03d227`（sinkfix 台架修复）⇒ `8d02ef64`。**表停在第一代**。 |
+| 2 | 产物 `p7b_tcp_sink` | `e56cb8bd…` / 169,392 | `6d9b14f2…` / 169,392 | ✅ **可解释**：旧值 = 输入①旧值 + §2 命令的**逐字节复现**（本次实测复现成功）；新值 = 现树输入的编译（与 sinkfix 轮对端独立编译 `6d9b14f2…` **逐字节相同**）。⚠️ 新旧**同尺寸** ⇒ 只认 md5。 |
+| 3 | 输入 `p7b_tcp_src_diag.cpp` | `c44129fc…` | `217a0e48…` | ✅ **可解释（纯注释）**：`e20b5bf` 只改了**注释**（编译行 + 3 行负对照臂说明），**代码零改动** ⇒ 产物 `430ed36a…` **未变**（本次复现逐字节相同 = "纯注释不改产物"的**第二次独立复证**）。 |
+| 4 | 输入 `p7b_tcp_sink_rate.cpp` | `5935bc51…`（"行为未动"） | `92ef5b45…` | ✅ **本次修复**（+42/−5，单文件）：sinkfix 同族（connect **之前**设 `SO_RCVBUF` + `--rcvbuf-after-connect` 旧臂 + `SINK_RCVBUF_ORDER` 见证行）；**既有输出字段名/顺序零改动**（逐字核过）。 |
+| 5 | 产物 `p7b_tcp_sink_rate` | `3161889f…` / 119,296 | `ca6900fd…` / 127,488 | ✅ **可解释**：旧值 = 旧输入 + §2 命令的**逐字节复现**（本次实测成功）；新值 = 修复后编译。⚠️ **+8,192 B 不是 8 KiB 新代码**：`size` 实测 `.text` 仅 **+608 B**，其余是 `.rodata` 增长后段对齐填充（`.data` 0x19000 → 0x1B000）。 |
+| 6 | 脚本 `stc_dl.sh` | `4273c6f8…` | `a9b4a0c2…` | ✅ **可解释**：现役部署 = 旧值（现读对端逐字相同）而树在 `15defaf`（GAP9-TX 收口）之后前进 ⇒ 表值 = 部署值、**树值尚未部署**。 |
+| 7 | 脚本 `j6_stagec.sh` | `7afce3a5…` | `3b248ece…` | ✅ 同上（`15defaf`）。 |
+| 8 | 脚本 `tcpreg_j6.sh` | `997f67d8…` | `158454d4…` | ✅ **可解释**：部署件 = 旧值；树在 `15defaf` → `dcf2bb6`（A7 轮）→ `70d5d59`（构建 F 板级）三代前进。 |
+
+**未失配项（逐字节复现/相同）**：产物 6 个 + 输入 8 个 + 脚本 8 个 —— 其中 6 个产物
+（`p7b_tcp_src 48d066a0…` · `p7b_udp_src a3faafd3…` · `p7b_tcp_src_fix d1ca0c28…` · `p7b_tcp_src_rate a76b2b4b…` ·
+`p7b_tcp_src_diag 430ed36a…` · `p7b_rate2_bench 1e956072…`）**与表值 = 与部署值三方逐字节相同** ⇒
+**同机同命令跨会话可复现**（含 `p7b_tcp_src_diag` 的"纯注释源改动 ⇒ 产物不变"），本轮再获一次独立复证。
+
+**现役部署核对（2026-10-11 现读 `/tmp/p7b_biz/`，只读；这是"部署 vs 树"，与上表"树 vs 表"是两件事）**：
+
+| 项 | 现役值 | 判定 |
+|---|---|---|
+| `p7b_tcp_sink.cpp` | `5b6d757b…`（= LONGSEND 代） | ⛔ **落后现树一代**（树 = `8d02ef64…`，sinkfix 未部署） |
+| 其二进制 `p7b_tcp_sink` | `c6b62420…` / 169,392 | ✅ **与它自己的源自洽** —— 本次实测：该源**同名**重编 = `c6b62420…` **逐字节复现**（早先"部署二进制失配"的疑点**到此关闭**） |
+| `p7b_tcp_sink_rate.cpp` | `5935bc51…` | ⛔ **落后现树一代**（树 = `92ef5b45…` = 本次修复） |
+| 其余 11 件源/头 | 逐件 = 现树 | ✅ |
+| 脚本 3 件（`stc_dl.sh` / `j6_stagec.sh` / `tcpreg_j6.sh`） | 逐件 = 旧表值 | ⛔ **落后现树**（见失配表 #6–#8） |
+
+⇒ 本轮之前"**部署源码 + 部署二进制双失配**"的登记**逐条已解释，且没有一条是"产物不可复现"**：
+sink 的失配 = 表未随 LONGSEND 轮回填（旧表值本身逐字节可复现）；sink_rate 的失配 = 本次修复（预期）；
+3 个脚本 = 树已前进而部署未跟。⚠️ **部署落后不影响已入库读数**（那些读数取自当时的旧件），
+但**下一轮要用新 sink / 新 rate 判据前必须按 §6 重部署**（并**保持文件名**，见上文新坑）。
+
+⚠️ **同文件 §5 各表未在本轮刷新范围内**（它们是**分轮的历史记录**），但 2026-10-11 现核到**两处值会误导当前读者**
+（登记待裁定，未改）：① §5b 的 `p7b_selftest.sh` = `c80914ed…` —— 那是 `a701fec`（R1/R2 轮）的值，
+`e20b5bf` 起为 `40c3f658…`（= §3 与现树值）；② §5c 的 `p7b_rate2_bench.cpp` / 二进制 = `791b1dc7…` / `b93e2e05…`
+—— `791b1dc7…` **从未入库**（`a701fec` 之前该文件在 git 里不存在；入库自 `e20b5bf` = `b9c18a76…`），
+属双线程轮的**中间态**记录。§5a 的两项（`p7baff_fake_softirqs.txt` `82a31bd1…` / `f9_loopback_check.sh` `95d0689f…`）现核 = 现树 ✅。
 
 ## 4. 可复现性实测（订正审查的措辞）
 

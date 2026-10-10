@@ -15,6 +15,16 @@
 //   **删掉了旧版 connect 后 `fcntl(fd,F_SETFL,fl)` 切回阻塞**那一步; recv 前一律 poll, poll 超时
 //   = 计数 + `SINK_CONN ... STALL` 行 + 计入 bad_conns (确定语义, 不静默吞);
 //   ⛔ 不写盘 (载荷只在内存; --nocheck 只是关掉复算, 同样不落盘)。
+//
+// ⭐⭐ 2026-10-11 (sinkfix 同族第二实例; 与 _proj_pcie/p7b_biz/p7b_tcp_sink.cpp 的
+//   `sink_connect_rcvbuf` 同一机制): 旧版在 connect 助手**返回之后**才 setsockopt(SO_RCVBUF)
+//   —— 而该助手内部已把三次握手跑完 (connect + poll(POLLOUT) + SO_ERROR) ⇒ SYN 通告的是
+//   默认 buf 的大窗 (实测 64240), 随后才塌 ⇒ 微窗触发变量 (结构性, 不是竞态)。
+//   现: setsockopt 抢在 connect **之前**落位 (默认 = 修复后); `--rcvbuf-after-connect` =
+//   旧行为逐字复现 (正控场景保留; 两臂只差 setsockopt 的位置这一件事); 启动见证行
+//   `SINK_RCVBUF_ORDER RCVBUF_ORDER=before_connect|after_connect_LEGACY` (缺见证按"未测"读)。
+//   ⛔ 既有输出字段名/顺序一字未动 (SINK_RATE_MODE / SINK_CONN / SINK_SUM 全部原样;
+//      新行 = 新前缀 ⇒ 下游 sed/正则零影响)。
 // 编译 (部署口径 = _proj_10g/notes/p7b_affinity/BUILD.md §2; ⛔ 别再用旧头注释里的 -O3 写法):
 //   g++ -O3 -pthread -o p7b_tcp_sink_rate p7b_tcp_sink_rate.cpp
 #include "p7b_pattern.h"
@@ -69,15 +79,27 @@ static int connect_nb(int fd, const struct sockaddr *sa, socklen_t sl, int timeo
     return 0;                                     // ⚠️ 返回后 fd **仍是 O_NONBLOCK**
 }
 
-static int connect_to(const char *host, int port, int secs, int *why) {
+// ------------------------- 2026-10-11 (sinkfix 同族): SO_RCVBUF 落点开关 -------------------------
+// 旧 `connect_to` 已被本函数收编 —— 它在 connect 助手**返回之后**才由调用点设 SO_RCVBUF,
+// 而助手返回时握手已完成 ⇒ SO_RCVBUF 晚了一整个握手 (缺陷形态见文件头)。
+// 本函数 = 原 connect_to 的近拷贝 + 一处落点参数; 两臂只差 setsockopt 的位置这一件事:
+//   !rcvbuf_after_connect (默认) : socket -> set_nonblock ->【setsockopt】-> connect_nb
+//    rcvbuf_after_connect (旧臂) : socket -> set_nonblock -> connect_nb ->【setsockopt】
+// (与 _proj_pcie/p7b_biz/p7b_tcp_sink.cpp 的 sink_connect_rcvbuf 逐条同构, 只去掉 p7b_io_ 前缀)
+static int sink_connect_rcvbuf(const char *host, int port, int secs, int rcvbuf,
+                               bool rcvbuf_after_connect, int *why) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) { *why = errno; return -1; }
     struct sockaddr_in a{};
     a.sin_family = AF_INET;
     a.sin_port = htons((uint16_t)port);
     if (inet_pton(AF_INET, host, &a.sin_addr) != 1) { *why = EINVAL; close(fd); return -1; }
-    set_nonblock(fd);                             // ⭐ socket() 之后立刻设, 且**不再切回**
+    set_nonblock(fd);                             // 与旧助手同款: socket() 之后立刻设, 且**不再切回**
+    if (!rcvbuf_after_connect)                    // 默认 (修复后): 抢在 SYN 之前落位
+        setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
     if (connect_nb(fd, (struct sockaddr *)&a, sizeof(a), secs * 1000, why) < 0) { close(fd); return -1; }
+    if (rcvbuf_after_connect)                     // 旧行为 (逐字复现; 只为正控场景保留)
+        setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
     return fd;
 }
 
@@ -85,6 +107,10 @@ int main(int argc, char **argv) {
     argc = p7b_pin_cpu(argc, argv);      // 启动即绑核 (p7b_affinity.h; 剥离本函数自己的选项)
     const char *host = "192.168.100.2";
     int port = 8080, conns = 100, secs = 60, rcvbuf = 8 << 20;
+    // ⭐⭐ 2026-10-11 (sinkfix 同族): SO_RCVBUF 落点开关 —— **默认 = 修复后** (connect 之前设)。
+    //   旧落点先按默认 buf 通告大窗 (实测 64240) 再塌 ⇒ 板的初突发已被对端自己授权 ⇒
+    //   小接收缓冲被冲掉 (微窗触发变量); 历史读数全部取自旧落点 ⇒ 与历史 A/B 必须带本开关。
+    bool rcvbuf_after_connect = false;   // --rcvbuf-after-connect = 旧行为臂 (正控场景保留)
     long maxbytes = 4L << 20;        // 每连接读上限 (1MB 图案 + 余量)
     int poll_ms = 5000, stall_n = 3; // R1: poll 等待上限 / 连续超时次数上限
     bool selftest = false, nocheck = false;
@@ -96,6 +122,7 @@ int main(int argc, char **argv) {
         else if (k == "--conns") conns = atoi(nx());
         else if (k == "--seconds") secs = atoi(nx());
         else if (k == "--rcvbuf") rcvbuf = atoi(nx());
+        else if (k == "--rcvbuf-after-connect") rcvbuf_after_connect = true;  // sinkfix 同族: 旧行为臂
         else if (k == "--maxbytes") maxbytes = atol(nx());
         else if (k == "--poll-ms") poll_ms = atoi(nx());
         else if (k == "--stall-n") stall_n = atoi(nx());
@@ -103,8 +130,11 @@ int main(int argc, char **argv) {
         else if (k == "--selftest") selftest = true;
         else if (k == "--help") {
             printf("p7b_tcp_sink_rate --host H --port P [--conns N] [--seconds S] [--rcvbuf B] [--maxbytes B] [--nocheck]\n"
-                   "             [--poll-ms 5000] [--stall-n 3]\n"
+                   "             [--poll-ms 5000] [--stall-n 3] [--rcvbuf-after-connect]\n"
                    "  同 p7b_tcp_sink 的接收循环 (非阻塞 + poll LT); --nocheck 关掉逐字节图案复算 (台架天花板对照臂)\n"
+                   "  --rcvbuf-after-connect: 旧行为逐字复现 (SO_RCVBUF 在 connect **之后**才设\n"
+                   "     => 首个窗口通告 = 默认大窗 [实测 64240] 再塌; 默认 = connect **之前**设 [修复后];\n"
+                   "     两臂见证行 = SINK_RCVBUF_ORDER = before_connect|after_connect_LEGACY)\n"
                    "  ⛔ 不写盘; 连续 stall-n 次 poll 超时 => 该连接 STALL 并计入 bad_conns\n");
             return 0;
         } else { fprintf(stderr, "unknown arg %s (--help)\n", k.c_str()); return 2; }
@@ -114,6 +144,12 @@ int main(int argc, char **argv) {
     if (stall_n < 1) stall_n = 1;
 
     printf("SINK_RATE_MODE check=%s\n", nocheck ? "off" : "on");
+    // ⭐⭐ 2026-10-11 (sinkfix 同族) 见证行: **这一跑是哪一臂必须可判** (缺见证按"未测"读)。
+    //   before_connect = 修复后 (默认; SO_RCVBUF 抢在 SYN 之前落位);
+    //   after_connect_LEGACY = 旧行为逐字复现 (--rcvbuf-after-connect; 首个窗口通告 = 默认大窗)。
+    printf("SINK_RCVBUF_ORDER RCVBUF_ORDER=%s rcvbuf=%d\n",
+           rcvbuf_after_connect ? "after_connect_LEGACY" : "before_connect", rcvbuf);
+    fflush(stdout);
     std::vector<uint8_t> buf(1 << 20);
     double t_start = now_s();
     long long tot_bytes = 0, tot_clean = 0, tot_conn = 0, tot_mismatch_bytes = 0;
@@ -124,7 +160,8 @@ int main(int argc, char **argv) {
         if (now_s() - t_start > secs) break;
         double t0 = now_s();
         int why = 0;
-        int fd = connect_to(host, port, 5, &why);
+        // ⭐ sinkfix 同族: 建连 + SO_RCVBUF 落点 (默认 connect 之前; --rcvbuf-after-connect = 旧行为)
+        int fd = sink_connect_rcvbuf(host, port, 5, rcvbuf, rcvbuf_after_connect, &why);
         double t1 = now_s();
         if (fd < 0) {
             fail_conns++;
@@ -133,7 +170,7 @@ int main(int argc, char **argv) {
             continue;
         }
         if (c == 0) first_conn_at = t1;
-        setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
+        // (旧 :136 的 SO_RCVBUF 落点已移进 sink_connect_rcvbuf ⇒ connect 之前; 见文件头)
         P7bPat pat(0);                       // **每连接** 从偏移 0 起
         long long got = 0, mism_bytes = 0;
         long long first_mis = -1;

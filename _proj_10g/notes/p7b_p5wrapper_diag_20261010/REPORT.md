@@ -4,7 +4,8 @@
 > `ifndef DP_156MHZ` 的 TX 单域"别名"块把 `mac_tx_64` 的 `s_axis_tvalid` 与 `tx_arb` 的 `m_axis_tready`
 > 变成**无驱动（Z）** ⇒ **该配置下 TX 全死**。引入点 = **`f08fc6a`（2026-09-29, P6b 顶层双域搬迁）**
 > ⇒ 与登记"自 P6b 起就红"逐字吻合。
-> ⚠️ **板配置（`DP_156MHZ=1`）走另一支（`:2768-2769` 写法正确）⇒ 静态推断不受影响；⛔ 未实测。**
+> ⛔ **2026-10-11 订正（行号）**：现核真值 = **`:2784-2788`**（五行 `assign`）/ **`:2782-2783`**（两行订正注释）—— 2026-10-11 现读工作树（当时带另一支构建 agent 的**未提交改动** +5 行、落 `:2141` 一带）；位移链 = 修复前 `2771-2775`（上一句原写 = 修复前旧行号）→ `faee172` `2773-2777` → `fd671b6`（2026-10-10 20:46）`2779-2783` → 现工作树再 +5 ⇒ **`2784-2788`**。⚠️ 该 5 行已由 `faee172` 修为正确方向 —— 本句"方向全写反"指**修复前原状**；本件下文各处 `2771-2775`/`2773-2777` 同此订正。
+> ⚠️ **板配置（`DP_156MHZ=1`）走另一支（`:2768-2769` 写法正确）⇒ 静态推断不受影响；⛔ 未实测。** ⛔ 2026-10-11 订正（行号）：该"正确写法对照"两行现核 = **`:2779-2780`**（原写 2768-2769 = 修复前旧号）。
 > ⚠️ 本报告由 TL 代落盘（子 agent 的写文件请求被 harness 拒绝："Subagents should return findings as text"）；
 > 正文按子 agent 的最终回复逐条整理，**未改一字事实**。全部原始证据在 `work/` 下。
 
@@ -54,8 +55,8 @@ P5 WRAPPER FAIL (1 项)
 - 旁支弱点（与本红无关，登记）：bat:59 的 `multi/driv/unconnected` grep **只打印不判**（无 errorlevel）；本缺陷没触发任何 warn。
 
 ### ② wrapper 预置侧 = **根因**
-- 宏走向：`DP_156MHZ` 未定义 ⇒ `:2770 else` ⇒ **`:2771-2775` 生效**；`P7B_10G` 未定义 ⇒ `:2807 mac_tx_64`；`APP_MODE` 定义 ⇒ `:1078-1256` app 通路 + `:1094-1104` `txin_*`。
-- **逐字（`:2771-2775`）**：
+- 宏走向：`DP_156MHZ` 未定义 ⇒ `:2770 else` ⇒ **`:2771-2775` 生效**；`P7B_10G` 未定义 ⇒ `:2807 mac_tx_64`；`APP_MODE` 定义 ⇒ `:1078-1256` app 通路 + `:1094-1104` `txin_*`。 ⛔ 2026-10-11 订正（行号）：本行各号现核 = `:2781`（`else`）/ **`:2784-2788`**（五行生效块）/ `:2820`（`mac_tx_64 u_mac_tx (`）；原写 2770 / 2771-2775 / 2807 = 修复前旧号；`:1078-1256` / `:1094-1104` 现核**未位移**。
+- **逐字（`:2771-2775`）**：〔⛔ 2026-10-11 订正（行号）：该块现核 = **`:2784-2788`**；原写 2771-2775 = 修复前旧号；下列 fence 是**修复前原状**逐字（fence 内 `// 2771`…标签同为旧号），保留不动。〕
   ```verilog
   assign txsrc_tdata  = m_tx_tdata;      // 2771
   assign txsrc_tkeep  = m_tx_tkeep;
@@ -65,7 +66,7 @@ P5 WRAPPER FAIL (1 项)
   ```
   而 `tx_arb` 的 m_axis 输出在 **`txsrc_*`**（`:2745-2750`，`.m_axis_tready(txsrc_tready)` 是**输入**），
   `mac_tx_64` 的 s_axis 在 **`m_tx_*`**（`:2810-2814`，`.s_axis_tready(m_tx_tready)` 是**输出**）
-  ⇒ **五行 rhs/lhs 全反**。**正确写法对照 = `:2768-2769`**（`assign txsrc_tready = ~tx_fifo_full; assign m_tx_tvalid = ~tx_fifo_empty;`）。
+  ⇒ **五行 rhs/lhs 全反**。**正确写法对照 = `:2768-2769`**（`assign txsrc_tready = ~tx_fifo_full; assign m_tx_tvalid = ~tx_fifo_empty;`）。 ⛔ 2026-10-11 订正（行号）：本段三处引用现核 = `:2756-2761`（`tx_arb` `m_axis` 组，`.m_axis_tready` 在 `:2760`）/ `:2823-2827`（`mac_tx_64` `s_axis` 组，`.s_axis_tready` 在 `:2826`）/ **`:2779-2780`**（正确写法对照）—— 原写 2745-2750 / 2810-2814 / 2768-2769 均为修复前旧号。
 - **实测（D 臂，pc≥6500 起 42 次采样冻结）**：
   ```
   PROBEY pc=16500 nets(tx_tready=x txsrc_tready=z m_tx_tready=1 m_tx_tvalid=z txsrc_tvalid=1 tx_tvalid=1)
@@ -91,19 +92,19 @@ P5 WRAPPER FAIL (1 项)
 
 ## 2. 定案 + 证伪实验
 
-**根因（一行）**：**`board/wrapper_p4.v:2771-2775`**（默认 / 非 `DP_156MHZ` 的 TX 单域别名块**方向全反** ⇒ TX 交付口空挂）。
+**根因（一行）**：**`board/wrapper_p4.v:2771-2775`**（默认 / 非 `DP_156MHZ` 的 TX 单域别名块**方向全反** ⇒ TX 交付口空挂）。 ⛔ 2026-10-11 订正（行号）：现核 = **`:2784-2788`**（原写 2771-2775 = 修复前旧号；该 5 行已由 `faee172` 修复 ⇒ 现读为正确方向）。
 
 **证伪实验（两臂，都已做）**
 
 | 臂 | 做法 | 结果 |
 |---|---|---|
-| **E** | `board/wrapper_p4.v` 逐字节复制到 `work/E/wrapper_p4.v`，**仅这 5 行**改正确方向（`diff` = **恰好 2771-2775 五行**；271,392 → 271,396 B），`BD` 指向副本，其余全同 | **EXIT=0**：`wrapper GMII: 3 帧…` / `wrapper 图案: 3 帧 / 4380 B` / `P5 WRAPPER OK` / `P5W tx(frames=3 bytes=4380)` |
+| **E** | `board/wrapper_p4.v` 逐字节复制到 `work/E/wrapper_p4.v`，**仅这 5 行**改正确方向（`diff` = **恰好 2771-2775 五行**〔⛔ 2026-10-11 订正（行号）：该五行现核 = **`:2784-2788`**；2771-2775 = 修复前旧号〕；271,392 → 271,396 B），`BD` 指向副本，其余全同 | **EXIT=0**：`wrapper GMII: 3 帧…` / `wrapper 图案: 3 帧 / 4380 B` / `P5 WRAPPER OK` / `P5W tx(frames=3 bytes=4380)` |
 | **F** | 同一副本喂 **同族第二门** `sim/p5e_t2/run_tb_p5e_t2_wrapper.bat` | 从 `FAIL errs=117` → **EXIT=0**：`P5E-T2 WRAPPER: gnfr=2 udp=1 tcp=1 tcp_tx_fr=1 udp_tx_fr=1` / `P5E-T2 WRAPPER GATE: OK` |
 | **A（反向对照）** | 原件 | 仍 **FAIL** |
 
 ⇒ **一处 5 行 = 两门转绿**。
 
-**最小修法（只写，未改）**
+**最小修法（只写，未改）**〔⛔ 2026-10-11 订正（行号）：fence 内 `// 2771`…`// 2775` 为修复前旧行号，该块现核 = **`:2784-2788`**〕
 ```verilog
     assign m_tx_tdata   = txsrc_tdata;     // 2771
     assign m_tx_tkeep   = txsrc_tkeep;
@@ -120,7 +121,7 @@ P5 WRAPPER FAIL (1 项)
 
 ## 3. 对 **#19** 的影响（一句话）
 
-> **可登记，但必须先修 `board/wrapper_p4.v:2771-2775`；且登记文字必须写明它只覆盖非 `DP_156MHZ` 配置、不覆盖板配置**（`TCP_TX_OVL` 关 ⇒ r6 `ack_seen` 门不在其中）。
+> **可登记，但必须先修 `board/wrapper_p4.v:2771-2775`；且登记文字必须写明它只覆盖非 `DP_156MHZ` 配置、不覆盖板配置**（`TCP_TX_OVL` 关 ⇒ r6 `ack_seen` 门不在其中）。 ⛔ 2026-10-11 订正（行号）：现核 = **`:2784-2788`**（原写 2771-2775 = 修复前旧号）。
 
 - 它是**真证据**（#19 前提现核成立）：矩阵 16 门（`run_matrix_p4dfix.bat:163-178`）里**无任何 p5 门**；
   `sim/p4gates/chain_src.f` **只有 19 个 rtl+TB，无 `wrapper_p4.v`、无 `app_pattern.v`**；
@@ -151,6 +152,8 @@ P5 WRAPPER FAIL (1 项)
 `sim/p4gates/chain_src.f` · `board/build_p7b_ku5p.tcl:153` · `board/build_p5.tcl:65` ·
 登记 = `P7B_REGRESSION.md:99,174`、`P7B_STAGEC_TX_REGRESSION.md:215,228,254`。
 
+⛔ **2026-10-11 订正（行号，本节索引）**：本索引里 `board/wrapper_p4.v` 的四个号（`2771-2775` / `2768-2769` / `2745-2750` / `2810-2814`）均为修复前旧号 —— 现核依次 = **`:2784-2788`** / **`:2779-2780`** / **`:2756-2761`** / **`:2823-2827`**（位移链见本件头部订正）。本索引其余各项**未逐条现核**（引用前请现读）。
+
 ## 6. 证据落盘位置
 
 `_proj_10g/notes/p7b_p5wrapper_diag_20261010/work/`：
@@ -175,7 +178,7 @@ X 有 output 端口驱动且 Y 无任何驱动 ⇒ **反向**（不看名字，�
 
 | 配置 | 纯别名条数 | 正确 | **反向** | 未定 | 反向逐条 |
 |---|---|---|---|---|---|
-| **A** `APP_MODE`（本门实际配置） | **30** | 25 | **5** | 0 | `wrapper_p4.v:2771-2775` = `txsrc_tdata←m_tx_tdata` / `txsrc_tkeep←m_tx_tkeep` / `txsrc_tlast←m_tx_tlast` / `txsrc_tvalid←m_tx_tvalid` / `m_tx_tready←txsrc_tready` |
+| **A** `APP_MODE`（本门实际配置） | **30** | 25 | **5** | 0 | `wrapper_p4.v:2771-2775` = `txsrc_tdata←m_tx_tdata` / `txsrc_tkeep←m_tx_tkeep` / `txsrc_tlast←m_tx_tlast` / `txsrc_tvalid←m_tx_tvalid` / `m_tx_tready←txsrc_tready`〔⛔ 2026-10-11 订正（行号）：现核 = **`:2784-2788`**；2771-2775 = 修复前旧号〕 |
 | **G** `APP_MODE+DP_156MHZ(=板那一支)` | **17** | **17** | **0** | 0 | 无 |
 
 - 表内 6 条初版"未定"已**逐条查实并落到"正确"**（不是抹掉）：`txin_{tdata,tkeep,tlast,tid}←app2_*` 由 **拼接 LHS**
@@ -183,7 +186,7 @@ X 有 output 端口驱动且 Y 无任何驱动 ⇒ **反向**（不看名字，�
   `rx_upd_gnt←sel_rx`(:2028) / `fc_gnt←sel_fc`(:2043) 的右值来自**声明即驱动**的 `wire sel_rx = …`(:2027) / `wire sel_fc = …`(:2035)。
 - ⇒ **同族普查结论（配置 A）**：反向别名**恰好 5 条，就是已知根因**；**无第二个同族**。
   ⇒ **配置 G（板那一支）**：**0 条反向**（`ifndef DP_156MHZ` 块不参与编译，改由 `fifo_async` 的 `dout` 驱动 `m_tx_*`、
-  由 `:2768-2769` 的两条 `assign` 驱动 `txsrc_tready`/`m_tx_tvalid`）。
+  由 `:2768-2769` 的两条 `assign` 驱动 `txsrc_tready`/`m_tx_tvalid`）。⛔ 2026-10-11 订正（行号）：该两行现核 = **`:2779-2780`**（原写 2768-2769 = 修复前旧号）。
 
 ### 7.2 任务 1-B：实证 Z 扫描（xsim Tcl 穷举；比人眼可靠）
 
