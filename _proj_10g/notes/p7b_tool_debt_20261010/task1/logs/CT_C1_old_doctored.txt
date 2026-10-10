@@ -1,0 +1,9 @@
+WROTE m1_cont_off            M1 CONT_OK=0 => 连续模式整条失效 (A1/A3 必红)
+WROTE m2_no_reload_txok      M2 tx_ok 臂不重装载 => 连续会停在量子末
+WROTE m3_miss_frmwait        M3 漏改 frm_wait 臂 => 量子末边界遇 tx_ok=0 即静默停滞 (A11/A3 必红)
+WROTE m5_no_uppend           M5 无待补登记 => u_rec1/u_rec2 又静默 (A13a/A13b 必红; A13c 仍绿)
+MUTFAIL m4_term_open: pattern hits=0 expect=1
+WROTE m4_term_open           M4 终结判据开 => 连续模式也终结 (A1/A2 必红)
+MUTGEN FAIL 1
+RC=1
+--- artifacts written: [m1_cont_off.v m2_no_reload_txok.v m3_miss_frmwait.v m4_term_open.v m5_no_uppend.v ] count=5

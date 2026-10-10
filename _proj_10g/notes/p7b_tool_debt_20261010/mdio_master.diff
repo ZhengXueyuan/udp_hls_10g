@@ -1,0 +1,80 @@
+--- D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_tool_debt_20261010/pristine/mdio_master.v.orig	2026-10-10 10:27:00.267160800 +0800
++++ D:/repo/XCKU5PMini/_proj_mdio/rtl/mdio_master.v	2026-10-10 10:28:15.187026200 +0800
+@@ -17,6 +17,16 @@
+ //
+ // MDC idles low. MDIO changes on the falling edge and is sampled on the rising
+ // edge, which is what the half-period phase machine below implements.
++//
++// 2026-10-10 -- two latent traps made observable (both are ADD-ONLY: no existing
++// output changes value, and the frame timing is bit-identical):
++//   (1) `start` while busy is still ignored, but no longer silently: the sticky
++//       flag `stat_start_lost` records it. Without that flag a host that pulses
++//       start mid-frame and then polls `done_sticky` reads the PREVIOUS
++//       transaction's result (done_sticky is only cleared by an accepted start).
++//   (2) the DIV parameter must be 1..65536; anything else used to be silently
++//       truncated by `DIV[15:0]` (DIV=65537 -> 1 -> MDC 50MHz). It is now
++//       clamped to the slow end and signalled on `param_bad`.
+ 
+ `timescale 1ns / 1ps
+ 
+@@ -39,9 +49,31 @@
+     output reg         mdc,
+     output reg         mdio_o,
+     output reg         mdio_t,          // 1 = release (high-Z)
+-    input  wire        mdio_i
++    input  wire        mdio_i,
++    // ---- appended 2026-10-10 (pure additions; nothing above changed value) ----
++    output wire        param_bad,       // 1 = DIV out of range, clamped (static)
++    output reg         stat_start_lost  // sticky: a start arrived while busy (dropped)
+ );
+ 
++    // ---- DIV range guard (2026-10-10) ---------------------------------------
++    // div_cnt is 16 bits wide, so the representable MDC half-periods are
++    // 1..65536 clk. A DIV outside that range used to be truncated SILENTLY by
++    // `DIV[15:0]`: DIV=65537 became 1, i.e. MDC = 50MHz at a 100MHz clk --
++    // 65537x the rate that was asked for, and 20x the 2.5MHz clause-22 limit.
++    // Choose the clamp direction deliberately: an over-SLOW MDC is harmless,
++    // an over-fast one is not, so an illegal DIV saturates to the *slow* end.
++    // For any legal DIV (1..65536) DIV_SAFE == DIV, so the tick expression
++    // below is bit-identical to the pre-guard one; the only difference for an
++    // illegal DIV is that it now runs slow AND raises param_bad (visible)
++    // instead of running fast in silence. param_bad is a static (constant)
++    // signal and is consumed by tb_mdio_master.v's DIV-guard arm.
++    localparam integer DIV_MAX  = 65536;
++    localparam integer DIV_SAFE = (DIV < 1) ? DIV_MAX
++                                            : ((DIV > DIV_MAX) ? DIV_MAX : DIV);
++    localparam        PARAM_BAD = (DIV < 1) || (DIV > DIV_MAX);
++
++    assign param_bad = PARAM_BAD;
++
+     reg [63:0] sh;
+     reg [63:0] rd_sh;
+     reg [5:0]  bit_idx;
+@@ -49,7 +81,7 @@
+     reg [15:0] div_cnt;
+     reg        is_read;
+ 
+-    wire       tick = (div_cnt == DIV[15:0] - 16'd1);
++    wire       tick = (div_cnt == DIV_SAFE[15:0] - 16'd1);
+ 
+     always @(posedge clk) begin
+         done <= 1'b0;
+@@ -116,4 +148,18 @@
+         end
+     end
+ 
++    // 2026-10-10: make the dropped start observable. The FSM above really does
++    // ignore `start` while busy -- that contract is unchanged -- but before this
++    // flag the ignore was invisible, and a host that pulses start mid-frame and
++    // then reads done_sticky gets the PREVIOUS transaction's result. Semantics:
++    // 1 = at least one start has been dropped since the last ACCEPTED start;
++    // cleared by the next accepted start (same instant done_sticky is cleared).
++    // Deliberately a separate always block: it cannot shift the frame timing by
++    // even one clk (a branch inside the FSM above would have).
++    always @(posedge clk) begin
++        if (!rstn)               stat_start_lost <= 1'b0;
++        else if (!busy && start) stat_start_lost <= 1'b0;   // accepted -> clear
++        else if (busy && start)  stat_start_lost <= 1'b1;   // dropped  -> sticky
++    end
++
+ endmodule

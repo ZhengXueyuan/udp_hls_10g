@@ -1,0 +1,19 @@
+SRC D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\notes\p7b_tool_debt_20261010\task1\fresh_author\rtl\tcp_tx_frame.v  142733 B  sha256 9bf333f4e24ba8f5ad3fa9bf6ec4a347d4798e4fd3b44bf6af85c1d0e0ee0fc7
+NORM: 2232 CRLF / 0 lone CR -> LF (matching + output, 与签出风格无关)
+WROTE mut_s0a    OVL: 数据推进写不推进 (seq 复用)
+WROTE mut_s0b    默认分支: 数据推进写不推进 (S0 灵敏度证明用)
+WROTE mut_c1     M-C1 同拍撞写口 => $onehot0 红
+WROTE mut_c2     M-C2 预留写滞后 8 拍 => J_seq_mono / J_seq_cont 红
+WROTE mut_c3     M-C3 退化单 bank => 帧周期/TX 引擎拍数红
+WROTE mut_c6     M-C6 撤回卷门 => FIN 预留被当 ring 数据重放 => J_seq_cont 红
+WROTE mut_c7     M-C7 撤槽独占 => issued > transmitted => J6 红
+WROTE mut_c8     M-C8 撤 rx_idle => 控制帧在收帧期装载 (混拼)
+WROTE mut_w66_dead M-W66-1 计数器恒 0 (两分支各一处) => 判据必红
+WROTE mut_w66_nownd M-W66-2 (OVL) 判据去掉 !wnd_open => 多数 start_data 拍
+WROTE mut_c9     M-C9 仲裁键=busy => 控制帧 T_DONE 自选 => transmitted > issued => J6 红
+WROTE mut_w67_always M-W67-1 分裂判据去掉侧别 => 板帽侧多数 (对端侧那份被算进来)
+WROTE mut_w67_dead M-W67-2 板帽侧计数器恒 0 (需 W67_CAP_SMALL 臂才有靶)
+WROTE mut_w69_dead M-W69-1 锁存恒 0 => 与 TB 复算 (非 0) 不等
+WROTE mut_w69_atstart M-W69-2 锁存使能换成 start_data => 操作点相位错
+ANCHORS: all 15 mutants matched (17 subs, each hits==expect)
+MUTGEN OK (15 mutants)

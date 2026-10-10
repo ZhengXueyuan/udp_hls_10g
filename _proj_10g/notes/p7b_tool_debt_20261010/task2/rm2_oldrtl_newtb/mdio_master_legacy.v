@@ -1,0 +1,119 @@
+// mdio_master.v -- IEEE 802.3 clause 22 MDIO master, one transaction per start.
+//
+// The frame is 64 bits, MSB first:
+//
+//   [63:32] preamble  32'hFFFFFFFF
+//   [31:30] ST        2'b01
+//   [29:28] OP        2'b10 read / 2'b01 write
+//   [27:23] PHYAD
+//   [22:18] REGAD
+//   [17:16] TA        2'b10 write / released (Z) for read
+//   [15:0]  DATA      write: driven by us; read: driven by the PHY
+//
+// Read turnaround: we drive bits 0..45, release MDIO from bit 46. The PHY then
+// drives 0 on the first TA bit and the 16 data bits after it, so sampling bits
+// 47..63 yields 17 samples of which the first is the TA zero -- shifting them
+// into a 64-bit register and taking the low 16 leaves exactly DATA[15:0].
+//
+// MDC idles low. MDIO changes on the falling edge and is sampled on the rising
+// edge, which is what the half-period phase machine below implements.
+
+`timescale 1ns / 1ps
+
+module mdio_master_legacy #(
+    parameter integer DIV = 25          // MDC half-period in clk cycles (100MHz/25 -> 2MHz)
+)(
+    input  wire        clk,
+    input  wire        rstn,
+    // control
+    input  wire        start,           // 1-cycle pulse; ignored while busy
+    input  wire        op,              // 0 = read, 1 = write
+    input  wire [4:0]  phyad,
+    input  wire [4:0]  regad,
+    input  wire [15:0] wr_data,
+    output reg  [15:0] rd_data,
+    output reg         done,            // 1-cycle pulse at end of frame
+    output reg         done_sticky,     // held until the next start (for VIO polling)
+    output reg         busy,
+    // PHY side
+    output reg         mdc,
+    output reg         mdio_o,
+    output reg         mdio_t,          // 1 = release (high-Z)
+    input  wire        mdio_i
+);
+
+    reg [63:0] sh;
+    reg [63:0] rd_sh;
+    reg [5:0]  bit_idx;
+    reg        phase;                   // 0 = MDC low, 1 = MDC high
+    reg [15:0] div_cnt;
+    reg        is_read;
+
+    wire       tick = (div_cnt == DIV[15:0] - 16'd1);
+
+    always @(posedge clk) begin
+        done <= 1'b0;
+
+        if (!rstn) begin
+            busy        <= 1'b0;
+            mdc         <= 1'b0;
+            mdio_o      <= 1'b1;
+            mdio_t      <= 1'b1;
+            bit_idx     <= 6'd0;
+            phase       <= 1'b0;
+            div_cnt     <= 16'd0;
+            sh          <= 64'd0;
+            rd_sh       <= 64'd0;
+            rd_data     <= 16'd0;
+            done_sticky <= 1'b0;
+            is_read     <= 1'b0;
+        end else if (!busy) begin
+            mdc    <= 1'b0;
+            mdio_t <= 1'b1;
+            if (start) begin
+                busy        <= 1'b1;
+                is_read     <= ~op;
+                sh          <= {32'hFFFFFFFF, 2'b01,
+                                op ? 2'b01 : 2'b10, phyad, regad,
+                                op ? 2'b10 : 2'b00, wr_data};
+                rd_sh       <= 64'd0;
+                bit_idx     <= 6'd0;
+                phase       <= 1'b0;
+                div_cnt     <= 16'd0;
+                mdio_o      <= 1'b1;    // first preamble bit
+                mdio_t      <= 1'b0;
+                done_sticky <= 1'b0;
+                rd_data     <= 16'd0;
+            end
+        end else if (tick) begin
+            div_cnt <= 16'd0;
+
+            if (!phase) begin
+                // rising edge: the PHY samples our bit; we sample the PHY's
+                mdc   <= 1'b1;
+                phase <= 1'b1;
+                if (is_read && bit_idx >= 6'd47)
+                    rd_sh <= {rd_sh[62:0], mdio_i};
+            end else begin
+                // falling edge: change data for the next bit time
+                mdc   <= 1'b0;
+                phase <= 1'b0;
+                if (bit_idx == 6'd63) begin
+                    busy        <= 1'b0;
+                    done        <= 1'b1;
+                    done_sticky <= 1'b1;
+                    mdio_t      <= 1'b1;
+                    rd_data     <= rd_sh[15:0];
+                end else begin
+                    bit_idx <= bit_idx + 6'd1;
+                    sh      <= {sh[62:0], 1'b0};
+                    mdio_o  <= sh[62];
+                    mdio_t  <= is_read && (bit_idx >= 6'd45);
+                end
+            end
+        end else begin
+            div_cnt <= div_cnt + 16'd1;
+        end
+    end
+
+endmodule
