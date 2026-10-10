@@ -1,0 +1,56 @@
+
+****** xsim v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Sat Oct 10 10:43:28 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source xsim.dir/tb_p5_wrapper/xsim_script.tcl
+# xsim {tb_p5_wrapper} -autoloadwcfg -tclbatch {zscan2.tcl}
+Time resolution is 1 ps
+source zscan2.tcl
+## run 60000ns
+## puts "--- positive control (direct) ---"
+--- positive control (direct) ---
+## foreach pn {/tb_p5_wrapper/u_dut/txsrc_tready /tb_p5_wrapper/u_dut/m_tx_tvalid /tb_p5_wrapper/u_dut/txsrc_tvalid /tb_p5_wrapper/u_dut/u_tcp_tx/state /tb_p5_wrapper/u_dut/gmii_clk} {
+##     if {[catch {set v [get_value -radix hex $pn]} e]} { puts "PC $pn ERR $e" } else { puts "PC $pn = $v" }
+## }
+PC /tb_p5_wrapper/u_dut/txsrc_tready = Z
+PC /tb_p5_wrapper/u_dut/m_tx_tvalid = Z
+PC /tb_p5_wrapper/u_dut/txsrc_tvalid = 1
+PC /tb_p5_wrapper/u_dut/u_tcp_tx/state = 3
+PC /tb_p5_wrapper/u_dut/gmii_clk = 1
+## puts "--- enumeration forms ---"
+--- enumeration forms ---
+## foreach pat {/tb_p5_wrapper/u_dut/* /tb_p5_wrapper/u_dut/*/ /tb_p5_wrapper/u_dut/*txsrc* /tb_p5_wrapper/u_dut/*tx_*} {
+##     if {[catch {set r [get_objects $pat]} e]} { puts "ENUM '$pat' ERR $e" } else { puts "ENUM '$pat' n=[llength $r] first5=[lrange $r 0 4]" }
+## }
+ENUM '/tb_p5_wrapper/u_dut/*' n=553 first5=/tb_p5_wrapper/u_dut/reset_n /tb_p5_wrapper/u_dut/fpga_gclk /tb_p5_wrapper/u_dut/phy1_rxc /tb_p5_wrapper/u_dut/phy1_rxd /tb_p5_wrapper/u_dut/phy1_rxctl
+WARNING: [Simtcl 6-168] No object found for the given pattern.
+ENUM '/tb_p5_wrapper/u_dut/*/' n=0 first5=
+ENUM '/tb_p5_wrapper/u_dut/*txsrc*' n=5 first5=/tb_p5_wrapper/u_dut/txsrc_tdata /tb_p5_wrapper/u_dut/txsrc_tkeep /tb_p5_wrapper/u_dut/txsrc_tvalid /tb_p5_wrapper/u_dut/txsrc_tready /tb_p5_wrapper/u_dut/txsrc_tlast
+ENUM '/tb_p5_wrapper/u_dut/*tx_*' n=114 first5=/tb_p5_wrapper/u_dut/tx_fe_clk /tb_p5_wrapper/u_dut/tx_stat_ack_w /tb_p5_wrapper/u_dut/tx_stat_ack_drop_w /tb_p5_wrapper/u_dut/tx_dbg_state /tb_p5_wrapper/u_dut/tx_rst_sent
+## set all [get_objects /tb_p5_wrapper/u_dut/*]
+## set have 0
+## foreach o $all { if {[string match "*txsrc_tready*" $o]} { incr have } }
+## puts "txsrc_tready in enumeration: $have"
+txsrc_tready in enumeration: 1
+## puts "sample names: [lrange $all 0 12]"
+sample names: /tb_p5_wrapper/u_dut/reset_n /tb_p5_wrapper/u_dut/fpga_gclk /tb_p5_wrapper/u_dut/phy1_rxc /tb_p5_wrapper/u_dut/phy1_rxd /tb_p5_wrapper/u_dut/phy1_rxctl /tb_p5_wrapper/u_dut/phy1_txc /tb_p5_wrapper/u_dut/phy1_txd /tb_p5_wrapper/u_dut/phy1_txctl /tb_p5_wrapper/u_dut/led_d0 /tb_p5_wrapper/u_dut/led_d1 /tb_p5_wrapper/u_dut/led_d2 /tb_p5_wrapper/u_dut/led_d3 /tb_p5_wrapper/u_dut/uart_txd
+## puts "names w/ z or x value:"
+names w/ z or x value:
+## set n 0
+## foreach o $all {
+##     if {[catch {set v [get_value -radix hex $o]} e]} { continue }
+##     incr n
+##     if {$n <= 3} { puts "  VALTRY $o = $v" }
+## }
+  VALTRY /tb_p5_wrapper/u_dut/reset_n = 1
+  VALTRY /tb_p5_wrapper/u_dut/fpga_gclk = 0
+  VALTRY /tb_p5_wrapper/u_dut/phy1_rxc = 0
+## puts "addressable objects: $n / [llength $all]"
+addressable objects: 553 / 553
+## exit 0
+INFO: [Common 17-206] Exiting xsim at Sat Oct 10 10:43:32 2026...

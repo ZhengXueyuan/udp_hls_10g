@@ -1,0 +1,513 @@
+# 端口方向表: 220 模块 / 214 源文件
+# 自校验: 18/18 条端口方向与源码一致
+
+===== 配置 A_default_appmode : macros=['APP_MODE'] =====
+# 例化 26 个 | 端口 output 驱动网 476 | 纯别名 assign 30 条 | wrapper wire 779 / reg 56
+
+-- 表A: 纯别名逐条方向判定 --
+LHS(X)                   RHS(Y)                       行号  X 的端口驱动者                       Y 的端口驱动者                       判定
+tx_fe_clk                gmii_clk                    668  -                              u_rgmii.gmii_rx_clk            正确
+rx_tdata                 rxsrc_tdata                 906  -                              u_mac_rx.m_axis_tdata          正确
+rx_tkeep                 rxsrc_tkeep                 907  -                              u_mac_rx.m_axis_tkeep          正确
+rx_tuser                 rxsrc_tuser                 908  -                              u_mac_rx.m_axis_tuser          正确
+rx_tlast                 rxsrc_tlast                 909  -                              u_mac_rx.m_axis_tlast          正确
+rx_tcrs                  rxsrc_tcrs                  910  -                              u_mac_rx.m_axis_tcrs           正确
+rx_terr                  rxsrc_terr                  911  -                              u_mac_rx.m_axis_terr           正确
+rx_tvalid                rxsrc_tvalid                912  -                              u_mac_rx.m_axis_tvalid         正确
+rxsrc_tready             rx_tready                   913  -                              u_vlan_strip.s_axis_tready     正确
+eco2_tready              app_rx_tready              1085  -                              u_app.rx_tready                正确
+txin_tdata               app2_tdata                 1094  concat LHS                     concat LHS                     正确
+txin_tkeep               app2_tkeep                 1095  concat LHS                     concat LHS                     正确
+txin_tvalid              app2_tvalid                1096  -                              u_app_pipe.m_valid             正确
+txin_tlast               app2_tlast                 1097  concat LHS                     concat LHS                     正确
+txin_tid                 app2_tid                   1098  concat LHS                     concat LHS                     正确
+app2_tready              txin_tready                1104  -                              u_tcp_tx.s_axis_tready         正确
+rx_upd_gnt               sel_rx                     2028  wire/reg 声明即驱动                 wire/reg 声明即驱动                 正确
+fc_gnt                   sel_fc                     2043  wire/reg 声明即驱动                 wire/reg 声明即驱动                 正确
+tx_fin_req               app_fin_req                2113  -                              u_app_ctrl.fin_req             正确
+tx_rst_req               app_rst_req                2114  -                              u_app_ctrl.rst_req             正确
+app_fin_sent             tx_fin_sent                2115  -                              u_tcp_tx.o_fin_sent            正确
+app_wu_req_t             app_wu_req                 2116  -                              u_app_ctrl.wu_req              正确
+app_wu_id_t              app_wu_id                  2117  -                              u_app_ctrl.wu_id               正确
+app_wu_val_t             app_wu_val                 2118  -                              u_app_ctrl.wu_val              正确
+app_wu_gnt               app_wu_gnt_t               2119  -                              u_tcp_tx.wu_gnt                正确
+txsrc_tdata              m_tx_tdata                 2771  u_tx_arb.m_axis_tdata          -                              **反向** (X 已被端口驱动, Y 无人驱动)
+txsrc_tkeep              m_tx_tkeep                 2772  u_tx_arb.m_axis_tkeep          -                              **反向** (X 已被端口驱动, Y 无人驱动)
+txsrc_tlast              m_tx_tlast                 2773  u_tx_arb.m_axis_tlast          -                              **反向** (X 已被端口驱动, Y 无人驱动)
+txsrc_tvalid             m_tx_tvalid                2774  u_tx_arb.m_axis_tvalid         -                              **反向** (X 已被端口驱动, Y 无人驱动)
+m_tx_tready              txsrc_tready               2775  u_mac_tx.s_axis_tready         -                              **反向** (X 已被端口驱动, Y 无人驱动)
+# 表A 小计: 正确 25 | 反向/多驱动 5 | 未定 0
+
+-- 表B: 浮空网 (wrapper 作用域 wire, 无端口驱动且无 assign) = 194 条 --
+   FLOAT SNAP_TX_NW             端口连接=(无端口, 仅声明)                                                
+   FLOAT UDP_APP_PORT           端口连接=u_udp_split.cfg_port0(input),u_udp_tx_cfg.cfg_my_port(input),u_udp_tx_cfg.cfg_dst_port(input)
+   FLOAT b1                     端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w51                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w52                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w53                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w54                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w55                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w56                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w57                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w58                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w59                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w60                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w61                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w62                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w63                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w64                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w66                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w67                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w68                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w69                端口连接=(无端口, 仅声明)                                                
+   FLOAT busy_dp                端口连接=(无端口, 仅声明)                                                
+   FLOAT busy_fe                端口连接=(无端口, 仅声明)                                                
+   FLOAT clk_in_100             端口连接=(无端口, 仅声明)                                                
+   FLOAT d0                     端口连接=(无端口, 仅声明)                                                
+   FLOAT d1                     端口连接=(无端口, 仅声明)                                                
+   FLOAT d4                     端口连接=(无端口, 仅声明)                                                
+   FLOAT d6                     端口连接=(无端口, 仅声明)                                                
+   FLOAT delay_ready            端口连接=(无端口, 仅声明)                                                
+   FLOAT dp_dout                端口连接=(无端口, 仅声明)                                                
+   FLOAT dp_rst_dp              端口连接=(无端口, 仅声明)                                                
+   FLOAT dp_src                 端口连接=(无端口, 仅声明)                                                
+   FLOAT drp0_addr_r            端口连接=(无端口, 仅声明)                                                
+   FLOAT drp0_do_r              端口连接=(无端口, 仅声明)                                                
+   FLOAT drp0_evt_r             端口连接=(无端口, 仅声明)                                                
+   FLOAT drp0_tgl_r             端口连接=(无端口, 仅声明)                                                
+   FLOAT drp0_to_r              端口连接=(无端口, 仅声明)                                                
+   FLOAT drp1_addr_r            端口连接=(无端口, 仅声明)                                                
+   FLOAT drp1_do_r              端口连接=(无端口, 仅声明)                                                
+   FLOAT drp1_evt_r             端口连接=(无端口, 仅声明)                                                
+   FLOAT drp1_tgl_r             端口连接=(无端口, 仅声明)                                                
+   FLOAT drp1_to_r              端口连接=(无端口, 仅声明)                                                
+   FLOAT drp_addr_w             端口连接=(无端口, 仅声明)                                                
+   FLOAT drp_di_w               端口连接=(无端口, 仅声明)                                                
+   FLOAT drp_do_w               端口连接=(无端口, 仅声明)                                                
+   FLOAT drp_en_w               端口连接=(无端口, 仅声明)                                                
+   FLOAT drp_por_n              端口连接=(无端口, 仅声明)                                                
+   FLOAT drp_rdy_w              端口连接=(无端口, 仅声明)                                                
+   FLOAT drp_we_w               端口连接=(无端口, 仅声明)                                                
+   FLOAT fe_dout                端口连接=(无端口, 仅声明)                                                
+   FLOAT fe_src                 端口连接=(无端口, 仅声明)                                                
+   FLOAT gt_refclk_out_w        端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_dp_evt_c           端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_dp_evt_cf          端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_dp_evt_d           端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_dp_evt_d2          端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_dp_evt_e           端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_dp_evt_e2          端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_dp_evt_vs          端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_drp_req_addr       端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_drp_req_go         端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_fe_evt_a           端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_fe_evt_b           端口连接=(无端口, 仅声明)                                                
+   FLOAT m_tx_tdata             端口连接=u_mac_tx.s_axis_tdata(input)                              
+   FLOAT m_tx_tkeep             端口连接=u_mac_tx.s_axis_tkeep(input)                              
+   FLOAT m_tx_tlast             端口连接=u_mac_tx.s_axis_tlast(input)                              
+   FLOAT m_tx_tvalid            端口连接=u_mac_tx.s_axis_tvalid(input)                             
+   FLOAT mmcm_locked            端口连接=(无端口, 仅声明)                                                
+   FLOAT mmcm_ref_locked        端口连接=(无端口, 仅声明)                                                
+   FLOAT p7b_por_n              端口连接=(无端口, 仅声明)                                                
+   FLOAT p7bdp_busy             端口连接=(无端口, 仅声明)                                                
+   FLOAT p7bdp_din              端口连接=(无端口, 仅声明)                                                
+   FLOAT p7bdp_dout             端口连接=(无端口, 仅声明)                                                
+   FLOAT p7bdp_valid            端口连接=(无端口, 仅声明)                                                
+   FLOAT p7bfe_busy             端口连接=(无端口, 仅声明)                                                
+   FLOAT p7bfe_din              端口连接=(无端口, 仅声明)                                                
+   FLOAT p7bfe_dout             端口连接=(无端口, 仅声明)                                                
+   FLOAT p7bfe_valid            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_araddr            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_arprot            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_arready           端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_arvalid           端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_awaddr            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_awprot            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_awready           端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_awvalid           端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_axi_aclk          端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_axi_aresetn       端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_bready            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_bresp             端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_bvalid            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_clk               端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_clk_gt            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_decode_err        端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_hw_status         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_irq_ack           端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_lnk_up            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_msi_enable        端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_msi_vec_w         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_rdata             端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_rready            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_rresp             端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_rvalid            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_scratch           端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_wdata             端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_wr_cnt            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_wready            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_wstrb             端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_wvalid            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_bad_code           端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_bad_code_v         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_blk_lock           端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_sig            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_bad          端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_badv         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_ber          端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_blk          端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_err          端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_errv         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_ferr         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_ferrv        端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_fifo         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_rlf          端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_status       端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_tlf          端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_vcc          端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_unused58       端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_evt_bundle         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_fifo_error         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_framing_err        端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_framing_err_v      端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_gtpowergood_0      端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_gtpowergood_1      端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_hi_ber             端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_rx_error           端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_rx_error_v         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_rx_localfault      端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_rx_reset_0         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_rx_reset_1         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_rx_status          端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_status_bundle      端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_tx_localfault      端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_tx_reset_0         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_tx_reset_1         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_user_rx_reset_0    端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_user_rx_reset_1    端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_user_tx_reset_0    端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_user_tx_reset_1    端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_valid_ctrl_code    端口连接=(无端口, 仅声明)                                                
+   FLOAT phy1_rxc               端口连接=u_rgmii.rgmii_rxc(input)                                  
+   FLOAT phy1_rxctl             端口连接=u_rgmii.rgmii_rx_ctl_i(input)                             
+   FLOAT phy1_rxd               端口连接=u_rgmii.rgmii_rd_i(input)                                 
+   FLOAT ref200_clk             端口连接=(无端口, 仅声明)                                                
+   FLOAT ref200_clk_raw         端口连接=(无端口, 仅声明)                                                
+   FLOAT ref200_fb              端口连接=(无端口, 仅声明)                                                
+   FLOAT req_dp                 端口连接=(无端口, 仅声明)                                                
+   FLOAT req_fe                 端口连接=(无端口, 仅声明)                                                
+   FLOAT reset_n                端口连接=u_mac_rx.rst_n(input),u_mac_tx.rst_n(input)               
+   FLOAT rx_clk_out_0           端口连接=(无端口, 仅声明)                                                
+   FLOAT rx_clk_out_1           端口连接=(无端口, 仅声明)                                                
+   FLOAT rx_core_clk_0          端口连接=(无端口, 仅声明)                                                
+   FLOAT rx_core_clk_1          端口连接=(无端口, 仅声明)                                                
+   FLOAT rx_mac_rst_n           端口连接=(无端口, 仅声明)                                                
+   FLOAT rx_mii_c_0             端口连接=(无端口, 仅声明)                                                
+   FLOAT rx_mii_c_1             端口连接=(无端口, 仅声明)                                                
+   FLOAT rx_mii_d_0             端口连接=(无端口, 仅声明)                                                
+   FLOAT rx_mii_d_1             端口连接=(无端口, 仅声明)                                                
+   FLOAT rxrecclkout_0          端口连接=(无端口, 仅声明)                                                
+   FLOAT rxrecclkout_1          端口连接=(无端口, 仅声明)                                                
+   FLOAT snap_busy              端口连接=(无端口, 仅声明)                                                
+   FLOAT snap_dout              端口连接=(无端口, 仅声明)                                                
+   FLOAT snap_dout_all          端口连接=(无端口, 仅声明)                                                
+   FLOAT snap_fe_state          端口连接=(无端口, 仅声明)                                                
+   FLOAT snap_req               端口连接=(无端口, 仅声明)                                                
+   FLOAT snap_seq_busy          端口连接=(无端口, 仅声明)                                                
+   FLOAT snap_valid             端口连接=(无端口, 仅声明)                                                
+   FLOAT snap_valid_all         端口连接=(无端口, 仅声明)                                                
+   FLOAT sys_reset_p7b          端口连接=(无端口, 仅声明)                                                
+   FLOAT tx_mac_rst_n           端口连接=(无端口, 仅声明)                                                
+   FLOAT tx_mii_c_0             端口连接=(无端口, 仅声明)                                                
+   FLOAT tx_mii_c_1             端口连接=(无端口, 仅声明)                                                
+   FLOAT tx_mii_clk_0           端口连接=(无端口, 仅声明)                                                
+   FLOAT tx_mii_clk_1           端口连接=(无端口, 仅声明)                                                
+   FLOAT tx_mii_d_0             端口连接=(无端口, 仅声明)                                                
+   FLOAT tx_mii_d_1             端口连接=(无端口, 仅声明)                                                
+   FLOAT txsnap_busy            端口连接=(无端口, 仅声明)                                                
+   FLOAT txsnap_din             端口连接=(无端口, 仅声明)                                                
+   FLOAT txsnap_dout            端口连接=(无端口, 仅声明)                                                
+   FLOAT txsnap_valid           端口连接=(无端口, 仅声明)                                                
+   FLOAT txsrc_tready           端口连接=u_tx_arb.m_axis_tready(input)                             
+   FLOAT u_udp_split            端口连接=(无端口, 仅声明)                                                
+   FLOAT uf_commit_word         端口连接=(无端口, 仅声明)                                                
+   FLOAT valid_dp               端口连接=(无端口, 仅声明)                                                
+   FLOAT valid_fe               端口连接=(无端口, 仅声明)                                                
+
+-- 表C: 二阶 (RHS 引用浮空网的 assign; 含 reg 的 X 传播源) --
+   PROP app_reg_wdata          <- d0
+   PROP mac_rx_10g_last_len    <- d0
+   PROP mrx_dbg_last_tlane     <- d0
+   PROP mrx_dbg_state          <- d0
+   PROP mrx_stat_rx_bad_words  <- d0
+   PROP mrx_stat_rx_er_words   <- d0
+   PROP mrx_stat_rx_frag       <- d0
+   PROP mrx_stat_rx_long       <- d0
+   PROP mrx_stat_rx_no_s       <- d0
+   PROP mrx_stat_rx_pay_bytes  <- d0
+   PROP mrx_stat_rx_q          <- d0
+   PROP mrx_stat_rx_short      <- d0
+   PROP mrx_stat_rx_words      <- d0
+   PROP mtx_dbg_last_clen      <- d0
+   PROP mtx_dbg_state          <- d0
+   PROP mtx_stat_flush_done    <- d0
+   PROP mtx_stat_flush_words   <- d0
+   PROP mtx_stat_tx_ctrl_char  <- d0
+   PROP mtx_stat_tx_idle       <- d0
+   PROP mtx_stat_tx_short      <- d0
+   PROP mtx_stat_tx_words      <- d0
+   PROP rxcdc_occ_w            <- d0
+   PROP rxcdc_ovf_cnt          <- d0
+   PROP txcdc_occ_w            <- d0
+   PROP txcdc_ovf_cnt          <- d0
+# 表C 计 25 条
+
+===== 配置 G_appmode_dp156 : macros=['APP_MODE', 'DP_156MHZ'] =====
+# 例化 29 个 | 端口 output 驱动网 487 | 纯别名 assign 17 条 | wrapper wire 779 / reg 56
+
+-- 表A: 纯别名逐条方向判定 --
+LHS(X)                   RHS(Y)                       行号  X 的端口驱动者                       Y 的端口驱动者                       判定
+tx_fe_clk                gmii_clk                    668  -                              u_rgmii.gmii_rx_clk            正确
+eco2_tready              app_rx_tready              1085  -                              u_app.rx_tready                正确
+txin_tdata               app2_tdata                 1094  concat LHS                     concat LHS                     正确
+txin_tkeep               app2_tkeep                 1095  concat LHS                     concat LHS                     正确
+txin_tvalid              app2_tvalid                1096  -                              u_app_pipe.m_valid             正确
+txin_tlast               app2_tlast                 1097  concat LHS                     concat LHS                     正确
+txin_tid                 app2_tid                   1098  concat LHS                     concat LHS                     正确
+app2_tready              txin_tready                1104  -                              u_tcp_tx.s_axis_tready         正确
+rx_upd_gnt               sel_rx                     2028  wire/reg 声明即驱动                 wire/reg 声明即驱动                 正确
+fc_gnt                   sel_fc                     2043  wire/reg 声明即驱动                 wire/reg 声明即驱动                 正确
+tx_fin_req               app_fin_req                2113  -                              u_app_ctrl.fin_req             正确
+tx_rst_req               app_rst_req                2114  -                              u_app_ctrl.rst_req             正确
+app_fin_sent             tx_fin_sent                2115  -                              u_tcp_tx.o_fin_sent            正确
+app_wu_req_t             app_wu_req                 2116  -                              u_app_ctrl.wu_req              正确
+app_wu_id_t              app_wu_id                  2117  -                              u_app_ctrl.wu_id               正确
+app_wu_val_t             app_wu_val                 2118  -                              u_app_ctrl.wu_val              正确
+app_wu_gnt               app_wu_gnt_t               2119  -                              u_tcp_tx.wu_gnt                正确
+# 表A 小计: 正确 17 | 反向/多驱动 0 | 未定 0
+
+-- 表B: 浮空网 (wrapper 作用域 wire, 无端口驱动且无 assign) = 198 条 --
+   FLOAT SNAP_TX_NW             端口连接=(无端口, 仅声明)                                                
+   FLOAT UDP_APP_PORT           端口连接=u_udp_split.cfg_port0(input),u_udp_tx_cfg.cfg_my_port(input),u_udp_tx_cfg.cfg_dst_port(input)
+   FLOAT b1                     端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w51                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w52                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w53                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w54                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w55                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w56                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w57                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w58                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w59                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w60                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w61                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w62                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w63                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w64                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w66                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w67                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w68                端口连接=(无端口, 仅声明)                                                
+   FLOAT biz_w69                端口连接=(无端口, 仅声明)                                                
+   FLOAT busy_dp                端口连接=(无端口, 仅声明)                                                
+   FLOAT busy_fe                端口连接=(无端口, 仅声明)                                                
+   FLOAT clk_in_100             端口连接=(无端口, 仅声明)                                                
+   FLOAT d0                     端口连接=(无端口, 仅声明)                                                
+   FLOAT d1                     端口连接=(无端口, 仅声明)                                                
+   FLOAT d4                     端口连接=(无端口, 仅声明)                                                
+   FLOAT d6                     端口连接=(无端口, 仅声明)                                                
+   FLOAT delay_ready            端口连接=(无端口, 仅声明)                                                
+   FLOAT dp_dout                端口连接=(无端口, 仅声明)                                                
+   FLOAT dp_src                 端口连接=(无端口, 仅声明)                                                
+   FLOAT drp0_addr_r            端口连接=(无端口, 仅声明)                                                
+   FLOAT drp0_do_r              端口连接=(无端口, 仅声明)                                                
+   FLOAT drp0_evt_r             端口连接=(无端口, 仅声明)                                                
+   FLOAT drp0_tgl_r             端口连接=(无端口, 仅声明)                                                
+   FLOAT drp0_to_r              端口连接=(无端口, 仅声明)                                                
+   FLOAT drp1_addr_r            端口连接=(无端口, 仅声明)                                                
+   FLOAT drp1_do_r              端口连接=(无端口, 仅声明)                                                
+   FLOAT drp1_evt_r             端口连接=(无端口, 仅声明)                                                
+   FLOAT drp1_tgl_r             端口连接=(无端口, 仅声明)                                                
+   FLOAT drp1_to_r              端口连接=(无端口, 仅声明)                                                
+   FLOAT drp_addr_w             端口连接=(无端口, 仅声明)                                                
+   FLOAT drp_di_w               端口连接=(无端口, 仅声明)                                                
+   FLOAT drp_do_w               端口连接=(无端口, 仅声明)                                                
+   FLOAT drp_en_w               端口连接=(无端口, 仅声明)                                                
+   FLOAT drp_por_n              端口连接=(无端口, 仅声明)                                                
+   FLOAT drp_rdy_w              端口连接=(无端口, 仅声明)                                                
+   FLOAT drp_we_w               端口连接=(无端口, 仅声明)                                                
+   FLOAT fe_dout                端口连接=(无端口, 仅声明)                                                
+   FLOAT fe_src                 端口连接=(无端口, 仅声明)                                                
+   FLOAT gt_refclk_out_w        端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_dp_evt_c           端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_dp_evt_cf          端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_dp_evt_d           端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_dp_evt_d2          端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_dp_evt_e           端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_dp_evt_e2          端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_dp_evt_vs          端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_drp_req_addr       端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_drp_req_go         端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_fe_evt_a           端口连接=(无端口, 仅声明)                                                
+   FLOAT lat_fe_evt_b           端口连接=(无端口, 仅声明)                                                
+   FLOAT m_tx_tdata             端口连接=u_mac_tx.s_axis_tdata(input)                              
+   FLOAT m_tx_tkeep             端口连接=u_mac_tx.s_axis_tkeep(input)                              
+   FLOAT m_tx_tlast             端口连接=u_mac_tx.s_axis_tlast(input)                              
+   FLOAT mmcm_ref_locked        端口连接=(无端口, 仅声明)                                                
+   FLOAT p7b_por_n              端口连接=(无端口, 仅声明)                                                
+   FLOAT p7bdp_busy             端口连接=(无端口, 仅声明)                                                
+   FLOAT p7bdp_din              端口连接=(无端口, 仅声明)                                                
+   FLOAT p7bdp_dout             端口连接=(无端口, 仅声明)                                                
+   FLOAT p7bdp_valid            端口连接=(无端口, 仅声明)                                                
+   FLOAT p7bfe_busy             端口连接=(无端口, 仅声明)                                                
+   FLOAT p7bfe_din              端口连接=(无端口, 仅声明)                                                
+   FLOAT p7bfe_dout             端口连接=(无端口, 仅声明)                                                
+   FLOAT p7bfe_valid            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_araddr            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_arprot            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_arready           端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_arvalid           端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_awaddr            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_awprot            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_awready           端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_awvalid           端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_axi_aclk          端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_axi_aresetn       端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_bready            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_bresp             端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_bvalid            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_clk               端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_clk_gt            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_decode_err        端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_hw_status         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_irq_ack           端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_lnk_up            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_msi_enable        端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_msi_vec_w         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_rdata             端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_rready            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_rresp             端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_rvalid            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_scratch           端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_wdata             端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_wr_cnt            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_wready            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_wstrb             端口连接=(无端口, 仅声明)                                                
+   FLOAT pcie_wvalid            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_bad_code           端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_bad_code_v         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_blk_lock           端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_sig            端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_bad          端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_badv         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_ber          端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_blk          端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_err          端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_errv         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_ferr         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_ferrv        端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_fifo         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_rlf          端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_status       端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_tlf          端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_u_vcc          端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_ch0_unused58       端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_evt_bundle         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_fifo_error         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_framing_err        端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_framing_err_v      端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_gtpowergood_0      端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_gtpowergood_1      端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_hi_ber             端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_rx_error           端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_rx_error_v         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_rx_localfault      端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_rx_reset_0         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_rx_reset_1         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_rx_status          端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_status_bundle      端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_tx_localfault      端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_tx_reset_0         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_tx_reset_1         端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_user_rx_reset_0    端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_user_rx_reset_1    端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_user_tx_reset_0    端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_user_tx_reset_1    端口连接=(无端口, 仅声明)                                                
+   FLOAT pcs_valid_ctrl_code    端口连接=(无端口, 仅声明)                                                
+   FLOAT phy1_rxc               端口连接=u_rgmii.rgmii_rxc(input)                                  
+   FLOAT phy1_rxctl             端口连接=u_rgmii.rgmii_rx_ctl_i(input)                             
+   FLOAT phy1_rxd               端口连接=u_rgmii.rgmii_rd_i(input)                                 
+   FLOAT ref200_clk             端口连接=(无端口, 仅声明)                                                
+   FLOAT ref200_clk_raw         端口连接=(无端口, 仅声明)                                                
+   FLOAT ref200_fb              端口连接=(无端口, 仅声明)                                                
+   FLOAT req_dp                 端口连接=(无端口, 仅声明)                                                
+   FLOAT req_fe                 端口连接=(无端口, 仅声明)                                                
+   FLOAT reset_n                端口连接=u_mac_rx.rst_n(input),u_rxcdc.wr_rst_n(input),u_rxcdc.rd_rst_n(input),u_txcdc.wr_rst_n(input),u_txcdc.rd_rst_n(input),u_mac_tx.rst_n(input)
+   FLOAT rx_clk_out_0           端口连接=(无端口, 仅声明)                                                
+   FLOAT rx_clk_out_1           端口连接=(无端口, 仅声明)                                                
+   FLOAT rx_core_clk_0          端口连接=(无端口, 仅声明)                                                
+   FLOAT rx_core_clk_1          端口连接=(无端口, 仅声明)                                                
+   FLOAT rx_mac_rst_n           端口连接=(无端口, 仅声明)                                                
+   FLOAT rx_mii_c_0             端口连接=(无端口, 仅声明)                                                
+   FLOAT rx_mii_c_1             端口连接=(无端口, 仅声明)                                                
+   FLOAT rx_mii_d_0             端口连接=(无端口, 仅声明)                                                
+   FLOAT rx_mii_d_1             端口连接=(无端口, 仅声明)                                                
+   FLOAT rx_tcrs                端口连接=u_vlan_strip.s_axis_tcrs(input)                           
+   FLOAT rx_tdata               端口连接=u_vlan_strip.s_axis_tdata(input)                          
+   FLOAT rx_terr                端口连接=u_vlan_strip.s_axis_terr(input)                           
+   FLOAT rx_tkeep               端口连接=u_vlan_strip.s_axis_tkeep(input)                          
+   FLOAT rx_tlast               端口连接=u_vlan_strip.s_axis_tlast(input)                          
+   FLOAT rx_tuser               端口连接=u_vlan_strip.s_axis_tuser(input)                          
+   FLOAT rxrecclkout_0          端口连接=(无端口, 仅声明)                                                
+   FLOAT rxrecclkout_1          端口连接=(无端口, 仅声明)                                                
+   FLOAT snap_busy              端口连接=(无端口, 仅声明)                                                
+   FLOAT snap_dout              端口连接=(无端口, 仅声明)                                                
+   FLOAT snap_dout_all          端口连接=(无端口, 仅声明)                                                
+   FLOAT snap_fe_state          端口连接=(无端口, 仅声明)                                                
+   FLOAT snap_req               端口连接=(无端口, 仅声明)                                                
+   FLOAT snap_seq_busy          端口连接=(无端口, 仅声明)                                                
+   FLOAT snap_valid             端口连接=(无端口, 仅声明)                                                
+   FLOAT snap_valid_all         端口连接=(无端口, 仅声明)                                                
+   FLOAT sys_clk_n              端口连接=u_clkgen.clk_n(input)                                     
+   FLOAT sys_clk_p              端口连接=u_clkgen.clk_p(input)                                     
+   FLOAT sys_reset_p7b          端口连接=(无端口, 仅声明)                                                
+   FLOAT tx_mac_rst_n           端口连接=(无端口, 仅声明)                                                
+   FLOAT tx_mii_c_0             端口连接=(无端口, 仅声明)                                                
+   FLOAT tx_mii_c_1             端口连接=(无端口, 仅声明)                                                
+   FLOAT tx_mii_clk_0           端口连接=(无端口, 仅声明)                                                
+   FLOAT tx_mii_clk_1           端口连接=(无端口, 仅声明)                                                
+   FLOAT tx_mii_d_0             端口连接=(无端口, 仅声明)                                                
+   FLOAT tx_mii_d_1             端口连接=(无端口, 仅声明)                                                
+   FLOAT txsnap_busy            端口连接=(无端口, 仅声明)                                                
+   FLOAT txsnap_din             端口连接=(无端口, 仅声明)                                                
+   FLOAT txsnap_dout            端口连接=(无端口, 仅声明)                                                
+   FLOAT txsnap_valid           端口连接=(无端口, 仅声明)                                                
+   FLOAT u_udp_split            端口连接=(无端口, 仅声明)                                                
+   FLOAT uf_commit_word         端口连接=(无端口, 仅声明)                                                
+   FLOAT valid_dp               端口连接=(无端口, 仅声明)                                                
+   FLOAT valid_fe               端口连接=(无端口, 仅声明)                                                
+
+-- 表C: 二阶 (RHS 引用浮空网的 assign; 含 reg 的 X 传播源) --
+   PROP app_reg_wdata          <- d0
+   PROP mac_rx_10g_last_len    <- d0
+   PROP mrx_dbg_last_tlane     <- d0
+   PROP mrx_dbg_state          <- d0
+   PROP mrx_stat_rx_bad_words  <- d0
+   PROP mrx_stat_rx_er_words   <- d0
+   PROP mrx_stat_rx_frag       <- d0
+   PROP mrx_stat_rx_long       <- d0
+   PROP mrx_stat_rx_no_s       <- d0
+   PROP mrx_stat_rx_pay_bytes  <- d0
+   PROP mrx_stat_rx_q          <- d0
+   PROP mrx_stat_rx_short      <- d0
+   PROP mrx_stat_rx_words      <- d0
+   PROP mtx_dbg_last_clen      <- d0
+   PROP mtx_dbg_state          <- d0
+   PROP mtx_stat_flush_done    <- d0
+   PROP mtx_stat_flush_words   <- d0
+   PROP mtx_stat_tx_ctrl_char  <- d0
+   PROP mtx_stat_tx_idle       <- d0
+   PROP mtx_stat_tx_short      <- d0
+   PROP mtx_stat_tx_words      <- d0
+# 表C 计 21 条
+
+# 交叉核对: 全文件 (未过 ifdef) 纯别名 assign = 56 条; 配置 A 计 30, G 计 17 + 被 ifdef 关掉的分支

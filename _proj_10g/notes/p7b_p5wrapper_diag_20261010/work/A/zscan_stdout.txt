@@ -1,0 +1,47 @@
+
+****** xsim v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Sat Oct 10 10:43:12 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source xsim.dir/tb_p5_wrapper/xsim_script.tcl
+# xsim {tb_p5_wrapper} -autoloadwcfg -tclbatch {zscan.tcl}
+Time resolution is 1 ps
+source zscan.tcl
+## proc scan {tag pat} {
+##     set objs [get_objects $pat]
+##     set n 0
+##     set hits 0
+##     foreach o $objs {
+##         incr n
+##         if {[catch {set v [get_value -radix hex $o]} e]} { continue }
+##         if {[string match "*x*" $v] || [string match "*z*" $v]} {
+##             incr hits
+##             puts "ZSCAN $tag $o = $v"
+##         }
+##     }
+##     puts "ZSCAN-COUNT $tag pat=$pat total=$n hits=$hits"
+## }
+WARNING: [Simtcl 6-168] No object found for the given pattern.
+## puts "ZSCAN-DEPTH2-COUNT = [llength [get_objects /tb_p5_wrapper/u_dut/*/*]]"
+ZSCAN-DEPTH2-COUNT = 0
+## run 4000ns
+## scan pre_preset /tb_p5_wrapper/u_dut/*
+ZSCAN-COUNT pre_preset pat=/tb_p5_wrapper/u_dut/* total=553 hits=0
+## run 36000ns
+## scan mid /tb_p5_wrapper/u_dut/*
+ZSCAN-COUNT mid pat=/tb_p5_wrapper/u_dut/* total=553 hits=0
+## run 20000ns
+## scan hang /tb_p5_wrapper/u_dut/*
+ZSCAN-COUNT hang pat=/tb_p5_wrapper/u_dut/* total=553 hits=0
+## scan hang_txarb /tb_p5_wrapper/u_dut/u_tx_arb/*
+ZSCAN-COUNT hang_txarb pat=/tb_p5_wrapper/u_dut/u_tx_arb/* total=20 hits=0
+## scan hang_mactx /tb_p5_wrapper/u_dut/u_mac_tx/*
+ZSCAN-COUNT hang_mactx pat=/tb_p5_wrapper/u_dut/u_mac_tx/* total=50 hits=0
+## scan hang_tcptx /tb_p5_wrapper/u_dut/u_tcp_tx/*
+ZSCAN-COUNT hang_tcptx pat=/tb_p5_wrapper/u_dut/u_tcp_tx/* total=225 hits=0
+## exit 0
+INFO: [Common 17-206] Exiting xsim at Sat Oct 10 10:43:17 2026...

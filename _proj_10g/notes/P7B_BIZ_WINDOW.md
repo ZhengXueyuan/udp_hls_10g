@@ -9,6 +9,13 @@
 
 ---
 
+> ### ⭐ **2026-10-10 更新（P7B 构建 F）：现役窗口 = 70 字**
+> **W67/W68/W69 = 三个纯观测仪器**（板帽侧等窗拍数 / 推进 `snd_una` 的 ACK 次数 / 等窗拍操作点锁存），
+> 加在 **MSB 端**（旧字逐项未动），`BUILD_ID_V 0x19 → 0x1A`，**未实现地址 `0x12C` → `0x138`**（word 78）。
+> ⚠️ 中间两代（**65 字 / BID 0x17**（构建 C，W63/W64）· **66 字 / BID 0x18**（构建 D，W65）· **67 字 / BID 0x19**（构建 E，W66））
+> 当时**没往本表补行** ⇒ 下表本次一并补齐 W63..W69（真值源 = `board/wrapper_p4.v` 装配段, 源码是唯一权威）。
+> 施工与证据 = `_proj_10g/notes/P7B_L_INSTRUMENT_DESIGN.md` §2 · `_proj_10g/notes/p7b_buildF/`。
+>
 > ### ⭐ **2026-10-07 更新（P7B-WU 二轮）：现役窗口 = 63 字**
 > **W61 = `app_ctrl.stat_wu` · W62 = `app_ctrl.rx_occ_bytes`**（加在 **MSB 端**，旧字逐项未动），
 > `BUILD_ID_V 8 → 9`，**未实现地址 `0x114` → `0x11C`**（word 71）。
@@ -34,9 +41,18 @@
 | **W60** | `0x110` | dp[21] | `slow_rx_adp.stat_fifo_ovf` | dp_clk | o_ovf 拒写（恒 0；写门回归守卫） |
 | **W61** | `0x114` | dp[22] | `app_ctrl.stat_wu` | dp_clk | ⭐ **WU 轮**：窗口重开通告 ACK **确实入 ackq 的次数**（寄存器 `0x96` 的同一根线）—— 把"wu 真的发了"从**推断升为观测** |
 | **W62** | `0x118` | dp[23] | `app_ctrl.rx_occ_bytes` | dp_clk | ⭐ **WU 轮**：app RX 可读字节（17 位，显式零扩展）= **wu 判据的输入之一** |
+| **W63** | `0x11C` | dp[24] | `app_pattern.stat_frmwait_cyc` | dp_clk | **构建 C**：app 侧 `frm_wait` 拍数（窗口/信用停顿） |
+| **W64** | `0x120` | dp[25] | `app_pattern.stat_bp_cyc` | dp_clk | **构建 C**：app 侧帧器背压拍数 |
+| **W65** | `0x124` | **tx[4]** | `mac_tx_10g.stat_tx_idle` | `tx_mii_clk` | **构建 D**：线空闲（S_IDLE）拍数 —— ⚠️ 在 **tx 束**（跨域, 不在 dp 束） |
+| **W66** | `0x128` | dp[26] | `tcp_tx_frame.stat_winstall` | dp_clk | **构建 E**：帧器侧**窗口门**停顿拍数 |
+| **W67** | `0x12C` | dp[27] | `tcp_tx_frame.stat_winstall_cap` | dp_clk | ⭐ **构建 F**：其中**板帽侧**那一份（`win_wnd_eff >= RING_CAP`）；对端侧 = `ΔW66 − ΔW67` |
+| **W68** | `0x130` | dp[28] | `tcp_rx.stat_ack_adv` | dp_clk | ⭐ **构建 F**：**推进 `snd_una` 的 ACK 次数**（`L` 的分母；⚠️ 与 `stat_ack` 不是一回事） |
+| **W69** | `0x134` | dp[29] | `tcp_tx_frame.o_win_at_winstall` | dp_clk | ⭐ **构建 F**：最近一次等窗拍的 `{win_inflight, win_wnd_eff}` 锁存（⚠️ **仅 `ΔW66 > 0` 时有效**） |
 
-- **未实现地址 = `0x11C`**（= `0x20 + 4*63`，word 71）⇒ 读回 `0xffffffff`（SLVERR 负对照）。
-  ⚠️ **旧值 `0x114` 现在是 W61**（读它会得到**真数据**）⇒ 拿旧口径去测"未实现地址"必**响亮失败**（不是静默）。
+- **未实现地址 = `0x138`**（= `0x20 + 4*70`，word 78；**构建 F 现役**）⇒ 读回 `0xffffffff`（SLVERR 负对照）。
+  ⚠️ 逐代回溯: `0x12C`（67 字/构建 E）· `0x128`（66 字/构建 D）· `0x124`（65 字/构建 C）· `0x11C`（63 字/WU 轮）·
+  `0x114`（61 字/BIZ 轮）· `0xEC`（51 字/RATE 轮）—— **旧值现在全是窗口内的真字**（读它们得真数据, 不是 SLVERR）。
+  ⛔ **绝不能挑 ≥ `0x200`**: 读侧 `ar_word` 7 位 ⇒ 地址每 512 字节回绕 ⇒ `0x200` 别名回 word 0 = MAGIC。
 - **W0..W60 的映射与地址逐项未变**（W0..W50 见 §4 的机械核对；W51..W60 见 `P7B_WU_P1P2_SNAP.md` §4.2 判据 4：
   HEAD 的 26 项 == 新表 28 项的**尾部** ⇒ 新增 2 项全在 MSB 端）。
 - ⚠️ **非 `APP_MODE` 构建**：W51..W54 / W56 / **W61 / W62 恒 0**（源模块/源线不存在）；

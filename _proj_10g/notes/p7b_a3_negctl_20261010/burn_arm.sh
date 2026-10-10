@@ -18,7 +18,7 @@ case "$ARM" in
   E) REL='_proj_10g/notes/p7b_buildE_build/E/wrapper_p4.bit'
      WANT=b88b2beee1650a9ecdfd1196b01d9e84422374ea2a168dd1bb54bc7ceb05a64f
      BIT='D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\notes\p7b_buildE_build\E\wrapper_p4.bit'
-     BID=0x00000019; BIE=0x00000019; NW=67 ;;   # 构建 E: 67 字 (新增 W66 = tcp_tx_frame.stat_winstall)
+     BID=0x0000001A; BIE=0x0000001A; NW=70 ;;   # 构建 F: 70 字 (新增 W67/W68/W69 = 三个纯观测仪器)
   D) REL='_proj_10g/notes/p7b_build_a7/D/wrapper_p4.bit'
      WANT=edb6dcb8288bd16fb435aaf10a9f73757fe94cf99e663cce2a869e334090a3f0
      BIT='D:\repo\XCKU5PMini\udp_hls_10g\_proj_10g\notes\p7b_build_a7\D\wrapper_p4.bit'

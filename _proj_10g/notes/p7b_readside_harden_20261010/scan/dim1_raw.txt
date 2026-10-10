@@ -1,0 +1,200 @@
+CLAUDE.md:22:  （取数器默认值已更新为 `NW=67 / EXPECT_BID=0x19`；读旧位流才需显式覆盖）。**未收口逐条 = `_proj_10g/notes/P7B_OPEN_ITEMS.md`（窗口侧轮后已刷新）**。
+CLAUDE.md:249:   全局经验 **30–51 条** (**43–51 全部已回灌全局文件**; ⚠️ 旧句"43–46 尚未回灌"已作废; ⛔ 2026-10-07 DOCFIX3: 全局 §六 现为 **24–51**, 新增 **#51** = "汇总者的措辞会被下游当权威照抄 ⇒ 现象/证据强度/判据层裁定必须分层写、裁定不代行" —— 本轮的 `J6` 事件)。⛔ **2026-10-07 订正 (Stage A 轮): 全局 §六 现为 24–53**, 新增 **#52** (回归矩阵结构性盲: manifest 一个都不含被改文件 + 237 文件指纹与上一轮逐行相同 ⇒ "指纹没变就是它没看见你") · **#53** (哑门新变种: 打 `[FAIL]` 却 `exit 0`、末行无条件 `PASS`; 同族默认值陷阱 `NW=${NW:-61}` 未 export)。⛔ **2026-10-07 订正 (Stage C 轮): 全局 §六 现为 24–57** (实测 `~/.claude/fpga_net_dev.md` 末条 = #57; Stage B 轮回灌 #54/#55/#56, Stage C 回归轮回灌 **#57** = "'改 RTL' 与 '在跑回归' 互斥")。映射 = `P7B_HANDOFF.md` §7。 ⛔ **2026-10-08 订正: 全局 §六 现为 24–62** —— 10-08 新增 **#58–#61**（warm-up 伪影 / 拆台架帽最便宜的一刀 / 位图输入全 0 全 1 是空判据 / "矩阵全绿"的第三种盲）与 **#62**（**速率台架的读数必须带"进程亲和见证"** = 绑核条；用户 2026-10-08 裁定）。
+P6B_COMMIT_PLAN.md:203:_proj_pcie/tb/tb_axi_regs.v      # 单元门跟随 (SNAP_NW / snap_din 位宽 / w8 长度)
+P6B_COMMIT_PLAN.md:279:  快照拆成两束 (SNAP_FE_NW=14 / SNAP_DP_NW=22 / SNAP_NW_P6E=36) 交给 snap_seq 链式触发;
+P6B_INTEGRATION_REVIEW.md:80:没有一个是"wrapper 上的悬空导线"。`snap_cdc` 的束宽也与项数一致（`.NW(SNAP_FE_NW)=14` `:2778`、
+P6B_INTEGRATION_REVIEW.md:81:`.NW(SNAP_DP_NW)=22` `:2789`）。
+P6B_REVIEW.md:558:`board/wrapper_p4.v:2537-2539` 仍是 `SNAP_NW_P6E=32 / SNAP_FE_NW=10 / SNAP_DP_NW=22`，
+P6B_SPEC.md:155:`SNAP_NW_P6E = 36` · `snap_seq #(.FW(14), .DW(22))` · 两个 `snap_cdc #(.NW(...))` ·
+P6B_SPEC.md:162:| 快照字数 | 32（§7.1/§7.4） | **36**（同批并入 F4 的 W32..W35；**读侧 `snap_idx`/`snap_base` 必须一起加宽**，否则 `0xA0..` 静默回绕成 W0.. = **假 PASS**） | `board/wrapper_p4.v` 的 `SNAP_NW_P6E/SNAP_FE_NW/SNAP_DP_NW`；`P6B_REVIEW.md` 附录 R.5 预先算出了这条硬顶 |
+P6B_SPEC.md:1052:施工铁律：**这两张表 + 两束的拼接项数 + `SNAP_NW_P6E` 四处，必须由同一个 `localparam` 派生**；
+P6B_SPEC.md:1084:| ① | 字数单一来源 | `board/wrapper_p4.v:2339` | `localparam SNAP_NW_P6E = 24;` | `= 32;` + 新增 `SNAP_FE_NW=10`/`SNAP_DP_NW=22` |
+P6B_SPEC.md:1087:| ④ | `axi_regs.SNAP_NW` | `board/wrapper_p4.v:2538` | `.SNAP_NW (SNAP_NW_P6E)` | 不变（自动跟随） |
+P6B_SPEC.md:1089:| ⑥ | 三个门自己的参数 | `_proj_pcie/tb/tb_axi_regs.v:51,55,70,144,149,151,251,261,263`; `tb/tb_snap_cdc.v:31`; `sim/p6e_pcie/tb_p6e_pcie_wrapper.v:114,137-163`; `sim/p6e_pcie/tb_p6e_pcie_counters.v:156` | `SNAP_NW(24)` / `snap_din[767:0]` / `w8[0:23]` / `NW=24` / force 23 路 / `BUILD_ID=4` | 32 / `[1023:0]` / `w8[0:31]` / `NW=32` / force 32 路(+2 束) / `BUILD_ID=5` |
+P6B_SPEC.md:1335:| `tb_axi_regs`（已有，`_proj_pcie/`） | `SNAP_NW=32` + `snap_din[1023:0]` + `w8[0:31]` + 未实现地址 `0xA0` | 把 `snap_base` 改回 `[8:0]` ⇒ 必须 FAIL（既有变异体手法） |
+P6B_SPEC.md:1399:| 1 | `board/wrapper_p4.v` | 新端口 `sys_clk_p/n`（`ifdef DEV_USP` 或无条件？**建议无条件**：K7 板没有 Y1，但默认构建不引用它 —— 需与 K7 构建核对，见 §B）；`IBUFDS+MMCME4_BASE+BUFG`；`dp_clk/dp_rst_n`；**全局 `gmii_clk`→`dp_clk` 替换（§1.3 的"留 FE"清单除外）**；两个 `fifo_async`；拆 2418 的 always 块；`wl_last_lat` 触发改 2FF；`SNAP_NW_P6E=32` + `fe_src`/`dp_src` + `snap_seq` 例化；`BUILD_ID_V=5`；§5.1 的全部常数；文档注释同步 |
+P6E_OBS.md:82:| 其它 | — | — | 读回 `0xFFFFFFFF`、写被拒 (SLVERR) —— 见下"用法坑"。**36 字版的第一个未实现地址 = `0xB0`**（word 44 = `SNAP_NW_P6E`） | — |
+P6E_OBS.md:108:> ① wrapper 的 `SNAP_NW_P6E`（单一来源，位宽全靠它推导；36 字版起拆成 `SNAP_FE_NW=14` / `SNAP_DP_NW=22`）
+P6E_OBS.md:115:> ④ `axi_regs.SNAP_NW` ⑤ **验收/采样脚本里"未实现地址"的取值** (0x18 → 0x44 → 0x60 → 0x84 → **0xB0**),
+P6E_OBS.md:118:> ⚠️ **第 ⑥ 处最容易漏**: 三道门自己的**参数** —— `tb_axi_regs` 的 `.SNAP_NW`/`snap_din` 位宽/`w8` 长度、
+P7B_SPEC.md:679:| B1 | `SNAP_NW`（wrapper localparam）== 两束之和 == `axi_regs.SNAP_NW` == `snap_cdc.NW` 之和 | 【先例】`wrapper_p4.v:2545-2547,2888` / `axi_regs.v:78` | 逐处相等 |
+P7B_SPEC.md:778:  由 `rtl/snap_seq.v` **链式定序（FE 先 → DP 后）**；`SNAP_NW_P6E = 36`（`wrapper_p4.v:2545-2547`）。
+P7B_SPEC.md:826:| ① | wrapper 的 `SNAP_NW_P6E`（单一来源） | 全链错位 |
+P7B_SPEC.md:829:| ④ | `axi_regs.SNAP_NW` | —— |
+P7B_SPEC.md:831:| ⑥ | 三道门自己的参数（`tb_axi_regs` 的 `.SNAP_NW`/`snap_din` 位宽/`w8` 长度、`tb_snap_cdc` 的 `NW`、wrapper 门的 force 清单与 `BUILD_ID` 期望） | 门"看不见"新字（16 字版当年就是这样让 `snap_base` 截断潜伏） |
+PORT_NOTES.md:3982:通道偏斜 / 亚周期相位扫描 —— **一次都没破"NW 个字必须来自同一个 clk_b 沿"**。
+PORT_NOTES.md:5578:   **同族"默认值陷阱"**：`tcpreg_j6.sh:53` / `j6_fix.sh:58` 的 `NW=${NW:-61}` **没有 export** ⇒ `NW=61 bash …` 里的 61 **不会**传给取数器
+PORT_NOTES.md:5579:   ⇒ "文档里的覆盖办法"**静默失效**、旧几何**被记进日志而不报错**；修后 = 默认 **63 + export** + **几何门**（(NW,BID) 成对断言，不符 `exit 3`）。
+PORT_NOTES.md:5584:   四个历史 `apply_*` 已加**代际硬守卫**（现役 `SNAP_NW_P6E` 必须等于本件的 pre-state，否则 `GUARD_REFUSE` + `exit 3`、**一个字节都不写**）。
+PORT_NOTES.md:5892:  `lf_dl.sh:90` 锁屏行仍硬编码 `NW=63`（⚠️ 窗口侧轮的 12 跑 `GEOM:` 行全部复现这一显示误标 —— 靠身份闸兜底、非数据错） ·
+_proj_10g/notes/P7B_A7_BUILD.md:28:| ⑤ | `:3189` | `localparam SNAP_NW_P6E = 65;` | `localparam SNAP_NW_P6E = 66;` |
+_proj_10g/notes/P7B_A7_BUILD.md:35:| ⑫ | 注释 | — | 订正三处**文字**: `:3766` "后 27 个字" → **30** (3+(26-4)+5; 27 是 24 槽时代旧口径) · `:4132` `.SNAP_NW` 算式末项 4 → **5** · `:3195` 扩窗块补 66 字预算复算 |
+_proj_10g/notes/P7B_A7_BUILD.md:63:| `_proj_10g/notes/p7b_affinity/j6_r6fix.sh` | `NW=${NW:-65→66}` · `EXPECT_BID …0x17→0x18` · **`GEOM_TIERS` 加一行** `"66\|0x00000018\|61 62\|构建 D …"` (旧档 65/63/61 全部保留) |
+_proj_10g/notes/P7B_A7_BUILD.md:67:| `…/p7b_biz_win/run_tb_biz_win.bat` · `run_xvlog_wrapper.bat` · `sim/p5wu_p1p2/run_xvlog_wrapper63.bat` | **指纹** `"SNAP_NW_P6E = 65"` → `66` (+ 报错文案) |
+_proj_10g/notes/P7B_A7_BUILD.md:68:| `_proj_pcie/p6e_snap_check.sh` | `SNAP_WORDS 65→66` · `EXPECT_BID 0x17→0x18` · UNIMPL 注释 0x124→0x128 |
+_proj_10g/notes/P7B_A7_BUILD.md:70:| `_proj_pcie/p7b_gate4_accept.sh` | `EXPECT_BID→0x18` · `SNAP_WORDS→66` · 现役句 |
+_proj_10g/notes/P7B_A7_BUILD.md:74:| `_proj_pcie/p7b_gate4_negctrl.sh` | **代差修复**: 合成夹具 63→66 字 · `BID 0x0A→0x18` · `shift1` 的 `NW=63→66` (原句注释保留) |
+_proj_10g/notes/P7B_A7_BUILD.md:225:  `1 总字数 == SNAP_NW_P6E (项数=31, 逐项字数之和=66, NW=66)` · `3 束宽等式 == NW (14+22+3+(26-4)+5 = 66)` ·
+_proj_10g/notes/P7B_A7_BUILD.md:235:  `NW=66/BID=0x18` → 命中构建 D 档 (WEXTRA=`61 62`); `NW=65/BID=0x17` → 命中构建 C 档; **`NW=66/BID=0x17` (错配) → 无命中** ⇒ "成对"语义保持。
+_proj_10g/notes/P7B_A7_HANDOFF.md:60:# 取数器默认值**本轮已随构建 E 更新** = NW=67 / EXPECT_BID=0x00000019 / 未实现地址 0x12C
+_proj_10g/notes/P7B_A7_HANDOFF.md:64:⚠️ **读旧位流必须显式覆盖**（`NW=66 EXPECT_BID=0x00000018` = 构建 D；`NW=65/0x17` = C；`NW=63/0x0A` = Stage C）。
+_proj_10g/notes/P7B_A7_HANDOFF.md:77:   ⭐ **本轮有更新件**：`p7b_snap.sh`（新默认 NW=67 / EXPECT_BID=0x19 / W63..W66 名字齐）
+_proj_10g/notes/P7B_A7_HANDOFF.md:200:6. **快照窗口 67 字**：字址 = `0x20 + 4*n`，未实现地址 = `0x12C`；`SNAP_NW_P6E`（`board/wrapper_p4.v:3205`）= 单一真值源。
+_proj_10g/notes/P7B_BID_SYNC.md:5:  窗口 `SNAP_NW_P6E = 63`（`:3125`）**不变** ⇒ 本轮的变更是**纯身份**（9 → 10），几何一字未动。
+_proj_10g/notes/P7B_BID_SYNC.md:94:| `_proj_10g/notes/p7b_board_stagea/j6_stagea.sh`（:63 等 4 处） | 默认档硬断言 `{NW=63, EXPECT_BID=0x00000009}` | Stage A 轮台架**快照**（含 `J6_GEOM_OK` 的原始语义）；下一轮若要跑 WU 阶梯，用它自己的 `J6_LEGACY_GEOM` 口径 |
+_proj_10g/notes/P7B_BID_SYNC.md:157:| **不同代（拒绝）** | 同脚本 staged 副本，只把 `BID_FIX` 改回 `0x9`；accept 用**已同步**的那份 | **rc=3**，逐字：`GEOM_GUARD_FAIL: accept 默认几何 = (SNAP_WORDS=63, EXPECT_BID=0xA), 本夹具 = (63, 0x9)` + "两者不同代…" ⇒ **且 `neg_out2/` 根本没被创建**（一个字节都没写） |
+_proj_10g/notes/P7B_BIZ_BUILD.md:59:- **只改了位流身份相关的期望值**，其它常量（`SNAP_WORDS`/`NW`/`UNIMPL_ADDR`/频率标称/容差…）**一字未动** ——
+_proj_10g/notes/P7B_BIZ_BUILD.md:138:> | `axi_regs` 的 `ar_word/w_word/r_word` 6→7 位（`_proj_pcie/rtl/axi_regs.v:152,192,193`） | 取 `[8:2]`；`r_word[6:0]` 与 `SNAP_NW` 派生的 `r_word - 8` 下标配套 | ✅ |
+_proj_10g/notes/P7B_BIZ_BUILD.md:143:> 每项恰 32 位，总线 `SNAP_NW_P6E*32 = 1952` 位 = 61×32 ✅。
+_proj_10g/notes/P7B_BIZ_CORRECTIONS.md:195:  （`board/wrapper_p4.v:2172/2371/2413/3539-3540/3631-3632`，`SNAP_NW_P6E` 51→**61**、`BUILD_ID_V` 7→8）」
+_proj_10g/notes/P7B_BIZ_CORRECTIONS.md:257:- **事实**：本方案按 `NW=57 / UNIMPL_ADDR=0x104` 写；**实际出厂的 BIZ 位流是 `NW=61 / 0x114 / BUILD_ID_V=8`**
+_proj_10g/notes/P7B_BIZ_CORRECTIONS.md:261:- **依据**：`P7B_BIZ_S2.md` §1.1（现场核实 `wrapper_p4.v:3115` `SNAP_NW_P6E = 61`、`BUILD_ID_V = 8`）。
+_proj_10g/notes/P7B_BIZ_DOC_REVIEW.md:52:| 14 | 窗口字数 | `51 → 61` | `board/wrapper_p4.v:3115` `SNAP_NW_P6E = 61` | ✅（**不是 51**） |
+_proj_10g/notes/P7B_BIZ_PLAN.md:568:python tools/peer_ssh.py 'for i in $(seq 1 60); do echo "CC $(date +%s.%N) $(cat /sys/class/net/enp1s0f1np1/carrier_changes) $(cat /sys/class/net/enp1s0f1np1/carrier)"; sleep 1; done'
+_proj_10g/notes/P7B_BIZ_PLAN.md:640:| d | `app_tx_frames/tx_bytes/rx_bytes/mismatch` 进窗口 | 关掉 **R3**（TCP 上行逐字节 = J12/J13） | ⚠️ **五处同改**（`SNAP_NW_P6E`、两束拼接、`axi_regs.SNAP_NW`、读侧 `snap_base` 位宽、未实现地址）。**不许复用 `W15/W16`**（活的） |
+_proj_10g/notes/P7B_BIZ_S2.md:110:| **窗口字数 `NW`** | **61** | `wrapper_p4.v:3115` `localparam SNAP_NW_P6E = 61` |
+_proj_10g/notes/P7B_BIZ_S2.md:114:| 工具默认值 | `NW=61` / `UNIMPL_ADDR=0x114` / `EXPECT_BID=0x00000008` | `_proj_pcie/p7b_biz/p7b_snap.sh:33-35` **现核**（任务书要求"每次用脚本前现核"⇒ 已核，**不需要覆盖**） |
+_proj_10g/notes/P7B_BIZ_S2.md:424:# 5) S0.5 身份（NW=61/UNIMPL=0x114/EXPECT_BID=0x00000008 已是脚本默认，无需覆盖）
+_proj_10g/notes/P7B_BIZ_TCPREG.md:57:| **BIZ（现役）** | `d20c08c9…`（BID=0x8, NW=61） | **4.719** | `tx_bytes=3,538,944`；`rx_first_mismatch=-1` |
+_proj_10g/notes/P7B_BIZ_TCPREG.md:184:| `board/wrapper_p4.v` | 只有：`srx/stx_stat_fifo_ovf` 声明+接线、快照字打包、`BUILD_ID_V` 7→8、`SNAP_NW` 51→61 | ❌（全是**只读探针**与观测面） |
+_proj_10g/notes/P7B_BIZ_WINDOW.md:73:| ① | 总字数（单一来源） | `board/wrapper_p4.v:3115` | `SNAP_NW_P6E = 61` |
+_proj_10g/notes/P7B_BIZ_WINDOW.md:76:| ④ | 块内参数 | `board/wrapper_p4.v:3843` | `.SNAP_NW(SNAP_NW_P6E)` |
+_proj_10g/notes/P7B_BIZ_WINDOW.md:79:⑤ 展开（全部**由 `SNAP_WORDS` 派生**，本轮的改动只是把默认字数改掉）：
+_proj_10g/notes/P7B_BIZ_WINDOW.md:81:- `_proj_pcie/p7b_gate4_accept.sh:109` `SNAP_WORDS=${SNAP_WORDS:-61}`
+_proj_10g/notes/P7B_BIZ_WINDOW.md:82:- `_proj_pcie/p6e_snap_check.sh:53` `SNAP_WORDS=${SNAP_WORDS:-61}`
+_proj_10g/notes/P7B_BIZ_WINDOW.md:83:- `_proj_pcie/p7b_gate4_selftest.sh:31` `SW=${SNAP_WORDS:-61}`
+_proj_10g/notes/P7B_BIZ_WINDOW.md:84:- `_proj_pcie/p7b_biz/p7b_snap.sh:33` `NW=${NW:-61}`
+_proj_10g/notes/P7B_BIZ_WINDOW.md:88:`SNAP_WORDS=51 UNIMPL_ADDR=0xEC …` / `SNAP_WORDS=36 UNIMPL_ADDR=0xB0 …`
+_proj_10g/notes/P7B_BIZ_WINDOW.md:100:> 真正的约束是 **总位数 == `SNAP_NW_P6E × 32`**：少一位 ⇒ 高位悬空（X），多一位 ⇒ 被截断。
+_proj_10g/notes/P7B_BIZ_WINDOW.md:102:> **旧注释（"拼接项数必须恰好 SNAP_NW_P6E"）订正为"总字数"口径**。
+_proj_10g/notes/P7B_BIZ_WINDOW.md:108:逐项字数之和 = 61 = SNAP_NW_P6E ✓
+_proj_10g/notes/P7B_BIZ_WINDOW.md:119:### 4.1 逐字读回（`tb_biz_win.v`，`SNAP_NW=61`）
+_proj_10g/notes/P7B_BOARD_STAGEA.md:21:构建读数：`BUILD_ID_V = 9` / `SNAP_NW_P6E = 63` / **`WNS +0.100 / WHS +0.010 / 三类失败端点 0/0/0`**（`board/p7b_ku5p_stdout.txt` 尾 + `board/p7b_ku5p_timing.rpt`）。
+_proj_10g/notes/P7B_BOARD_STAGEA.md:90:| ② | **旧几何臂（`J6_LEGACY_GEOM=1 NW=61`）** | ⛔ **做不到**：旧位流 `d20c08c9…5ed5` **全盘无副本**（派单已写明）⇒ **明说做不到、不编** | —— |
+_proj_10g/notes/P7B_BOARD_STAGEA.md:91:| ②′ | **替代**：台架几何门在**真板**上的负对照 | `J6_LEGACY_GEOM=1 NW=61 EXPECT_BID=0x00000008` ⇒ `J6_GEOM_FAIL 板侧 BID=0x00000009 != 0x00000008` + **`rc=3`**、**未跑任何传输**（原件 `geom_gate_negctrl.txt`） | ✅ 门有牙（台架修复轮只能用替身验这条） |
+_proj_10g/notes/P7B_BOARD_STAGEA_ACCEPT.md:89:| `0x11C` 未实现 | `0xffffffff` | `id_check.txt`（= `SNAP_NW=63` 的首个空字，RTL `r_word > SNAP_LAST_IDX ⇒ SLVERR`） |
+_proj_10g/notes/P7B_BOARD_STAGEA_ACCEPT.md:90:| 63 字 | `J6META_NW=63` + 快照逐字打印 W0..W62（63 行）+ 取数器默认 `NW=63` | 13 跑 stdout；`_proj_pcie/p7b_biz/p7b_snap.sh:38`（md5 `6282843…`，与对端现役**逐字相同**） |
+_proj_10g/notes/P7B_BOARD_STAGEA_ACCEPT.md:139:`0x04 = 9`（13/13 跑开场+收尾、`id_check.txt`、`final_stop_state.txt` 三处一致）·**63 字**（`J6META_NW=63` + 逐字打印 W0..W62 + 取数器默认 63 + 地址算术 `0x20+4*62 = 0x118`）·`0x114` **已可读**（idle 返 0 = 正确值；**活线**由 §2 的 ΔW61 链证明）·`0x11C` **未实现**（返 `0xffffffff`，= `NW=63` 的首个空字）。
+_proj_10g/notes/P7B_BOARD_STAGEA_ACCEPT.md:172:**② 旧几何做不到：已独立证实（并附一条细化）** —— `geom_gate_negctrl.txt` = 真板上 `J6_LEGACY_GEOM=1 NW=61 EXPECT_BID=8` ⇒ `J6_GEOM_FAIL` + **`rc=3`**（我核了：`GEOM_NEG_RC=3`、`legacy_test.txt` 未跑任何传输）✓。
+_proj_10g/notes/P7B_BOARD_STAGEB.md:64:| 会话中/末身份复核 | BID 仍 9 | 13 跑每跑 `J6_GEOM_OK NW=63 BID=0x00000009` + `J6META_BOARD_BID_END=0x00000009` | ✅ 无中途重烧 |
+_proj_10g/notes/P7B_BOARD_STAGEB.md:417:# 阶梯（对端执行；台架 = /tmp/p7b_biz/j6_stagea.sh，含 (NW,BID) 几何门）
+_proj_10g/notes/P7B_BOARD_STAGEC.md:152:- 台架 = `j6_stagec.sh`（本轮副本；`J6_GEOM_OK NW=63 BID=0x0000000a`）· `BIN=./p7b_tcp_src_fix`（md5 `09a266a9…`，**与 Build 2 锚同二进制**）·
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:421:| 1 | 总字数（单一来源） | `board/wrapper_p4.v:3228` `localparam SNAP_NW_P6E = 70;` | `→ 71`（+ 改 `:3195-3227` 的几何注释块；**未实现地址 `0x20+4*71 = 0x13C`**；`(71−1)<<5 = 2240 < 4096` ⇒ `axi_regs.snap_base [11:0]` **不动**；`snap_idx = r_word[6:0]−8` 最大 70 ⇒ 7 位 ✓，回绕红线仍 ≥ `0x200`） |
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:442:| A1 | `_proj_pcie/p7b_biz/p7b_snap.sh:49` | `NW=${NW:-70}` | `71` |
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:447:| A6 | `_proj_pcie/p6e_snap_check.sh:71,72,60` | `SNAP_WORDS=${SNAP_WORDS:-70}` / `UNIMPL_ADDR` 注释 / `EXPECT_BID=${EXPECT_BID:-0x0000001A}` | 三个一起 → `71`/`0x13C`/`0x1B` |
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:450:| A9 | `_proj_10g/notes/p7b_affinity/j6_r6fix.sh:75,76,82` | `NW=${NW:-70}` / `EXPECT_BID:-0x0000001A` / `GEOM_TIERS` 行 `"70|0x0000001A|61 62|构建 F …"` | `71` / `0x1B` / **表尾加一行**（旧档全留）`"71|0x0000001B|61 62|构建 G (2026-10-10) 71 字 / BID 0x1B (W70 = tcp_rx.stat_absrej)"` |
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:452:| A11 | `_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py:42,43` | `NW_FIX = 70` / `BID_FIX = 0x0000001A`（+ `:40-41` 历史注释） | `71` / `0x1B`（⚠️ **它自带 `_geo_guard()`（`:46-67`）：不同代 ⇒ `GEOM_GUARD_FAIL` + `exit 3` + **零文件** ⇒ 漏改它不是静默，是**响亮失败**；但**必须同批改**，否则 `negctrl_fix3.sh` 整轮打空） |
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:462:| B4 | `_proj_pcie/p7b_gate4_selftest.sh:37,39` | `SW=${SNAP_WORDS:-70}` / `UNIMPL_A=$(printf '0X%X' $(( 0x20 + 4*SW )))` | 自动跟随 `SW`；`SW` → `71` |
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:471:| B13 | `_proj_pcie/p7b_gate4_negctrl.sh:140` | `shift1(){ awk -v NW=70 …}` | `NW=71` |
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:481:| C5 | `_proj_10g/notes/p7b_biz_win/tb_biz_win.v:3,26,173,179` | `SNAP_NW=70` / `NW = 70` / `5a 末字 … = 0x134 @NW=70` / `6a 未实现地址 … = 0x138 @NW=70` | `71` / `71` / `0x138` / `0x13C`（**判据 5b/6b 的 rresp 期望值不变**） |
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:482:| C6 | `_proj_10g/notes/p7b_biz_win/run_tb_biz_win.bat:22` | `findstr /C:"SNAP_NW_P6E = 70" …` | `= 71`（**指纹门：漏改 ⇒ exit /b 92 硬失败**，是好事） |
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:498:| E1 | `_proj_10g/notes/p7b_a3_negctl_20261010/{burn_arm.sh:21, step0_selfcheck.sh:4,46, _tools/p7b_snap.deployed.sh:4,49,50}` | F 代几何（`NW=70 / 0x138 / BID 0x1A`） | **上一轮板级轮的现场脚本 = 历史件**，保留原样（它的读数绑 F 位流）；**新一轮的部署副本按 `_proj_10g/notes/p7b_affinity/BUILD.md` 重新部署到对端 `/tmp/p7b_biz/`**，不复制它的数值 |
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:511:grep -rn "NW=\${NW:-\|SNAP_WORDS=\${SNAP_WORDS:-\|SW=\${SNAP_WORDS:-\|EXPECT_BID=\${\|UNIMPL_ADDR=\${\|FAKE_BID\|NW_FIX\|BID_FIX" \
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:516:grep -n "SNAP_NW_P6E\|SNAP_P7BDP_NW\|p7bdp_din\[\|BUILD_ID_V" board/wrapper_p4.v
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:518:grep -n "NW_FIX\|BID_FIX\|_geo_guard" _proj_10g/notes/p7b_gate4_criteria/gen_inputs.py
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:531:| `axi_regs.snap_words_r` | `SNAP_NW*32` ⇒ **+32** | `pcie_axi_aclk` | `_proj_pcie/rtl/axi_regs.v:202`（`reg [SNAP_NW*32-1:0] snap_words_r;`） |
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:605:3. **指纹守卫**：对 A 臂要 `findstr /C:"SNAP_NW_P6E = 71"` 之类**反查几何**不合适（本门不编 wrapper）；
+_proj_10g/notes/P7B_DATAPATH_CONTRACT.md:450:   （`wrapper_p4.v:2537-2544`，`SNAP_NW_P6E=36 / SNAP_FE_NW=14 / SNAP_DP_NW=22`）。
+_proj_10g/notes/P7B_GAP9_TX_RECALC.md:442:`board/wrapper_p4.v` 的 `SNAP_NW_P6E 63→65` / `SNAP_P7BDP_NW 24→26` / 槽 24/25 两个显式
+_proj_10g/notes/P7B_GAP9_TX_RECALC.md:443:`assign` / 装配段最上面两项 / `axi_regs.SNAP_NW`（派生，未改行）/ 读侧脚本默认字数
+_proj_10g/notes/P7B_GATE4_ACCEPT.md:57:| B1 | `SNAP_NW` == 各束之和 == `axi_regs.SNAP_NW` | 【先例】`wrapper_p4.v:3078` `SNAP_NW_P6E=51` | 51（静态核） | **PASS** |
+_proj_10g/notes/P7B_GATE4_ACCEPT2.md:74:| B1 | `SNAP_NW` == 各束之和 == `axi_regs.SNAP_NW` | 【先例】`wrapper_p4.v:3078` | 静态：`SNAP_NW_P6E = 51`（`:3078`）且 `.SNAP_NW(SNAP_NW_P6E)`（`:3708`） | **PASS（静态）** |
+_proj_10g/notes/P7B_GATE4_ACCEPT3.md:79:| B1 | `SNAP_NW` == 各束之和 == `axi_regs.SNAP_NW` | 【先例】 | **PASS**（静态） | `wrapper_p4.v:3078` `SNAP_NW_P6E = 51`；装配项数 36+3+8+4 = **51**（与第二轮逐项一致） |
+_proj_10g/notes/P7B_GATE4_CRITERIA_CLOSEOUT.md:211:| B1 | `SNAP_NW` == 各束之和 == `axi_regs.SNAP_NW` | `wrapper_p4.v:3078`（`SNAP_NW_P6E=51`）·`:3081-3085`（FE14/DP22/p7bfe3/p7bdp12/tx4）·`:3708`（`.SNAP_NW(SNAP_NW_P6E)`） | **PASS**（静态） | 装配项数**逐项数过**：36(snap_seq)+3+8+4 = **51** ✅；⚠️ 见 §5.1 的口径注 |
+_proj_10g/notes/P7B_GATE4_CRITERIA_CLOSEOUT.md:215:| B5 | "未实现地址"已随窗口更新 | 脚本 `UNIMPL_ADDR` 由 `SNAP_WORDS` 派生 | **PASS** | `0xEC → 0xffffffff`，**同趟** `0x00=0x50360001`、`0x14=0xdeadbeef` |
+_proj_10g/notes/P7B_GATE4_CRITERIA_CLOSEOUT.md:218:| B8 | 各束拼接恰好 `NW*32` 位 | 装配 `wrapper_p4.v:3513`（`[SNAP_NW_P6E*32-1:0]`） | **PASS**（静态+板级） | 51 字全读出、无 X/无零填充/无别名（`B_WIN` PASS） |
+_proj_10g/notes/P7B_GATE4_PLAN.md:262:③ ⚠️ `SNAP_NW` 已由 `axi_regs` 的 `SNAP_NW_V` 参数控制（`wrapper_p4.v` 传 `SNAP_NW_P6E = 51`，`localparam` 在 `:3078`）；
+_proj_10g/notes/P7B_GATE4_PLAN.md:435:for i in $(seq 1 60); do
+_proj_10g/notes/P7B_GATE4_PLAN.md:479:   for i in \$(seq 0 50); do printf 'W%d ' \$i; \$T/reg_rw \$D \$(printf '0x%X' \$((0x20+4*i))) w | tail -1 | sed 's/.*: *//'; done"
+_proj_10g/notes/P7B_GATE4_PLAN.md:501:| 某字恒 0 且**该字应有非零正证据** | 生产者节点没接出 / 被钉死 / 束拼接被静默截断 | 查 `SNAP_NW` 三处一致性（规格 B1/B8）；`10-3091] actual bit length 1` 当硬失败 |
+_proj_10g/notes/P7B_GATE4_TOOLING.md:9:| ① | `snap_words()` 只到 `0xAC`（36 字时代）+ **尾部 8 项重复** | ✅ 改成**由 `SNAP_WORDS` 派生**的 51 字（`0x20..0xE8`）；手抄重复结构性不可能再犯 |
+_proj_10g/notes/P7B_GATE4_TOOLING.md:37:SNAP_WORDS=${SNAP_WORDS:-51}
+_proj_10g/notes/P7B_GATE4_TOOLING.md:38:UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 51 ⇒ 0xEC
+_proj_10g/notes/P7B_GATE4_TOOLING.md:42:snap_words(){ local i; for (( i = 0; i < SNAP_WORDS; i++ )); do printf "%s " "$(rd "$(snap_addr $i)")"; done; echo; }
+_proj_10g/notes/P7B_GATE4_TOOLING.md:49:- 51 字的来源 = `board/wrapper_p4.v:3078` `localparam SNAP_NW_P6E = 51;`（单一来源）
+_proj_10g/notes/P7B_GATE4_TOOLING.md:59:[OK] 旧手抄地址表已消失 / [OK] 源码里已按 SNAP_WORDS 派生
+_proj_10g/notes/P7B_GATE4_TOOLING.md:73:1. `axi_regs.v:118` `SNAP_LAST_IDX = 8 + SNAP_NW - 1 = 8 + 51 - 1 = 58`；
+_proj_10g/notes/P7B_GATE4_TOOLING.md:181:| `SNAP_NW` | `axi_regs.v:78`（由 wrapper `:3708` 传 `SNAP_NW_P6E=51`） | 51 | ✅ 单一来源 |
+_proj_10g/notes/P7B_GATE4_TOOLING.md:182:| `SNAP_LAST_IDX` | `axi_regs.v:118` `= 8 + SNAP_NW - 1` | 58 (=0xE8) | ✅ 派生 |
+_proj_10g/notes/P7B_GATE4_TOOLING.md:270:#   sudo bash /home/a/xdma_test/p6e_snap_check.sh     # 默认 SNAP_WORDS=51 / EXPECT_BID=7
+_proj_10g/notes/P7B_GATE4_TOOLING.md:271:#   sudo bash /home/a/xdma_test/p6e_snap_check.sh     # 跑历史 P6b 位流时: EXPECT_BID=0x00000006 SNAP_WORDS=36
+_proj_10g/notes/P7B_GATE4_TOOLING.md:275:`G4_IFACE=`（口名）· `EXPECT_BID=`（认位流）· `SNAP_WORDS=`（窗口几何）· `G4_BIT=`（算 sha256）·
+_proj_10g/notes/P7B_GATE4_TOOLING_FIX2.md:313:`G4_IFACE=` · `EXPECT_BID=` · `SNAP_WORDS=` · `W5_NOM_MHZ=`（P6b 位流取 125）· `TRAFFIC_TIMEOUT=` ·
+_proj_10g/notes/P7B_HANDOFF.md:456:| 44 | ⚠️ **负对照臂位流身份缺一条腿（WU 轮新增，已复核为"事实"）** | 全盘搜索（所有 15 MB 级 `.bit` 逐个 sha256）**没有任何 `d20c08c9` 的副本** ⇒ 身份 = **"行为 + 族判别（`NW=61` vs RATE 重建件的 `NW=51`）+ 烧录链有界（`.prev_biz` 链）+ 三次声明"**，**支持但非密码学证明**（验收 agent 裁定）。若要闭合：找一台有 BIZ 构建备份的机器；否则**不可能**。 |
+_proj_10g/notes/P7B_HANDOFF.md:466:| 54 | ⚠️ **旧几何臂在真板上做不到（Stage A 轮新增）** | 负对照臂几何（61 字 / BID 8）的旧位流 `d20c08c9…5ed5` **全盘无副本** ⇒ 几何门真板负对照只能用**替身路径**（`J6_LEGACY_GEOM=1 NW=61 EXPECT_BID=0x00000008` 在真板上 ⇒ `J6_GEOM_FAIL` + **`rc=3`** + 未跑任何传输，原件 `geom_gate_negctrl.txt`）；`(h′)` 形态的负对照臂读数只能用**上一轮留在对端 `/tmp` 的 pcap 原件**（6 份中 1 份 md5 逐字核过 `3dcbcc971df49bc94befc74eb23c6269`，其余 5 份同目录同时间戳、**未逐份比对 md5**）。 |
+_proj_10g/notes/P7B_HANDOFF.md:543:> **本表 52 = 全局 53**（**哑门的最新变种**：打出 `[FAIL]` 却 `exit 0`、末行**无条件**写 `PASS`（`p6b_smoke_gate.sh`）；**同族"默认值陷阱"**：`NW=${NW:-61}` + **未 `export`** ⇒ "文档里的覆盖办法"**静默失效**；出处 = `P7B_WU_HARNESS_FIX.md`）。
+_proj_10g/notes/P7B_HANDOFF.md:568:| **52** | ⭐⭐ **哑门的新变种：`[FAIL]` + `exit 0` + 末行无条件 `PASS`（= 全局 53）。** `p6b_smoke_gate.sh` 实测：A1b 判 `[FAIL]` + `[FATAL] 拒绝继续`，**末行照样 `冒烟门: PASS`、`rc=0`**；`ID_BAD=1` 赋值后**从未被读**（`grep -c` = 1）—— 修后 = 末行 `FAIL` + **`rc=7`** + 点名根因、**仍读完 A3/A4**（归因纪律保留）。**同族"默认值陷阱"**：`tcpreg_j6.sh:53` / `j6_fix.sh:58` 的 `NW=${NW:-61}` **没有 export** ⇒ `NW=61 bash …` 里的 61 **不会**传给取数器（后者用自己默认值）⇒ "文档里的覆盖办法"**静默失效**、旧几何**被记进日志而不报错**；修后 = 默认 **63 + export** + **几何门**（(NW,BID) 成对断言，不符 `exit 3`）。⇒ **凡"默认值可被环境覆盖"的写法，必须有一条实测证明覆盖真的到达了**。 |
+_proj_10g/notes/P7B_LATENT_FIFO_FIX.md:267:  `:3631-3632` 拼接；`SNAP_NW_P6E` 51 → **61**，`BUILD_ID_V` 7 → 8）。
+_proj_10g/notes/P7B_LATENT_FIFO_FIX.md:272:  `SNAP_NW_P6E` → `SNAP_P7BDP_NW` 续槽。）
+_proj_10g/notes/P7B_LONGFLOW_DESIGN.md:243:| P5 | **台架身份门 / 几何门** | `stc_dl.sh` 用 `BID_EXPECT`（`j6_stagec*` 变体里是 `EXPECT_BID`）+ `NW=63` + `0x11C` 未实现 | **BID 改 `0x12`**（本轮改动后）；`NW=63` / `0x11C` 不变。⚠️ **逐处清单见 §5.1（本轮必补）—— 有两处是"写死常量"、env 覆盖不了** | `board/wrapper_p4.v:3904`（BID）/ `P7B_BIZ_WINDOW.md` §1（63 字） |
+_proj_10g/notes/P7B_LONGSEND_HANDOFF.md:5:> **② 取数器默认值已更新为 NW=67 / `EXPECT_BID=0x00000019`**（本件 §3 的"默认 `0x0A` ⇒ 每读必显式传"对**旧位流**仍成立，
+_proj_10g/notes/P7B_LOOP_HANDOFF.md:281:**7）上行/双向复跑**：`j6_stagec.sh`（上行；`J6_GEOM_OK NW=63 BID=0x0000000a`）· `stc_bidir.sh <secs> <tag>`（双向，需先跑一次
+_proj_10g/notes/P7B_LOOP_HANDOFF.md:294:| **53** | **哑门的最新变种：打出 `[FAIL]` 却 `exit 0`、末行还写 `PASS`**（+ 同族"默认值陷阱"：`NW=${NW:-61}` 未 `export` ⇒ 覆盖静默失效）。**"门打出了 FAIL" 与 "门失败了" 是两件事** —— 判决要一路走到**退出码**。 | ⭐ 直接相关：本工程台架的输出即判据（`STC_GEOM_OK` / `J6META_*`），**改台架后必须看退出码 + 身份行**，别只看末行。 |
+_proj_10g/notes/P7B_L_INSTRUMENT_DESIGN.md:578:**几何**【事实】：现役 `SNAP_NW_P6E = 67`（`board/wrapper_p4.v:3205`）⇒ 未实现地址 `0x20+4×67 = 0x12C`
+_proj_10g/notes/P7B_L_INSTRUMENT_DESIGN.md:579:（`_proj_pcie/p7b_biz/p7b_snap.sh:49` 的派生式）。加 3 字 ⇒ **NW=70 ⇒ 未实现地址 `0x138`**。
+_proj_10g/notes/P7B_L_INSTRUMENT_DESIGN.md:583:| 1 | 总字数（单一来源） | `board/wrapper_p4.v:3205` | `SNAP_NW_P6E 67 → 70` + 改几何注释块（`:3194-3215`） |
+_proj_10g/notes/P7B_L_INSTRUMENT_DESIGN.md:587:| 5 | 块内参数 | `board/wrapper_p4.v:3843` 一带 `.SNAP_NW(SNAP_NW_P6E)` | 自动跟随（只核） |
+_proj_10g/notes/P7B_L_INSTRUMENT_DESIGN.md:590:| 8 | 读侧**默认值**（逐文件，全部由 `NW`/`SNAP_WORDS` 派生） | `_proj_pcie/p7b_biz/p7b_snap.sh:48,49,50` · `_proj_pcie/p6e_snap_check.sh:60,71,72` · `_proj_pcie/p7b_gate4_accept.sh:131,137,138` · `_proj_pcie/p6e_snap_selftest_fix2.sh:16,97` · `_proj_pcie/p7b_gate4_negctrl.sh:31` · `_proj_pcie/p7b_gate4_selftest.sh:59` · `_proj_10g/notes/p7b_a3_negctl_20261010/step0_selfcheck.sh:4,46` · `_proj_10g/notes/p7b_a3_negctl_20261010/_tools/p7b_snap.deployed.sh:4,48,49,50` · `_proj_10g/notes/p7b_a7/apply_edges.py:16,25`（它改写 `_proj_10g/notes/p7b_affinity/j6_r6fix.sh` 与 `_proj_10g/notes/p7b_biz_tcpreg/tcpreg_j6.sh` 的默认值） | 全部 `67 → 70` / `EXPECT_BID 0x19 → 0x1A` / 未实现地址随派生式走。⚠️ **另有一处硬编码 `NW`（`P7B_OPEN_ITEMS.md` §C6 登记）不在上表** —— 该文件**正由另一路 agent 编辑**，本件**不读取其状态、也不作为结论依据**，只提示"扩窗时按 C6 的登记一起核" |
+_proj_10g/notes/P7B_OPEN_ITEMS.md:40:| **22** | **`lf_dl.sh` 锁屏行硬编码 `NW=63`** | **未改**（BIZ 遗留；实际 NW 由环境传入；⚠️ 窗口侧轮 12 跑的 `GEOM:` 行全部复现这一显示误标 —— 靠身份闸兜底、**非数据错**） | 纯显示行，靠身份闸兜 | 改成 `${NW}`（零风险，⚠️ 改后 md5 变 ⇒ 同步部署台账） |
+_proj_10g/notes/P7B_OPEN_ITEMS.md:337:### C6 `lf_dl.sh` 锁屏行硬编码 `NW=63`
+_proj_10g/notes/P7B_OPEN_ITEMS.md:339:- **① 现状【未改】**：`_proj_10g/notes/p7b_longflow_board/lf_dl.sh:90` = `echo "LF_GEOM_OK NW=63 BID=$BID0"` —— **写死 63**，而实际 NW 由环境传入（本轮 D 臂 = 66）。靠**身份闸**（`ID_UNIMPL` 判据）兜底，不会静默错读，但**台账行会误导**（本轮 5 跑的 `GEOM: LF_GEOM_OK NW=63 BID=0x00000018` 即此）。
+_proj_10g/notes/P7B_OPEN_ITEMS.md:342:- **④ 下一步最小动作**：改成 `NW=${NW}`（一行）。代价 ≈0。⚠️ 改后 **md5 会再变**（部署闸看它）⇒ 同步 `p7b_env_restore_20261009/05_remote_md5.txt` 与 `p7b_longsend_board/ACCEPT.md:70` 里登记的值。
+_proj_10g/notes/P7B_OPEN_ITEMS.md:352:- **① 现状【已核实会失败；A7 轮现核仍未改】**：`_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py:38-39` = `NW_FIX = 63` / `BID_FIX = 0x0000000A`（Stage C 代），而它读的权威源 `_proj_pcie/p7b_gate4_accept.sh` 现默认 = **`SNAP_WORDS=67` / `EXPECT_BID=0x00000019`**（`:131/:137`；E 轮同步）⇒ `_geo_guard()` 判 `nw != NW_FIX or bid != BID_FIX` ⇒ **`GEOM_GUARD_FAIL` + `sys.exit(3)`（"一个字节都不写"）** ⇒ 依赖它的 `_proj_10g/notes/p7b_gate4_criteria/negctrl_fix3.sh`（**反例台架**，期望 `OK=31 BAD=0`）**第一步就 FATAL**。
+_proj_10g/notes/P7B_OPEN_ITEMS.md:354:- **② 依据**：`_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py:38-64,215`（guard 逐字；本件现核 = `NW_FIX = 63` / `BID_FIX = 0x0000000A`）· `_proj_pcie/p7b_gate4_accept.sh:131,137` · `_proj_10g/notes/P7B_BID_SYNC.md:99`（同族"留档替身成对"的先例）· `git log -- gen_inputs.py` 最后一次改动 = `955e555`（Stage C）。
+_proj_10g/notes/P7B_OPEN_ITEMS.md:356:- **④ 下一步最小动作**：把 `NW_FIX/BID_FIX` 改成 **67/0x19**，并核 `W = [0] * NW_FIX` 生成的合成读数与 67 字表一致；跑 `negctrl_fix3.sh` 回到 `OK=31 BAD=0`。代价 = 改两个常数 + 跑一次（零构建）。
+_proj_10g/notes/P7B_OPEN_ITEMS.md:365:- **① 现状【已消（本轮）·纪律保留】**：E 轮板级轮**走了重部署流程**（`p7b_buildE_board_20261010/STEP0_selfcheck.txt` 逐字自证：`NW=67` / `EXPECT_BID=0x00000019` / W63..W66 名字齐 / 部署后对端 md5 与本地 md5 相同）；上一轮的代差件（D 轮的 `_tools/p7b_snap.deployed.sh` = 65/0x17）按"归档件"读。
+_proj_10g/notes/P7B_OPEN_ITEMS.md:403:15. **部署件与仓内件代差 = 本次已消（纪律保留）**：E 轮走完整重部署流程并逐字自证（`p7b_buildE_board_20261010/STEP0_selfcheck.txt`：`NW=67` / `EXPECT_BID=0x00000019` / 对端 md5 == 本地 md5）。
+_proj_10g/notes/P7B_RATE_MEASURE_PLAN.md:659:2. **`SNAP_WORDS` = 51**（`0x20..0xE8`；未实现地址 **`0xEC`**）；
+_proj_10g/notes/P7B_RETXFIX_ACCEPT2.md:198:| 观测面 | 63 字 / 未实现地址 | 每跑 `SNAP_GEOM_OK NW=63`、`id` 门（MAGIC/BID/`0x11C`=SLVERR）全过、`gen` 逐点 +1 | ✅ |
+_proj_10g/notes/P7B_STAGEA_MILESTONE.md:55:| 17 | 新增 | §7 经验表尾 | **两行新行**：**51 = 回归矩阵结构性盲**（manifest 不含被改文件 + 237 文件指纹逐字节不变）· **52 = 哑门新变种**（`[FAIL]` 却 `exit 0`、末行无条件 `PASS`；同族默认值陷阱 `NW=${NW:-61}` 未 export） |
+_proj_10g/notes/P7B_STAGEA_MILESTONE.md:85:  同族"默认值陷阱"：`NW=${NW:-61}` **未 export** ⇒ 覆盖办法静默失效；修后 = 默认 63 + export + 几何门（不符 `exit 3`）。
+_proj_10g/notes/P7B_STAGEB_FIX.md:101:| 窗口字数 | **63**（W0..W62，占 `0x20..0x118`） | `board/wrapper_p4.v:3125` `localparam SNAP_NW_P6E = 63;`（其行注："未实现地址 = 0x11C = word 71"） |
+_proj_10g/notes/P7B_UDP_APP_ROOTCAUSE.md:154:3. 该束按既有惯例走一条 **`snap_cdc`**（`rtl/snap_cdc.v`，与 P7b 三条新束同一手法）进 51→**54** 字窗口；⚠️ **扩窗要按 `board/wrapper_p4.v:3053,3062` 注释的"七处"同步改**（含 `snap_base` 位宽 ≥12 位、`axi_regs.SNAP_NW`、验收脚本的"未实现地址" 0xEC→0xF8）。
+_proj_10g/notes/P7B_WU_ACCEPT.md:172:- **F3**：负对照臂位流身份**比他写的强**（`NW=61` 排除 RATE 重建位流；烧录链有界）—— 见 §3-Q5。
+_proj_10g/notes/P7B_WU_ACCEPT.md:247:     负对照臂 24 跑全是 **`NW=61`** 且 `W51..W60` 读出**真实值**（不是回绕别名/MAGIC）
+_proj_10g/notes/P7B_WU_ACCEPT.md:249:     ⚠️ 这条**排除了** A/B 的主要混淆项；它**不能**区分 `d20c08c9` vs `1076e50e`（两者都 `BID=8`、`NW=61`、
+_proj_10g/notes/P7B_WU_ACCEPT.md:259:- **强度裁定**：身份 = **"行为（塌陷）+ 族判别（NW=61 vs 51）+ 烧录历史有界（.prev_biz 链）+ 三次声明"**。
+_proj_10g/notes/P7B_WU_ACCEPT.md:261:  **"支持，非密码学证明；残余风险 = 有人在 16:12–18:24 之间临时烧进另一个 `NW=61` 的 pre-fix 位流
+_proj_10g/notes/P7B_WU_ACCEPT.md:305:| **负对照位流身份** | ⚠️ **支持（非密码学）** | 族判别（`NW=61` 排除 RATE 重建）+ 烧录链有界 + 3 次声明；`sha256` 已无副本（我全盘搜过） |
+_proj_10g/notes/P7B_WU_ACCEPT.md:324:2. **我没能证明负对照臂的 sha256 就是 `d20c08c9`** —— 只能收敛到"BIZ 族、pre-fix、`NW=61`、`BID=8`" + 烧录链。
+_proj_10g/notes/P7B_WU_BOARD.md:49:① **族判别器 `NW`**：RATE 轮重建位流的跑（`rate_j6_run1.txt`）是 **`NW=51`**（骨架另要 `NW=51 UNIMPL=0xEC`），而**负对照臂 24 跑全是 `NW=61`** 且 `W51..W60` 读出**真实值**（非回绕别名/MAGIC）⇒ **排除"最可能的冒名者" = RATE 重建位流**；⚠️ 但它**不能**区分 `d20c08c9` vs `1076e50e`（两者都 `BID=8`/`NW=61`、`0x00/0x04/0x14/0x114` 全同）⇒ 板子自己分辨不出两臂（§9-2 的判断正确）。
+_proj_10g/notes/P7B_WU_BOARD.md:52:⇒ 强度裁定 = **"行为（塌陷）+ 族判别（`NW=61` vs `51`）+ 烧录历史有界 + 三次声明"**：比"同一次会话内的两次测量"**强**，**但 `sha256` 那一格仍是声明、不是现核**（残余风险 = 有人在 16:12–18:24 之间临时烧进另一个 `NW=61` 的 pre-fix 位流 —— 无任何物证）。
+_proj_10g/notes/P7B_WU_BOARD_CORRECT.md:16:| 2 | 同 | `:48-52` | 负对照位流身份**加两条腿**（`NW=61` vs `51`、烧录链有界）；"sha 仍是声明"限定词保留 | §3-Q5 / §2.4-F3·F7 |
+_proj_10g/notes/P7B_WU_BOARD_CORRECT.md:43:| B2 | `:48-52`（§1 表后） | `⚠️ 板子不吐自己的 sha256…两条合起来的判断。` | `⛔ …身份可再强一档（从 1 条腿加到 3 条），但"sha256 仍是声明、未到证实"保留 —— ① 族判别器 NW：RATE 重建位流 NW=51 vs 负对照臂 24 跑全 NW=61（排除主要冒名者；不能区分 d20c08c9 vs 1076e50e）② 烧录链有界（S2_BIT_MTIME=1790769222 同路径同 mtime；.prev_biz 落盘 = 18:29Z = 修复烧录前一刻 ⇒ 16:12–18:29 无别的烧录）③ 全盘 sha 搜过 d20c08c9 确无副本` | 验收 §3-Q5 / §2.4-F3/F7；**限定词按派单要求保留** |
+_proj_10g/notes/P7B_WU_DOCAUDIT.md:52:| `NW=61` vs `51` | ✅ 一致（`ACCEPT:246-249`/`:259-261`、`TCPREG:56-57`、`BOARD:48-52` 订正块）；`PLAN:33` 的 "NW→57" 是**建窗前的计划值**，实际出厂 61，`BIZ_CORRECTIONS:257` 已登记 ⇒ 允许保留 | — |
+_proj_10g/notes/P7B_WU_F2_F1_FIX.md:125:  .SNAP_NW    (SNAP_NW_P6E)       // 63 = 14+22 (snap_seq) + 3+24+4 (P7b 三束: BIZ 加 10, WU 加 2)
+_proj_10g/notes/P7B_WU_F2_F1_FIX.md:130:  .SNAP_NW    (SNAP_NW_P6E)       // 63 = 14+22 (snap_seq) + 3+(24-4)+4 (P7b 三束)
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:16:| ① | `tcpreg_j6.sh` · `j6_fix.sh` | t0/t1 只读 `5 53 54`（**结构性不读 W61/W62**）；`NW=${NW:-61}` 只用于打印标签、**没 export** ⇒ 覆盖办法失效、且"记录错几何不报错" | 默认 **NW=63 + export**；**几何门**（(NW,BID) 成对断言 + `p7b_snap.sh id`），不符 **exit 3**；t0/t1 = **`5 53 54 61 62`**；旧几何必须显式 `J6_LEGACY_GEOM=1` | 替身 **OK=27 BAD=0**（`logs/j6_double_final.txt`） |
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:17:| ② | `p7b_biz_win/apply_c.py`（+`apply_b/apply_fixups/apply_script_updates`） | 历史补丁生成器，**无守卫**；实测今天重跑会 MISS 退出，但那是**字符串巧合**，且 `sub()` **逐文件落盘**（可留半改） | 加**硬守卫**：现役 `SNAP_NW_P6E` 必须 = 本件的 pre-state（59/57/57/55），否则 `GUARD_REFUSE` + **exit 3**、**一个字节都不写** | 干跑四件全 `GUARD_REFUSE … = 63`（`logs/dryrun_after_guard.txt`） |
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:37:| 用法注释 `:5-6` | `用法: NW=61 bash …` / `⚠️ NW 默认 61 (BIZ 位流)` | `用法: bash …`；写明默认 **63/BID 9**，读旧位流必须 `J6_LEGACY_GEOM=1 NW=61 EXPECT_BID=0x00000008` |
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:38:| 头部新增 `⑥⑦` 段 | —— | ⑥ t0/t1 也读 W61/W62；⑦ 几何门；并**点名**原 `NW=${NW:-61}` 没 export 的事实 |
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:39:| `:53` 附近（标签） | `echo "### PHASE pre_snapshot … NW=${NW:-61}"` | `NW=${NW:-63}` + **`export NW EXPECT_BID`** + 只认两套显式几何（缺省 `{63,0x9}`；`J6_LEGACY_GEOM=1` ⇒ `{61,0x8}`），其余 **exit 3** |
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:53:  [OK] G3 改前: 却把 NW=61 写进日志 (记录错几何)          命中 'NW=61'
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:56:  [OK] A2 几何门通过                                J6_GEOM_OK NW=63 BID=0x00000009
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:57:  [OK] A4 替身收到的 t0 字表(+NW 真的传过去了)      STUB_SNAP_CALL|NW=63|snap default_t0 5 53 54 61 62
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:58:  [OK] A5 替身收到的 t1 字表                        STUB_SNAP_CALL|NW=63|snap default_t1 5 53 54 61 62
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:59:  [OK] A7 元数据行带几何                            J6META_NW=63 J6META_EXPECT_BID=0x00000009
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:62:  [OK] D1/D2   NW=61 但没 legacy 声明       ⇒ rc=3 + "默认档要求 NW=63"
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:65:  [OK] C1..C4  rc=0 + J6_GEOM_LEGACY 醒目行 + 字表退回 "5 53 54" + 取数器看到 NW=61
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:104:    m = re.search(r'localparam\s+SNAP_NW_P6E\s*=\s*(\d+)\s*;', s)
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:107:        sys.stderr.write("GUARD_REFUSE: %s 的 SNAP_NW_P6E = %s (期望 pre-state = 59). …" % (w, got))
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:124:GUARD_REFUSE: board/wrapper_p4.v 的 SNAP_NW_P6E = 63 (期望 pre-state = 57).
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:151:| `gen_inputs.py` | `snap_words` `[0]*51`→`[0]*NW_FIX(63)`；`BID 0x00000007`→`0x%08X % BID_FIX(9)`；**新增 `_geo_guard()`**：读 accept 的 `SNAP_WORDS=${SNAP_WORDS:-N}` / `EXPECT_BID=${EXPECT_BID:-0xN}`，**不同代拒绝生成**（exit 3） | 整套判据台架 `汇总: OK=0 BAD=31` rc=1 | `OK=31 BAD=0` rc=0；守卫负对照（`NW_FIX=61` 副本）⇒ `GEOM_GUARD_FAIL: accept 默认几何 = (SNAP_WORDS=63, EXPECT_BID=0x9), 本夹具 = (61, 0x9)` rc=3 |
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:167:- 老臂跑的是 `pre_fix2` 版 accept（`SNAP_WORDS=51` / `EXPECT_BID=0x7` / `rd 0xEC`）。
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:170:- 修法：从远端文本里**解析**请求的界（`for i in $(seq 0 50)` 或 `for i in $(seq 0 $(( 63 - 1 )))`），
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:177:- ⚠️ **一处我自己踩到的坑（写在这里给下一个人）**：**不许用 `"seq 0 50" in remote` 这种子串判定** ——
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:178:  新版远端文本的**注释里**刚好引用了"旧版写死 `seq 0 50`"这句话 ⇒ 新版被误判成 51 字 ⇒ 又整台假红
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:240:   `NW=61 bash p7b_snap.sh full T1` 在 63 字板上仍会**静默少读 W61/W62 并 exit 0**。
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:258:   "**同代**会被放行"是**读码推断**（守卫只比对 `SNAP_NW_P6E` 一个数）。
+_proj_10g/notes/P7B_WU_LOOP_RECON.md:466:| 1 | `board/wrapper_p4.v:3115` | `SNAP_NW_P6E = 61` → **63**（未实现地址随之变成 `0x20+4*63 = 0x11C`） |
+_proj_10g/notes/P7B_WU_LOOP_RECON.md:472:| 7 | `_proj_pcie/rtl/axi_regs.v` | `.SNAP_NW` 由 `SNAP_NW_P6E` 派生 ⇒ **通常不用改**（同文件 `:41-48` 的"七处同改"清单：①`SNAP_NW` ②两束拼接项数 ③读侧 `snap_base` 位宽 ④读 mux/SLVERR 边界 ⑤验收脚本的未实现地址 ⑥三个门自己的参数 ⑦两束索引表 `rtl/snap_seq.v` 的 `fe_idx_of/dp_idx_of`） |
+_proj_10g/notes/P7B_WU_LOOP_RECON.md:473:| 8 | `_proj_pcie/p7b_biz/p7b_snap.sh:33-35` | `NW=${NW:-63}`、`EXPECT_BID` 跟 `BUILD_ID_V`、`UNIMPL_ADDR` 由 NW 派生（**但 `:50-75` 的 `NAME` 数组要补名**，否则显示 `?`） |
+_proj_10g/notes/P7B_WU_LOOP_RECON.md:474:| 9 | `_proj_pcie/p6e_snap_check.sh:53` / `p7b_gate4_accept.sh:109` / `p7b_gate4_selftest.sh:31` / `_proj_10g/notes/p7b_gate4_3/final_state.sh:14` | `SNAP_WORDS` / 未实现地址跟着挪 |
+_proj_10g/notes/P7B_WU_P1P2_REGRESSION.md:22:| ⑥ | 有没有别处会**静默** | 有**两条仍在**（都不在作者的 §8 清单里）：`tcpreg_j6.sh:53` / `j6_fix.sh:58` 自带的 `NW=${NW:-61}` 元数据（取数器升 63 后它会把几何记错且**不报错**）。另有一条**已被并发轮修掉**（`final_state.sh` 08:53 → `0x11C`）。见 §5.3（带时间戳） |
+_proj_10g/notes/P7B_WU_P1P2_REGRESSION.md:240:  `p7b_snap.sh` 改为 `NW=63 / EXPECT_BID=9` **并加上了未实现地址的当场断言**（09:06:33 又改过一次，
+_proj_10g/notes/P7B_WU_P1P2_REGRESSION.md:241:  我复核的是 **09:06 版 `md5 6282843073c3…`**：`NW=${NW:-63}`@38 / `EXPECT_BID=0x00000009`@40 /
+_proj_10g/notes/P7B_WU_P1P2_REGRESSION.md:252:| ① | `_proj_10g/notes/p7b_biz_tcpreg/tcpreg_j6.sh:53`（mtime **02:23**，**未被 08:52 那批改到**） | `echo "### PHASE pre_snapshot … NW=${NW:-61}"` —— **仍是 61** | 这个 61 是**脚本自己的默认值**，**不由所调用的 `p7b_snap.sh` 派生**。取数器升 63 后，J6 的元数据行会写 `NW=61` 而 dump 有 63 行 ⇒ **记录错几何且不报错**。已知用途：J6-ladder 的判读必须带 pace **与几何**（该脚本自己的头注释就要求引用它）⇒ 建议从取数器读几何，或交叉断言 dump 行数 == NW |
+_proj_10g/notes/P7B_WU_P1P2_REGRESSION.md:253:| ①b | `_proj_10g/notes/p7b_wu_w54/j6_fix.sh:58`（mtime **03:16**） | 同款 `NW=${NW:-61}`，**仍是 61** | 同上 |
+_proj_10g/notes/P7B_WU_P1P2_REGRESSION.md:257:（`p7b_snap.sh` 在我读完之后又被改了一次：8:52 版 → **09:06 版 `md5 6282843073c3…`**，NW=63/BID=9/断言都在）。
+_proj_10g/notes/P7B_WU_P1P2_REGRESSION.md:303:| ② | `sim/snapcdc` / `sim/snapseq` 门（`NW` 参数化位宽/时序门） | **未跑**——本轮改了 `SNAP_P7BDP_NW` 22→24 与 `SNAP_NW_P6E`，这两族是**改 `NW` 参数值**时最该跑的；作者声明"只改参数值、未动语义"，**我没有验证这句话** |
+_proj_10g/notes/P7B_WU_P1P2_REGRESSION.md:307:| ⑥ | 板侧脚本的几何元数据（§5.3） | `tcpreg_j6.sh:53` / `j6_fix.sh:58` 的 `NW=${NW:-61}` **09:36 仍是 61**（我按纪律未改任何既存脚本；属测量脚本轮的边界）；`final_state.sh` 已被并发轮修到 `0x11C` |

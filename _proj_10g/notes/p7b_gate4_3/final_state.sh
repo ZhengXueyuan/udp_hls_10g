@@ -8,9 +8,9 @@ echo "=== 1. 板侧最终读数 (PCIe 观测窗口**仍然活着**) ==="
 $T/reg_rw $D 0x18 w 0x1 >/dev/null 2>&1
 for i in $(seq 1 400); do s=$(rd 0x1c); [ -n "$s" ] && [ $(( s & 2 )) -ne 0 ] && break; sleep 0.002; done
 BID=$(rd 0x04)
-echo "MAGIC=$(rd 0x00) BID=$BID MARKER=$(rd 0x14) UNIMPL=$(rd 0x12c) gen=$(( (s >> 16) & 0xffff ))"
-# ⚠️ UNIMPL 地址跟窗口宽度走: **67 字 (构建 E, 2026-10-10 起) ⇒ 0x12C** (word 75);
-#    66 字 (构建 D) = 0x128 (word 74); 65 字 (P7B-GAP9-TX) = 0x124 (word 73);
+echo "MAGIC=$(rd 0x00) BID=$BID MARKER=$(rd 0x14) UNIMPL=$(rd 0x138) gen=$(( (s >> 16) & 0xffff ))"
+# ⚠️ UNIMPL 地址跟窗口宽度走: **70 字 (构建 F, 2026-10-10 起) ⇒ 0x138** (word 78);
+#    67 字 (构建 E) = 0x12C (word 75); 66 字 (构建 D) = 0x128 (word 74); 65 字 = 0x124 (word 73);
 #    63 字 (P7B-WU 二轮) = 0x11C (word 71);
 #    61 字 (P7B-BIZ) ⇒ 0x114; 51 字 (RATE) ⇒ 0xEC。
 #    绝不能用 ≥0x200 —— 读侧 ar_word 7 位, 地址每 512 字节回绕 ⇒ 0x200 别名回 MAGIC。
@@ -26,7 +26,7 @@ BID_N=$(printf '%s' "$BID" | tr 'A-F' 'a-f')
 #    现默认 = **0x17** (构建 C 65 字; 源码 `board/wrapper_p4.v` 的 `BUILD_ID_V = 32'h00000017`);
 #    读旧位流: `EXPECT_BID=0x0000000a bash final_state.sh` (Stage C 63 字) / `0x00000009` (Build 2)。
 #    判据语义不变 (仍是"读回值必须 == 期望值"), 只是期望值可注入。
-EXPECT_BID=${EXPECT_BID:-0x00000017}
+EXPECT_BID=${EXPECT_BID:-0x0000001A}   # ⛔ 2026-10-10 构建 F (70 字); 原 0x17 = 构建 C
 EXPECT_BID_N=$(printf '%s' "$EXPECT_BID" | tr 'A-F' 'a-f')
 if [ "$BID_N" != "$EXPECT_BID_N" ]; then
   echo "  [ABORT] BID=$BID != $EXPECT_BID (大小写归一后 $BID_N) ⇒ **板上不是本脚本期望的位流** (构建 C = 0x17 / 65 字); 下面 W61/W62 若为 0xffffffff 是 SLVERR(读失败) 不是数据"
@@ -39,6 +39,7 @@ echo "W51=$(rd 0xec) W52=$(rd 0xf0) W53=$(rd 0xf4) W54=$(rd 0xf8) W55=$(rd 0xfc)
 echo "W61=$(rd 0x114) W62=$(rd 0x118)  # P7B-WU 二轮新增 (stat_wu / rx_occ_bytes)"
 echo "W63=$(rd 0x11c) W64=$(rd 0x120) W65=$(rd 0x124)  # 构建 C: app 停滞计数; 构建 D: W65 = mac_tx_10g.stat_tx_idle"
 echo "W66=$(rd 0x128)  # 构建 E: W66 = tcp_tx_frame.stat_winstall (帧器侧窗口门停顿拍数)"
+echo "W67=$(rd 0x12c) W68=$(rd 0x130) W69=$(rd 0x134)  # 构建 F: 板帽侧等窗拍数 / 推进 ACK 次数 / 等窗拍操作点锁存"
 echo "=== 2. 对端机 /tmp 里本轮产物清单 (取回后删) ==="
 ls -la /tmp/*.pcap /tmp/*.py /tmp/*.sh 2>/dev/null
 echo "=== 3. 网络配置复原 ==="

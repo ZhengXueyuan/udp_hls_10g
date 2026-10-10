@@ -1,0 +1,125 @@
+### STEP0_BEGIN 2026-10-10T10:27:31+0800
+### A) 部署新一代取数器 (仓库 _proj_pcie/p7b_biz/p7b_snap.sh -> 对端 /tmp/p7b_biz/p7b_snap.sh)
+### 部署前: 仓库 md5 / 对端旧副本 md5 (旧 = 构建 E 轮部署件)
+ba2faf79f409302d1e542450db402975 */d/repo/XCKU5PMini/udp_hls_10g/_proj_pcie/p7b_biz/p7b_snap.sh
+ec4e4b252ae30164fd79702de3e1eded  /tmp/p7b_biz/p7b_snap.sh
+LOCAL_SHA256 150aad3032303687c7043b52a841c5ac6f89c1d6705dd59b89334043cbb06d8b
+PUT OK D:\repo\XCKU5PMini\udp_hls_10g\_proj_pcie\p7b_biz\p7b_snap.sh -> /tmp/p7b_biz/p7b_snap.sh
+### 部署后对端 md5 与本地 md5 (必须相同):
+ba2faf79f409302d1e542450db402975  /tmp/p7b_biz/p7b_snap.sh
+ba2faf79f409302d1e542450db402975 */d/repo/XCKU5PMini/udp_hls_10g/_proj_pcie/p7b_biz/p7b_snap.sh
+### 部署后对端文件里的生效默认值 (逐字三行):
+49:NW=${NW:-70}
+50:UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 70 ⇒ 0x138 (67 ⇒ 0x12C; 65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)
+51:EXPECT_BID=${EXPECT_BID:-0x0000001A}
+### 部署后对端文件里的 NAME 表 W66..W69 逐字 (旧缺口 = 打成 '?'; 本轮应全有名字):
+125: [65]=mac_tx_idle          [66]=tx_stat_winstall
+### 本地归档部署件 (取证):
+ba2faf79f409302d1e542450db402975 */d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_buildF_board_20261010/_tools/p7b_snap.deployed.sh
+### 历史对照 md5: 构建 E 轮部署件 =
+ec4e4b252ae30164fd79702de3e1eded */d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_buildE_board_20261010/_tools/p7b_snap.deployed.sh
+### 对端 lf_dl.sh md5 (本轮回合不变更; 判据 = 与 _tools/lf_dl.deployed.sh 相同):
+8c8301aacc95ae5dc8760ef121def26c  /tmp/p7b_biz/lf_dl.sh
+8c8301aacc95ae5dc8760ef121def26c */d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_buildE_board_20261010/_tools/lf_dl.deployed.sh
+
+### B) 板上现态 (烧 F 之前; 期望 = 构建 D: BID 0x18 / 66 字)
+BID=Read 32-bit value at address 0x4 (0x7228ddb21004): 0x00000018
+SCRATCH_0x08=Read 32-bit value at address 0x8 (0x7d4048def008): 0x00000000
+MARSHAL_0x00=Read 32-bit value at address 0x0 (0x7b4552d51000): 0x50360001
+CARRIER=1
+		LnkSta:	Speed 5GT/s (downgraded), Width x4
+
+### C-a) 默认档 (NW=70 / 0x138 / BID 0x1A) —— 对当前 D 位流: 期望 ID_FAIL (身份不符, 且只该因 BID)
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x00000018   (want 0x0000001A = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0xffffffff  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_FAIL 身份不符 (烧了别的位流? 期望 BID=0x0000001A, 实测 BID=0x00000018)
+RC=1
+
+### C-b) 显式 D 档 (NW=66 UNIMPL_ADDR=0x128 EXPECT_BID=0x00000018) —— 期望 ID_OK
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x00000018   (want 0x00000018 = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0xffffffff  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_OK 1791599260.000637946
+RC=0
+
+### C-b2) 显式 D 档短取数 + 计时 (为长流字表定 SNAPGAP/字数预算)
+SNAP_BEGIN STEP0_8W gen=22
+W5   0x34   gmii_free_FE           0xaa7c075a
+W20  0x70   mac_tx_frames          0x00b1dce8
+W43  0xCC   mtx_stat_tx_words      0xa9af49d3
+W51  0xEC   app_tx_bytes           0xf5a47781
+W63  0x11C  app_frmwait_cyc        0x05b1aabc
+W64  0x120  app_bp_cyc             0x43560bd3
+W65  0x124  mac_tx_idle            0x23993b09
+W66  0x128  tx_stat_winstall       0xffffffff
+SNAP_END STEP0_8W nff=1
+SNAP_FAIL 窗口内有 1 个 0xffffffff (SLVERR 混入, 不是数据) => 整窗作废
+STEP0_SNAP_T0 1791599260.956497234 T1 1791599260.994194604 RC 1
+
+### C-c) 显式 67 档 (NW=67 UNIMPL_ADDR=0x12C EXPECT_BID=0x00000018) —— 期望 ID_OK (0x12C 在 D 上仍空)
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x00000018   (want 0x00000018 = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0xffffffff  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_OK 1791599261.859888857
+RC=0
+
+### C-d) 显式 63 档 (NW=63 UNIMPL_ADDR=0x11C EXPECT_BID=0x00000018) —— 期望 ID_FAIL (0x11C 是 D 的真字 W63 ⇒ 未实现地址断言有牙)
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x00000018   (want 0x00000018 = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0x05b1aabc  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_FAIL 未实现地址 0x11C 读出 '0x05b1aabc' (期望 0xffffffff) ⇒ 板上窗口 >= 64 字 (NW=63 覆盖值不对), 或译码过宽
+RC=1
+
+### STEP0_END 2026-10-10T10:27:41+0800
+### STEP0_ADDENDUM 2026-10-10T10:27:47+0800 —— 补记 NAME 表 W67..W69 行 (C 段 grep 模式只匹配到 W65/W66)
+125: [65]=mac_tx_idle          [66]=tx_stat_winstall
+132:[67]=tx_winstall_cap      [68]=rx_stat_ack_adv     [69]=tx_win_at_winstall
+--- md5 复核 ---
+ba2faf79f409302d1e542450db402975  /tmp/p7b_biz/p7b_snap.sh
+
+### STEP0B_BEGIN 2026-10-10T10:30:20+0800 —— 烧 F 之后 (板上 = 构建 F / BID 0x1A / 70 字)
+### D-1) 默认档 (无任何覆盖: NW=70 / 0x138 / BID 0x1A) —— 期望 ID_OK
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x0000001a   (want 0x0000001A = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0xffffffff  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_OK 1791599421.982854841
+RC=0
+
+### D-2) 显式 67 档 (NW=67 UNIMPL_ADDR=0x12C EXPECT_BID=0x1A) —— 期望 ID_FAIL (0x12C 在 F 上已是真字 W67 ⇒ 未实现地址断言有牙)
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x0000001a   (want 0x0000001A = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0x00000000  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_FAIL 未实现地址 0x12C 读出 '0x00000000' (期望 0xffffffff) ⇒ 板上窗口 >= 68 字 (NW=67 覆盖值不对), 或译码过宽
+RC=1
+
+### D-3) 显式 66 档 (NW=66 UNIMPL_ADDR=0x128) —— 期望 ID_FAIL (0x128 = W66 真字)
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x0000001a   (want 0x0000001A = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0x00000000  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_FAIL 未实现地址 0x128 读出 '0x00000000' (期望 0xffffffff) ⇒ 板上窗口 >= 67 字 (NW=66 覆盖值不对), 或译码过宽
+RC=1
+
+### D-4) 默认档 11 字短取数 (W67/W68/W69 名字与新鲜度自检; 空载)
+SNAP_BEGIN STEP0B_11W gen=1
+W5   0x34   gmii_free_FE           0x89d00190
+W20  0x70   mac_tx_frames          0x00000000
+W43  0xCC   mtx_stat_tx_words      0x89d0a656
+W51  0xEC   app_tx_bytes           0x00000000
+W63  0x11C  app_frmwait_cyc        0x00000000
+W64  0x120  app_bp_cyc             0x00000000
+W65  0x124  mac_tx_idle            0x89d0a656
+W66  0x128  tx_stat_winstall       0x00000000
+W67  0x12C  tx_winstall_cap        0x00000000
+W68  0x130  rx_stat_ack_adv        0x00000000
+W69  0x134  tx_win_at_winstall     0x00000000
+SNAP_END STEP0B_11W nff=0
+STEP0B_SNAP_T0 1791599424.814625086 T1 1791599424.864006043 RC 0
+### STEP0B_END 2026-10-10T10:30:24+0800

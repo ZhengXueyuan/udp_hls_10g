@@ -1,0 +1,50 @@
+
+****** xsim v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Sat Oct 10 10:38:07 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source xsim.dir/tb_p5_wrapper/xsim_script.tcl
+# xsim {tb_p5_wrapper} -autoloadwcfg -tclbatch {zs2.tcl}
+Time resolution is 1 ps
+source zs2.tcl
+## run 4000ns
+## foreach cmd {
+##   {get_objects}
+##   {get_objects *}
+##   {get_objects /tb_p5_wrapper/u_dut/*}
+##   {get_objects -filter {type == net}}
+##   {get_objects -filter {type == signal}}
+##   {get_objects -filter {type == "net"}}
+## } {
+##     if {[catch {set r [eval $cmd]} e]} {
+##         puts "TRY '$cmd' -> ERR $e"
+##     } else {
+##         puts "TRY '$cmd' -> n=[llength $r] first=[lrange $r 0 3]"
+##     }
+## }
+TRY 'get_objects' -> n=19 first=/tb_p5_wrapper/reset_n /tb_p5_wrapper/fpga_gclk /tb_p5_wrapper/phy1_rxc /tb_p5_wrapper/phy1_rxd
+TRY 'get_objects *' -> n=19 first=/tb_p5_wrapper/reset_n /tb_p5_wrapper/fpga_gclk /tb_p5_wrapper/phy1_rxc /tb_p5_wrapper/phy1_rxd
+TRY 'get_objects /tb_p5_wrapper/u_dut/*' -> n=553 first=/tb_p5_wrapper/u_dut/reset_n /tb_p5_wrapper/u_dut/fpga_gclk /tb_p5_wrapper/u_dut/phy1_rxc /tb_p5_wrapper/u_dut/phy1_rxd
+WARNING: [Simtcl 6-168] No object found for the given pattern.
+TRY 'get_objects -filter {type == net}' -> n=0 first=
+TRY 'get_objects -filter {type == signal}' -> n=8 first=/tb_p5_wrapper/phy1_txc /tb_p5_wrapper/phy1_txd /tb_p5_wrapper/phy1_txctl /tb_p5_wrapper/led_d0
+WARNING: [Simtcl 6-168] No object found for the given pattern.
+TRY 'get_objects -filter {type == "net"}' -> n=0 first=
+## puts "--- direct value tests ---"
+--- direct value tests ---
+## foreach pn {/tb_p5_wrapper/u_dut/txsrc_tready /tb_p5_wrapper/u_dut/m_tx_tvalid /tb_p5_wrapper/u_dut/u_tcp_tx/state} {
+##     if {[catch {set v [get_value -radix hex $pn]} e]} {
+##         puts "VAL $pn -> ERR $e"
+##     } else {
+##         puts "VAL $pn = $v"
+##     }
+## }
+VAL /tb_p5_wrapper/u_dut/txsrc_tready = Z
+VAL /tb_p5_wrapper/u_dut/m_tx_tvalid = Z
+VAL /tb_p5_wrapper/u_dut/u_tcp_tx/state = 0
+## exit 0
+INFO: [Common 17-206] Exiting xsim at Sat Oct 10 10:38:09 2026...

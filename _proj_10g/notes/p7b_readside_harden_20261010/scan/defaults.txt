@@ -1,0 +1,313 @@
+CLAUDE.md:249:   全局经验 **30–51 条** (**43–51 全部已回灌全局文件**; ⚠️ 旧句"43–46 尚未回灌"已作废; ⛔ 2026-10-07 DOCFIX3: 全局 §六 现为 **24–51**, 新增 **#51** = "汇总者的措辞会被下游当权威照抄 ⇒ 现象/证据强度/判据层裁定必须分层写、裁定不代行" —— 本轮的 `J6` 事件)。⛔ **2026-10-07 订正 (Stage A 轮): 全局 §六 现为 24–53**, 新增 **#52** (回归矩阵结构性盲: manifest 一个都不含被改文件 + 237 文件指纹与上一轮逐行相同 ⇒ "指纹没变就是它没看见你") · **#53** (哑门新变种: 打 `[FAIL]` 却 `exit 0`、末行无条件 `PASS`; 同族默认值陷阱 `NW=${NW:-61}` 未 export)。⛔ **2026-10-07 订正 (Stage C 轮): 全局 §六 现为 24–57** (实测 `~/.claude/fpga_net_dev.md` 末条 = #57; Stage B 轮回灌 #54/#55/#56, Stage C 回归轮回灌 **#57** = "'改 RTL' 与 '在跑回归' 互斥")。映射 = `P7B_HANDOFF.md` §7。 ⛔ **2026-10-08 订正: 全局 §六 现为 24–62** —— 10-08 新增 **#58–#61**（warm-up 伪影 / 拆台架帽最便宜的一刀 / 位图输入全 0 全 1 是空判据 / "矩阵全绿"的第三种盲）与 **#62**（**速率台架的读数必须带"进程亲和见证"** = 绑核条；用户 2026-10-08 裁定）。
+PORT_NOTES.md:5578:   **同族"默认值陷阱"**：`tcpreg_j6.sh:53` / `j6_fix.sh:58` 的 `NW=${NW:-61}` **没有 export** ⇒ `NW=61 bash …` 里的 61 **不会**传给取数器
+_proj_10g/notes/P7B_A7_BUILD.md:63:| `_proj_10g/notes/p7b_affinity/j6_r6fix.sh` | `NW=${NW:-65→66}` · `EXPECT_BID …0x17→0x18` · **`GEOM_TIERS` 加一行** `"66\|0x00000018\|61 62\|构建 D …"` (旧档 65/63/61 全部保留) |
+_proj_10g/notes/P7B_BID_SYNC.md:32:| B1 | `_proj_pcie/p7b_gate4_accept.sh` | `:122`（原 `:115`） | `EXPECT_BID=${EXPECT_BID:-0x00000009}` → **`:-0x0000000A}`**（尾注 `P7B-WU 二轮 = 9` → `P7b Stage C = 10`；原句进订正块 `:123`） | G1 位流身份的**默认期望值**（唯一真源 = wrapper 的 `BUILD_ID_V`） |
+_proj_10g/notes/P7B_BID_SYNC.md:38:| B4 | `_proj_pcie/p7b_gate4_selftest.sh` | `:99`（原 `:95`） | `\${FAKE_BID:-0x00000009}` → **`:-0x0000000A}`** | 假板子 BID 必须与 `p6e_snap_check.sh` 的默认**同代**（否则正例判据 1.2 假 FAIL —— 源码注释逐字这么写的） |
+_proj_10g/notes/P7B_BID_SYNC.md:51:| C1 | `_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py` | `:39`（原 `:35`） | `BID_FIX = 0x00000009` → **`0x0000000A`**（尾注原值） | 它生成"规范形态"合成读数喂给 accept ⇒ 必须同代 |
+_proj_10g/notes/P7B_BID_SYNC.md:112:  ⇒ 谁要复核本轮的完整性，请用**值行**判（`EXPECT_BID=${EXPECT_BID:-…}` / `BID_FIX =` / `"BID 0x…"` / `0X04) V=` / `== 10`），不要用裸 `grep 0x00000009`。
+_proj_10g/notes/P7B_BIZ_BUILD.md:43:| 2 | `_proj_pcie/p7b_gate4_accept.sh:108` | `EXPECT_BID=${EXPECT_BID:-0x00000007}` → **`0x00000008`**（同行尾注 `# P7b = 7 (…:3701…)` → `# P7B-BIZ = 8 (…:3832…)`） |
+_proj_10g/notes/P7B_BIZ_WINDOW.md:81:- `_proj_pcie/p7b_gate4_accept.sh:109` `SNAP_WORDS=${SNAP_WORDS:-61}`
+_proj_10g/notes/P7B_BIZ_WINDOW.md:82:- `_proj_pcie/p6e_snap_check.sh:53` `SNAP_WORDS=${SNAP_WORDS:-61}`
+_proj_10g/notes/P7B_BIZ_WINDOW.md:83:- `_proj_pcie/p7b_gate4_selftest.sh:31` `SW=${SNAP_WORDS:-61}`
+_proj_10g/notes/P7B_BIZ_WINDOW.md:84:- `_proj_pcie/p7b_biz/p7b_snap.sh:33` `NW=${NW:-61}`
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:442:| A1 | `_proj_pcie/p7b_biz/p7b_snap.sh:49` | `NW=${NW:-70}` | `71` |
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:444:| A3 | `_proj_pcie/p7b_biz/p7b_snap.sh:51` | `EXPECT_BID=${EXPECT_BID:-0x0000001A}` | `0x0000001B` |
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:447:| A6 | `_proj_pcie/p6e_snap_check.sh:71,72,60` | `SNAP_WORDS=${SNAP_WORDS:-70}` / `UNIMPL_ADDR` 注释 / `EXPECT_BID=${EXPECT_BID:-0x0000001A}` | 三个一起 → `71`/`0x13C`/`0x1B` |
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:450:| A9 | `_proj_10g/notes/p7b_affinity/j6_r6fix.sh:75,76,82` | `NW=${NW:-70}` / `EXPECT_BID:-0x0000001A` / `GEOM_TIERS` 行 `"70|0x0000001A|61 62|构建 F …"` | `71` / `0x1B` / **表尾加一行**（旧档全留）`"71|0x0000001B|61 62|构建 G (2026-10-10) 71 字 / BID 0x1B (W70 = tcp_rx.stat_absrej)"` |
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:452:| A11 | `_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py:42,43` | `NW_FIX = 70` / `BID_FIX = 0x0000001A`（+ `:40-41` 历史注释） | `71` / `0x1B`（⚠️ **它自带 `_geo_guard()`（`:46-67`）：不同代 ⇒ `GEOM_GUARD_FAIL` + `exit 3` + **零文件** ⇒ 漏改它不是静默，是**响亮失败**；但**必须同批改**，否则 `negctrl_fix3.sh` 整轮打空） |
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:460:| B2 | `_proj_pcie/p6e_snap_selftest_fix2.sh:77` | `0X04) V=\${FAKE_BID:-0x0000001A};;` | `0x0000001B` |
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:462:| B4 | `_proj_pcie/p7b_gate4_selftest.sh:37,39` | `SW=${SNAP_WORDS:-70}` / `UNIMPL_A=$(printf '0X%X' $(( 0x20 + 4*SW )))` | 自动跟随 `SW`；`SW` → `71` |
+_proj_10g/notes/P7B_BUILDG_RFC_SEQ_DESIGN.md:465:| B7 | `_proj_pcie/p7b_gate4_selftest.sh:137` | `0X04) V=\${FAKE_BID:-0x0000001A};;` | `0x0000001B` |
+_proj_10g/notes/P7B_BUILD_STAGEC.md:118:| `_proj_pcie/p7b_biz/p7b_snap.sh:40` | `EXPECT_BID=${EXPECT_BID:-0x00000009}` | 默认档**响亮失败** `ID_FAIL 身份不符 (烧了别的位流? 期望 BID=..., 实测 BID=...)`，并打印覆盖配方 |
+_proj_10g/notes/P7B_BUILD_STAGEC.md:121:| `_proj_pcie/p7b_gate4_selftest.sh:95` | 假板 `FAKE_BID:-0x00000009` | **与上一行强耦合**（源码注释逐字："假板子的 BID 必须与 `p6e_snap_check.sh` 的 `EXPECT_BID` 同代"） |
+_proj_10g/notes/P7B_BUILD_STAGEC.md:130:| `_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py:35` | `BID_FIX = 0x00000009` | **它有一个 `_geo_guard()` 主动读 `p7b_gate4_accept.sh` 的默认 `EXPECT_BID`**；两者不同代 ⇒ **`GEOM_GUARD_FAIL` + `exit 3` 拒绝生成**（`.../gen_inputs.py:53-60`）。⚠️ 这就是"只同步一半 = 结构性拒绝"的现成例子 |
+_proj_10g/notes/P7B_GATE4_TOOLING.md:37:SNAP_WORDS=${SNAP_WORDS:-51}
+_proj_10g/notes/P7B_GATE4_TOOLING.md:38:UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 51 ⇒ 0xEC
+_proj_10g/notes/P7B_HANDOFF.md:543:> **本表 52 = 全局 53**（**哑门的最新变种**：打出 `[FAIL]` 却 `exit 0`、末行**无条件**写 `PASS`（`p6b_smoke_gate.sh`）；**同族"默认值陷阱"**：`NW=${NW:-61}` + **未 `export`** ⇒ "文档里的覆盖办法"**静默失效**；出处 = `P7B_WU_HARNESS_FIX.md`）。
+_proj_10g/notes/P7B_HANDOFF.md:568:| **52** | ⭐⭐ **哑门的新变种：`[FAIL]` + `exit 0` + 末行无条件 `PASS`（= 全局 53）。** `p6b_smoke_gate.sh` 实测：A1b 判 `[FAIL]` + `[FATAL] 拒绝继续`，**末行照样 `冒烟门: PASS`、`rc=0`**；`ID_BAD=1` 赋值后**从未被读**（`grep -c` = 1）—— 修后 = 末行 `FAIL` + **`rc=7`** + 点名根因、**仍读完 A3/A4**（归因纪律保留）。**同族"默认值陷阱"**：`tcpreg_j6.sh:53` / `j6_fix.sh:58` 的 `NW=${NW:-61}` **没有 export** ⇒ `NW=61 bash …` 里的 61 **不会**传给取数器（后者用自己默认值）⇒ "文档里的覆盖办法"**静默失效**、旧几何**被记进日志而不报错**；修后 = 默认 **63 + export** + **几何门**（(NW,BID) 成对断言，不符 `exit 3`）。⇒ **凡"默认值可被环境覆盖"的写法，必须有一条实测证明覆盖真的到达了**。 |
+_proj_10g/notes/P7B_LONGFLOW_DESIGN.md:258:| `_proj_10g/notes/p7b_board_stagec/stc_dl.sh:27` | `BID_EXPECT=${BID_EXPECT:-0x0000000A}`（`:28` export 给 `p7b_snap.sh`） | 不设 env 即拒（`STC_GEOM_FAIL`，`:101-102`） | ✅ `BID_EXPECT=0x00000012` |
+_proj_10g/notes/P7B_LONGFLOW_DESIGN.md:259:| `_proj_pcie/p7b_biz/p7b_snap.sh:44` | `EXPECT_BID=${EXPECT_BID:-0x0000000A}` | 不设 env 即拒（`:113` ID 行） | ✅ |
+_proj_10g/notes/P7B_LONGFLOW_DESIGN.md:260:| `_proj_pcie/p7b_gate4_accept.sh:122` | `EXPECT_BID=${EXPECT_BID:-0x0000000A}` | 不设 env 即拒 | ✅ |
+_proj_10g/notes/P7B_LONGFLOW_DESIGN.md:261:| `_proj_pcie/p6e_snap_check.sh:50` | `EXPECT_BID=${EXPECT_BID:-0x0000000A}` | 不设 env 即拒 | ✅ |
+_proj_10g/notes/P7B_LONGSEND_DESIGN.md:586:| `p7b_snap.sh` | **不改代码**；但 §4.5 的命令行**必须显式** `EXPECT_BID=0x00000016` | ⚠️ 它的默认是 `EXPECT_BID=${EXPECT_BID:-0x0000000A}`（`:44`，Stage C 的值），**而板上现役 S3 是 `0x15`、构建 A 是 `0x16`** ⇒ 用默认值会 `ID_FAIL`（这是**正确**行为：身份门有牙）。改成 0x16 会破坏历史复跑的可比性 ⇒ **不改，用环境变量** |
+_proj_10g/notes/P7B_LOOP_HANDOFF.md:294:| **53** | **哑门的最新变种：打出 `[FAIL]` 却 `exit 0`、末行还写 `PASS`**（+ 同族"默认值陷阱"：`NW=${NW:-61}` 未 `export` ⇒ 覆盖静默失效）。**"门打出了 FAIL" 与 "门失败了" 是两件事** —— 判决要一路走到**退出码**。 | ⭐ 直接相关：本工程台架的输出即判据（`STC_GEOM_OK` / `J6META_*`），**改台架后必须看退出码 + 身份行**，别只看末行。 |
+_proj_10g/notes/P7B_OPEN_ITEMS.md:352:- **① 现状【已核实会失败；A7 轮现核仍未改】**：`_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py:38-39` = `NW_FIX = 63` / `BID_FIX = 0x0000000A`（Stage C 代），而它读的权威源 `_proj_pcie/p7b_gate4_accept.sh` 现默认 = **`SNAP_WORDS=67` / `EXPECT_BID=0x00000019`**（`:131/:137`；E 轮同步）⇒ `_geo_guard()` 判 `nw != NW_FIX or bid != BID_FIX` ⇒ **`GEOM_GUARD_FAIL` + `sys.exit(3)`（"一个字节都不写"）** ⇒ 依赖它的 `_proj_10g/notes/p7b_gate4_criteria/negctrl_fix3.sh`（**反例台架**，期望 `OK=31 BAD=0`）**第一步就 FATAL**。
+_proj_10g/notes/P7B_OPEN_ITEMS.md:354:- **② 依据**：`_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py:38-64,215`（guard 逐字；本件现核 = `NW_FIX = 63` / `BID_FIX = 0x0000000A`）· `_proj_pcie/p7b_gate4_accept.sh:131,137` · `_proj_10g/notes/P7B_BID_SYNC.md:99`（同族"留档替身成对"的先例）· `git log -- gen_inputs.py` 最后一次改动 = `955e555`（Stage C）。
+_proj_10g/notes/P7B_STAGEA_MILESTONE.md:55:| 17 | 新增 | §7 经验表尾 | **两行新行**：**51 = 回归矩阵结构性盲**（manifest 不含被改文件 + 237 文件指纹逐字节不变）· **52 = 哑门新变种**（`[FAIL]` 却 `exit 0`、末行无条件 `PASS`；同族默认值陷阱 `NW=${NW:-61}` 未 export） |
+_proj_10g/notes/P7B_STAGEA_MILESTONE.md:85:  同族"默认值陷阱"：`NW=${NW:-61}` **未 export** ⇒ 覆盖办法静默失效；修后 = 默认 63 + export + 几何门（不符 `exit 3`）。
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:16:| ① | `tcpreg_j6.sh` · `j6_fix.sh` | t0/t1 只读 `5 53 54`（**结构性不读 W61/W62**）；`NW=${NW:-61}` 只用于打印标签、**没 export** ⇒ 覆盖办法失效、且"记录错几何不报错" | 默认 **NW=63 + export**；**几何门**（(NW,BID) 成对断言 + `p7b_snap.sh id`），不符 **exit 3**；t0/t1 = **`5 53 54 61 62`**；旧几何必须显式 `J6_LEGACY_GEOM=1` | 替身 **OK=27 BAD=0**（`logs/j6_double_final.txt`） |
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:38:| 头部新增 `⑥⑦` 段 | —— | ⑥ t0/t1 也读 W61/W62；⑦ 几何门；并**点名**原 `NW=${NW:-61}` 没 export 的事实 |
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:39:| `:53` 附近（标签） | `echo "### PHASE pre_snapshot … NW=${NW:-61}"` | `NW=${NW:-63}` + **`export NW EXPECT_BID`** + 只认两套显式几何（缺省 `{63,0x9}`；`J6_LEGACY_GEOM=1` ⇒ `{61,0x8}`），其余 **exit 3** |
+_proj_10g/notes/P7B_WU_HARNESS_FIX.md:151:| `gen_inputs.py` | `snap_words` `[0]*51`→`[0]*NW_FIX(63)`；`BID 0x00000007`→`0x%08X % BID_FIX(9)`；**新增 `_geo_guard()`**：读 accept 的 `SNAP_WORDS=${SNAP_WORDS:-N}` / `EXPECT_BID=${EXPECT_BID:-0xN}`，**不同代拒绝生成**（exit 3） | 整套判据台架 `汇总: OK=0 BAD=31` rc=1 | `OK=31 BAD=0` rc=0；守卫负对照（`NW_FIX=61` 副本）⇒ `GEOM_GUARD_FAIL: accept 默认几何 = (SNAP_WORDS=63, EXPECT_BID=0x9), 本夹具 = (61, 0x9)` rc=3 |
+_proj_10g/notes/P7B_WU_LOOP_RECON.md:473:| 8 | `_proj_pcie/p7b_biz/p7b_snap.sh:33-35` | `NW=${NW:-63}`、`EXPECT_BID` 跟 `BUILD_ID_V`、`UNIMPL_ADDR` 由 NW 派生（**但 `:50-75` 的 `NAME` 数组要补名**，否则显示 `?`） |
+_proj_10g/notes/P7B_WU_P1P2_REGRESSION.md:22:| ⑥ | 有没有别处会**静默** | 有**两条仍在**（都不在作者的 §8 清单里）：`tcpreg_j6.sh:53` / `j6_fix.sh:58` 自带的 `NW=${NW:-61}` 元数据（取数器升 63 后它会把几何记错且**不报错**）。另有一条**已被并发轮修掉**（`final_state.sh` 08:53 → `0x11C`）。见 §5.3（带时间戳） |
+_proj_10g/notes/P7B_WU_P1P2_REGRESSION.md:241:  我复核的是 **09:06 版 `md5 6282843073c3…`**：`NW=${NW:-63}`@38 / `EXPECT_BID=0x00000009`@40 /
+_proj_10g/notes/P7B_WU_P1P2_REGRESSION.md:252:| ① | `_proj_10g/notes/p7b_biz_tcpreg/tcpreg_j6.sh:53`（mtime **02:23**，**未被 08:52 那批改到**） | `echo "### PHASE pre_snapshot … NW=${NW:-61}"` —— **仍是 61** | 这个 61 是**脚本自己的默认值**，**不由所调用的 `p7b_snap.sh` 派生**。取数器升 63 后，J6 的元数据行会写 `NW=61` 而 dump 有 63 行 ⇒ **记录错几何且不报错**。已知用途：J6-ladder 的判读必须带 pace **与几何**（该脚本自己的头注释就要求引用它）⇒ 建议从取数器读几何，或交叉断言 dump 行数 == NW |
+_proj_10g/notes/P7B_WU_P1P2_REGRESSION.md:253:| ①b | `_proj_10g/notes/p7b_wu_w54/j6_fix.sh:58`（mtime **03:16**） | 同款 `NW=${NW:-61}`，**仍是 61** | 同上 |
+_proj_10g/notes/P7B_WU_P1P2_REGRESSION.md:307:| ⑥ | 板侧脚本的几何元数据（§5.3） | `tcpreg_j6.sh:53` / `j6_fix.sh:58` 的 `NW=${NW:-61}` **09:36 仍是 61**（我按纪律未改任何既存脚本；属测量脚本轮的边界）；`final_state.sh` 已被并发轮修到 `0x11C` |
+_proj_10g/notes/P7B_WU_P1P2_SNAP.md:367:`_proj_pcie/p7b_biz/p7b_snap.sh:33-35`（`NW=${NW:-61}` → `63`、`EXPECT_BID` → `9`、`NAME` 数组补 `W61/W62`）、
+_proj_10g/notes/P7B_WU_P1P2_TOOLS.md:42:| `:38` | `NW=${NW:-61}` | `NW=${NW:-63}` |
+_proj_10g/notes/P7B_WU_P1P2_TOOLS.md:44:| `:40` | `EXPECT_BID=${EXPECT_BID:-0x00000008}` | **`0x00000009`** |
+_proj_10g/notes/P7B_WU_P1P2_TOOLS.md:60:| `:57` | `SNAP_WORDS=${SNAP_WORDS:-61}` → **`63`** |
+_proj_10g/notes/P7B_WU_P1P2_TOOLS.md:80:| `:34` | `SW=${SNAP_WORDS:-61}` → **`63`**；`:35-36` 的 `LAST_A`/`UNIMPL_A` 随之（脚本本来就是 SW 派生的） |
+_proj_10g/notes/P7B_WU_P1P2_TOOLS.md:82:| `:95`（原 `:67`） | 假板 BID 从写死 `0x00000008` 改成 `${FAKE_BID:-0x00000009}`（**必须与 `p6e_snap_check.sh` 的 EXPECT_BID 同代**，否则正例的判据 1.2 假 FAIL） |
+_proj_10g/notes/P7B_WU_P1P2_TOOLS.md:283:| 15 | ⚠️ **`_proj_10g/notes/p7b_wu_w54/j6_fix.sh`** 与 **`_proj_10g/notes/p7b_biz_tcpreg/tcpreg_j6.sh`** | **下一轮的 j6-ladder 测量台** | **未改（越界，但必须点名）** | 它们调 `/tmp/p7b_biz/p7b_snap.sh` 并把 `NW=${NW:-61}` 只用于**打印标签** ⇒ 不传 `NW` 时标签写 61、取数器按 63 跑 ⇒ **`TCPREG_ABORT pre_snapshot`**（响亮，因为身份闸会红）。⇒ **下一轮跑 W61/W62 读数前必须先处理**（改 `NW=63`/`EXPECT_BID=0x00000009` 或直接删掉该默认值）。⚠️ 这正是本轮给 `p7b_snap.sh` 加 UNIMPL 断言的用处：**`NW` 覆盖值不对时当场红，而不是打出一窗真数据** |
+_proj_10g/notes/p7b_a3_negctl_20261010/STEP0_selfcheck.txt:9:48:NW=${NW:-67}
+_proj_10g/notes/p7b_a3_negctl_20261010/STEP0_selfcheck.txt:10:49:UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 67 ⇒ 0x12C (65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)
+_proj_10g/notes/p7b_a3_negctl_20261010/STEP0_selfcheck.txt:11:50:EXPECT_BID=${EXPECT_BID:-0x00000019}
+_proj_10g/notes/p7b_a3_negctl_20261010/_tools/p7b_snap.deployed.sh:49:NW=${NW:-70}
+_proj_10g/notes/p7b_a3_negctl_20261010/_tools/p7b_snap.deployed.sh:50:UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 70 ⇒ 0x138 (67 ⇒ 0x12C; 65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)
+_proj_10g/notes/p7b_a3_negctl_20261010/_tools/p7b_snap.deployed.sh:51:EXPECT_BID=${EXPECT_BID:-0x0000001A}
+_proj_10g/notes/p7b_a3_negctl_20261010/burn_arm.sh:21:     BID=0x0000001A; BIE=0x0000001A; NW=70 ;;   # 构建 F: 70 字 (新增 W67/W68/W69 = 三个纯观测仪器)
+_proj_10g/notes/p7b_a3_negctl_20261010/burn_arm.sh:25:     BID=0x00000018; BIE=0x00000018; NW=66 ;;   # 构建 D: 66 字 (W65 = mac_tx_10g.stat_tx_idle; 无 W66)
+_proj_10g/notes/p7b_a7/apply_edges.py:16: ("_proj_10g/notes/p7b_affinity/j6_r6fix.sh", "NW=${NW:-65}", "NW=${NW:-66}", 1),
+_proj_10g/notes/p7b_a7/apply_edges.py:18:  "EXPECT_BID=${EXPECT_BID:-0x00000017}   # 2026-10-10 构建 C (65 字; 原 0x00000011 = r6-fix / 更早 0x0000000A = Stage C)",
+_proj_10g/notes/p7b_a7/apply_edges.py:19:  "EXPECT_BID=${EXPECT_BID:-0x00000018}   # 2026-10-10 构建 D (66 字; 原 0x00000017 = 构建 C / 更早 0x00000011 = r6-fix)", 1),
+_proj_10g/notes/p7b_a7/apply_edges.py:25: ("_proj_10g/notes/p7b_biz_tcpreg/tcpreg_j6.sh", "NW=${NW:-65}", "NW=${NW:-66}", 1),
+_proj_10g/notes/p7b_a7/apply_edges.py:27:  "EXPECT_BID=${EXPECT_BID:-0x00000017}   # 2026-10-10 构建 C (65 字; 原 0x00000009 = P7B-WU 二轮 / Build 2)",
+_proj_10g/notes/p7b_a7/apply_edges.py:28:  "EXPECT_BID=${EXPECT_BID:-0x00000018}   # 2026-10-10 构建 D (66 字; 原 0x00000017 = 构建 C / 0x00000009 = WU 二轮)", 1),
+_proj_10g/notes/p7b_a7/apply_edges.py:57:  "EXPECT_BID=${EXPECT_BID:-0x00000017}       # ⛔ 2026-10-10 构建 C: 原默认 0x0000000A (P7b Stage C 63 字)",
+_proj_10g/notes/p7b_a7/apply_edges.py:58:  "EXPECT_BID=${EXPECT_BID:-0x00000018}       # ⛔ 2026-10-10 构建 D: 原默认 0x00000017 (构建 C 65 字) / 0x0000000A (Stage C)", 1),
+_proj_10g/notes/p7b_a7/apply_edges.py:59: ("_proj_pcie/p6e_snap_check.sh", "SNAP_WORDS=${SNAP_WORDS:-65}", "SNAP_WORDS=${SNAP_WORDS:-66}", 1),
+_proj_10g/notes/p7b_a7/apply_edges.py:67: ("_proj_pcie/p7b_biz/p7b_snap.sh", "NW=${NW:-65}", "NW=${NW:-66}", 1),
+_proj_10g/notes/p7b_a7/apply_edges.py:69:  "EXPECT_BID=${EXPECT_BID:-0x00000017}", "EXPECT_BID=${EXPECT_BID:-0x00000018}", 1),
+_proj_10g/notes/p7b_a7/apply_edges.py:74:  "EXPECT_BID=${EXPECT_BID:-0x00000017}      # 构建 C = 17 (源码 board/wrapper_p4.v 的 BUILD_ID_V)",
+_proj_10g/notes/p7b_a7/apply_edges.py:75:  "EXPECT_BID=${EXPECT_BID:-0x00000018}      # 构建 D = 0x18 (源码 board/wrapper_p4.v 的 BUILD_ID_V; 原 17 = 构建 C / 0x0A = Stage C)", 1),
+_proj_10g/notes/p7b_a7/apply_edges.py:76: ("_proj_pcie/p7b_gate4_accept.sh", "SNAP_WORDS=${SNAP_WORDS:-65}", "SNAP_WORDS=${SNAP_WORDS:-66}", 1),
+_proj_10g/notes/p7b_a7_board_20261010/STEP0_selfcheck.txt:9:46:NW=${NW:-66}
+_proj_10g/notes/p7b_a7_board_20261010/STEP0_selfcheck.txt:10:47:UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 66 ⇒ 0x128 (65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)
+_proj_10g/notes/p7b_a7_board_20261010/STEP0_selfcheck.txt:11:48:EXPECT_BID=${EXPECT_BID:-0x00000018}
+_proj_10g/notes/p7b_a7_board_20261010/_tools/lf_dl.deployed.sh:22:BID_EXPECT=${BID_EXPECT:-0x00000015}
+_proj_10g/notes/p7b_a7_board_20261010/_tools/p7b_snap.deployed.sh:46:NW=${NW:-65}
+_proj_10g/notes/p7b_a7_board_20261010/_tools/p7b_snap.deployed.sh:47:UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 65 ⇒ 0x124 (63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)
+_proj_10g/notes/p7b_a7_board_20261010/_tools/p7b_snap.deployed.sh:48:EXPECT_BID=${EXPECT_BID:-0x00000017}
+_proj_10g/notes/p7b_a7_board_20261010/burn_arm.sh:18:     BID=0x00000018; BIE=0x00000018; NW=66 ;;   # 构建 D: 66 字 (新增 W65 = mac_tx_10g.stat_tx_idle)
+_proj_10g/notes/p7b_a7_board_20261010/burn_arm.sh:22:     BID=0x00000017; BIE=0x00000017; NW=65 ;;   # 构建 C: 65 字 (W63/W64; 有尾字 carry)
+_proj_10g/notes/p7b_a7_board_20261010/run_arm.sh:21:  D) BIE=0x00000018; NW=66; KW='5 20 43 51 15 63 64 65' ;;   # 被测: 66 字 (W65 = tx 侧 S_IDLE 拍数)
+_proj_10g/notes/p7b_a7_board_20261010/run_arm.sh:22:  C) BIE=0x00000017; NW=65; KW='5 20 43 51 15 63 64' ;;      # 对照: 65 字 (无 W65; 有尾字 carry)
+_proj_10g/notes/p7b_affinity/j6_r6fix.sh:44:#     ⑦ **几何门 (硬断言)**: ① `NW=${NW:-70}` (构建 F; 更早构建 E=67 / P7B-A7=66 / P7B-GAP9-TX=65 / 原 63) 且 **export** (原先那个 `NW=${NW:-61}` **没 export**,
+_proj_10g/notes/p7b_affinity/j6_r6fix.sh:75:NW=${NW:-70}
+_proj_10g/notes/p7b_affinity/j6_r6fix.sh:76:EXPECT_BID=${EXPECT_BID:-0x0000001A}   # 2026-10-10 构建 F (70 字; 原 0x00000019 = 构建 E / 0x18 = 构建 D / 0x17 = 构建 C)
+_proj_10g/notes/p7b_bench/j6_stagec_r6fix.sh:40:#     ⑦ **几何门 (硬断言)**: ① `NW=${NW:-63}` 且 **export** (原先那个 `NW=${NW:-61}` **没 export**,
+_proj_10g/notes/p7b_bench/j6_stagec_r6fix.sh:84:NW=${NW:-63}
+_proj_10g/notes/p7b_bench/j6_stagec_r6fix.sh:85:EXPECT_BID=${EXPECT_BID:-0x00000011}   # 2026-10-07 Stage C: 原值 0x00000009 (Build 2)
+_proj_10g/notes/p7b_bench/old_j6_stagec.sh:40:#     ⑦ **几何门 (硬断言)**: ① `NW=${NW:-63}` 且 **export** (原先那个 `NW=${NW:-61}` **没 export**,
+_proj_10g/notes/p7b_bench/old_j6_stagec.sh:66:NW=${NW:-63}
+_proj_10g/notes/p7b_bench/old_j6_stagec.sh:67:EXPECT_BID=${EXPECT_BID:-0x0000000A}   # 2026-10-07 Stage C: 原值 0x00000009 (Build 2)
+_proj_10g/notes/p7b_bench/old_j6_stagec_r6fix.sh:40:#     ⑦ **几何门 (硬断言)**: ① `NW=${NW:-63}` 且 **export** (原先那个 `NW=${NW:-61}` **没 export**,
+_proj_10g/notes/p7b_bench/old_j6_stagec_r6fix.sh:66:NW=${NW:-63}
+_proj_10g/notes/p7b_bench/old_j6_stagec_r6fix.sh:67:EXPECT_BID=${EXPECT_BID:-0x00000011}   # 2026-10-07 Stage C: 原值 0x00000009 (Build 2)
+_proj_10g/notes/p7b_bench/old_stc_dl.sh:17:BID_EXPECT=${BID_EXPECT:-0x0000000A}
+_proj_10g/notes/p7b_bench/old_tcpreg_j6.sh:34:#     ⑦ **几何门 (硬断言)**: ① `NW=${NW:-63}` 且 **export** (原先那个 `NW=${NW:-61}` **没 export**,
+_proj_10g/notes/p7b_bench/old_tcpreg_j6.sh:48:NW=${NW:-63}
+_proj_10g/notes/p7b_bench/old_tcpreg_j6.sh:49:EXPECT_BID=${EXPECT_BID:-0x00000009}
+_proj_10g/notes/p7b_biz_tcpreg/tcpreg_j6.sh:38:#     ⑦ **几何门 (硬断言)**: ① `NW=${NW:-70}` (构建 F; 更早构建 E=67 / P7B-A7=66 / P7B-GAP9-TX=65 / 原 63) 且 **export** (原先那个 `NW=${NW:-61}` **没 export**,
+_proj_10g/notes/p7b_biz_tcpreg/tcpreg_j6.sh:69:NW=${NW:-70}
+_proj_10g/notes/p7b_biz_tcpreg/tcpreg_j6.sh:70:EXPECT_BID=${EXPECT_BID:-0x0000001A}   # 2026-10-10 构建 F (70 字; 原 0x00000019 = 构建 E / 0x18 = 构建 D / 0x09 = WU 二轮)
+_proj_10g/notes/p7b_biz_win/apply_b.py:145: ("SNAP_WORDS=${SNAP_WORDS:-57}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 57 ⇒ 0x104 (51 ⇒ 0xEC)",
+_proj_10g/notes/p7b_biz_win/apply_b.py:146:  "SNAP_WORDS=${SNAP_WORDS:-59}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 59 ⇒ 0x10C (51 ⇒ 0xEC)"),
+_proj_10g/notes/p7b_biz_win/apply_b.py:160: ("SNAP_WORDS=${SNAP_WORDS:-57}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 57 ⇒ 0x104 (51 ⇒ 0xEC)",
+_proj_10g/notes/p7b_biz_win/apply_b.py:161:  "SNAP_WORDS=${SNAP_WORDS:-59}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 59 ⇒ 0x10C (51 ⇒ 0xEC)"),
+_proj_10g/notes/p7b_biz_win/apply_b.py:178: ("SW=${SNAP_WORDS:-57}\nLAST_A=$(printf '0X%X' $(( 0x20 + 4*(SW-1) )))   # 末字地址  (57 ⇒ 0X100)",
+_proj_10g/notes/p7b_biz_win/apply_b.py:179:  "SW=${SNAP_WORDS:-59}\nLAST_A=$(printf '0X%X' $(( 0x20 + 4*(SW-1) )))   # 末字地址  (59 ⇒ 0X108)"),
+_proj_10g/notes/p7b_biz_win/apply_b.py:195: ("NW=${NW:-57}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 57 ⇒ 0x104 (51 ⇒ 0xEC)",
+_proj_10g/notes/p7b_biz_win/apply_b.py:196:  "NW=${NW:-59}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 59 ⇒ 0x10C (51 ⇒ 0xEC)"),
+_proj_10g/notes/p7b_biz_win/apply_c.py:148: ("SNAP_WORDS=${SNAP_WORDS:-59}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 59 ⇒ 0x10C (51 ⇒ 0xEC)",
+_proj_10g/notes/p7b_biz_win/apply_c.py:149:  "SNAP_WORDS=${SNAP_WORDS:-61}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 61 ⇒ 0x114 (51 ⇒ 0xEC)"),
+_proj_10g/notes/p7b_biz_win/apply_c.py:163: ("SNAP_WORDS=${SNAP_WORDS:-59}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 59 ⇒ 0x10C (51 ⇒ 0xEC)",
+_proj_10g/notes/p7b_biz_win/apply_c.py:164:  "SNAP_WORDS=${SNAP_WORDS:-61}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 61 ⇒ 0x114 (51 ⇒ 0xEC)"),
+_proj_10g/notes/p7b_biz_win/apply_c.py:181: ("SW=${SNAP_WORDS:-59}\nLAST_A=$(printf '0X%X' $(( 0x20 + 4*(SW-1) )))   # 末字地址  (59 ⇒ 0X108)",
+_proj_10g/notes/p7b_biz_win/apply_c.py:182:  "SW=${SNAP_WORDS:-61}\nLAST_A=$(printf '0X%X' $(( 0x20 + 4*(SW-1) )))   # 末字地址  (61 ⇒ 0X110)"),
+_proj_10g/notes/p7b_biz_win/apply_c.py:198: ("NW=${NW:-59}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 59 ⇒ 0x10C (51 ⇒ 0xEC)",
+_proj_10g/notes/p7b_biz_win/apply_c.py:199:  "NW=${NW:-61}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 61 ⇒ 0x114 (51 ⇒ 0xEC)"),
+_proj_10g/notes/p7b_biz_win/apply_script_updates.py:64: ("SNAP_WORDS=${SNAP_WORDS:-55}\n"
+_proj_10g/notes/p7b_biz_win/apply_script_updates.py:65:  "UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 55 ⇒ 0xFC (51 ⇒ 0xEC)\n"
+_proj_10g/notes/p7b_biz_win/apply_script_updates.py:70:  "SNAP_WORDS=${SNAP_WORDS:-57}\n"
+_proj_10g/notes/p7b_biz_win/apply_script_updates.py:71:  "UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 57 ⇒ 0x104 (51 ⇒ 0xEC)\n"
+_proj_10g/notes/p7b_biz_win/apply_script_updates.py:95: ("SNAP_WORDS=${SNAP_WORDS:-55}\n"
+_proj_10g/notes/p7b_biz_win/apply_script_updates.py:96:  "UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 55 ⇒ 0xFC (51 ⇒ 0xEC)",
+_proj_10g/notes/p7b_biz_win/apply_script_updates.py:97:  "SNAP_WORDS=${SNAP_WORDS:-57}\n"
+_proj_10g/notes/p7b_biz_win/apply_script_updates.py:98:  "UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 57 ⇒ 0x104 (51 ⇒ 0xEC)"),
+_proj_10g/notes/p7b_biz_win/apply_script_updates.py:115: ("SW=${SNAP_WORDS:-55}\nLAST_A=$(printf '0X%X' $(( 0x20 + 4*(SW-1) )))   # 末字地址  (55 ⇒ 0XF8)",
+_proj_10g/notes/p7b_biz_win/apply_script_updates.py:116:  "SW=${SNAP_WORDS:-57}\nLAST_A=$(printf '0X%X' $(( 0x20 + 4*(SW-1) )))   # 末字地址  (57 ⇒ 0X100)"),
+_proj_10g/notes/p7b_biz_win/apply_script_updates.py:134:  "NW=${NW:-55}\n"
+_proj_10g/notes/p7b_biz_win/apply_script_updates.py:135:  "UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 55 ⇒ 0xFC (51 ⇒ 0xEC)",
+_proj_10g/notes/p7b_biz_win/apply_script_updates.py:139:  "NW=${NW:-57}\n"
+_proj_10g/notes/p7b_biz_win/apply_script_updates.py:140:  "UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 57 ⇒ 0x104 (51 ⇒ 0xEC)"),
+_proj_10g/notes/p7b_board_stagea/j6_stagea.sh:36:#     ⑦ **几何门 (硬断言)**: ① `NW=${NW:-63}` 且 **export** (原先那个 `NW=${NW:-61}` **没 export**,
+_proj_10g/notes/p7b_board_stagea/j6_stagea.sh:62:NW=${NW:-63}
+_proj_10g/notes/p7b_board_stagea/j6_stagea.sh:63:EXPECT_BID=${EXPECT_BID:-0x00000009}
+_proj_10g/notes/p7b_board_stagec/j6_stagec.sh:40:#     ⑦ **几何门 (硬断言)**: ① `NW=${NW:-63}` 且 **export** (原先那个 `NW=${NW:-61}` **没 export**,
+_proj_10g/notes/p7b_board_stagec/j6_stagec.sh:84:NW=${NW:-63}
+_proj_10g/notes/p7b_board_stagec/j6_stagec.sh:85:EXPECT_BID=${EXPECT_BID:-0x0000000A}   # 2026-10-07 Stage C: 原值 0x00000009 (Build 2)
+_proj_10g/notes/p7b_board_stagec/mk_j6_stagec.py:35:        "EXPECT_BID=${EXPECT_BID:-0x00000009}",
+_proj_10g/notes/p7b_board_stagec/mk_j6_stagec.py:36:        "EXPECT_BID=${EXPECT_BID:-0x0000000A}   # 2026-10-07 Stage C: 原值 0x00000009 (Build 2)",
+_proj_10g/notes/p7b_board_stagec/stc_dl.sh:31:BID_EXPECT=${BID_EXPECT:-0x0000000A}
+_proj_10g/notes/p7b_buildE/apply_readside.py:33:    E(f, "NW=${NW:-66}", "NW=${NW:-67}", 1)
+_proj_10g/notes/p7b_buildE/apply_readside.py:40:  "EXPECT_BID=${EXPECT_BID:-0x00000018}   # 2026-10-10 构建 D (66 字; 原 0x00000017 = 构建 C / 更早 0x00000011 = r6-fix)",
+_proj_10g/notes/p7b_buildE/apply_readside.py:41:  "EXPECT_BID=${EXPECT_BID:-0x00000019}   # 2026-10-10 构建 E (67 字; 原 0x00000018 = 构建 D / 0x00000017 = 构建 C / 0x11 = r6-fix)", 1)
+_proj_10g/notes/p7b_buildE/apply_readside.py:43:  "EXPECT_BID=${EXPECT_BID:-0x00000018}   # 2026-10-10 构建 D (66 字; 原 0x00000017 = 构建 C / 0x00000009 = WU 二轮)",
+_proj_10g/notes/p7b_buildE/apply_readside.py:44:  "EXPECT_BID=${EXPECT_BID:-0x00000019}   # 2026-10-10 构建 E (67 字; 原 0x00000018 = 构建 D / 0x17 = 构建 C / 0x09 = WU 二轮)", 1)
+_proj_10g/notes/p7b_buildE/apply_readside.py:50:  "NW=${NW:-66}",
+_proj_10g/notes/p7b_buildE/apply_readside.py:51:  "NW=${NW:-67}", 1)
+_proj_10g/notes/p7b_buildE/apply_readside.py:53:  "UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 66 ⇒ 0x128 (65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)",
+_proj_10g/notes/p7b_buildE/apply_readside.py:54:  "UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 67 ⇒ 0x12C (65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)", 1)
+_proj_10g/notes/p7b_buildE/apply_readside.py:56:  "EXPECT_BID=${EXPECT_BID:-0x00000018}",
+_proj_10g/notes/p7b_buildE/apply_readside.py:57:  "EXPECT_BID=${EXPECT_BID:-0x00000019}", 1)
+_proj_10g/notes/p7b_buildE/apply_readside.py:75:  "EXPECT_BID=${EXPECT_BID:-0x00000018}       # ⛔ 2026-10-10 构建 D: 原默认 0x00000017 (构建 C 65 字) / 0x0000000A (Stage C)",
+_proj_10g/notes/p7b_buildE/apply_readside.py:76:  "EXPECT_BID=${EXPECT_BID:-0x00000019}       # ⛔ 2026-10-10 构建 E: 原默认 0x00000018 (构建 D 66 字) / 0x17 (构建 C) / 0x0A (Stage C)", 1)
+_proj_10g/notes/p7b_buildE/apply_readside.py:78:  "SNAP_WORDS=${SNAP_WORDS:-66}",
+_proj_10g/notes/p7b_buildE/apply_readside.py:79:  "SNAP_WORDS=${SNAP_WORDS:-67}", 1)
+_proj_10g/notes/p7b_buildE/apply_readside.py:81:  "UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 66 ⇒ 0x128 (65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)",
+_proj_10g/notes/p7b_buildE/apply_readside.py:82:  "UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 67 ⇒ 0x12C (65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)", 1)
+_proj_10g/notes/p7b_buildE/apply_readside.py:85:  "EXPECT_BID=${EXPECT_BID:-0x00000018}      # 构建 D = 0x18 (源码 board/wrapper_p4.v 的 BUILD_ID_V; 原 17 = 构建 C / 0x0A = Stage C)",
+_proj_10g/notes/p7b_buildE/apply_readside.py:86:  "EXPECT_BID=${EXPECT_BID:-0x00000019}      # 构建 E = 0x19 (源码 board/wrapper_p4.v 的 BUILD_ID_V; 原 0x18 = 构建 D / 17 = 构建 C)", 1)
+_proj_10g/notes/p7b_buildE/apply_readside.py:88:  "SNAP_WORDS=${SNAP_WORDS:-66}",
+_proj_10g/notes/p7b_buildE/apply_readside.py:89:  "SNAP_WORDS=${SNAP_WORDS:-67}", 1)
+_proj_10g/notes/p7b_buildE/apply_readside.py:100:  "  0X04) V=\\${FAKE_BID:-0x00000018};;   # 构建 D = 0x18 (⛔ 原 0x00000017 = 构建 C / 0x0000000A = Stage C);",
+_proj_10g/notes/p7b_buildE/apply_readside.py:101:  "  0X04) V=\\${FAKE_BID:-0x00000019};;   # 构建 E = 0x19 (⛔ 原 0x18 = 构建 D / 0x17 = 构建 C / 0x0A = Stage C);", 1)
+_proj_10g/notes/p7b_buildE/apply_readside.py:111:  "SW=${SNAP_WORDS:-66}",
+_proj_10g/notes/p7b_buildE/apply_readside.py:112:  "SW=${SNAP_WORDS:-67}", 1)
+_proj_10g/notes/p7b_buildE/apply_readside.py:143:  "  0X04) V=\\${FAKE_BID:-0x00000018};;",
+_proj_10g/notes/p7b_buildE/apply_readside.py:144:  "  0X04) V=\\${FAKE_BID:-0x00000019};;", 1)
+_proj_10g/notes/p7b_buildE_board_20261010/STEP0_selfcheck.txt:9:48:NW=${NW:-67}
+_proj_10g/notes/p7b_buildE_board_20261010/STEP0_selfcheck.txt:10:49:UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 67 ⇒ 0x12C (65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)
+_proj_10g/notes/p7b_buildE_board_20261010/STEP0_selfcheck.txt:11:50:EXPECT_BID=${EXPECT_BID:-0x00000019}
+_proj_10g/notes/p7b_buildE_board_20261010/_tools/lf_dl.deployed.sh:22:BID_EXPECT=${BID_EXPECT:-0x00000015}
+_proj_10g/notes/p7b_buildE_board_20261010/_tools/p7b_snap.deployed.sh:48:NW=${NW:-67}
+_proj_10g/notes/p7b_buildE_board_20261010/_tools/p7b_snap.deployed.sh:49:UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 67 ⇒ 0x12C (65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)
+_proj_10g/notes/p7b_buildE_board_20261010/_tools/p7b_snap.deployed.sh:50:EXPECT_BID=${EXPECT_BID:-0x00000019}
+_proj_10g/notes/p7b_buildE_board_20261010/burn_arm.sh:18:     BID=0x00000019; BIE=0x00000019; NW=67 ;;   # 构建 E: 67 字 (新增 W66 = tcp_tx_frame.stat_winstall)
+_proj_10g/notes/p7b_buildE_board_20261010/burn_arm.sh:22:     BID=0x00000018; BIE=0x00000018; NW=66 ;;   # 构建 D: 66 字 (W65 = mac_tx_10g.stat_tx_idle; 无 W66)
+_proj_10g/notes/p7b_buildE_board_20261010/run_arm.sh:21:  E) BIE=0x00000019; NW=67; KW='5 20 43 51 15 63 64 65 66' ;;   # 被测: 67 字 (W66 = 帧器侧窗口门停顿拍数)
+_proj_10g/notes/p7b_buildE_board_20261010/run_arm.sh:22:  D) BIE=0x00000018; NW=66; KW='5 20 43 51 15 63 64 65' ;;      # 对照: 66 字 (无 W66)
+_proj_10g/notes/p7b_buildF/apply_readside.py:35:    # ⚠️ 锚点带尾换行: 同文件 :44/:38 的**注释**里也有 `NW=${NW:-67}`（后跟反引号）⇒
+_proj_10g/notes/p7b_buildF/apply_readside.py:37:    E(f, "NW=${NW:-67}\n", "NW=${NW:-70}\n", 1)
+_proj_10g/notes/p7b_buildF/apply_readside.py:44:  "EXPECT_BID=${EXPECT_BID:-0x00000019}   # 2026-10-10 构建 E (67 字; 原 0x00000018 = 构建 D / 0x00000017 = 构建 C / 0x11 = r6-fix)",
+_proj_10g/notes/p7b_buildF/apply_readside.py:45:  "EXPECT_BID=${EXPECT_BID:-0x0000001A}   # 2026-10-10 构建 F (70 字; 原 0x00000019 = 构建 E / 0x18 = 构建 D / 0x17 = 构建 C)", 1)
+_proj_10g/notes/p7b_buildF/apply_readside.py:47:  "EXPECT_BID=${EXPECT_BID:-0x00000019}   # 2026-10-10 构建 E (67 字; 原 0x00000018 = 构建 D / 0x17 = 构建 C / 0x09 = WU 二轮)",
+_proj_10g/notes/p7b_buildF/apply_readside.py:48:  "EXPECT_BID=${EXPECT_BID:-0x0000001A}   # 2026-10-10 构建 F (70 字; 原 0x00000019 = 构建 E / 0x18 = 构建 D / 0x09 = WU 二轮)", 1)
+_proj_10g/notes/p7b_buildF/apply_readside.py:53:E("_proj_pcie/p7b_biz/p7b_snap.sh", "NW=${NW:-67}", "NW=${NW:-70}", 1)
+_proj_10g/notes/p7b_buildF/apply_readside.py:55:  "UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 67 ⇒ 0x12C (65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)",
+_proj_10g/notes/p7b_buildF/apply_readside.py:56:  "UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 70 ⇒ 0x138 (67 ⇒ 0x12C; 65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)", 1)
+_proj_10g/notes/p7b_buildF/apply_readside.py:58:  "EXPECT_BID=${EXPECT_BID:-0x00000019}",
+_proj_10g/notes/p7b_buildF/apply_readside.py:59:  "EXPECT_BID=${EXPECT_BID:-0x0000001A}", 1)
+_proj_10g/notes/p7b_buildF/apply_readside.py:83:  "EXPECT_BID=${EXPECT_BID:-0x00000019}       # ⛔ 2026-10-10 构建 E: 原默认 0x00000018 (构建 D 66 字) / 0x17 (构建 C) / 0x0A (Stage C)",
+_proj_10g/notes/p7b_buildF/apply_readside.py:84:  "EXPECT_BID=${EXPECT_BID:-0x0000001A}       # ⛔ 2026-10-10 构建 F: 原默认 0x00000019 (构建 E 67 字) / 0x18 (构建 D) / 0x0A (Stage C)", 1)
+_proj_10g/notes/p7b_buildF/apply_readside.py:86:  "SNAP_WORDS=${SNAP_WORDS:-67}",
+_proj_10g/notes/p7b_buildF/apply_readside.py:87:  "SNAP_WORDS=${SNAP_WORDS:-70}", 1)
+_proj_10g/notes/p7b_buildF/apply_readside.py:89:  "UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 67 ⇒ 0x12C (65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)",
+_proj_10g/notes/p7b_buildF/apply_readside.py:90:  "UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 70 ⇒ 0x138 (67 ⇒ 0x12C; 65 ⇒ 0x124; 63 ⇒ 0x11C; 51 ⇒ 0xEC)", 1)
+_proj_10g/notes/p7b_buildF/apply_readside.py:93:  "EXPECT_BID=${EXPECT_BID:-0x00000019}      # 构建 E = 0x19 (源码 board/wrapper_p4.v 的 BUILD_ID_V; 原 0x18 = 构建 D / 17 = 构建 C)",
+_proj_10g/notes/p7b_buildF/apply_readside.py:94:  "EXPECT_BID=${EXPECT_BID:-0x0000001A}      # 构建 F = 0x1A (源码 board/wrapper_p4.v 的 BUILD_ID_V; 原 0x19 = 构建 E / 0x18 = 构建 D)", 1)
+_proj_10g/notes/p7b_buildF/apply_readside.py:96:  "SNAP_WORDS=${SNAP_WORDS:-67}",
+_proj_10g/notes/p7b_buildF/apply_readside.py:97:  "SNAP_WORDS=${SNAP_WORDS:-70}", 1)
+_proj_10g/notes/p7b_buildF/apply_readside.py:109:  "  0X04) V=\\${FAKE_BID:-0x00000019};;   # 构建 E = 0x19 (⛔ 原 0x18 = 构建 D / 0x17 = 构建 C / 0x0A = Stage C);",
+_proj_10g/notes/p7b_buildF/apply_readside.py:110:  "  0X04) V=\\${FAKE_BID:-0x0000001A};;   # 构建 F = 0x1A (⛔ 原 0x19 = 构建 E / 0x18 = 构建 D / 0x0A = Stage C);", 1)
+_proj_10g/notes/p7b_buildF/apply_readside.py:122:  "SW=${SNAP_WORDS:-67}",
+_proj_10g/notes/p7b_buildF/apply_readside.py:123:  "SW=${SNAP_WORDS:-70}", 1)
+_proj_10g/notes/p7b_buildF/apply_readside.py:159:  "  0X04) V=\\${FAKE_BID:-0x00000019};;",
+_proj_10g/notes/p7b_buildF/apply_readside.py:160:  "  0X04) V=\\${FAKE_BID:-0x0000001A};;", 1)
+_proj_10g/notes/p7b_buildF/apply_readside.py:220:  "EXPECT_BID=${EXPECT_BID:-0x00000017}\n",
+_proj_10g/notes/p7b_buildF/apply_readside.py:221:  "EXPECT_BID=${EXPECT_BID:-0x0000001A}   # ⛔ 2026-10-10 构建 F (70 字); 原 0x17 = 构建 C\n", 1)
+_proj_10g/notes/p7b_buildF/apply_readside.py:296:  "NW_FIX = 67                # 快照字数 (W0..W66)\n"
+_proj_10g/notes/p7b_buildF/apply_readside.py:297:  "BID_FIX = 0x00000019       # 位流身份 (P7b 构建 E) —— ⛔ 2026-10-10: 原值 0x0000000A (P7b Stage C)",
+_proj_10g/notes/p7b_buildF/apply_readside.py:301:  "NW_FIX = 70                # 快照字数 (W0..W69)\n"
+_proj_10g/notes/p7b_buildF/apply_readside.py:302:  "BID_FIX = 0x0000001A       # 位流身份 (P7b 构建 F) —— ⛔ 2026-10-10: 原值 0x00000019 (构建 E)", 1)
+_proj_10g/notes/p7b_buildF/apply_readside.py:311:  "     BID=0x00000019; BIE=0x00000019; NW=67 ;;   # 构建 E: 67 字 (新增 W66 = tcp_tx_frame.stat_winstall)",
+_proj_10g/notes/p7b_buildF/apply_readside.py:312:  "     BID=0x0000001A; BIE=0x0000001A; NW=70 ;;   # 构建 F: 70 字 (新增 W67/W68/W69 = 三个纯观测仪器)", 1)
+_proj_10g/notes/p7b_buildF_board_20261010/STEP0_selfcheck.txt:12:49:NW=${NW:-70}
+_proj_10g/notes/p7b_buildF_board_20261010/STEP0_selfcheck.txt:13:50:UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 70 ⇒ 0x138 (67 ⇒ 0x12C; 65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)
+_proj_10g/notes/p7b_buildF_board_20261010/STEP0_selfcheck.txt:14:51:EXPECT_BID=${EXPECT_BID:-0x0000001A}
+_proj_10g/notes/p7b_buildF_board_20261010/_tools/p7b_snap.deployed.sh:49:NW=${NW:-70}
+_proj_10g/notes/p7b_buildF_board_20261010/_tools/p7b_snap.deployed.sh:50:UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 70 ⇒ 0x138 (67 ⇒ 0x12C; 65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)
+_proj_10g/notes/p7b_buildF_board_20261010/_tools/p7b_snap.deployed.sh:51:EXPECT_BID=${EXPECT_BID:-0x0000001A}
+_proj_10g/notes/p7b_buildF_board_20261010/burn_arm.sh:20:     BIE=0x0000001A; NW=70 ;;   # 构建 F: 70 字 (W67/W68/W69 = 三个纯观测仪器)
+_proj_10g/notes/p7b_buildF_board_20261010/run_arm.sh:22:BIE=0x0000001A; NW=70
+_proj_10g/notes/p7b_buildF_review_20261010/FINDINGS.md:120:| `_proj_pcie/p7b_gate4_accept.sh:131/137` | `EXPECT_BID=${EXPECT_BID:-0x0000001A}` / `SNAP_WORDS=${SNAP_WORDS:-70}` ✓ |
+_proj_10g/notes/p7b_buildF_review_20261010/FINDINGS.md:121:| `_proj_pcie/p7b_biz/p7b_snap.sh:49/51` | `NW=${NW:-70}` / `EXPECT_BID=${EXPECT_BID:-0x0000001A}` ✓ |
+_proj_10g/notes/p7b_buildF_review_20261010/FINDINGS.md:137:| `…/p7b_buildE_board_20261010/run_arm.sh:21` 等 | `NW=67` / `BIE=0x00000019` | 上一轮臂脚本（旧位流读法）✓ 可留 |
+_proj_10g/notes/p7b_buildG_review_20261010/FINDINGS.md:189:  `p7b_longflow_board/lf_dl.sh:28 BID_EXPECT=${BID_EXPECT:-0x00000015}`（**对端台架本体**，每轮部署 `/tmp/p7b_biz/`）·
+_proj_10g/notes/p7b_buildG_review_20261010/FINDINGS.md:190:  `p7b_window_side_20261010/wrun.sh:19 BIE=0x00000019; NW=67`（**上一轮板级驱动，硬赋值**）·
+_proj_10g/notes/p7b_buildG_review_20261010/FINDINGS.md:196:  `up_ceil.sh:24,25`（`0x16` / `NW=${NW:-63}`）与 `udp_longrun.sh:39,40`（`0x15` / `63`）未被 E 类覆盖 ·
+_proj_10g/notes/p7b_buildG_review_20261010/FINDINGS.md:219:`gen_inputs.py :42,:43,:46-67`（现 `NW_FIX=70 / BID_FIX=0x0000001A` ✓）。
+_proj_10g/notes/p7b_gap9_tx_board_20261010/burn_arm.sh:19:     BID=0x00000016; BIE=0x00000016; NW=63 ;;   # 长流档: 63 字
+_proj_10g/notes/p7b_gap9_tx_board_20261010/burn_arm.sh:23:     BID=0x00000017; BIE=0x00000017; NW=65 ;;   # 构建 C: 65 字 (W63/W64)
+_proj_10g/notes/p7b_gap9_tx_board_20261010/run_arm.sh:21:  A) BIE=0x00000016; NW=63; KW='5 20 43 51 15' ;;              # 负对照 (无尾字 carry)
+_proj_10g/notes/p7b_gap9_tx_board_20261010/run_arm.sh:22:  C) BIE=0x00000017; NW=65; KW='5 20 43 51 15 63 64' ;;        # 被测 (TX_TAILCARRY=1)
+_proj_10g/notes/p7b_gate4_3/final_state.sh:29:EXPECT_BID=${EXPECT_BID:-0x0000001A}   # ⛔ 2026-10-10 构建 F (70 字); 原 0x17 = 构建 C
+_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py:42:NW_FIX = 70                # 快照字数 (W0..W69)
+_proj_10g/notes/p7b_gate4_criteria/gen_inputs.py:43:BID_FIX = 0x0000001A       # 位流身份 (P7b 构建 F) —— ⛔ 2026-10-10: 原值 0x00000019 (构建 E)
+_proj_10g/notes/p7b_gate4_tools/fix2/bin/reg_rw:17:  0X04) V=${FAKE_BID:-0x0000001A};;   # 构建 F = 0x1A (⛔ 原 0x19 = 构建 E / 0x18 = 构建 D / 0x0A = Stage C);
+_proj_10g/notes/p7b_gate4_tools/fix2/new_fake.sh:60:EXPECT_BID=${EXPECT_BID:-0x0000001A}       # ⛔ 2026-10-10 构建 F: 原默认 0x00000019 (构建 E 67 字) / 0x18 (构建 D) / 0x0A (Stage C)
+_proj_10g/notes/p7b_gate4_tools/fix2/new_fake.sh:71:SNAP_WORDS=${SNAP_WORDS:-70}
+_proj_10g/notes/p7b_gate4_tools/fix2/new_fake.sh:72:UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 70 ⇒ 0x138 (67 ⇒ 0x12C; 65 ⇒ 0x124; 63 ⇒ 0x11C; 51 ⇒ 0xEC)
+_proj_10g/notes/p7b_gate4_tools/fix2/old/p6e_snap_check.sh.pre_fix2:34:EXPECT_BID=${EXPECT_BID:-0x00000007}
+_proj_10g/notes/p7b_gate4_tools/fix2/old/p6e_snap_check.sh.pre_fix2:40:SNAP_WORDS=${SNAP_WORDS:-51}
+_proj_10g/notes/p7b_gate4_tools/fix2/old/p6e_snap_check.sh.pre_fix2:41:UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 51 ⇒ 0xEC
+_proj_10g/notes/p7b_gate4_tools/fix2/old/p7b_gate4_accept.sh.pre_fix2:49:EXPECT_BID=${EXPECT_BID:-0x00000007}      # P7b = 7 (源码 board/wrapper_p4.v:3701 的 BUILD_ID_V)
+_proj_10g/notes/p7b_gate4_tools/fix2/old/p7b_gate4_accept.sh.pre_fix2:50:SNAP_WORDS=${SNAP_WORDS:-51}
+_proj_10g/notes/p7b_gate4_tools/fix2/old/p7b_gate4_accept.sh.pre_fix2:51:UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 51 ⇒ 0xEC
+_proj_10g/notes/p7b_gate4_tools/fix2/old_fake.sh:34:EXPECT_BID=${EXPECT_BID:-0x00000007}
+_proj_10g/notes/p7b_gate4_tools/fix2/old_fake.sh:40:SNAP_WORDS=${SNAP_WORDS:-51}
+_proj_10g/notes/p7b_gate4_tools/fix2/old_fake.sh:41:UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 51 ⇒ 0xEC
+_proj_10g/notes/p7b_gate4_tools/selftest/bin/reg_rw:19:  0X04) V=${FAKE_BID:-0x0000001A};;
+_proj_10g/notes/p7b_gate4_tools/selftest/p6e_snap_check_fake.sh:60:EXPECT_BID=${EXPECT_BID:-0x0000001A}       # ⛔ 2026-10-10 构建 F: 原默认 0x00000019 (构建 E 67 字) / 0x18 (构建 D) / 0x0A (Stage C)
+_proj_10g/notes/p7b_gate4_tools/selftest/p6e_snap_check_fake.sh:71:SNAP_WORDS=${SNAP_WORDS:-70}
+_proj_10g/notes/p7b_gate4_tools/selftest/p6e_snap_check_fake.sh:72:UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 70 ⇒ 0x138 (67 ⇒ 0x12C; 65 ⇒ 0x124; 63 ⇒ 0x11C; 51 ⇒ 0xEC)
+_proj_10g/notes/p7b_longflow_board/lf_dl.sh:28:BID_EXPECT=${BID_EXPECT:-0x00000015}
+_proj_10g/notes/p7b_toolfix_20261010/INDEX.txt:18:  负控制  : 副本 gen_inputs_negctl_tmp.py (NW_FIX=68) ⇒ RC=3 + 0 文件, 已删除
+_proj_10g/notes/p7b_udp_longrun_20261009/udp_longrun.sh:39:export EXPECT_BID=${EXPECT_BID:-0x00000015}   # S3 长流刀 (BID 0x15)
+_proj_10g/notes/p7b_udp_longrun_20261009/udp_longrun.sh:40:export NW=${NW:-63}
+_proj_10g/notes/p7b_uplink_ceil_20261010/up_ceil.sh:24:export EXPECT_BID=${EXPECT_BID:-0x00000016}
+_proj_10g/notes/p7b_uplink_ceil_20261010/up_ceil.sh:25:export NW=${NW:-63}
+_proj_10g/notes/p7b_window_side_20261010/wrun.sh:19:BIE=0x00000019; NW=67
+_proj_10g/notes/p7b_wu_harness_fix/apply_b.py:125: ("SNAP_WORDS=${SNAP_WORDS:-57}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 57 ⇒ 0x104 (51 ⇒ 0xEC)",
+_proj_10g/notes/p7b_wu_harness_fix/apply_b.py:126:  "SNAP_WORDS=${SNAP_WORDS:-59}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 59 ⇒ 0x10C (51 ⇒ 0xEC)"),
+_proj_10g/notes/p7b_wu_harness_fix/apply_b.py:140: ("SNAP_WORDS=${SNAP_WORDS:-57}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 57 ⇒ 0x104 (51 ⇒ 0xEC)",
+_proj_10g/notes/p7b_wu_harness_fix/apply_b.py:141:  "SNAP_WORDS=${SNAP_WORDS:-59}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 59 ⇒ 0x10C (51 ⇒ 0xEC)"),
+_proj_10g/notes/p7b_wu_harness_fix/apply_b.py:158: ("SW=${SNAP_WORDS:-57}\nLAST_A=$(printf '0X%X' $(( 0x20 + 4*(SW-1) )))   # 末字地址  (57 ⇒ 0X100)",
+_proj_10g/notes/p7b_wu_harness_fix/apply_b.py:159:  "SW=${SNAP_WORDS:-59}\nLAST_A=$(printf '0X%X' $(( 0x20 + 4*(SW-1) )))   # 末字地址  (59 ⇒ 0X108)"),
+_proj_10g/notes/p7b_wu_harness_fix/apply_b.py:175: ("NW=${NW:-57}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 57 ⇒ 0x104 (51 ⇒ 0xEC)",
+_proj_10g/notes/p7b_wu_harness_fix/apply_b.py:176:  "NW=${NW:-59}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 59 ⇒ 0x10C (51 ⇒ 0xEC)"),
+_proj_10g/notes/p7b_wu_harness_fix/apply_c.py:123: ("SNAP_WORDS=${SNAP_WORDS:-59}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 59 ⇒ 0x10C (51 ⇒ 0xEC)",
+_proj_10g/notes/p7b_wu_harness_fix/apply_c.py:124:  "SNAP_WORDS=${SNAP_WORDS:-61}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 61 ⇒ 0x114 (51 ⇒ 0xEC)"),
+_proj_10g/notes/p7b_wu_harness_fix/apply_c.py:138: ("SNAP_WORDS=${SNAP_WORDS:-59}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 59 ⇒ 0x10C (51 ⇒ 0xEC)",
+_proj_10g/notes/p7b_wu_harness_fix/apply_c.py:139:  "SNAP_WORDS=${SNAP_WORDS:-61}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 61 ⇒ 0x114 (51 ⇒ 0xEC)"),
+_proj_10g/notes/p7b_wu_harness_fix/apply_c.py:156: ("SW=${SNAP_WORDS:-59}\nLAST_A=$(printf '0X%X' $(( 0x20 + 4*(SW-1) )))   # 末字地址  (59 ⇒ 0X108)",
+_proj_10g/notes/p7b_wu_harness_fix/apply_c.py:157:  "SW=${SNAP_WORDS:-61}\nLAST_A=$(printf '0X%X' $(( 0x20 + 4*(SW-1) )))   # 末字地址  (61 ⇒ 0X110)"),
+_proj_10g/notes/p7b_wu_harness_fix/apply_c.py:173: ("NW=${NW:-59}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 59 ⇒ 0x10C (51 ⇒ 0xEC)",
+_proj_10g/notes/p7b_wu_harness_fix/apply_c.py:174:  "NW=${NW:-61}\nUNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 61 ⇒ 0x114 (51 ⇒ 0xEC)"),
+_proj_10g/notes/p7b_wu_harness_fix/apply_script_updates.py:45: ("SNAP_WORDS=${SNAP_WORDS:-55}\n"
+_proj_10g/notes/p7b_wu_harness_fix/apply_script_updates.py:46:  "UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 55 ⇒ 0xFC (51 ⇒ 0xEC)\n"
+_proj_10g/notes/p7b_wu_harness_fix/apply_script_updates.py:51:  "SNAP_WORDS=${SNAP_WORDS:-57}\n"
+_proj_10g/notes/p7b_wu_harness_fix/apply_script_updates.py:52:  "UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 57 ⇒ 0x104 (51 ⇒ 0xEC)\n"
+_proj_10g/notes/p7b_wu_harness_fix/apply_script_updates.py:76: ("SNAP_WORDS=${SNAP_WORDS:-55}\n"
+_proj_10g/notes/p7b_wu_harness_fix/apply_script_updates.py:77:  "UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 55 ⇒ 0xFC (51 ⇒ 0xEC)",
+_proj_10g/notes/p7b_wu_harness_fix/apply_script_updates.py:78:  "SNAP_WORDS=${SNAP_WORDS:-57}\n"
+_proj_10g/notes/p7b_wu_harness_fix/apply_script_updates.py:79:  "UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 57 ⇒ 0x104 (51 ⇒ 0xEC)"),
+_proj_10g/notes/p7b_wu_harness_fix/apply_script_updates.py:96: ("SW=${SNAP_WORDS:-55}\nLAST_A=$(printf '0X%X' $(( 0x20 + 4*(SW-1) )))   # 末字地址  (55 ⇒ 0XF8)",
+_proj_10g/notes/p7b_wu_harness_fix/apply_script_updates.py:97:  "SW=${SNAP_WORDS:-57}\nLAST_A=$(printf '0X%X' $(( 0x20 + 4*(SW-1) )))   # 末字地址  (57 ⇒ 0X100)"),
+_proj_10g/notes/p7b_wu_harness_fix/apply_script_updates.py:115:  "NW=${NW:-55}\n"
+_proj_10g/notes/p7b_wu_harness_fix/apply_script_updates.py:116:  "UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 55 ⇒ 0xFC (51 ⇒ 0xEC)",
+_proj_10g/notes/p7b_wu_harness_fix/apply_script_updates.py:120:  "NW=${NW:-57}\n"
+_proj_10g/notes/p7b_wu_harness_fix/apply_script_updates.py:121:  "UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 57 ⇒ 0x104 (51 ⇒ 0xEC)"),
+_proj_10g/notes/p7b_wu_harness_fix/j6_fix.sh:58:echo "### PHASE pre_snapshot $(date +%s.%N)  NW=${NW:-61}"
+_proj_10g/notes/p7b_wu_harness_fix/smoke_double_run.sh:28:  0X04) V=\${FAKE_BID:-0x00000008};;                 # 现役板实测 BID = 8 (wu 修复位流)
+_proj_10g/notes/p7b_wu_harness_fix/tcpreg_j6.sh:53:echo "### PHASE pre_snapshot $(date +%s.%N)  NW=${NW:-61}"
+_proj_10g/notes/p7b_wu_loop/tcpreg_j6.sh.orig_8bff24e8:44:echo "### PHASE pre_snapshot $(date +%s.%N)  NW=${NW:-61}"
+_proj_10g/notes/p7b_wu_w54/j6_fix.sh:41:#   ⑦ 几何门: NW 默认 63 + **export** (原 `NW=${NW:-61}` 没 export ⇒ 覆盖办法失效);
+_proj_10g/notes/p7b_wu_w54/j6_fix.sh:43:NW=${NW:-63}
+_proj_10g/notes/p7b_wu_w54/j6_fix.sh:44:EXPECT_BID=${EXPECT_BID:-0x00000009}
+_proj_pcie/p6e_snap_check.sh:60:EXPECT_BID=${EXPECT_BID:-0x0000001A}       # ⛔ 2026-10-10 构建 F: 原默认 0x00000019 (构建 E 67 字) / 0x18 (构建 D) / 0x0A (Stage C)
+_proj_pcie/p6e_snap_check.sh:71:SNAP_WORDS=${SNAP_WORDS:-70}
+_proj_pcie/p6e_snap_check.sh:72:UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 70 ⇒ 0x138 (67 ⇒ 0x12C; 65 ⇒ 0x124; 63 ⇒ 0x11C; 51 ⇒ 0xEC)
+_proj_pcie/p6e_snap_selftest_fix2.sh:77:  0X04) V=\${FAKE_BID:-0x0000001A};;   # 构建 F = 0x1A (⛔ 原 0x19 = 构建 E / 0x18 = 构建 D / 0x0A = Stage C);
+_proj_pcie/p7b_biz/p7b_snap.sh:49:NW=${NW:-70}
+_proj_pcie/p7b_biz/p7b_snap.sh:50:UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 70 ⇒ 0x138 (67 ⇒ 0x12C; 65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)
+_proj_pcie/p7b_biz/p7b_snap.sh:51:EXPECT_BID=${EXPECT_BID:-0x0000001A}
+_proj_pcie/p7b_gate4_accept.sh:131:EXPECT_BID=${EXPECT_BID:-0x0000001A}      # 构建 F = 0x1A (源码 board/wrapper_p4.v 的 BUILD_ID_V; 原 0x19 = 构建 E / 0x18 = 构建 D)
+_proj_pcie/p7b_gate4_accept.sh:137:SNAP_WORDS=${SNAP_WORDS:-70}
+_proj_pcie/p7b_gate4_accept.sh:138:UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 70 ⇒ 0x138 (67 ⇒ 0x12C; 66 ⇒ 0x128; 65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)
+_proj_pcie/p7b_gate4_selftest.sh:37:SW=${SNAP_WORDS:-70}
+_proj_pcie/p7b_gate4_selftest.sh:137:  0X04) V=\${FAKE_BID:-0x0000001A};;

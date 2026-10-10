@@ -1,0 +1,35 @@
+
+****** xsim v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Sat Oct 10 10:37:58 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source xsim.dir/tb_p5_wrapper/xsim_script.tcl
+# xsim {tb_p5_wrapper} -autoloadwcfg -tclbatch {zs.tcl}
+Time resolution is 1 ps
+source zs.tcl
+## run 4000ns
+## puts "TCLPROBE time=[current_time]"
+TCLPROBE time=4 us
+## if {[catch {set objs [get_objects -filter {type == net}]} e]} {
+##     puts "TCLPROBE get_objects FAILED: $e"
+##     exit 0
+## }
+WARNING: [Simtcl 6-168] No object found for the given pattern.
+## set n 0
+## set nz 0
+## foreach o $objs {
+##     incr n
+##     if {[catch {set v [get_value -radix hex $o]} e2]} { continue }
+##     if {[string match "*z*" $v] || [string match "*x*" $v]} {
+##         incr nz
+##         if {$nz <= 40} { puts "TCLZ obj=$o val=$v" }
+##     }
+## }
+## puts "TCLPROBE nets=$n zx=$nz"
+TCLPROBE nets=0 zx=0
+## exit 0
+INFO: [Common 17-206] Exiting xsim at Sat Oct 10 10:38:00 2026...

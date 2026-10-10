@@ -15,10 +15,11 @@ cd /d %~dp0
 if not exist "%RTL%" ( echo [PATHGUARD FAIL] no axi_regs.v & exit /b 90 )
 if not exist "%TB%"  ( echo [PATHGUARD FAIL] no tb_biz_win.v & exit /b 90 )
 if not exist "%XV%\xvlog.bat" ( echo [TOOL FAIL] no xvlog.bat & exit /b 91 )
+REM 2026-10-10 (build F): fingerprint 67 -> 70.
 REM 2026-10-10 (build E): fingerprint 66 -> 67.
 REM 2026-10-10 (P7B-GAP9-TX): fingerprint 61 -> 65. It had already gone stale at 63
 REM   (P7B-WU round) => like its sibling (run_xvlog_wrapper.bat) this gate was DEAD (exit 92).
-findstr /C:"SNAP_NW_P6E = 67" "%ROOT%\board\wrapper_p4.v" >NUL || ( echo [FINGERPRINT FAIL] wrapper is not 67-word & exit /b 92 )
+findstr /C:"SNAP_NW_P6E = 70" "%ROOT%\board\wrapper_p4.v" >NUL || ( echo [FINGERPRINT FAIL] wrapper is not 70-word & exit /b 92 )
 
 call "%XV%\xvlog.bat" -work xil_defaultlib "%RTL%" "%TB%" > xvlog_biz.log 2>&1 || ( type xvlog_biz.log & exit /b 1 )
 call "%XV%\xvlog.bat" -work xil_defaultlib "%XV%\..\data\verilog\src\glbl.v" >> xvlog_biz.log 2>&1
