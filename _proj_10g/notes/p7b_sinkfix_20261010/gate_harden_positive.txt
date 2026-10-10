@@ -1,0 +1,20 @@
+# gate_harden_positive.txt -- 2026-10-10 (gate harden) 加固后正件输出; 与加固前记录 gate_positive.txt 分开存放
+# cmd: /c/Users/zhxue/anaconda3/python.exe gate_sinkfix.py ../../../_proj_pcie/p7b_biz/p7b_tcp_sink.cpp
+# cpp md5 (加固前后各核一次, 均 8d02ef6426d4ef6ad5fd2c514965c1e8):
+8d02ef6426d4ef6ad5fd2c514965c1e8 *../../../_proj_pcie/p7b_biz/p7b_tcp_sink.cpp
+C1 helper_present            OK 
+C2 order_before_connect      OK 
+C3 two_setsockopt_inside_helper OK 
+C4 call_site_uses_helper     OK 
+C5 no_bypass_connect_to      OK 
+C6 witness_line              OK 
+C7 witness_same_var          OK 
+C8 arm_tokens                OK 
+C9 default_is_fixed          OK 
+C10 flag_parsed              OK 
+C11 guard_direct_setsockopt  OK guards=2 direct=2
+C12 witness_arg_live_value   OK arg1=rcvbuf_after_connect ? "after_connect_LEGACY" : "before_conn
+C13 flag_writes_pinned       OK writes=2 decl=1 cli_true=1
+C14 no_cond_preproc          OK non-include_directives=0
+GATE_SINKFIX checks=14 ok=14 violations=0 file=../../../_proj_pcie/p7b_biz/p7b_tcp_sink.cpp
+RC=0

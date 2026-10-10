@@ -1,0 +1,47 @@
+# gate_harden_controls.txt -- 2026-10-10 (gate harden) 加固后对照输出
+# cmd: /c/Users/zhxue/anaconda3/python.exe run_gate_controls.py
+# 说明: 前 8 行 = 既有 7 对照块 (生成逻辑与期望一字未动); 第 9 行起 = 追加块
+P  working_tree_now        RC=0 want=0 OK fired=-
+N0 HEAD_version_pre_fix    RC=0 want=1 MISMATCH fired=-
+C1 helper_present            OK 
+C2 order_before_connect      OK 
+C3 two_setsockopt_inside_helper OK 
+C4 call_site_uses_helper     OK 
+C5 no_bypass_connect_to      OK 
+C6 witness_line              OK 
+C7 witness_same_var          OK 
+C8 arm_tokens                OK 
+C9 default_is_fixed          OK 
+C10 flag_parsed              OK 
+C11 guard_direct_setsockopt  OK guards=2 direct=2
+C12 witness_arg_live_value   OK arg1=rcvbuf_after_connect ? "after_connect_LEGACY" : "before_conn
+C13 flag_writes_pinned       OK writes=2 decl=1 cli_true=1
+C14 no_cond_preproc          OK non-include_directives=0
+GATE_SINKFIX checks=14 ok=14 violations=0 file=C:\Users\zhxue\AppData\Local\Temp\sinkfix_gate_tm9odh4b\N0.cpp
+
+M1 guards_swapped          RC=1 want=1 OK fired=C2
+M2 default_true            RC=1 want=1 OK fired=C9
+M3 witness_removed         RC=1 want=1 OK fired=C6,C7,C8
+M4 true_revert             RC=1 want=1 OK fired=C3,C4,C5
+M5 both_arms_late          RC=1 want=1 OK fired=C2
+GATE_CONTROLS cases=7 mismatch=1 tmp=C:\Users\zhxue\AppData\Local\Temp\sinkfix_gate_tm9odh4b
+[HARDEN-NOTE] legacy N0 anchor drifted: git show HEAD:<file> md5=8d02ef6426d4ef6ad5fd2c514965c1e8 (post-fix) != historical 5b6d757b17ed9b49db77c34494319264 (pre-fix)
+[HARDEN-NOTE]   => in-script N0 is now equivalent to P (RC=0); this run did NOT touch it (dispatch: no edits to the first 7)
+[HARDEN-NOTE]   => compensation = appended N0pin case (pinned to pre-fix commit 61cc107, md5 verified)
+---- harden block: 4 escapees + same-family bonuses (want RED) / equivalent edits (want GREEN) / known-escape probe ----
+N0pin pre_fix_61cc107          RC=1 want=1 OK fired=C1,C2,C3,C4,C5,C6,C7,C8,C9,C10 want_fired=C1,C2,C3,C4,C5,C6,C7,C8,C9,C10
+A_unguard_before               RC=1 want=1 OK fired=C11 want_fired=C11
+C_fix_disabled_if0             RC=1 want=1 OK fired=C11 want_fired=C11
+B2_witness_const_ternDEAD      RC=1 want=1 OK fired=C12 want_fired=C12
+F_forces_fixed_arm             RC=1 want=1 OK fired=C13 want_fired=C13
+E1_legacy_arm_if0              RC=1 want=1 OK fired=C11 want_fired=C11
+P1_preproc_if0                 RC=1 want=1 OK fired=C14 want_fired=C14
+Y1_rcvbufforce                 RC=1 want=1 OK fired=C11 want_fired=C11
+G1 comments_blank              RC=0 want=0 OK fired=- want_fired=-
+G2 witness_reformat            RC=0 want=0 OK fired=- want_fired=-
+G3 braces_around_body          RC=0 want=0 OK fired=- want_fired=-
+G4 add_include                 RC=0 want=0 OK fired=- want_fired=-
+G5 braces+reformat             RC=0 want=0 OK fired=- want_fired=-
+X1_goto_skip KNOWN-ESCAPE      RC=0 want=0 OK fired=- want_fired=-
+GATE_CONTROLS_HARDEN cases=14 mismatch=0 tmp=C:\Users\zhxue\AppData\Local\Temp\sinkfix_gate_harden_zydrr6bs
+RC=1
