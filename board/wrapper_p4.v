@@ -2141,7 +2141,8 @@ module wrapper_p4 (
         end
     end
 
-    // ⭐ 本轮构建配置 (2026-10-11 · BID **0x1D**): `.PERSIST_EN(1'b1)` = persist **开**
+    // ⭐ 现役构建配置 (persist 自 **0x1D** 起开; 本版 **0x1E** 沿用):
+    //   `.PERSIST_EN(1'b1)` = persist **开**
     //   (发送侧**零窗探询** —— RFC 1122 §4.2.2.17 **MUST-36**; 设计件
     //    `_proj_10g/notes/P7B_PERSIST_DESIGN.md` v3 §1.1 候选 A)。
     //   · 内容 = **persist 刀** (含 **P-1 修复**): 机制 = 每连接一条独立 persist 计时器
@@ -4064,8 +4065,29 @@ module wrapper_p4 (
 
     axi_regs #(
         .MAGIC_V    (32'h50360001),
-        .BUILD_ID_V (32'h0000001D),     // ⚠️ 每次改动自增 (前置闸读这一项认位流; 构建 F = 0x1A)
-                                        //   ⭐ 本轮构建 (2026-10-11): **0x1C → 0x1D**。
+        .BUILD_ID_V (32'h0000001E),     // ⚠️ 每次改动自增 (前置闸读这一项认位流; 构建 F = 0x1A)
+                                        //   ⭐ 本轮构建 (2026-10-11): **0x1D → 0x1E**。
+                                        //      0x1E 内容 = **snd_wnd 写入守卫** (`rtl/tcp_rx.v`:
+                                        //      `pend_wnd` 的置位门与值锁存**成对**按"可接受 ACK"门控
+                                        //      —— 谓词 `ackok_l` = `ack_ok` 锁存, 含等号 ⇒ 零推进的
+                                        //      窗口更新 ACK 放行 = 零窗恢复必需; RFC 793 p.72;
+                                        //      新参数 `SNDWND_GUARD = 1'b1` = 修后 (0 = 遗留行为,
+                                        //      仅 A/B); 提交 = cherry-pick `a38d4a4`。
+                                        //      门证据 = `sim/p3sim_sw/` **四臂全绿**: FIXED 全 PASS /
+                                        //      LEGACY `XFAIL-REPRODUCED` (缺陷复现) / MUTANT 腿 B1
+                                        //      红 (守卫谓词换 `ack_adv_l` ⇒ 零窗恢复被打死) /
+                                        //      DROPA 腿 A 红 ("帧被收下"承重件有牙);
+                                        //      `logs/gate_stdout.txt` 尾逐字 `SNDWND-GATE: PASS`。
+                                        //      ⛔ 回退点 = `rtl/tcp_rx.v` 的 `SNDWND_GUARD` 置 0
+                                        //      (或回滚提交 `a38d4a4`)。
+                                        //      ⚠️ 窗口字长/未实现地址**不变** (仍 70 字 / `0x138`)
+                                        //      ⇒ 读侧只需 `EXPECT_BID` **0x1D → 0x1E** (本轮**不做**,
+                                        //      TL 另派; 本刀未触碰任何读侧文件)。
+                                        //      历史链: 0x1D = persist 刀 (发送侧零窗探询 + P-1 修复) /
+                                        //      0x1C = 缺陷刀 (RETXHI-GHOST 修复) / 0x1B =
+                                        //      已分配、从未构建 (原定 persist) / 0x1A = 构建 F (70 字窗口)。
+                                        //   ---- (以下为历史, 逐字保留) ----
+                                        //   ⭐ 上一版 (2026-10-11): **0x1C → 0x1D**。
                                         //      0x1D 内容 = **persist 刀** (发送侧零窗探询; RFC 1122
                                         //      §4.2.2.17 MUST-36): 唯一功能改动 = 上面 `u_tcp_tx`
                                         //      例化的 `.PERSIST_EN(1'b0) → 1'b1` (0x1C 版为"可证惰性"
