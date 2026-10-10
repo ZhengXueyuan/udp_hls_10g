@@ -278,28 +278,6 @@ module tcp_tx_frame (
     //      RTO 触发时重放整窗 ⇒ 一次 RTO 修好任意孔 (不能自持: RTO 是计时器驱动)。
     parameter [3:0] RETX_SPAN = 4'd3;
 
-    // =========================================================================
-    // ⭐ P7B-PERSIST (2026-10-10): 发送侧 persist / 零窗探询 —— 三个参数
-    //   设计件 = _proj_10g/notes/P7B_PERSIST_DESIGN.md (v3; 542 行) §2.5-① / §3.1/§3.2。
-    // -------------------------------------------------------------------------
-    // · PERSIST_EN: 总开关。**默认 1'b0 ⇒ 逐位退化** (§7.1): 参数声明在宏外
-    //   (与上面 RTO_LIM / RING_CAP / PLEN_MAX / ACKQ_* / RETX_SPAN 同款 —— D-1
-    //   的修法 (i)), 但**逻辑体全部落在 `ifdef TCP_TX_OVL` 支内** (D-8 定"不镜像":
-    //   默认支是另一套 FSM, 双实现 = 语义双支漂移)。
-    //   ⚠️ 默认配置下它是**未使用参数** ⇒ 命名覆盖合法 (不落硬错); 只报 warning
-    //   与否未验证 (【推断·未跑工具】, 设计件 §7.1 同款口径)。
-    // · PS_BASE / PS_MAX: 退避阶梯常数 (26 位; §3.1 唯一编码 `ps_phase`)。
-    //   `Reload(p) = (p==0) ? RTO_LIM : (p<=4 ? PS_BASE<<(p-1) : PS_MAX)`
-    //   一份, 扫描拍共用。首档**复用 RTO_LIM** (引用同一参数, 不另立常数 —— §3.2:
-    //   RTO 常数有 `DP_156MHZ` 分叉, 5–60 s 不塞进那条线)。
-    //   换算 (1 visit = 256 拍 = 1.6384 µs @156.25MHz):
-    //     PS_BASE = 3,051,758 visits = 5.0 s  ·  PS_MAX = 36,621,094 = 60.0 s
-    //   两者都 < 2²⁶ (67,108,864) ⇒ 26 位计数器 (§3.1)。
-    //   ⚠️ #64: 改这两个常量会**确定性**改变网表/时序 ⇒ 改值 = 另一次构建。
-    parameter        PERSIST_EN = 1'b0;              // 默认关 (开 = wrapper 显式传 1'b1)
-    parameter [25:0] PS_BASE    = 26'd3_051_758;     // 5.0 s  (阶梯第 1 档)
-    parameter [25:0] PS_MAX     = 26'd36_621_094;    // 60.0 s (阶梯封顶, 永不放弃)
-
 `ifdef TCP_TX_OVL
     // =========================================================================
     // P7b Stage C: 乒乓双 bank / 收发重叠 (宏 TCP_TX_OVL)
@@ -404,20 +382,6 @@ module tcp_tx_frame (
         end
     endfunction
 
-    // ⭐ P7B-PERSIST §3.1: 退避装载函数 (**一份**, 扫描拍共用)。
-    //   Reload(p) = (p==0) ? RTO_LIM : (p<=4 ? (PS_BASE << (p-1)) : PS_MAX)
-    //   ⇒ 间隔序列 = 20 ms(RTO_LIM) → 5 → 10 → 20 → 40 → 60 → 60 … s (封顶, 永不放弃)。
-    //   ⚠️ 3 位可表示 0..7 ⇒ 6/7 **不可达** (出现则按 5 处理 —— 本式的 else 支)。
-    //   ⚠️ `PS_BASE << (p-1)` 在 26 位内无溢出 (24,414,064 < 2²⁶)。
-    function [25:0] ps_reload;
-        input [2:0] p;
-        begin
-            if (p == 3'd0)      ps_reload = RTO_LIM[25:0];
-            else if (p <= 3'd4) ps_reload = PS_BASE << (p - 3'd1);
-            else                ps_reload = PS_MAX;
-        end
-    endfunction
-
     // 与 rtl/checksum16.v:31-38 的 fold16 逐位同款 (单次折叠, 对 32 位入参良定义)
     function [15:0] fold16;
         input [31:0] v;
@@ -442,22 +406,6 @@ module tcp_tx_frame (
     reg  [63:0] tail_d;
     reg  [7:0]  tail_k;
     reg         tx_is_ctrl;    // TX 引擎本帧来自控制帧槽 (而非 bank)
-
-    // ---- ⭐ P7B-PERSIST (§2.5-②): 探询通路的寄存器 (全在 OVL 支内; PERSIST_EN=0
-    //      ⇒ 全部为常量, S1 静态剪枝, 见 §7.2-S1) ----
-    reg         tx_is_probe;      // 本帧 = 探询段 (帧入口装载, 照 tx_is_ctrl 四点 + 复位)
-    reg         ctrl_probe;       // 本槽装载的是探询段 (槽装载拍写入; 取代 v2 的 probe_sel_r
-                                  //   —— v3 #11: 用途写死 = ① 槽装载拍写入 ② start_ack_d1
-                                  //   的校验和 flavor 选择 ③ 帧入口 tx_is_probe 的源)
-    reg  [7:0]  ctrl_pld;         // 探询段的 1 字节载荷 (槽装载拍写入 = ps_stage_byte)
-    reg  [25:0] ps_timer [0:15];  // 每连接 persist 计时器 (单位 = visits; §3.1/§3.4b)
-    reg  [2:0]  ps_phase [0:15];  // 每连接退避档位 (§3.1 唯一编码, 0..5 可达)
-    reg         ps_stage_rdy;     // 暂存有效位 = **暂存的唯一有效位** (§3.4b)
-    reg  [3:0]  ps_stage_conn;    // 暂存连接的槽号 (承载 ② rb_id arm 与 ③ rdy 清位匹配)
-    reg  [31:0] ps_stage_seq;     // 暂存 seq (T 拍锁存)
-    reg  [7:0]  ps_stage_byte;    // 暂存载荷字节 (T+2 捕获 = retx_ram 在 seq=snd_una 的读)
-    reg         ps_stage_estab;   // 暂存 estab (T 拍锁存; probe_sel 的环断项 §2.4-2)
-    reg         ps_rd_d1, ps_rd_d2;  // ring 读请求流水 (读延迟 2 拍 ⇒ T+2 捕获; §2.3)
 
     // ---- 每 bank 帧上下文 (304 bit × 2) ----
     reg  [1:0]  bank_rdy;
@@ -567,48 +515,8 @@ module tcp_tx_frame (
                             !bank_rdy[rx_bank];
     wire        scan_now  = rx_idle && !ack_pend_r && !svc && !ring_eval && !rx_flush &&
                             scan_tick;
-    // ================= ⭐ P7B-PERSIST: 探询的组合判据 =========================
-    //   (设计件 §2.4-2 / §2.5-③。⚠️ 位置: 设计件说"落在扫描块末", 但 ① `wire` 不能写在
-    //    `always` 内、② xvlog 要求**先声明后用** (`VRFC 10-3380`) —— 实测踩到 ⇒ 本处 =
-    //    与设计件语义**逐字相同**的合法位置, 且全部操作数在 `start_ack` 之前已定义)
-    //
-    // ① 数据帧启动守卫 `ds_guard` —— **逐字照 v3**: `start_data`(下方 S_IDLE 门)的门
-    //    **去掉 `!tx_blk_sid`** 后的取反, **全操作数非 `rb_id` 派生**。
-    //    · 为什么需要 (v3 #1, 第 5 个 `rb_id` 消费者): 活帧首拍锁存用的是 `rb_*` 与
-    //      `cam_rd_*`, 且 `w_tap_seq = start_data ? rb_snd_nxt : tap_seq` 把**ring 写
-    //      游标**也钉在 `rb_snd_nxt` 上; 而同拍 `probe_sel=1` 会把 `rb_id` 指到
-    //      `ps_stage_conn` (探询 arm 在 `start_id` arm 之前) ⇒ **数据帧带探询连接的
-    //      四元组 + seq 上线, 并按错 seq 写 ring**。单连接 (A==B) 时自洽 ⇒ 门/板级的
-    //      单连接用例**结构性看不见** (判据必须多连接 = §5.2-j13)。
-    //    · 充分性 (超集论证): `ds_guard` 的操作数集合 = `start_data` 操作数集合的
-    //      **非 `rb_id` 派生子集** (缺 `!tx_blk_sid`; 而 `!svc/!ring_eval/!scan_now/`
-    //      `!rx_flush/rx_idle` 已是 `probe_sel` 的正项 ⇒ 取反冗余) ⇒
-    //      `start_data ⇒ (ds_guard 的合取项全真) ⇒ ¬ds_guard ⇒ probe_sel = 0`
-    //      ⇒ **同拍不可能同时成立** ✓。⛔ 缺 `!tx_blk_sid` 使守卫**更保守**
-    //      (探询在"数据帧可能启动"时让位) ⇒ 只影响延迟, 不影响正确性。
-    //    · 环安全 (逐操作数): `recv_first`(reg) · `s_axis_tvalid`(输入) ·
-    //      `ack_pend_r`(reg) · `fifo_full`(FIFO 输出) · `bank_rdy`(reg) · `wnd_open`
-    //      (**注册**输出, tcb.v:153-157; 其 `win_id = rb_id` 在**上一拍**采样 ⇒ 无组合
-    //      回路) ⇒ `probe_sel` **不含任何 `rb_id` 派生项** ⇒ 环断 ✓。
-    //    ⛔ **禁用 `&& !start_data`**: `start_data` 含 `!tx_blk_sid` ⇒ `tx_blk_sid` 含
-    //      `~st_ok` ⇒ `st_ok = (rb_state == 4'd1)` 是**组合**读出 (tcb.v:115-120) ⇒
-    //      `probe_sel → rb_id → rb_state → st_ok → tx_blk_sid → start_data → probe_sel`
-    //      = **新环** (设计件逐线核过)。
-    //    ⚠️ (设计件 §9-④ 纪律) **若将来有人改了 `start_data` 的门 (加/删子句), 必须
-    //      同步重核本守卫的集合包含关系** —— 本注释即那份纪律的落点。
-    wire        ds_guard = ~( recv_first && s_axis_tvalid && !ack_pend_r &&
-                              !fifo_full && !bank_rdy[rx_bank] && wnd_open );
-    // ② 探询槽上线条件 (v3 逐字; `ackq_empty` ⇒ ACK 永远优先, §8.3-4)。
-    wire        probe_sel = ps_stage_rdy && ps_stage_estab && rx_idle && !rx_flush &&
-                            !ctrl_slot_busy && ackq_empty &&
-                            !svc && !ring_eval && !scan_now && !retx_active && ds_guard;
-
-    // ⭐ P7B-PERSIST §2.5-⑤: 控制帧槽的**第二来源** = 探询段 (`probe_sel`)。
-    //   逐字改写 (v3): `… && ((ack_pend_r && !ackq_empty) || probe_sel)` —— 探询与
-    //   ACK 条目共用同一条槽装载 / T_HDR / T_PAY 路 (控制帧门**不含** `wnd_open`)。
-    //   PERSIST_EN=0 ⇒ probe_sel ≡ 0 ⇒ `((…&&…)||0)` 逐字折回原式 (S1)。
-    wire        start_ack = rx_idle && !rx_flush && !ctrl_slot_busy &&
-                            ((ack_pend_r && !ackq_empty) || probe_sel);
+    wire        start_ack = rx_idle && ack_pend_r && !ackq_empty && !rx_flush &&
+                            !ctrl_slot_busy;          // ← 槽跨拍独占门 (C7/C8)
     wire        ctrl_adv_inflight = ctrl_slot_busy && (|ctrl_is) && (ctrl_id == svc_id);
     wire        svc_x     = svc && !ctrl_adv_inflight;    // 回卷门 (§1.4(4))
     wire        svc_rewind= svc_x && (rb_snd_nxt != rb_snd_una) && !blocked;
@@ -623,9 +531,7 @@ module tcp_tx_frame (
     // svc_rewind (svc ⊆ !retx_active) 三对结构性互斥 ⇒ $onehot0 不变式保持。
     wire        replay_jump;
     wire        upd_wr_data = (rx_state == RX_FIN) && (fin_cnt == 3'd0);
-    // ⭐ P7B-PERSIST §2.4-4①: 探询槽**不消费 seq** (探询 = 旧数据重传, §2.2-1: 不进
-    //   `upd_wr_data`、也不得走 `upd_wr_ctrl` 的 +1 预留)。probe_sel=0 ⇒ 原式逐位不变。
-    wire        upd_wr_ctrl = start_ack && !probe_sel && (aq_syn | aq_fin | aq_rst);
+    wire        upd_wr_ctrl = start_ack && (aq_syn | aq_fin | aq_rst);
     wire        upd_wr_rew  = svc_rewind || replay_jump;
     assign      upd_wr  = upd_wr_data || upd_wr_ctrl || upd_wr_rew;
     assign      upd_id  = upd_wr_data ? f_conn[rx_bank] :
@@ -638,17 +544,7 @@ module tcp_tx_frame (
     assign      retx_gnt = svc_x && retx_req;
 
     // ---- rb/cam 读口 mux (旁路拍 = 各服务引擎自己的目标连接) ----
-    // ⭐ P7B-PERSIST §2.5-⑤b / §2.4-3 (**成对不变量**): 探询 arm 必须插在
-    //   `scan_now ? scan_id :` **之后**、`(rx_state == RX_IDLE) ? start_id :` **之前**。
-    //   · 为什么在 `scan_now` 之后 (v3 #17): 同一扫描拍上 `:998-1020` 的 RTO 扫描与
-    //     `fin_push/rst_push` 都**靠 `rb_id = scan_id` 取值** ⇒ v1 的"arm 在最前"会让
-    //     它们读成探询连接的值 (RTO 装到错连接 / FIN·RST 判据用错的 state 与 seq)。
-    //   · 为什么在 `start_id` 之前: 探询槽装载要用 `ps_stage_conn` 的四元组。
-    //   · `probe_sel` 里保留 `!svc/!ring_eval/!scan_now` 与本次搬位**同生共死**
-    //     (§2.4-3 末: 不许单独改一半) —— `!scan_now` 不冗余: 它保证槽装载字段取自
-    //     `ps_stage_conn` 是**靠定义**成立, 而不是靠 mux 优先级兜底。
     assign rb_id     = svc ? svc_id : ring_eval ? retx_id_r : scan_now ? scan_id :
-                       probe_sel ? ps_stage_conn :
                        (rx_state == RX_IDLE) ? start_id : f_conn[rx_bank];
     assign cam_rd_id = rb_id;
 
@@ -734,18 +630,6 @@ module tcp_tx_frame (
     //     本线只喂 `stat_winstall_cap_ev` (唯一消费者 = 计数器 CE)。
     wire        win_cap_bind         = (win_wnd_eff >= RING_CAP);
     wire        stat_winstall_cap_ev = stat_winstall_ev && win_cap_bind;
-
-    // ③ 武装 / 到期 (§3.1/§3.4; 全部在扫描拍上以 `scan_id` 门控 ⇒ 不引入新的长锥)。
-    wire        ps_arm    = PERSIST_EN && scan_now && scan_estab &&
-                            (rb_snd_wnd == 16'd0) && (rb_snd_nxt != rb_snd_una) &&
-                            !fin_sent_r[scan_id] && !rst_sent_r[scan_id];
-    // ⭐ fire 语义 (v3 #4): 到期**不是置电平请求**, 而是在该连接的扫描拍上**发一拍
-    //    `ps_fire` 脉冲**并**同拍**发起 ring 读请求 (§2.3 的逐拍分工)。
-    wire        ps_fire   = ps_arm && (ps_timer[scan_id] == 26'd1);
-    wire        ps_rd     = ps_fire;    // 探询读请求 (与 ring 读共读口, 见 u_retx 前的 mux)
-    // 推进: next = (phase == 0) ? 1 : (phase < 5 ? phase + 1 : 5)  (§3.1)
-    wire [2:0]  ps_next   = (ps_phase[scan_id] == 3'd0) ? 3'd1 :
-                            (ps_phase[scan_id] < 3'd5) ? (ps_phase[scan_id] + 3'd1) : 3'd5;
 
     // ---- 重传 ring 读/写 + 会话 ----
     wire        ring_act = (rx_state == RX_RING);
@@ -836,52 +720,26 @@ module tcp_tx_frame (
     //     · 会话级无覆盖: 下一帧的 start_ack 必须等本帧 T_DONE 清 ctrl_slot_busy
     //       (≥ T0+9), 其校验和装载必然晚于本帧两个读点 ⇒ 不会覆盖在飞帧的字段。
     //   ⚠️ 一次折叠、加完再折 (不许边加边折成 16 位) — 与三拍 aen 序列逐位等价
-    // ⭐ P7B-PERSIST §2.4-4③ (陈旧 `ackq_dout` 第三条门): 探询槽的 ack 必须取**注册的
-    //   `rb_rcv_nxt`** (该拍 `rb_id = ps_stage_conn` ⇒ 自动是探询连接的 rcv_nxt), ⛔ 不能
-    //   取 `ackq_dout` —— `fifo_sync.v` 逐字: "`empty` 时 `dout` = `mem[rptr]` **陈旧值**",
-    //   而探询要求 `ackq_empty` ⇒ 陈旧值可能是**任意历史条目** (板级 = 给对端一个错的 ack)。
-    //   probe_sel=0 ⇒ 原式逐位不变 (S1)。
-    //   ⚠️ 实施轮自核: 本条**首版漏做**, 是静态核对脚本的 FB 项把它抓出来的 (注释里写了
-    //      "§2.4-4③" 但代码没改) —— 记此一笔, 供下一轮核对者参考。
-    wire [31:0] ctrl_ack_now  = (probe_sel || aq_fin || aq_rst) ? rb_rcv_nxt : ackq_dout[31:0];
+    wire [31:0] ctrl_ack_now  = (aq_fin || aq_rst) ? rb_rcv_nxt : ackq_dout[31:0];
     wire [15:0] ctrl_doff_now = {8'h50, aq_syn ? 8'h12 : aq_fin ? 8'h11 :
                                  aq_rst ? 8'h14 : 8'h10};
     wire [31:0] csum_init_ctrl = {4'b0, cfg_src_ip[31:16]} + {4'b0, cfg_src_ip[15:0]} +
                                  {4'b0, ctrl_dip[31:16]} + {4'b0, ctrl_dip[15:0]} +
                                  32'h0006;
-    // ⭐ P7B-PERSIST §2.5-⑦ / §2.1「TCP 伪头长度项」: **第 3 处长度**。
-    //   纯 ACK 段 tcplen = 20 (TCP 头 20 B); 探询段 = 20 + 1 B 载荷 = **21**。
-    //   (另两处 = `h_totlen` 的 41 与 `ip_csum_calc` 的操作数 41 —— 三处必须同步,
-    //    否则：IP 校验和/长度算错 ⇒ 对端静默丢弃, 且**没有任何握手判据会红**。)
-    wire [17:0] ctl_aen_v1 = (ctrl_probe ? 18'd21 : 18'd20) +
-                             {2'b0, ctrl_sport} + {2'b0, ctrl_dport} +
+    wire [17:0] ctl_aen_v1 = 18'd20 + {2'b0, ctrl_sport} + {2'b0, ctrl_dport} +
                              {2'b0, ctrl_seq[31:16]};
     wire [17:0] ctl_aen_v2 = {2'b0, ctrl_seq[15:0]} + {2'b0, ctrl_ack[31:16]} +
                              {2'b0, ctrl_ack[15:0]} + {2'b0, ctrl_doff};
     wire [17:0] ctl_aen_v3 = {2'b0, ctrl_wnd};
-    // ⭐ P7B-PERSIST §2.5-⑦: 探询段的 TCP 校验和 = 既有 ctrl 树 + **载荷项**
-    //   `{16'b0, ctrl_pld, 8'h00}` (单字节载荷在 TCP 头之后的第 1 个 16 位字的高字节;
-    //   §2.1「字节位序」: 末字 = `{hold48, ctrl_pld, 8'h00}`、`tkeep = 8'hFE` ⇒ 帧 = 55 B)。
-    //   32 位上界: `0x10FFF8 + 0xFF00 < 2³²` ⇒ 一次折叠、加完再折 (不许边加边折成 16 位)。
-    //   ⛔ ctrl_probe=0 时该项 = `{16'b0, 8'd0, 8'h00}` = 0 ⇒ 纯 ACK 的校验和逐位不变
-    //      (但注意: 加法带零项**仍会**改变校验和的**中间值**, 不含改变结果 —— 逐位相同 ✓)。
     wire [31:0] ctrl_acc = csum_init_ctrl + {14'b0, ctl_aen_v1} + {14'b0, ctl_aen_v2} +
-                           {14'b0, ctl_aen_v3} + {16'b0, ctrl_pld, 8'h00};
+                           {14'b0, ctl_aen_v3};
     wire [15:0] ctrl_tcpcsum_now = ~fold16(ctrl_acc);
-    // ⭐ P7B-PERSIST §2.5-⑦: **第 2 处长度** = IP 校验和的 total_len 操作数 (纯 ACK 40 /
-    //   探询 41)。flavor 由 `ctrl_probe` 选 —— R-1 之后本树的**装载拍 = start_ack+1**
-    //   (使能 `start_ack_d1`), 而 `ctrl_probe` 在 start_ack 拍装载 ⇒ 该拍已稳定 ✓
-    //   (⛔ 不能用 `tx_is_probe`: 它是**帧入口**装载, 到 T_HDR 才有效, 装载拍上未必对)。
-    wire [15:0] ctrl_ipcsum_now  = ip_csum_calc(ctrl_probe ? 16'd41 : 16'd40,
-                                                ctrl_idcap, ctrl_dip);
+    wire [15:0] ctrl_ipcsum_now  = ip_csum_calc(16'd40, ctrl_idcap, ctrl_dip);
 
     // ---- TX 引擎: 头字段来源 mux (控制槽 vs bank) ----
     wire        h_ctrl    = tx_is_ctrl;
     wire [11:0] h_plen    = h_ctrl ? 12'd0        : f_plen[tx_bank];
-    // ⭐ P7B-PERSIST §2.5-⑧ / §2.1: **第 1 处长度** —— 探询段 IP total_len = **41**
-    //   (54 B 帧 - 14 B 以太头 = 40 B IP 段 + 1 B 载荷)。⛔ `h_plen` 对控制槽恒 0
-    //   (探询是"控制帧槽的第二来源" ⇒ `stat_bytes` **+0**, 见 §5.1 的 W15 口径)。
-    wire [15:0] h_totlen  = tx_is_probe ? 16'd41 : (h_ctrl ? 16'd40 : f_totlen[tx_bank]);
+    wire [15:0] h_totlen  = h_ctrl ? 16'd40       : f_totlen[tx_bank];
     wire [15:0] h_idcap   = h_ctrl ? ctrl_idcap   : f_idcap[tx_bank];
     wire [15:0] h_ipcsum  = h_ctrl ? ctrl_ipcsum  : f_ipcsum[tx_bank];
     wire [15:0] h_tcpcsum = h_ctrl ? ctrl_tcpcsum : f_tcpcsum[tx_bank];
@@ -920,23 +778,11 @@ module tcp_tx_frame (
         .full_next(), .ovf_pulse(dovf_b)
     );
 
-    // ⭐ P7B-PERSIST §2.5-④ / §2.3: ring 读口三根线改成 mux (读口仲裁)。
-    //   两个读者**结构性不共存** (只需 mux, 不需要仲裁器): 探询读只在扫描拍
-    //   (`ps_fire ⇒ ps_arm ⇒ scan_now ⇒ rx_idle && !ring_eval`), 而
-    //   `rd_tap = ring_start || (ring_act && …)` 要求 `ring_eval` / `RX_RING`
-    //   ⇒ 扫描拍上 `rd_tap ≡ 0` (设计件 §2.3 第一条)。
-    //   读延迟 2 拍 (retx_ram.v:92-105 地址入口寄存 + :138-146 读拍):
-    //   请求拍 T ⇒ 地址拍 T+1 ⇒ `r_data` 在 **T+2** 有效 ⇒ §2.3 的"T+2 只捕获数据"。
-    //   ⛔ 读地址 = `snd_una[15:0]`; 该字节必在环内 (§2.2-3: 61439+1508 < 65536,
-    //      余量 ≈2589 B) ⇒ 读口**只读**, 不碰 LFSR/ring 写口。
-    wire        rd_en_m = rd_tap || ps_rd;
-    wire [3:0]  r_conn_m = ps_rd ? scan_id : retx_id_r;
-    wire [15:0] r_seq_m  = ps_rd ? rb_snd_una[15:0] : r_tap_seq;
     retx_ram u_retx (
         .clk(clk), .rst_n(rst_n),
         .wr_en(wr_tap), .w_conn(w_tap_conn), .w_seq(w_tap_seq[15:0]),
         .w_data(s_axis_tdata), .w_n(pop8(s_axis_tkeep)),
-        .rd_en(rd_en_m), .r_conn(r_conn_m), .r_seq(r_seq_m), .r_data(ring_d)
+        .rd_en(rd_tap), .r_conn(retx_id_r), .r_seq(r_tap_seq), .r_data(ring_d)
     );
 
     checksum16 u_csum (
@@ -992,7 +838,6 @@ module tcp_tx_frame (
             fin_cnt <= 3'd0; thcnt <= 3'd0;
             plen <= 12'd0; len_bad <= 1'b0; id_r <= 16'd0;
             hold48 <= 64'd0; tail_d <= 64'd0; tail_k <= 8'd0; tx_is_ctrl <= 1'b0;
-            tx_is_probe <= 1'b0;         // ⭐ P7B-PERSIST: 复位点 (照 tx_is_ctrl)
             bank_rdy <= 2'b00;
             f_seq[0] <= 32'd0; f_seq[1] <= 32'd0;
             f_ack[0] <= 32'd0; f_ack[1] <= 32'd0;
@@ -1025,11 +870,6 @@ module tcp_tx_frame (
             nbeats <= 8'd0; beat_cnt <= 8'd0; ring_d_r <= 64'h0;
             svc_id_r <= 0; tick_cnt <= 0; rto_pend_any <= 0; ack_pend_r <= 0;
             start_ack_d1 <= 1'b0;    // P7B-A7 R-1 (校验和装载使能延迟位)
-            // ⭐ P7B-PERSIST §2.5-② / §3.4b: 探询暂存 + 槽侧字段 + 读请求流水 复位
-            ctrl_probe <= 1'b0; ctrl_pld <= 8'h00;
-            ps_stage_rdy <= 1'b0; ps_stage_conn <= 4'd0; ps_stage_seq <= 32'd0;
-            ps_stage_byte <= 8'h00; ps_stage_estab <= 1'b0;
-            ps_rd_d1 <= 1'b0; ps_rd_d2 <= 1'b0;
             stat_retx_wrap <= 32'd0;
             retx_ovf_p     <= 1'b0;
             stat_retx <= 0;
@@ -1042,8 +882,6 @@ module tcp_tx_frame (
                 snd_una_prev[ri] <= 32'd0;
                 epoch[ri] <= 4'd0;
                 fin_seq_r[ri] <= 32'd0;
-                ps_timer[ri] <= 26'd0;   // ⭐ P7B-PERSIST §3.4b: 复位 ⇒ timer/phase = 0
-                ps_phase[ri] <= 3'd0;
             end
         end else begin
             // ---- 与默认分支逐字相同的前置块 ----
@@ -1055,12 +893,6 @@ module tcp_tx_frame (
                 snd_una_prev[cfg_up_id] <= 32'd0;
                 rto_pend[cfg_up_id]     <= 1'b0;
                 rto_timer[cfg_up_id]    <= 21'd0;
-                // ⭐ P7B-PERSIST §2.5-② / §3.4b「cfg_up（同 id）」列:
-                //   计时器/档位清零 (下次武装重新从 RTO_LIM 起) + **同 id 才清暂存**
-                //   (清位全集表: `ps_stage_rdy <= 0 iff ps_stage_conn == k`)。
-                ps_timer[cfg_up_id]     <= 26'd0;
-                ps_phase[cfg_up_id]     <= 3'd0;
-                if (ps_stage_conn == cfg_up_id) ps_stage_rdy <= 1'b0;
             end
             if (m_axis_tready && m_axis_tvalid) m_axis_tvalid <= 1'b0;
             if (ack_req && ackq_full) stat_ack_drop <= stat_ack_drop + 1;
@@ -1097,24 +929,6 @@ module tcp_tx_frame (
             if (start_ack_d1) begin
                 ctrl_ipcsum  <= ctrl_ipcsum_now;
                 ctrl_tcpcsum <= ctrl_tcpcsum_now;
-            end
-
-            // ============ ⭐ P7B-PERSIST §2.3 / §2.5-②: 读请求流水 + T+2 捕获 =========
-            //   逐拍分工 (v3 #3 **钉死**, 取代 v2 的两种读法):
-            //     T   (扫描拍, `ps_fire`) : 发 ring 读请求 + 在扫描块里锁 conn/estab/seq
-            //     T+1 (读地址拍)           : **本拍不锁任何暂存控制位**
-            //     T+2 (**只**捕获数据)      : `ps_stage_byte <= r_data[63:56]`; `rdy <= 1`
-            //   ⛔ **不许在 T+2 重采 estab/seq/conn** —— T+2 不是扫描拍, 该拍的 `rb_id`
-            //      未必 = `scan_id`; "采样拍 = 扫描拍" 是 §2.4-2 环断论证的**前提**。
-            //   ⚠️ 本块放在两个 `case` **之外** (T+2 拍不保证落在 RX_IDLE —— 与 R-1 的
-            //      `start_ack_d1` 块同理), 且在 `cfg_up` 块**之后** ⇒ 同拍写冲突时
-            //      **清位路径赢** (§3.4b 清位全集表: cfg_up / 解除武装 / 槽消费三条清位
-            //      都比"同拍新捕获"更具体; 让掉一次捕获只损失一次机会 = 下一档重发)。
-            ps_rd_d1 <= ps_rd;
-            ps_rd_d2 <= ps_rd_d1;
-            if (ps_rd_d2) begin
-                ps_stage_byte <= ring_d[63:56];
-                ps_stage_rdy  <= 1'b1;
             end
 
             // ==================== RX 引擎 ====================
@@ -1202,86 +1016,23 @@ module tcp_tx_frame (
                             rto_timer[scan_id] <= rto_timer[scan_id] - 21'd1;
                     end else
                         rto_timer[scan_id] <= 21'd0;
-                    // ================= ⭐ P7B-PERSIST §2.5-③ / §3.1 / §3.4b ==========
-                    //   persist 计时段 (扫描拍, 与 RTO 扫描同段同 id 门控 ⇒ 不引入新长锥)。
-                    //   · 武装条件 (含 D-5 的第五/六子句): `scan_estab && rb_snd_wnd == 0
-                    //     && rb_snd_nxt != rb_snd_una && !fin_sent_r[scan_id]
-                    //     && !rst_sent_r[scan_id]` (FIN/RST 在飞时 snd_nxt = snd_una+1
-                    //     而 snd_una 处**无数据字节** ⇒ 必须排除 —— §1.1 末的边界)。
-                    //   · 武装拍 (条件由假变真那拍, §3.1): `phase <= 0`, `timer <=
-                    //     Reload(0) = RTO_LIM` (首档复用 RTO 额定值, §3.2)。
-                    //   · fire 拍 (`timer == 1`): `phase <= next`, `timer <= Reload(next)`;
-                    //     同拍 `ps_fire` 发 ring 读请求 + T 拍锁 conn/estab/seq (见上)。
-                    //   · 解除武装 (条件为假 = 下一扫描拍, §3.4-1/2/3): `phase <= 0`,
-                    //     `timer <= 0`, 且**同 id 才清暂存** (`rdy <= 0 iff conn == k`)。
-                    //   ⛔ 冻结/复位/cfg_up 的清位在各自的块里 (§3.4b 清位全集表)。
-                    if (PERSIST_EN) begin
-                        if (ps_arm) begin
-                            if (ps_timer[scan_id] == 26'd0) begin
-                                ps_timer[scan_id] <= ps_reload(3'd0);   // = RTO_LIM
-                                ps_phase[scan_id] <= 3'd0;
-                            end else if (ps_timer[scan_id] == 26'd1) begin
-                                ps_timer[scan_id] <= ps_reload(ps_next);
-                                ps_phase[scan_id] <= ps_next;
-                            end else
-                                ps_timer[scan_id] <= ps_timer[scan_id] - 26'd1;
-                        end else begin
-                            ps_timer[scan_id] <= 26'd0;
-                            ps_phase[scan_id] <= 3'd0;
-                            if (ps_stage_conn == scan_id) ps_stage_rdy <= 1'b0;
-                        end
-                        // T 拍锁存 (采样拍 = 扫描拍; 该拍 `rb_id ≡ scan_id` ⇒ 样本必属本连接)
-                        if (ps_fire) begin
-                            ps_stage_conn  <= scan_id;
-                            ps_stage_estab <= scan_estab;
-                            ps_stage_seq   <= rb_snd_una;
-                        end
-                    end
                     scan_id <= scan_id + 4'd1;
                 end
                 // ---- 控制帧槽装载 (FIX-2': 帧首拍同拍预留 +1 = upd_wr_ctrl) ----
-                // ⭐ P7B-PERSIST §2.5-⑥: 槽的**第二来源** = 探询段 (`probe_sel`)。
-                //   探询支与 ACK 条目支共用本块, 五处探询专属改写:
-                //     `ctrl_is` (§2.4-4② —— 防陈旧 `ackq_dout` 把探询发成 FIN/RST/SYN)、
-                //     `ctrl_seq` (旧数据 ⇒ = `rb_snd_una`, 不是 `rb_snd_nxt`)、
-                //     `ctrl_doff` (0x5018 = PSH+ACK, 与数据段同形)、
-                //     `ctrl_pld` + `ctrl_probe` (槽上线字段; `ctrl_probe` 同时是 T+1 校验和
-                //     flavor 选择与帧入口 `tx_is_probe` 的源)、
-                //     **消费暂存** `ps_stage_rdy <= 1'b0` (§3.4b「槽上线拍」列)。
-                //   其余字段 (ack/wnd/dmac/dip/sport/dport/idcap) 取 `rb_*`/`cam_rd_*`,
-                //   而该拍 `rb_id = ps_stage_conn` (mux 的探询 arm) ⇒ **自动属于探询连接**
-                //   (§0.2: `cam_rd_id = rb_id` 是 assign、`tcp_cam` 读口组合 ⇒ 同拍可用)。
-                //   ⚠️ `ctrl_id <= start_id` **一字未动** —— 探询槽 `ctrl_is = 0` ⇒ 三处
-                //      消费者 (`ctrl_adv_inflight` 要求 `|ctrl_is`; FIN/RST 落标要求
-                //      `ctrl_is[1]`/`[2]`) 全部不被触发 ⇒ 该字段对探询是 **don't-care**
-                //      (唯一例外: 探询拍 `ack_pend_r` 的 1 拍陈旧可能让 start_id 取陈旧槽
-                //       号 —— 已逐条核过三处消费者, 结论不变; 登记在实施报告)。
                 if (start_ack) begin
                     ctrl_slot_busy <= 1'b1;
                     ctrl_tx_pend   <= 1'b1;
                     ctrl_id        <= start_id;
-                    ctrl_is        <= probe_sel ? 3'b000 : {aq_rst, aq_fin, aq_syn};
-                    ctrl_seq       <= probe_sel ? rb_snd_una : rb_snd_nxt;
+                    ctrl_is        <= {aq_rst, aq_fin, aq_syn};
+                    ctrl_seq       <= rb_snd_nxt;
                     ctrl_ack       <= ctrl_ack_now;
-                    ctrl_doff      <= probe_sel ? 16'h5018 : ctrl_doff_now;
+                    ctrl_doff      <= ctrl_doff_now;
                     ctrl_wnd       <= rb_rcv_wnd;
                     ctrl_dmac      <= cam_rd_dmac;
                     ctrl_dip       <= cam_rd_sip;
                     ctrl_sport     <= cam_rd_dport;
                     ctrl_dport     <= cam_rd_sport;
                     ctrl_idcap     <= id_r;
-                    // ⛔ **实施轮订正 (H1 类: 设计件 v3 §2.5-⑥ 按字面写出来是错的)**:
-                    //   设计件原文写的是**无门控**的 `ctrl_pld <= ps_stage_byte;`, 而
-                    //   §2.1/§2.5-⑦ 的 TCP 校验和树**无条件**加上 `{16'b0, ctrl_pld,
-                    //   8'h00}` ⇒ 一旦本连接曾有过探询, `ctrl_pld` 就是**陈旧的载荷字节**,
-                    //   于是其后**每一个控制帧的 TCP 校验和都被多算一项** (帧里并没有那
-                    //   个字节) ⇒ 对端静默丢弃。实测: 门里 `REDS csum=206` (基线 = 0)。
-                    //   修法 = 与同块里 `ctrl_seq`/`ctrl_doff` **同款门控** (最小、对称):
-                    //   非探询槽 `ctrl_pld = 0` ⇒ 树里的项为 0 ⇒ 既有 ACK/SYN/FIN/RST 的
-                    //   校验和逐位不变 (探询槽的项仍 = 载荷字节 << 8 ✓ 与 §2.1 的字节位序一致)。
-                    ctrl_pld       <= probe_sel ? ps_stage_byte : 8'h00;
-                    ctrl_probe     <= probe_sel;
-                    if (probe_sel) ps_stage_rdy <= 1'b0;   // 暂存消费 (唯一有效位, §3.4b)
                     // ⭐ R-1: `ctrl_ipcsum` / `ctrl_tcpcsum` **不再在这里装载** —— 推到
                     //   下一拍, 由本块外的 `if (start_ack_d1)` 装载 (使能位在 T0 沿置,
                     //   T0+1 装载; 源树见 :582 段)。其余 10 项与 id_r 一字未动。
@@ -1364,13 +1115,9 @@ module tcp_tx_frame (
                 if (ctrl_tx_pend) begin
                     // 控制帧优先 (ACK 时延); 仲裁键清位 = 本帧启动拍 (与进 T_HDR 同拍)
                     tx_state     <= T_HDR; thcnt <= 3'd0; tx_is_ctrl <= 1'b1;
-                    // ⭐ P7B-PERSIST §2.5-⑧: **帧入口装载点 1/4** (照 tx_is_ctrl 同拍同支;
-                    //   源 = `ctrl_probe` —— 槽装载拍写入 ⇒ 帧入口 ≥ T0+1 ⇒ 已稳定)
-                    tx_is_probe  <= ctrl_probe;
                     ctrl_tx_pend <= 1'b0;
                 end else if (bank_rdy[tx_bank]) begin
                     tx_state     <= T_HDR; thcnt <= 3'd0; tx_is_ctrl <= 1'b0;
-                    tx_is_probe  <= 1'b0;      // 数据/重放帧恒非探询 (帧入口装载点 2/4)
                 end
             end
             T_HDR: begin
@@ -1397,26 +1144,12 @@ module tcp_tx_frame (
             T_PAY: begin
                 if (!m_axis_tvalid || m_axis_tready) begin
                     if (h_plen == 12'd0) begin
-                        if (h_ctrl && tx_is_probe) begin
-                            // ⭐ P7B-PERSIST §2.5-⑨ / §2.1「字节位序」: 探询段 = 55 B
-                            //   (48 B 头 + 7 B: 第 7 个保留字节 = 帧字节 index 54 = 载荷[0])。
-                            //   select = `h_ctrl && tx_is_probe` (逐字照 v3);
-                            //   末字 `{hold48, ctrl_pld, 8'h00}` / `tkeep 8'hFE` / `tlast 1'b1`。
-                            //   ⚠️ `h_plen` 对控制槽恒 0 ⇒ `stat_bytes` **+0** (§5.1 W15 口径)。
-                            m_axis_tvalid <= 1'b1;
-                            m_axis_tdata  <= {hold48, ctrl_pld, 8'h00};
-                            m_axis_tkeep  <= 8'hFE;
-                            m_axis_tlast  <= 1'b1;
-                            tx_state      <= T_DONE;
-                        end else begin
-                            // 纯 ACK / 零长数据: w6 = {window, csum, urg} 6 字节收尾
-                            // (探询支以外**一字不动**)
-                            m_axis_tvalid <= 1'b1;
-                            m_axis_tdata  <= {hold48, 16'h0000};
-                            m_axis_tkeep  <= 8'hFC;
-                            m_axis_tlast  <= 1'b1;
-                            tx_state      <= T_DONE;
-                        end
+                        // 纯 ACK / 零长数据: w6 = {window, csum, urg} 6 字节收尾
+                        m_axis_tvalid <= 1'b1;
+                        m_axis_tdata  <= {hold48, 16'h0000};
+                        m_axis_tkeep  <= 8'hFC;
+                        m_axis_tlast  <= 1'b1;
+                        tx_state      <= T_DONE;
                     end else if (fifo_empty_tx) begin
                         // 欠载防御 (app 契约违规): 提前结束帧 (结构不可达哨兵)
                         stat_eend     <= stat_eend + 1;
@@ -1488,11 +1221,9 @@ module tcp_tx_frame (
                     // 下一帧边界: 槽优先 (ACK 时延), 否则就绪 bank
                     if (ctrl_tx_pend) begin
                         tx_state <= T_HDR; thcnt <= 3'd0; tx_is_ctrl <= 1'b1;
-                        tx_is_probe <= ctrl_probe;   // ⭐ §2.5-⑧ 帧入口装载点 3/4
                         ctrl_tx_pend <= 1'b0;
                     end else if (tx_is_ctrl ? bank_rdy[tx_bank] : bank_rdy[nxt_bank]) begin
                         tx_state <= T_HDR; thcnt <= 3'd0; tx_is_ctrl <= 1'b0;
-                        tx_is_probe <= 1'b0;         // ⭐ §2.5-⑧ 帧入口装载点 4/4
                     end else begin
                         tx_state <= T_IDLE;
                     end

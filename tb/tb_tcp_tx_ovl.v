@@ -56,6 +56,51 @@ module tb_tcp_tx_ovl;
     localparam [15:0] TB_WIN_CAP = 16'hBFFE;
 `endif
 
+    // ⭐ P7B-PERSIST (设计件 §5.2-Ⅰ / §5.3): DUT 参数注入 = **宏 + 双跑** 形态
+    //   (D-10-2 定型: 取值机制 = TB 内 `ifdef` 选 localparam)。
+    //   ⚠️ **非 persist 臂的取值 = DUT 自己的默认值** ⇒ 例化处那些参数覆盖是**恒等
+    //      覆盖** ⇒ 既有 A..R 臂的读数逐字不变 (L2 的**结构性**保证, 不靠"我记得没改")。
+    //   ⚠️ `RTO_LIM` 在 ARM_PERSIST 臂**必须显式覆盖** (设计件原话): 门不定义
+    //      `DP_156MHZ` ⇒ DUT 默认 48828 visits ≈ 12.5M 拍 ≫ 本 TB 的观察窗。
+    //   档值选择 (观察窗预算 = 70 万拍; 阶梯窗 = RTO + 3×PS_BASE 档):
+    //     TB_RTO_LIM = 8 visits × 256 拍 = 2048 拍 ≈ 13.1 µs (首档)
+    //     TB_PS_BASE = 24 visits × 256 拍 = 6144 拍 (阶梯第 1 档; 其后 ×2/×4)
+    //     TB_PS_MAX  = 8192 visits (封顶档; 本 TB 结构性够不到 ⇒ 只作守卫值)
+`ifdef ARM_PERSIST
+    localparam integer TB_RTO_LIM = 8;
+    localparam [25:0]  TB_PS_BASE = 26'd24;
+    localparam [25:0]  TB_PS_MAX  = 26'd8192;
+`ifdef PERSIST_NEGCTL
+    localparam TB_PERSIST_EN = 1'b0;   // 臂 T (负对照): 同一刺激、DUT 门关 ⇒ 新判据必红
+`else
+    localparam TB_PERSIST_EN = 1'b1;   // 臂 S
+`endif
+`else
+    localparam integer TB_RTO_LIM = 48828;            // = DUT 默认 (逐位等价)
+    localparam [25:0]  TB_PS_BASE = 26'd3_051_758;    // = DUT 默认
+    localparam [25:0]  TB_PS_MAX  = 26'd36_621_094;   // = DUT 默认
+    localparam TB_PERSIST_EN = 1'b0;                  // = DUT 默认
+`endif
+    localparam integer TB_VISIT   = 256;              // 1 visit = 256 拍 (§3.1)
+    // ⭐ P7B-PERSIST episode 时间尺度 (单位 = 拍; 总额 ≈ 9 万拍 ⇒ 与 70 万拍预算相容)
+    localparam integer PE_AT         = 150000;   // 起点 (在既有 wc 窗口关闭插曲之后)
+    localparam integer PE_LAD_WAIT   = 90000;    // E1 阶梯窗上限 (3 档 = 80 visits = 20480 拍)
+    localparam integer PE_AFTER      = 2500;     // "恢复后 0 新探询" 观察窗
+    localparam integer PE_E2_DRAIN   = 8000;     // E2 排空窗
+    localparam integer PE_HOLD_SHORT = 5200;     // E2/E5/E6 的关窗观察窗 (2×RTO' + 余量)
+    localparam integer PE_E3_SESS    = 14000;    // E3 epoch 饱和窗
+    localparam integer PE_E3_HOLD    = 34000;     // E3 关窗观察窗
+    localparam integer PE_E4_WAIT    = 30000;     // E4 等 fire 窗
+    localparam integer PE_E4_OBS     = 1500;     // E4 清位观察窗 (< RTO'=2048, 见 step 30 注)
+    localparam integer PE_E4_PC      = 16000;     // E4 正控 (再关窗 ⇒ 探询应出现)
+    localparam integer PE_COLL_WAIT  = 30000;     // E7 等 fire 窗
+    localparam integer PE_COLL_OBS   = 6000;     // E7 释放后观察窗
+    localparam integer PE_TAIL       = 1500;     // 通用尾窗
+    // 期望间隔 (拍) = 档值 × 256: 首档 / PS_BASE / 2×PS_BASE
+    localparam integer TB_T_RTO    = TB_RTO_LIM * TB_VISIT;
+    localparam integer TB_T_BASE   = TB_PS_BASE * TB_VISIT;
+    localparam integer TB_T_BASE2  = TB_T_BASE * 2;
+
     // ===================== 函数 =====================
     function [7:0] fb;                      // 无状态字节函数
         input [31:0] i;
@@ -239,6 +284,12 @@ module tb_tcp_tx_ovl;
     reg         ack_req; reg [3:0] ack_id; reg [31:0] ack_val;
     reg         ack_syn, ack_fin, ack_rst;
     reg  [15:0] fin_req, rst_req;
+    // ⭐ P7B-PERSIST 激励钩子 (默认全 0 ⇒ 既有臂零影响; 只有 ARM_PERSIST 的那段 FSM 写它们):
+    //   · `src_skip[c]`   = 源侧不启动 c 的帧 (can_start 里加一项)
+    //   · `psc_ack_hold[c]` = TB 不给 c 发 rx ACK (冻结其 snd_una —— 探询的 seq 见证量)
+    //   · `pe_no_retx`    = 暂停 TB 的周期 retx_req 注入 (让 episode 时序确定)
+    reg  [15:0] src_skip, psc_ack_hold;
+    reg         pe_no_retx;
     reg         cfg_up; reg [3:0] cfg_up_id;
     wire [15:0] o_fin_sent, o_rst_sent;
     reg         wu_req; reg [3:0] wu_id; reg [31:0] wu_val; wire wu_gnt;
@@ -264,12 +315,125 @@ module tb_tcp_tx_ovl;
         fin_req=0; rst_req=0; cfg_up=0; cfg_up_id=0;
         wu_req=0; wu_id=0; wu_val=0; retx_req=0; retx_id=0;
         m_tready=1; rx_upd_wr=0; rx_upd_id=0; rx_upd_sel=0; rx_upd_val=0;
+        src_skip=16'h0; psc_ack_hold=16'h0; pe_no_retx=1'b0;   // P7B-PERSIST 钩子
         scfg_upd_wr=0; scfg_upd_id=0; scfg_upd_sel=0; scfg_upd_val=0;
         beat_d=0; beat_k=8'h00; beat_l=0; beat_v=0; beat_id=0;
         cur_c=0; rr=0; phase=0; ack_sch=0; cur_len=0; cur_pos=0; cur_kb=0; cur_n=0;
         setup_c=0; trq_next=32'd20000; tmp_sel=0; c6_tmr=9'd0; c6_n=0;
         for (i = 0; i < 16; i = i + 1) setup_st[i] = 4'd0;
     end
+
+`ifdef ARM_PERSIST
+    // ================= ⭐ P7B-PERSIST 判据组状态 (设计件 §5.2; 只在 ARM_PERSIST 臂) ====
+    //   单写者纪律: FSM 写 `pe_st/pe_t/pe_holdb/psc_win_closed/pe_exp_*/pe_clr_pc/…`;
+    //   观察块写计数器 (`pe_probe_ep/out/cur/pn/pe_pt[]/判决计数器`);
+    //   `frame_check` 只写事件记录 (`pe_probe_ev/pe_probe_bad/pe_rec_*`)。
+    // ---- FSM ----
+    reg  [6:0]  pe_st;              // 主状态 (0 = 空闲; 见建连 FSM 块末的 episode 驱动)
+    integer     pe_t;               // 步内计时
+    reg  [3:0]  pe_ep;              // 当前 episode 编号 (1..7)
+    reg  [6:0]  pe_ret;             // "静默例程"的返回状态 (见 7'd70 起的 Q 段)
+    integer     pe_x;               // 初始化/复位循环变量 (两处共用, 唯一一处声明)
+`ifdef ARM_PERSIST
+    // ==== PERSIST 归因探针 (声明处; always 体在源声明之后) ====
+    reg [3:0]  dbg_sd_c;  reg [31:0] dbg_sd_kb;  reg [11:0] dbg_sd_pos;
+    reg [7:0]  dbg_sd_b0; reg         dbg_sd_op;
+    initial begin dbg_sd_c=0; dbg_sd_kb=0; dbg_sd_pos=0; dbg_sd_b0=0; dbg_sd_op=0; end
+`endif
+    reg  [3:0]  pe_conn;            // 当前 episode 的目标连接
+    reg         pe_holdb;           // E4/E7: 按住 conn0 的 data-start 门 (tx_blk_sid)
+    reg         pe_clr_pc;          // 1 拍脉冲: 观察块清"当前 episode 探询计数/时刻表"
+    reg  [15:0] psc_win_closed;     // "TB 自己关的窗" 位图 (探询分类器的末项)
+    reg  [31:0] pe_exp_seq [0:15];  // 关窗时刻的 snd_una 快照 (探询 seq 的期望值)
+    reg  [3:0]  pe_exp_conn;        // 当前 episode 期望的探询连接 (A)
+    // ---- 事件记录 (写者 = frame_check) ----
+    integer     pe_probe_ev, pe_probe_bad;
+    integer     pe_rec_cyc; reg [3:0] pe_rec_conn; reg [31:0] pe_rec_seq;
+    reg [11:0]  pe_rec_plen; reg [15:0] pe_rec_iplen;
+    reg [7:0]   pe_rec_flags, pe_rec_pay;
+    // ---- 观察块状态 ----
+    integer     pe_probe_seen, pe_probe_ep, pe_probe_out, pe_probe_cur, pe_pn;
+    integer     pe_pt [0:7];        // 当前 episode 内的探询时刻表 (≤8 条, 单位 = 拍)
+    integer     pe_pv [0:7];        // 同上, 但单位 = **conn1 的扫描访问数 (visits)**
+    integer     w_vis1, w_vis1_cyc; // conn1 的扫描访问计数 / 最近一次访问拍号
+    integer     w_leak1;            // 关窗期仍上线 conn1 数据帧数 (既存偏斜的泄漏见证)
+    integer     pe_d_seen;          // 数据帧事件消费游标
+    // E1 阶梯的 visit 口径快照 (FSM 写)
+    integer     pe_lad_vc, pe_lad_vo, pe_lad_vr, pe_f_gap4_v;
+    integer     pe_lad_dc, pe_lad_d1, pe_lad_d2;   // 阶梯三档的 visit 间隔 (判据主口径)
+    integer     pe_sn_first, pe_sn_last;            // j3: 探询序列首/末的 snd_nxt 快照
+    integer     w_ps_rst1;          // E6' 的 rst_sent_r[1] 见证
+    integer     w_ps_quiet_to;      // 静默例程超时次数 (见证: 重放机没压静)
+    integer     w_ps_dbg;           // E7 诊断打印计数 (≤10 行)
+    integer     w_ps_dbg4;          // E3 观察窗诊断计数 (≤10 行)
+    integer     w_ps_dbg2;          // conn1 数据帧诊断计数 (≤14 行)
+    integer     w_ps_e5ok, w_ps_e6ok;   // E5/E6 粘滞见证: 除 !fin/!rst 外武装条件全真过
+    // ---- 各 episode 的判决计数器 (0 = 绿) ----
+    integer     e_ps_ladder, e_ps_stop, e_ps_field, e_ps_side, e_ps_sndnxt;
+    integer     e_ps_e2, e_ps_e3, e_ps_e4, e_ps_e5, e_ps_e6, e_ps_coll;
+    integer     e_ps_negctl;        // 臂 T 专用: "门关 ⇒ 该有的现象没出现" 计数
+    // ---- 见证 (非空判据) ----
+    integer     w_ps_lad, w_ps_drain, w_ps_blocked, w_ps_rdy, w_ps_cfgu_pc;
+    integer     w_ps_fin, w_ps_rst, w_ps_coll, w_ps_posctrl, w_ps_out_cyc;
+    integer     w_ps_retx_req;      // 窗口内 TB 自己发的 retx_req 数 (j9/j3 的比较基准)
+    // ---- E1 阶梯的时刻快照 (FSM 在 episode 尾拷贝; 观察块不再动) ----
+    integer     pe_lad_n, pe_lad_t0, pe_lad_t1, pe_lad_t2;
+    integer     pe_lad_close, pe_lad_reclose, pe_lad_reopen;
+    integer     pe_f_reclose_gap;   // 再关窗 ⇒ 首探询的间隔 (应 ≈ RTO 档)
+    // ---- 各 episode 的判决输入 (FSM 在 episode 尾快照) ----
+    integer     pe_f_e2_probe, pe_f_e3_probe, pe_f_e4_probe;
+    integer     pe_f_e5_probe, pe_f_e6_probe, pe_f_e7_wit;
+    integer     pe_lad_n2;          // E1b 关窗前的累计探询数 (j7a: 恢复窗内新增 = 0)
+    integer     w_ps_e5win, w_ps_e6win;   // E5/E6 观察窗内 "该连接 snd_wnd==0" 拍数 (见证)
+    integer     pe_de0, pe_de1;     // E7 观察窗内数据帧计数 (见证: 窗内确有数据流)
+    reg  [2:0]  pe_f_e5_state, pe_f_e6_state;   // {fin_sent, rst_sent, snd_nxt != snd_una}
+    integer     pe_stat0, pe_stat1, pe_req0, pe_req1, pe_sndnxt0, pe_sndnxt1;
+    reg         pe_done;
+    // ---- 多连接相撞 episode (E7) ----
+    reg         pe_coll_arm;
+    integer     pe_coll_wit;        // 相撞见证 (psc_coll 成立拍数)
+    integer     pe_coll_seq, pe_coll_conn;
+    integer     e_coll_bad, w_coll_frame;
+    // ---- 帧事件记录 (写者 = frame_check; 观察块按事件变化消费) ----
+    integer     pe_d_ev;  reg [3:0] pe_d_conn;  reg [31:0] pe_d_seq;
+    // (相撞判据的三根 wire 见下方 "DUT 例化之后" —— 它们要引用 win_open 等线网)
+
+    // ⚠️ 必须初始化 (实测踩过): 这些 reg 若为 X ⇒ `case (pe_st)` 永不匹配 ⇒ episode 全不跑;
+    //    且 `ack_seen_tb` 的三目在 `pe_holdb = X` 下出 `16'hFFFX` ⇒ **conn0 的数据门被 X
+    //    卡住** (相位卡在 0 ⇒ 无 FIN/RST ⇒ 跑满 CY_MAX)。初始值与既有 TB 计数器同款:
+    //    在 `initial` 里给初值 (rst_n 只在 t=0 断言一次)。
+    initial begin
+        pe_st = 7'd0; pe_t = 0; pe_ep = 4'd0; pe_conn = 4'd0;
+        pe_holdb = 1'b0; pe_clr_pc = 1'b0; psc_win_closed = 16'h0; pe_exp_conn = 4'd0;
+        pe_lad_n = 0; pe_lad_t0 = 0; pe_lad_t1 = 0; pe_lad_t2 = 0; pe_lad_n2 = 0;
+        pe_lad_close = 0; pe_lad_reclose = 0; pe_lad_reopen = 0; pe_f_reclose_gap = 0;
+        pe_lad_vc = 0; pe_lad_vo = 0; pe_lad_vr = 0; pe_f_gap4_v = 0;
+        pe_lad_dc = 0; pe_lad_d1 = 0; pe_lad_d2 = 0; w_ps_rst1 = 0;
+        w_ps_quiet_to = 0; w_ps_e5ok = 0; w_ps_e6ok = 0; pe_ret = 7'd1; w_ps_dbg = 0;
+        w_ps_dbg2 = 0;
+        w_ps_dbg4 = 0;   // ⚠️ 必须初始化: 未初始化 = X ⇒ `w_ps_dbg4 < 10` 为 X ⇒ 诊断不打
+                         //    (实测踩过: E3 观察窗的诊断因此静默一整个 episode)
+        pe_f_e2_probe = 0; pe_f_e3_probe = 0; pe_f_e4_probe = 0;
+        pe_f_e5_probe = 0; pe_f_e6_probe = 0; pe_f_e7_wit = 0;
+        pe_f_e5_state = 3'b0; pe_f_e6_state = 3'b0;
+        pe_stat0 = 0; pe_stat1 = 0; pe_req0 = 0; pe_req1 = 0;
+        pe_sndnxt0 = 0; pe_sndnxt1 = 0; pe_done = 1'b0;
+        w_ps_e5win = 0; w_ps_e6win = 0; pe_de0 = 0; pe_de1 = 0;
+        w_ps_lad = 0; w_ps_drain = 0; w_ps_blocked = 0; w_ps_rdy = 0;
+        w_ps_cfgu_pc = 0; w_ps_fin = 0; w_ps_rst = 0; w_ps_coll = 0;
+        w_ps_posctrl = 0; w_ps_out_cyc = 0; w_ps_retx_req = 0;
+        // 事件记录 (写者 = frame_check) 与判决计数器 (写者 = summary)
+        pe_probe_ev = 0; pe_probe_bad = 0; pe_d_ev = 0;
+        pe_rec_cyc = 0; pe_rec_conn = 4'd0; pe_rec_seq = 0; pe_rec_plen = 0;
+        pe_rec_iplen = 0; pe_rec_flags = 8'h00; pe_rec_pay = 8'h00;
+        pe_coll_arm = 1'b0; pe_coll_seq = 0; pe_coll_conn = 0;
+        e_coll_bad = 0; w_coll_frame = 0;
+        e_ps_ladder = 0; e_ps_stop = 0; e_ps_field = 0; e_ps_side = 0;
+        e_ps_sndnxt = 0; e_ps_e2 = 0; e_ps_e3 = 0; e_ps_e4 = 0;
+        e_ps_e5 = 0; e_ps_e6 = 0; e_ps_coll = 0; e_ps_negctl = 0;
+        for (pe_x = 0; pe_x < 8; pe_x = pe_x + 1) pe_pt[pe_x] = 0;
+    end
+`endif
 
     // ===================== TCB + CAM + 仲裁 =====================
     wire [3:0]  rb_id, cam_rd_id;
@@ -357,11 +521,22 @@ module tb_tcp_tx_ovl;
     reg  [1:0] ag_st;
     integer    ag_cyc, ag_wit_sv;
     reg        ag_seen_sd;
+`elsif ARM_PERSIST
+    // ⭐ P7B-PERSIST 臂: 本臂**自己驱动** ack_seen_tb —— E7 的 "data-start 门 hold":
+    //   `tx_blk_sid = tx_blk | ~st_ok | ~acks_ok`, 拉低 `acks_ok[B]` 只按住 **B 的**
+    //   数据帧启动门 (start_data / s_axis_tready 逐字同门 ⇒ 只延迟, 不变语义),
+    //   而**不动任何探询门槛** ⇒ 这正是 E7 要的"探询待发 + 数据帧就绪"的可控相位。
+    reg [15:0] ack_seen_tb;
+    initial ack_seen_tb = 16'hFFFF;   // ⚠️ 必须给初值 (X 会长到 tx_blk_sid 上卡住数据门)
 `else
     wire [15:0] ack_seen_tb = 16'hFFFF;   // 既有臂: 门恒开 (本刀不动既有判据)
 `endif
 
-    tcp_tx_frame #(.RING_CAP(TB_WIN_CAP)) u_dut (   // 构建 F: 与 u_tcb.WIN_CAP 同值
+    // ⭐ P7B-PERSIST: 参数注入 (取值 = 上面的 localparam; 非 persist 臂 = DUT 默认值
+    //   ⇒ 恒等覆盖, 逐位等价)。`.RTO_LIM` 覆盖是**必须**的 (见上)。
+    tcp_tx_frame #(.RING_CAP(TB_WIN_CAP), .RTO_LIM(TB_RTO_LIM),
+                   .PERSIST_EN(TB_PERSIST_EN), .PS_BASE(TB_PS_BASE),
+                   .PS_MAX(TB_PS_MAX)) u_dut (   // 构建 F: 与 u_tcb.WIN_CAP 同值
         .clk(clk), .rst_n(rst_n),
         .s_axis_tdata(s_tdata), .s_axis_tkeep(s_tkeep), .s_axis_tvalid(s_tvalid),
         .s_axis_tready(s_tready), .s_axis_tlast(s_tlast), .s_axis_tid(s_tid),
@@ -399,6 +574,26 @@ module tb_tcp_tx_ovl;
     );
     // (s_tready 由 DUT 输出端口驱动; 再加 assign 会形成自环网 => X)
 
+`ifdef ARM_PERSIST
+    // ---- ⭐ P7B-PERSIST E7 的相撞判据 (TB **自写**; 与 RTL 的 ds_guard 同式不同源) ----
+    //   三根 wire 逐项取自 DUT 的**状态线/输入**与 TB 自己的 `s_tvalid/s_tid`:
+    //     · `pe_probe_gates` = `probe_sel` 里**除 ds_guard 之外**的全部正项 (逐项自写);
+    //     · `pe_dsg` = 与 RTL `ds_guard` **同值** (取反的 6 项合取) —— 即 "guard 开着";
+    //     · `pe_startdata_nodsg` = "**没有** ds_guard 时, 探询槽上线 **∧** 数据帧同时启动"
+    //       = 这一拍就是**那条缺陷拍** (数据帧带探询连接的四元组 + seq 上线);
+    //     · `psc_coll` = 同上, 且**呈交的帧属于别的连接** (跨连接可判; A==B 时自洽不可判)。
+    //   ⛔ 刻意**不引用** `u_dut.ds_guard / u_dut.probe_sel` (否则判据成环路恒等式)。
+    wire pe_probe_gates = u_dut.ps_stage_rdy && u_dut.ps_stage_estab &&
+                          u_dut.rx_idle && !u_dut.rx_flush && !u_dut.ctrl_slot_busy &&
+                          u_dut.ackq_empty && !u_dut.svc && !u_dut.ring_eval &&
+                          !u_dut.scan_now && !u_dut.retx_active;
+    wire pe_dsg = ~(u_dut.recv_first && s_tvalid && !u_dut.ack_pend_r &&
+                    !u_dut.fifo_full && !u_dut.bank_rdy[u_dut.rx_bank] && win_open);
+    wire pe_startdata_nodsg = pe_probe_gates && !pe_dsg && !u_dut.tx_blk_sid;
+    wire psc_coll = pe_probe_gates && !pe_dsg && !u_dut.tx_blk_sid &&
+                    (s_tid != pe_exp_conn);
+`endif
+
     // ===================== 帧内字访问 (读 fr) =====================
     function [15:0] fw;
         input [11:0] o;
@@ -413,6 +608,7 @@ module tb_tcp_tx_ovl;
         reg [11:0] plen;
         reg [31:0] fseq, ip_acc, tcp_acc;
         reg [15:0] ip_len;
+        reg        is_probe;   // ⭐ P7B-PERSIST: 线上字段分类器 (见下; 非该臂恒 0)
         integer    c;
         begin
             n_frames = n_frames + 1;
@@ -450,6 +646,20 @@ module tb_tcp_tx_ovl;
                 if (fw(48) !== RCV_WND) begin
                     e_parse = e_parse + 1; $display("[FAIL] wnd=%h @%0d", fw(48), cyc); end
                 fseq = {fw(38), fw(40)};
+`ifdef ARM_PERSIST
+                // ⭐ P7B-PERSIST 判据组: 探询段的**线上字段**分类器 (设计件 v3 #12)。
+                //   ⛔ **不许从 `u_dut.tx_is_probe` 取样** —— 否则"两计数相等"是恒等式,
+                //      不是独立见证。四要素全部来自**线上帧字段 + TB 自维护模型**:
+                //     flags == 0x18 (与数据段同形) ∧ plen == 1 (55-54)
+                //     ∧ fseq == TB 的 `snd_una` 影子 (`sh_una`, 由 tcb 写口逐拍重建)
+                //     ∧ 该连接此刻落在"TB 自己关的窗"里 (`psc_win_closed`)。
+                //   末项是**必要**的: 健康态下"1 字节数据帧恰落在自己 snd_una 上"结构性
+                //   存在 (无在飞时的首帧) ⇒ 只用前三项会误分类。
+                is_probe = (flags == 8'h18) && (plen == 12'd1) &&
+                           (fseq == sh_una[t_conn]) && psc_win_closed[t_conn];
+`else
+                is_probe = 1'b0;
+`endif
                 if ({fw(42), fw(44)} !== RCV_NXT) begin
                     e_ackf = e_ackf + 1;
                     if (e_ackf < 6) $display("[FAIL] ack=%h @%0d", {fw(42), fw(44)}, cyc); end
@@ -497,11 +707,55 @@ module tb_tcp_tx_ovl;
                     if (flags !== 8'h18) begin
                         e_parse = e_parse + 1;
                         $display("[FAIL] data flags=%h @%0d", flags, cyc); end
+`ifdef ARM_PERSIST
+                    // ---- ⭐ P7B-PERSIST: 探询段逐帧取证 (计数归观察块所有 ⇒ 本处只
+                    //      **记录事件**并累加事件数; 单写者规则与 sh_una/stat_drop_len 同款) --
+                    if (is_probe) begin
+                        pe_probe_ev   = pe_probe_ev + 1;
+                        pe_rec_cyc    = cyc;
+                        pe_rec_conn   = t_conn;
+                        pe_rec_seq    = fseq;
+                        pe_rec_plen   = plen;
+                        pe_rec_iplen  = ip_len;
+                        pe_rec_flags  = flags;
+                        pe_rec_pay    = fr[54];
+                        // j2 字段判据: IP total_len == 41 / plen == 1 / flags == 0x18 /
+                        //              seq == TB 的 snd_una 影子 (四要素同上, 独立复算)
+                        if ((ip_len !== 16'd41) || (plen !== 12'd1) ||
+                            (flags !== 8'h18) || (fseq !== sh_una[t_conn]))
+                            pe_probe_bad = pe_probe_bad + 1;
+                        // tuple 归属 (j13 后半"探询仍带 A 的字段"): 帧的 dmac/ip/端口/窗口
+                        // 已由 J1 按**端口识别的连接**逐字校验 ⇒ 这里只再钉一条**顺序**:
+                        // 探询帧的连接必须 == 所记录事件连接的期望值 (TB 自维护)。
+                        if (t_conn !== pe_exp_conn) pe_probe_bad = pe_probe_bad + 1;
+                    end
+                    // ---- ⭐ j13 的核心判据: E7 相撞窗内**不得出现非 B 的数据帧** ----
+                    //   签名: 变异臂 (无 ds_guard) 下, 数据帧带 **conn1 的端口** + conn1
+                    //   的 snd_nxt 上线 ⇒ `t_conn = 1 != 0` 且**不是探询段** (seq 不是
+                    //   snd_una ⇒ 分类器不认) ⇒ 命中。clean 臂里 conn1 的窗是关的 ⇒
+                    //   结构性不可能出现 ⇒ 该判据在 clean 臂上由"臂的构造"保证为 0。
+                    pe_d_ev   = pe_d_ev + 1;
+                    pe_d_conn = t_conn;
+                    pe_d_seq  = fseq;
+                    if ((t_conn == 4'd1) && (pe_st != 7'd0) && !is_probe &&
+                        (w_ps_dbg2 < 14)) begin
+                        w_ps_dbg2 = w_ps_dbg2 + 1;
+                        $display("DBG C1DATA @%0d ps=%0d fseq=%h plen=%0d wcl=%b nxt=%h una=%h",
+                                 cyc, pe_st, fseq, plen, psc_win_closed[1],
+                                 u_tcb.snd_nxt_r[1], u_tcb.snd_una_r[1]);
+                    end
+                    if (((pe_st == 7'd51) || (pe_st == 7'd52)) && !is_probe && (t_conn != 4'd0))
+                        e_coll_bad = e_coll_bad + 1;
+`endif
 `ifdef TCP_TX_OVL
                     // J9: 会话内**落在重放窗口 [rep_lo, retx_hi) 内**的数据帧必须逐段
                     // 连续覆盖 (含"对端尚未见过"的那些 —— 它们与重放帧一起构成覆盖)
                     if (u_dut.retx_active && (u_dut.retx_id_r == t_conn) &&
-                        ((fseq - rep_hi_w) >= 32'h8000_0000)) begin
+                        ((fseq - rep_hi_w) >= 32'h8000_0000) && !is_probe) begin
+                        // ⭐ P7B-PERSIST §5.2-Ⅳ: 探询段**不进 J9 的重放覆盖窗口**
+                        //   (`is_probe` = 线上字段分类器; 非该臂恒 0 ⇒ 既有臂逐位不变)。
+                        //   ⚠️ 这里是"状态线口径"的**唯一**允许处 (与同分支已用的
+                        //      `u_dut.retx_active/retx_id_r` 同类); 计数面仍禁用。
                         if (!rep_lo_ok) begin
                             rep_max   = fseq;              // 首帧自锚 = 重放起点
                             rep_lo_ok = 1'b1;
@@ -545,6 +799,11 @@ module tb_tcp_tx_ovl;
                                     $display("[FAIL] payload conn=%0d seq=%h off=%0d got=%h exp=%h @%0d",
                                              t_conn, fseq, kk, fr[54+kk],
                                              fb(CBASE*t_conn + (fseq-isn[t_conn]) + kk), cyc);
+`ifdef ARM_PERSIST
+                                    $display("   APP-SNAP c=%0d kw=%0d pos=%0d b0=%h op=%b (frame conn=%0d fseq=%h plen=%0d)",
+                                             dbg_sd_c, dbg_sd_kb, dbg_sd_pos, dbg_sd_b0, dbg_sd_op,
+                                             t_conn, fseq, plen);
+`endif
                                     $display("   dump54..69: %h %h %h %h %h %h %h %h  %h %h %h %h %h %h %h %h",
                                              fr[54],fr[55],fr[56],fr[57],fr[58],fr[59],fr[60],fr[61],
                                              fr[62],fr[63],fr[64],fr[65],fr[66],fr[67],fr[68],fr[69]);
@@ -611,11 +870,13 @@ module tb_tcp_tx_ovl;
 
     // ===================== app 源 (单呈现口, 轮转, 一次一帧) =====================
     reg can_start_v;
+    // ⭐ P7B-PERSIST: `src_skip` = 源侧禁止启动某连接的帧 (只在 ARM_PERSIST 臂被置位;
+    //   默认全 0 ⇒ 本函数逐位不变 ⇒ 既有臂零影响)。
     function can_start;
         input [3:0] c;
         begin
             can_start = (setup_st[c] == 4'd10) && !dead[c] && !fin_req[c] &&
-                        !rst_req[c] && !o_fin_sent[c] && !o_rst_sent[c];
+                        !rst_req[c] && !o_fin_sent[c] && !o_rst_sent[c] && !src_skip[c];
         end
     endfunction
 
@@ -698,6 +959,14 @@ module tb_tcp_tx_ovl;
         end
     end
 
+`ifdef ARM_PERSIST
+    // ==== PERSIST 归因探针 (体; 只读 TB 自己的源状态) ====
+    always @(posedge clk) if (u_dut.start_data) begin
+        dbg_sd_c <= cur_c; dbg_sd_kb <= kw_live; dbg_sd_pos <= cur_pos;
+        dbg_sd_b0 <= s_tdata[63:56]; dbg_sd_op <= cur_op;
+    end
+`endif
+
     // ===================== 建连 FSM + rx ACK + 激励 =====================
     reg [7:0] tmp8;
     always @(posedge clk or negedge rst_n) begin
@@ -751,7 +1020,7 @@ module tb_tcp_tx_ovl;
             // ---- rx ACK 调度 ----
             if (!rx_upd_wr) begin
                 if (ack_sch < NCONN) begin
-                    if ((setup_st[ack_sch] == 4'd10) &&
+                    if ((setup_st[ack_sch] == 4'd10) && !psc_ack_hold[ack_sch] &&
                         ((peer_rcv[ack_sch] > (sh_una[ack_sch] + ack_lag[ack_sch])) ||
                          (ack_first[ack_sch] && (peer_rcv[ack_sch] > sh_una[ack_sch])) ||
                          ((cyc % 2048) == 0 && (peer_rcv[ack_sch] > sh_una[ack_sch])))) begin
@@ -787,7 +1056,7 @@ module tb_tcp_tx_ovl;
                 if (wu_req && wu_gnt) wu_req <= 1'b0;
             end
             // ---- retx_req 脉冲 (周期性, 逼出回卷会话) ----
-            if ((phase >= 2'd1) && (cyc >= trq_next) && !retx_req) begin
+            if ((phase >= 2'd1) && (cyc >= trq_next) && !retx_req && !pe_no_retx) begin
                 retx_req <= 1'b1;
                 retx_id  <= (trq_next / 32'd20000) % NCONN;
                 trq_next <= trq_next + 32'd20000;
@@ -856,6 +1125,491 @@ module tb_tcp_tx_ovl;
                   end
             default: ;
             endcase
+`ifdef ARM_PERSIST
+            // ============== ⭐ P7B-PERSIST episode 驱动 (设计件 §5.2-Ⅲ) =============
+            //   为什么在本块内: `scfg_upd_*` 是**本 always 块**独有的写者 (与 setup FSM /
+            //   wc 窗口插曲同源) —— 另起一个 always 写它就是多驱动。本段写在块尾, 且
+            //   只在 `wc_st == 4` 之后出发 (既有两个写者此时结构性静止: setup FSM 停在
+            //   `setup_st[3] == 10` ⇒ 其 case 走 default; wc FSM 停在 3'd4 ⇒ 无写)。
+            //   每个 episode 的判据见 summary 段与 tb 头注; 计数/见证全部落在 ARM_PERSIST。
+            ack_seen_tb <= pe_holdb ? 16'hFFFE : 16'hFFFF;   // 单写者 = 本块
+            pe_clr_pc   <= 1'b0;
+            case (pe_st)
+            7'd0: if ((phase == 2'd2) && (cyc >= PE_AT) && (wc_st == 3'd4)) begin
+                      pe_ep <= 4'd1; pe_conn <= 4'd1; pe_ret <= 7'd1; pe_st <= 7'd70;
+                  end
+            // ---- ⭐ 静默例程 (Q): 每次"关 conn1 的窗"之前先把重放机压静 ----
+            //   为什么必须: TB 的 RTO 扫描会在**别的窗口开着**时给 conn1 置上 `rto_pend[1]`,
+            //   而 `rto_pend` **不随武装条件变假而清** (只在会话服务 / 非 ESTAB / cfg_up 清)
+            //   ⇒ 一旦带着陈旧的 `rto_pend[1]` 关窗, 回卷会话会被**反复**服务 ⇒ conn1 的
+            //   重放帧持续上线: ① 破坏 j3 的"snd_nxt 逐位不变" ② 让 E7 的"跨连接帧"判据
+            //   假红 ③ 主判据的 J3/J4 被重放语义扰动 (首轮实测: payload=2/seqcont=1)。
+            //   做法: cfg_up(conn) 清该连接的 `rto_pend/timer/epoch/flag` 族 (设计件 §3.4-4
+            //   正是同一脉冲), 然后等重放机**空闲** (`!retx_active` 且无挂起请求)。
+            //   ⚠️ 只对 conn1 用 (cfg_up 会清 `fin_sent_r` ⇒ 不能对 conn2 用, 见 7'd73)。
+            7'd70: begin
+                      cfg_up <= 1'b1; cfg_up_id <= pe_conn; pe_t <= 0; pe_st <= 7'd71;
+                  end
+            7'd71: begin
+                      cfg_up <= 1'b0; pe_t <= 0; pe_st <= 7'd72;
+                  end
+            7'd72: begin
+                      pe_t <= pe_t + 1;
+                      if ((!retx_req && !u_dut.retx_active && !u_dut.rto_pend[pe_conn]) ||
+                          (pe_t > 8000)) begin
+                          if (u_dut.retx_active) w_ps_quiet_to <= w_ps_quiet_to + 1;
+                          pe_st <= pe_ret;
+                      end
+                  end
+            // 静默例程 (只等, 不 cfg_up): E5 用 (conn2 的 `fin_sent_r` 不能被清)
+            7'd73: begin pe_t <= 0; pe_st <= 7'd74; end
+            7'd74: begin
+                      pe_t <= pe_t + 1;
+                      if ((!retx_req && !u_dut.retx_active) || (pe_t > 8000)) begin
+                          if (u_dut.retx_active) w_ps_quiet_to <= w_ps_quiet_to + 1;
+                          pe_st <= pe_ret;
+                      end
+                  end
+            // ========================== E1 阶梯 (j1/j2/j3/j5/j7) ==============
+            7'd1: begin   // E1: 关 conn1 的窗 + 冻结其 snd_una
+                      pe_conn <= 4'd1;
+                      psc_ack_hold[1] <= 1'b1; pe_no_retx <= 1'b1;
+                      // ⚠️ 源侧同时**不给 conn1 供数**: 既存的 `win_open` 1 拍注册偏斜
+                      //    (门用**上一拍 rb_id** 的窗) 会在"源刚呈交 conn1 那一拍"放行
+                      //    一帧 ⇒ 关窗期仍有 conn1 数据上线 (实测 +5919 B) ⇒ 那是既存行为、
+                      //    不是探询的副作用; 本 episode 要量**探询**的副作用 ⇒ 把源挡住。
+                      src_skip <= 16'hFFFE;
+                      scfg_upd_wr <= 1'b1; scfg_upd_id <= 4'd1;
+                      scfg_upd_sel <= 3'd4; scfg_upd_val <= 32'd0;
+                      pe_st <= 7'd2;
+                  end
+            7'd2: if (tcb_wr && (tcb_sel == 3'd4) && (tcb_id == 4'd1)) begin
+                      scfg_upd_wr <= 1'b0;
+                      psc_win_closed[1] <= 1'b1;
+                      pe_exp_conn <= 4'd1; pe_exp_seq[1] <= u_tcb.snd_una_r[1];
+                      pe_sndnxt0 <= u_tcb.snd_nxt_r[1];   // j3: 窗内 snd_nxt 逐位不变的锚
+                      pe_lad_vc <= w_vis1;                // 阶梯判据的 visit 口径锚
+                      pe_clr_pc <= 1'b1; pe_lad_close <= cyc; pe_t <= 0; pe_st <= 7'd3;
+                  end
+            7'd3: begin   // E1: 窗内等 3 条探询 (j1 的期望条数)
+                      pe_t <= pe_t + 1;
+                      if (pe_probe_cur >= 3) pe_st <= 7'd4;
+                      else if (pe_t > PE_LAD_WAIT) begin
+                          pe_clr_pc <= 1'b1; pe_st <= 7'd4;   // 超时也往下 (判据在 summary 裁)
+                      end
+                  end
+            7'd4: begin   // E1: 快照阶梯时刻 + 重开窗 (j7 前半的起点)
+                      pe_lad_n  <= pe_probe_cur;
+                      pe_sndnxt1 <= u_tcb.snd_nxt_r[1];   // j3: 窗末的 snd_nxt (须逐位同锚)
+                      pe_lad_vo <= w_vis1;                // visit 口径: 重开窗时刻
+                      // 阶梯三档的 visit 间隔 (主判据口径; 拍数只作显示 —— 扫描节奏会被
+                      // ACK/重放挤稀, 而 RTL 的 `ps_timer` **数的就是 visit**)
+                      pe_lad_dc <= pe_pv[0] - pe_lad_vc;
+                      pe_lad_d1 <= pe_pv[1] - pe_pv[0];
+                      pe_lad_d2 <= pe_pv[2] - pe_pv[1];
+                      pe_lad_t0 <= pe_pt[0]; pe_lad_t1 <= pe_pt[1]; pe_lad_t2 <= pe_pt[2];
+                      pe_lad_reopen <= cyc;
+                      scfg_upd_wr <= 1'b1; scfg_upd_id <= 4'd1;
+                      scfg_upd_sel <= 3'd4; scfg_upd_val <= {16'b0, SND_WND};
+                      pe_t <= 0; pe_st <= 7'd5;
+                  end
+            7'd5: if (tcb_wr && (tcb_sel == 3'd4) && (tcb_id == 4'd1)) begin
+                      scfg_upd_wr <= 1'b0;
+                      psc_ack_hold[1] <= 1'b0; pe_no_retx <= 1'b0;
+                      psc_win_closed[1] <= 1'b0; src_skip <= 16'h0000;
+                      pe_clr_pc <= 1'b1; pe_t <= 0; pe_st <= 7'd6;
+                  end
+            7'd6: begin   // E1: 恢复观察窗 (j7: 0 新探询 + 数据恢复)
+                      pe_t <= pe_t + 1;
+                      if (pe_t > PE_AFTER) pe_st <= 7'd7;
+                  end
+            7'd7: begin   // E1b: 再关窗 (验"首档退回 RTO_LIM")
+                      pe_lad_n2 <= pe_probe_cur;    // j7a: 恢复窗内新增探询数 (应为 0)
+                      psc_ack_hold[1] <= 1'b1; pe_no_retx <= 1'b1; src_skip <= 16'hFFFE;
+                      scfg_upd_wr <= 1'b1; scfg_upd_id <= 4'd1;
+                      scfg_upd_sel <= 3'd4; scfg_upd_val <= 32'd0;
+                      pe_st <= 7'd8;
+                  end
+            7'd8: if (tcb_wr && (tcb_sel == 3'd4) && (tcb_id == 4'd1)) begin
+                      scfg_upd_wr <= 1'b0;
+                      psc_win_closed[1] <= 1'b1;
+                      pe_lad_vr <= w_vis1;      // visit 口径: 再关窗时刻
+                      pe_clr_pc <= 1'b1; pe_lad_reclose <= cyc; pe_t <= 0; pe_st <= 7'd9;
+                  end
+            7'd9: begin   // E1b: 等首探询 ⇒ 记录间隔 (拍 + visit 双口径)
+                      pe_t <= pe_t + 1;
+                      if (pe_probe_cur >= 1) begin
+                          pe_f_reclose_gap <= cyc - pe_lad_reclose;
+                          pe_f_gap4_v <= w_vis1 - pe_lad_vr;
+                          pe_st <= 7'd10;
+                      end else if (pe_t > PE_LAD_WAIT) begin
+                          pe_f_gap4_v <= w_vis1 - pe_lad_vr; pe_st <= 7'd10;
+                      end
+                  end
+            7'd10: begin  // E1 收尾
+                      scfg_upd_wr <= 1'b1; scfg_upd_id <= 4'd1;
+                      scfg_upd_sel <= 3'd4; scfg_upd_val <= {16'b0, SND_WND};
+                      pe_st <= 7'd11;
+                  end
+            7'd11: if (tcb_wr && (tcb_sel == 3'd4) && (tcb_id == 4'd1)) begin
+                      scfg_upd_wr <= 1'b0;
+                      psc_ack_hold[1] <= 1'b0; pe_no_retx <= 1'b0;
+                      psc_win_closed[1] <= 1'b0; src_skip <= 16'h0000;
+                      pe_ep <= 4'd2; pe_st <= 7'd12;   // E2 不需要静默 (不关窗)
+                  end
+            // ========================== E2 无在飞不发 (j6) ====================
+            7'd12: begin  // E2: 只允许 conn0 供数 ⇒ conn1 排空 (ACK 照常 ⇒ snd_una 追上)
+                      src_skip <= 16'hFFFE; pe_t <= 0; pe_st <= 7'd13;
+                  end
+            7'd13: begin
+                      pe_t <= pe_t + 1;
+                      if (u_tcb.snd_nxt_r[1] == u_tcb.snd_una_r[1]) begin
+                          w_ps_drain <= w_ps_drain + 1; pe_st <= 7'd14;
+                      end else if (pe_t > PE_E2_DRAIN) pe_st <= 7'd14;
+                  end
+            7'd14: begin  // E2: 关窗 (此时无在飞 ⇒ 武装条件第二子句为假)
+                      psc_ack_hold[1] <= 1'b1; pe_no_retx <= 1'b1;
+                      scfg_upd_wr <= 1'b1; scfg_upd_id <= 4'd1;
+                      scfg_upd_sel <= 3'd4; scfg_upd_val <= 32'd0;
+                      pe_st <= 7'd15;
+                  end
+            7'd15: if (tcb_wr && (tcb_sel == 3'd4) && (tcb_id == 4'd1)) begin
+                      scfg_upd_wr <= 1'b0; psc_win_closed[1] <= 1'b1;
+                      pe_clr_pc <= 1'b1; pe_exp_conn <= 4'd1;
+                      pe_exp_seq[1] <= u_tcb.snd_una_r[1]; pe_t <= 0; pe_st <= 7'd16;
+                  end
+            7'd16: begin
+                      pe_t <= pe_t + 1;
+                      if (pe_t > PE_HOLD_SHORT) begin
+                          pe_f_e2_probe <= pe_probe_cur; pe_st <= 7'd17;
+                      end
+                  end
+            7'd17: begin
+                      scfg_upd_wr <= 1'b1; scfg_upd_id <= 4'd1;
+                      scfg_upd_sel <= 3'd4; scfg_upd_val <= {16'b0, SND_WND};
+                      pe_st <= 7'd18;
+                  end
+            7'd18: if (tcb_wr && (tcb_sel == 3'd4) && (tcb_id == 4'd1)) begin
+                      scfg_upd_wr <= 1'b0;
+                      psc_ack_hold[1] <= 1'b0; pe_no_retx <= 1'b0;
+                      psc_win_closed[1] <= 1'b0; src_skip <= 16'h0000;
+                      pe_ep <= 4'd3; pe_conn <= 4'd1; pe_ret <= 7'd19; pe_st <= 7'd70;
+                  end
+            // ========================== E3 打第二把锁 (j8) ====================
+            7'd19: begin  // E3(a): 冻结 snd_una + 注入 retx_req 直到 epoch 饱和
+                      //   [!!] 先饱和、后关窗: 每次回卷 (svc_rewind) 都把 snd_nxt 写回
+                      //   snd_una => 若先关窗, 饱和结束时在飞 = 0 => 武装条件第二子句
+                      //   为假 => 探询结构性不发 (首轮实测 0 条)。窗开着时饱和: data 照流
+                      //   => 关窗那一刻在飞非 0。
+                      psc_ack_hold[1] <= 1'b1; pe_no_retx <= 1'b1; src_skip <= 16'hFFFE;
+                      pe_clr_pc <= 1'b1;
+                      pe_stat0 <= stat_retx; pe_req0 <= w_ps_retx_req;
+                      pe_t <= 0; pe_st <= 7'd21;
+                  end
+            7'd21: begin  // E3(b): 注入 retx_req 直到 epoch 饱和 (见证 blocked 面)
+                      pe_t <= pe_t + 1;
+                      if (!retx_req) begin
+                          retx_req <= 1'b1; retx_id <= 4'd1;
+                          w_ps_retx_req <= w_ps_retx_req + 1;
+                      end else if (retx_gnt) retx_req <= 1'b0;
+                      if ((u_dut.epoch[1] >= 4'd15) || (pe_t > PE_E3_SESS)) begin
+                          retx_req <= 1'b0;
+                          if (u_dut.epoch[1] >= 4'd15) w_ps_blocked <= w_ps_blocked + 1;
+                          pe_t <= 0; pe_st <= 7'd66;
+                      end
+                  end
+            7'd66: begin  // E3(b2): **补在飞** —— 饱和期把 conn1 的在飞抽干了
+                      //   (实测: 关窗时 `nxt == una` ⇒ 武装条件第二子句为假 ⇒ 探询结构性
+                      //    不发 —— DUT 行为**正确** (§3.4-2 停条件), 是**激励缺陷**)。
+                      //   做法: 放开源跳过, 让 conn1 的数据重新上线若干帧; 此后 epoch 已
+                      //   饱和 ⇒ 不会再回卷 ⇒ 也不会有"载荷基址 vs 会话"那类错位。
+                      src_skip <= 16'h0000; pe_t <= 0; pe_st <= 7'd67;
+                  end
+            7'd67: begin
+                      pe_t <= pe_t + 1;
+                      if (((u_tcb.snd_nxt_r[1] - u_tcb.snd_una_r[1]) != 32'd0) &&
+                          (pe_t > 2500)) begin pe_t <= 0; pe_st <= 7'd20; end
+                      else if (pe_t > 12000) begin pe_t <= 0; pe_st <= 7'd20; end
+                  end
+            7'd20: begin  // E3(c): 关窗 (补完在飞) + 挡住源
+                      src_skip <= 16'hFFFE;
+                      scfg_upd_wr <= 1'b1; scfg_upd_id <= 4'd1;
+                      scfg_upd_sel <= 3'd4; scfg_upd_val <= 32'd0;
+                      pe_st <= 7'd65;
+                  end
+            7'd65: if (tcb_wr && (tcb_sel == 3'd4) && (tcb_id == 4'd1)) begin
+                      scfg_upd_wr <= 1'b0; psc_win_closed[1] <= 1'b1;
+                      pe_clr_pc <= 1'b1; pe_exp_conn <= 4'd1;
+                      pe_exp_seq[1] <= u_tcb.snd_una_r[1];
+                      pe_t <= 0; pe_st <= 7'd22;
+                  end
+            7'd22: begin  // E3(d): 关窗观察窗 (j8: blocked 后仍要 >=2 条)
+                      pe_t <= pe_t + 1;
+                      if (((pe_t % 5000) == 0) && (w_ps_dbg4 < 10)) begin
+                          w_ps_dbg4 <= w_ps_dbg4 + 1;
+                          $display("DBG E3 @%0d t=%0d wnd=%0d nxt=%h una=%h fin=%b rst=%b blk=%b pt=%0d pp=%0d ract=%b ep=%0d prdy=%b",
+                                   cyc, pe_t, u_tcb.snd_wnd_r[1], u_tcb.snd_nxt_r[1],
+                                   u_tcb.snd_una_r[1], u_dut.fin_sent_r[1], u_dut.rst_sent_r[1],
+                                   u_dut.blocked, u_dut.ps_timer[1], u_dut.ps_phase[1],
+                                   u_dut.retx_active, u_dut.epoch[1], u_dut.ps_stage_rdy);
+                      end
+                      pe_t <= pe_t + 1;
+                      if (pe_t > PE_E3_HOLD) begin
+                          pe_f_e3_probe <= pe_probe_cur;
+                          pe_stat1 <= stat_retx; pe_req1 <= w_ps_retx_req;
+                          pe_sndnxt1 <= u_tcb.snd_nxt_r[1];
+                          pe_st <= 7'd23;
+                      end
+                  end
+            7'd23: begin
+                      scfg_upd_wr <= 1'b1; scfg_upd_id <= 4'd1;
+                      scfg_upd_sel <= 3'd4; scfg_upd_val <= {16'b0, SND_WND};
+                      pe_st <= 7'd24;
+                  end
+            7'd24: if (tcb_wr && (tcb_sel == 3'd4) && (tcb_id == 4'd1)) begin
+                      scfg_upd_wr <= 1'b0;
+                      psc_ack_hold[1] <= 1'b0; pe_no_retx <= 1'b0;
+                      psc_win_closed[1] <= 1'b0; src_skip <= 16'h0000;
+                      pe_ep <= 4'd4; pe_conn <= 4'd1; pe_ret <= 7'd25; pe_st <= 7'd70;
+                  end
+            // ======================== E4 cfg_up 清暂存 (j10) ==================
+            7'd25: begin  // E4: 关窗 + 按住 conn0 的 data-start 门 (源持续供数 ⇒ ds_guard=0
+                          //     ⇒ 待发暂存不会被"空档"消费掉, 相位可控)
+                      psc_ack_hold[1] <= 1'b1; pe_no_retx <= 1'b1; pe_holdb <= 1'b1;
+                      src_skip <= 16'hFFFE;
+                      scfg_upd_wr <= 1'b1; scfg_upd_id <= 4'd1;
+                      scfg_upd_sel <= 3'd4; scfg_upd_val <= 32'd0;
+                      pe_st <= 7'd26;
+                  end
+            7'd26: if (tcb_wr && (tcb_sel == 3'd4) && (tcb_id == 4'd1)) begin
+                      scfg_upd_wr <= 1'b0; psc_win_closed[1] <= 1'b1;
+                      pe_clr_pc <= 1'b1; pe_exp_conn <= 4'd1;
+                      pe_exp_seq[1] <= u_tcb.snd_una_r[1]; pe_t <= 0; pe_st <= 7'd27;
+                  end
+            7'd27: begin  // E4: 等 fire
+                      pe_t <= pe_t + 1;
+                      if (u_dut.ps_fire || (pe_t > PE_E4_WAIT)) begin pe_t <= 0; pe_st <= 7'd28; end
+                  end
+            7'd28: begin  // E4: 等暂存落地 ⇒ 打 cfg_up (清暂存); 见证 rdy
+                      pe_t <= pe_t + 1;
+                      if (u_dut.ps_stage_rdy) begin
+                          cfg_up <= 1'b1; cfg_up_id <= 4'd1; w_ps_rdy <= w_ps_rdy + 1;
+                          pe_st <= 7'd29;
+                      end else if (pe_t > 600) pe_st <= 7'd29;
+                  end
+            7'd29: begin pe_t <= 0; pe_st <= 7'd30; end   // cfg_up 由块首默认自然落 0
+            7'd30: begin  // E4: 观察窗: 被清掉的暂存不得再上线
+                      //   ⚠️ 窗长必须 < 重新武装的延迟 (RTO' = 2048 拍): 清位之后**计时器
+                      //   也被清** (cfg_up ⇒ timer/phase = 0) ⇒ 到下一档会有一条**合法**
+                      //   的新探询; 窗口开太长会把合法重发误判成"没清干净"。
+                      pe_t <= pe_t + 1;
+                      if (pe_t > PE_E4_OBS) begin
+                          pe_f_e4_probe <= pe_probe_cur; pe_t <= 0; pe_st <= 7'd31;
+                      end
+                  end
+            7'd31: begin  // E4 正控 (a): 放开 data-start hold + 重开窗
+                      //   ⚠️ `psc_ack_hold[1]` **不放开** —— 放开会让 TB 把 conn1 排空
+                      //   (snd_una 追到 snd_nxt) ⇒ 后面的正控再关窗时**没有在飞** ⇒ 武装
+                      //   条件第二子句为假 ⇒ 正控空判据 (首轮实测正是这样)。
+                      pe_holdb <= 1'b0; src_skip <= 16'h0000;
+                      pe_no_retx <= 1'b0;
+                      psc_win_closed[1] <= 1'b0;
+                      scfg_upd_wr <= 1'b1; scfg_upd_id <= 4'd1;
+                      scfg_upd_sel <= 3'd4; scfg_upd_val <= {16'b0, SND_WND};
+                      pe_st <= 7'd32;
+                  end
+            7'd32: if (tcb_wr && (tcb_sel == 3'd4) && (tcb_id == 4'd1)) begin
+                      scfg_upd_wr <= 1'b0; pe_clr_pc <= 1'b1; pe_t <= 0; pe_st <= 7'd33;
+                  end
+            7'd33: begin  // E4 正控 (b): 同一构造再关窗 ⇒ 探询应出现 (非空判据的正控)
+                      psc_ack_hold[1] <= 1'b1; pe_no_retx <= 1'b1; src_skip <= 16'hFFFE;
+                      scfg_upd_wr <= 1'b1; scfg_upd_id <= 4'd1;
+                      scfg_upd_sel <= 3'd4; scfg_upd_val <= 32'd0;
+                      pe_st <= 7'd34;
+                  end
+            7'd34: if (tcb_wr && (tcb_sel == 3'd4) && (tcb_id == 4'd1)) begin
+                      scfg_upd_wr <= 1'b0; psc_win_closed[1] <= 1'b1;
+                      pe_clr_pc <= 1'b1; pe_exp_conn <= 4'd1;
+                      pe_exp_seq[1] <= u_tcb.snd_una_r[1]; pe_t <= 0; pe_st <= 7'd35;
+                  end
+            7'd35: begin
+                      pe_t <= pe_t + 1;
+                      if (pe_probe_cur >= 1) begin
+                          w_ps_posctrl <= w_ps_posctrl + 1; pe_st <= 7'd36;
+                      end else if (pe_t > PE_E4_PC) pe_st <= 7'd36;
+                  end
+            7'd36: begin
+                      scfg_upd_wr <= 1'b1; scfg_upd_id <= 4'd1;
+                      scfg_upd_sel <= 3'd4; scfg_upd_val <= {16'b0, SND_WND};
+                      pe_st <= 7'd37;
+                  end
+            7'd37: if (tcb_wr && (tcb_sel == 3'd4) && (tcb_id == 4'd1)) begin
+                      scfg_upd_wr <= 1'b0;
+                      psc_ack_hold[1] <= 1'b0; pe_no_retx <= 1'b0;
+                      psc_win_closed[1] <= 1'b0; src_skip <= 16'h0000;
+                      pe_ep <= 4'd5; pe_conn <= 4'd1; pe_ret <= 7'd76; pe_st <= 7'd70;
+                  end
+            7'd76: begin   // E5 前: conn1 静默完再对 conn2 走"只等"静默
+                      pe_conn <= 4'd2; pe_ret <= 7'd38; pe_st <= 7'd73;
+                  end
+            // ==================== E5 FIN 在飞 (j12 / j11 变异) =================
+            7'd38: begin  // E5: 关 conn2 的窗 (fin_sent_r[2] 由 phase>=1 关闭语义造成)
+                      scfg_upd_wr <= 1'b1; scfg_upd_id <= 4'd2;
+                      scfg_upd_sel <= 3'd4; scfg_upd_val <= 32'd0;
+                      pe_st <= 7'd39;
+                  end
+            7'd39: if (tcb_wr && (tcb_sel == 3'd4) && (tcb_id == 4'd2)) begin
+                      scfg_upd_wr <= 1'b0; psc_win_closed[2] <= 1'b1;
+                      pe_clr_pc <= 1'b1; pe_exp_conn <= 4'd2;
+                      pe_exp_seq[2] <= u_tcb.snd_una_r[2]; pe_t <= 0; pe_st <= 7'd40;
+                  end
+            7'd40: begin
+                      pe_t <= pe_t + 1;
+                      if (u_dut.fin_sent_r[2]) w_ps_fin <= w_ps_fin + 1;
+                      // 粘滞见证: "除 !fin_sent_r 之外的武装条件**同时**为真" 至少出现一拍
+                      //   ("该臂有牙"的构造性见证; 首轮曾因重放会话把在飞抹掉而假空)
+                      if (u_dut.fin_sent_r[2] && !u_dut.rst_sent_r[2] &&
+                          (u_tcb.snd_wnd_r[2] == 16'd0) &&
+                          (u_tcb.snd_nxt_r[2] != u_tcb.snd_una_r[2])) w_ps_e5ok <= w_ps_e5ok + 1;
+                      if (u_tcb.snd_wnd_r[2] == 16'd0) w_ps_e5win <= w_ps_e5win + 1;
+                      if (pe_t > PE_HOLD_SHORT) begin
+                          pe_f_e5_probe <= pe_probe_cur;
+                          pe_f_e5_state <= {u_dut.fin_sent_r[2], u_dut.rst_sent_r[2],
+                                            (u_tcb.snd_nxt_r[2] != u_tcb.snd_una_r[2])};
+                          pe_st <= 7'd41;
+                      end
+                  end
+            7'd41: begin
+                      scfg_upd_wr <= 1'b1; scfg_upd_id <= 4'd2;
+                      scfg_upd_sel <= 3'd4; scfg_upd_val <= {16'b0, SND_WND};
+                      pe_st <= 7'd42;
+                  end
+            7'd42: if (tcb_wr && (tcb_sel == 3'd4) && (tcb_id == 4'd2)) begin
+                      scfg_upd_wr <= 1'b0; psc_win_closed[2] <= 1'b0;
+                      pe_ep <= 4'd6; pe_st <= 7'd43;
+                  end
+            // (E6 已挪到 E7 **之后** = 7'd55 起: 用 conn1 + 现场注入的 RST。
+            //  原 conn3 版在本 TB 上**结构性不可达**: conn3 的 RST 预留 +1 会被打到
+            //  conn3 的重放会话抹掉 —— `svc_rewind` 把 snd_nxt 写回 snd_una ⇒ 武装条件
+            //  的"有在飞"子句为假 ⇒ 该臂退化成空判据 (首轮实测 E6 inflight=0)。)
+            7'd43: begin pe_ep <= 4'd7; pe_conn <= 4'd1; pe_ret <= 7'd48; pe_st <= 7'd70; end
+            // ============ E7 多连接相撞 (j13/j14; 本刀最重的那条缺陷) ==========
+            //   构造: A = conn1 (关窗 ⇒ 探询待发) + B = conn0 (供数, 但被
+            //   `ack_seen_tb[0]=0` ⇒ `tx_blk_sid[0]=1` 按住启动门 ⇒ 源**持续呈交**一个
+            //   开帧请求而 DUT 不收 ⇒ `ds_guard = 0` 且 `s_tvalid = 1` 长期成立)。
+            //   在 fire+2 拍 (= 读流水第 2 拍, 暂存落地前一拍) 释放 hold ⇒ 暂存落地那一拍
+            //   `tx_blk_sid = 0` ⇒ 若没有 `ds_guard`, 探询槽上线与数据帧启动**同拍** ⇒
+            //   数据帧带 conn1 的四元组与 seq 上线 (跨连接错帧 + 按错 seq 写 ring)。
+            //   ⛔ 单连接 (A==B) 时自洽 ⇒ 本 episode 是**必须多连接**的那条 (REVIEW2 欠账)。
+            7'd48: begin  // E7: 关 conn1 的窗 + 只允许 conn0 供数 + 按住 conn0 启动门
+                      pe_conn <= 4'd1;
+                      psc_ack_hold[1] <= 1'b1; pe_no_retx <= 1'b1; pe_holdb <= 1'b1;
+                      src_skip <= 16'hFFFE;
+                      scfg_upd_wr <= 1'b1; scfg_upd_id <= 4'd1;
+                      scfg_upd_sel <= 3'd4; scfg_upd_val <= 32'd0;
+                      pe_st <= 7'd49;
+                  end
+            7'd49: if (tcb_wr && (tcb_sel == 3'd4) && (tcb_id == 4'd1)) begin
+                      scfg_upd_wr <= 1'b0; psc_win_closed[1] <= 1'b1;
+                      pe_clr_pc <= 1'b1; pe_exp_conn <= 4'd1;
+                      pe_exp_seq[1] <= u_tcb.snd_una_r[1];
+                      pe_t <= 0; pe_st <= 7'd50;
+                  end   // (`pe_coll_wit` 归观察块所有; 由 pe_clr_pc 清零 —— 单写者)
+            7'd50: begin  // E7: 等 conn1 的 fire
+                      pe_t <= pe_t + 1;
+                      if (u_dut.ps_fire && (u_dut.scan_id == 4'd1)) begin
+                          pe_de0 <= pe_d_ev;        // 见证锚: 观察窗内的数据帧计数
+                          pe_t <= 0; pe_st <= 7'd51;
+                      end else if (pe_t > PE_COLL_WAIT) begin
+                          pe_de0 <= pe_d_ev; pe_t <= 0; pe_st <= 7'd51;
+                      end
+                  end
+            7'd51: begin  // E7: 等 fire+2 (读流水第 2 拍) ⇒ 释放 hold
+                      pe_t <= pe_t + 1;
+                      if (u_dut.ps_rd_d2) begin pe_holdb <= 1'b0; pe_t <= 0; pe_st <= 7'd52; end
+                      else if (pe_t > 16) begin pe_holdb <= 1'b0; pe_t <= 0; pe_st <= 7'd52; end
+                  end
+            7'd52: begin  // E7: 相撞观察窗 (判决在观察块 + frame_check)
+                      pe_t <= pe_t + 1;
+                      if ((pe_t <= 14) && (w_ps_dbg < 40)) begin
+                          w_ps_dbg <= w_ps_dbg + 1;
+                          $display("DBG E7 @%0d t=%0d rdy=%b rxidle=%b rf=%b tval=%b tid=%0d blk=%b busy=%b aqem=%b svc=%b re=%b scn=%b ract=%b wo=%b apen=%b fifo=%b bkr=%b coll=%b",
+                                   cyc, pe_t, u_dut.ps_stage_rdy, u_dut.rx_idle, u_dut.recv_first,
+                                   s_tvalid, s_tid, u_dut.tx_blk_sid, u_dut.ctrl_slot_busy,
+                                   u_dut.ackq_empty, u_dut.svc, u_dut.ring_eval, u_dut.scan_now,
+                                   u_dut.retx_active, win_open, u_dut.ack_pend_r, u_dut.fifo_full,
+                                   u_dut.bank_rdy[u_dut.rx_bank], psc_coll);
+                      end
+                      if (pe_t > PE_COLL_OBS) begin
+                          pe_f_e7_wit <= pe_coll_wit; pe_de1 <= pe_d_ev; pe_st <= 7'd53;
+                      end
+                  end
+            7'd53: begin  // E7 收尾
+                      pe_holdb <= 1'b0; src_skip <= 16'h0000;
+                      psc_ack_hold[1] <= 1'b0; pe_no_retx <= 1'b0;
+                      scfg_upd_wr <= 1'b1; scfg_upd_id <= 4'd1;
+                      scfg_upd_sel <= 3'd4; scfg_upd_val <= {16'b0, SND_WND};
+                      pe_st <= 7'd54;
+                  end
+            7'd54: if (tcb_wr && (tcb_sel == 3'd4) && (tcb_id == 4'd1)) begin
+                      scfg_upd_wr <= 1'b0; psc_win_closed[1] <= 1'b0;
+                      pe_ep <= 4'd6; pe_conn <= 4'd1; pe_ret <= 7'd55; pe_st <= 7'd70;
+                  end
+            // ============ E6 RST 在飞 (j12 扩展 / j11 变异) —— 用在 E7 之后 ========
+            //   为什么用 conn1 而不是 conn3: 见 7'd43 的注 (conn3 的 +1 留不住)。
+            //   构造: 关 conn1 的窗 (在飞) + 现注入一条 RST (ack_req+ack_rst, id=1) ⇒
+            //   RST 上线后 `rst_sent_r[1]=1` 且 `snd_nxt[1] = snd_una[1]+1` (预留 +1)
+            //   ⇒ 除 `!rst_sent_r` 之外的武装条件**全部成立** ⇒ 这是**有牙**的构造:
+            //   `PS_MUT_NOARM_RST` (删 `!rst_sent_r`) 必在此臂上冒探询。
+            7'd55: begin  // E6: 关 conn1 的窗 + 冻结 snd_una + 挡住源 (同 E1 的相位纪律)
+                      psc_ack_hold[1] <= 1'b1; pe_no_retx <= 1'b1; src_skip <= 16'hFFFE;
+                      scfg_upd_wr <= 1'b1; scfg_upd_id <= 4'd1;
+                      scfg_upd_sel <= 3'd4; scfg_upd_val <= 32'd0;
+                      pe_st <= 7'd56;
+                  end
+            7'd56: if (tcb_wr && (tcb_sel == 3'd4) && (tcb_id == 4'd1)) begin
+                      scfg_upd_wr <= 1'b0; psc_win_closed[1] <= 1'b1;
+                      pe_clr_pc <= 1'b1; pe_exp_conn <= 4'd1;
+                      pe_exp_seq[1] <= u_tcb.snd_una_r[1]; pe_t <= 0; pe_st <= 7'd57;
+                  end
+            7'd57: begin  // E6: 注入 RST 请求 (电平保持到 rst_sent_r[1] 出现)
+                      pe_t <= pe_t + 1;
+                      ack_req <= 1'b1; ack_id <= 4'd1; ack_rst <= 1'b1;
+                      ack_syn <= 1'b0; ack_fin <= 1'b0; ack_val <= RCV_NXT;
+                      if (u_dut.rst_sent_r[1] || (pe_t > 600)) begin
+                          ack_req <= 1'b0; ack_rst <= 1'b0;
+                          if (u_dut.rst_sent_r[1]) w_ps_rst1 <= w_ps_rst1 + 1;
+                          pe_t <= 0; pe_st <= 7'd58;
+                      end
+                  end
+            7'd58: begin  // E6: 观察窗 (j12-RST: 必须 0 探询)
+                      pe_t <= pe_t + 1;
+                      if (u_tcb.snd_wnd_r[1] == 16'd0) w_ps_e6win <= w_ps_e6win + 1;
+                      if (u_dut.rst_sent_r[1]) w_ps_rst1 <= w_ps_rst1 + 1;
+                      if (u_dut.rst_sent_r[1] && !u_dut.fin_sent_r[1] &&
+                          (u_tcb.snd_wnd_r[1] == 16'd0) &&
+                          (u_tcb.snd_nxt_r[1] != u_tcb.snd_una_r[1])) w_ps_e6ok <= w_ps_e6ok + 1;
+                      if (pe_t > PE_HOLD_SHORT) begin
+                          pe_f_e6_probe <= pe_probe_cur;
+                          pe_f_e6_state <= {u_dut.fin_sent_r[1], u_dut.rst_sent_r[1],
+                                            (u_tcb.snd_nxt_r[1] != u_tcb.snd_una_r[1])};
+                          pe_st <= 7'd59;
+                      end
+                  end
+            7'd59: begin  // E6 收尾
+                      scfg_upd_wr <= 1'b1; scfg_upd_id <= 4'd1;
+                      scfg_upd_sel <= 3'd4; scfg_upd_val <= {16'b0, SND_WND};
+                      pe_st <= 7'd60;
+                  end
+            7'd60: if (tcb_wr && (tcb_sel == 3'd4) && (tcb_id == 4'd1)) begin
+                      scfg_upd_wr <= 1'b0;
+                      psc_ack_hold[1] <= 1'b0; pe_no_retx <= 1'b0;
+                      psc_win_closed[1] <= 1'b0; src_skip <= 16'h0000;
+                      pe_done <= 1'b1; pe_ep <= 4'd0; pe_st <= 7'd61;
+                  end
+            default: ;
+            endcase
+`endif
         end
     end
 
@@ -1369,6 +2123,65 @@ module tb_tcp_tx_ovl;
     end
 `endif
 
+`ifdef ARM_PERSIST
+    // ================ ⭐ P7B-PERSIST 观察块 (只读 DUT 状态线; 单写者) ================
+    //   消费 `frame_check` 落的探询事件 (计数变化沿), 维护累计 + "当前 episode" 计数,
+    //   并维护相撞见证 `pe_coll_wit` (由 FSM 的 `pe_clr_pc` 清零 ⇒ 单写者规则保持)。
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            pe_probe_seen <= 0; pe_probe_ep <= 0; pe_probe_out <= 0;
+            pe_probe_cur <= 0; pe_pn <= 0; pe_coll_wit <= 0;
+            pe_d_seen <= 0; w_vis1 <= 0; w_vis1_cyc <= 0; w_leak1 <= 0;
+            for (pe_x = 0; pe_x < 8; pe_x = pe_x + 1) begin
+                pe_pt[pe_x] <= 0; pe_pv[pe_x] <= 0;
+            end
+        end else begin
+            // 扫描访问计数 (conn1): 与 RTL `ps_timer` 的**同一把尺子** (1 visit = 该连接
+            // 的一次 scan_now 访问) —— 阶梯判据用它, 而不是用拍数 (扫描节奏会被 ACK/重放
+            // 挤稀 ⇒ 拍数口径不可判; 设计件 §3.1 的 "1 visit = 256 拍" 只在扫描不停时成立)
+            if (u_dut.scan_now && (u_dut.scan_id == 4'd1)) w_vis1 <= w_vis1 + 1;
+            // 泄漏见证: "TB 自己关着 conn1 的窗" 期间仍上线了 conn1 的数据帧 (非探询)
+            if (u_dut.scan_now && (u_dut.scan_id == 4'd1)) w_vis1_cyc <= cyc;
+            if (pe_d_ev != pe_d_seen) begin
+                pe_d_seen <= pe_d_ev;
+                if (psc_win_closed[pe_d_conn] && (pe_d_conn == 4'd1)) w_leak1 <= w_leak1 + 1;
+            end
+            if (pe_probe_ev != pe_probe_seen) begin
+                pe_probe_seen <= pe_probe_ev;
+                if (pe_st != 7'd0) begin
+                    // j3 口径 (订正): "探询序列**首/末**之间的 snd_nxt 逐位不变" ——
+                    //   关窗边界上正在收的那一帧会合法推进 snd_nxt (实测 +1531 B),
+                    //   那不是探询的副作用; 首个探询 ≥ RTO 之后, 边界的在飞早已落地。
+                    if (pe_exp_conn == 4'd1) begin
+                        if (pe_probe_cur == 0) pe_sn_first <= u_tcb.snd_nxt_r[1];
+                        pe_sn_last <= u_tcb.snd_nxt_r[1];
+                    end
+                    pe_probe_ep  <= pe_probe_ep + 1;
+                    pe_probe_cur <= pe_probe_cur + 1;
+                    if (pe_pn < 8) begin
+                        pe_pt[pe_pn] <= pe_rec_cyc; pe_pv[pe_pn] <= w_vis1; pe_pn <= pe_pn + 1;
+                    end
+                end else
+                    pe_probe_out <= pe_probe_out + 1;   // j5: episode 外必须恒 0
+            end
+            // 相撞见证 (psc_coll 的真值 = 逐项自写的 "无 ds_guard 时探询槽上线 ∧ 数据帧启动")
+            if (psc_coll && ((pe_st == 7'd51) || (pe_st == 7'd52))) pe_coll_wit <= pe_coll_wit + 1;
+            // 清零放最后 ⇒ 同拍冲突时"清"优先 (与 RTL 的 cfg_up/解除武装清位同序)
+            if (pe_clr_pc) begin pe_probe_cur <= 0; pe_pn <= 0; pe_coll_wit <= 0; end
+        end
+    end
+
+    // 容差带判据助手 (只在本臂用): |x - want| <= want*tol_pct/100 + slack
+    function in_band;
+        input integer x; input integer want; input integer tol_pct; input integer slack;
+        integer d;
+        begin
+            d = (x > want) ? (x - want) : (want - x);
+            in_band = (d <= ((want * tol_pct) / 100 + slack));
+        end
+    endfunction
+`endif
+
     // ===================== 汇总 =====================
     integer tot_red;
     task summary_and_exit;
@@ -1378,6 +2191,8 @@ module tb_tcp_tx_ovl;
                       e_ovf + e_ackf + e_f1_ring + e_j9 + e_c6 + e_f1_delta + e_f1_cyc +
                       e_replay_span + e_replay_jump + e_c2_resv +
                       e_ag_block + e_ag_resume;
+            // ⭐ P7B-PERSIST 本臂判决: 与既有判据同款 —— 每条 `tot_red = tot_red + 1`
+            //    直接落在下面对应判据里 (计数器只为显示, 不重复计入)。
             $display("---------------- TB_TCP_TX_OVL SUMMARY ----------------");
             $display("FRAMES recv=%0d data=%0d ctrl=%0d dead_skip=%0d cyc=%0d",
                      n_frames, n_data, n_ctrl, n_dead_skip, cyc);
@@ -1551,6 +2366,120 @@ module tb_tcp_tx_ovl;
             if (fp_n > 0)
                 $display("PACE fpc_milli=%0d", (fp_n*1000000)/cyc);
 `endif
+`ifdef ARM_PERSIST
+            // ============ ⭐ P7B-PERSIST 判据组 (设计件 §5.2-Ⅲ: j1..j14) ============
+            //   【事实】= 本 TB 的读数与判据式; 【推断】= 见设计件的对应节。
+            //   判例形态: 每条判据 = 计数器 + `tot_red+1` + `[FAIL]` 行 (与既有判据同款)。
+            $display("PS1 fire probe_ep=%0d probe_out=%0d probe_bad=%0d d_ev=%0d",
+                     pe_probe_ep, pe_probe_out, pe_probe_bad, pe_d_ev);
+            $display("PS2 LAD n=%0d visits dc=%0d d1=%0d d2=%0d gap4=%0d (want %0d/%0d/%0d/%0d) n2=%0d",
+                     pe_lad_n, pe_lad_dc, pe_lad_d1, pe_lad_d2, pe_f_gap4_v,
+                     TB_RTO_LIM, TB_PS_BASE, TB_T_BASE2 / TB_VISIT, TB_RTO_LIM, pe_lad_n2);
+            $display("PS2b LAD cycles t_close=%0d t1=%0d t2=%0d t3=%0d reopen=%0d reclose=%0d gap4=%0d leak1=%0d",
+                     pe_lad_close, pe_lad_t0, pe_lad_t1, pe_lad_t2,
+                     pe_lad_reopen, pe_lad_reclose, pe_f_reclose_gap, w_leak1);
+            $display("PS3 EP probes E2=%0d E3=%0d E4=%0d E5=%0d E6=%0d E7wit=%0d",
+                     pe_f_e2_probe, pe_f_e3_probe, pe_f_e4_probe,
+                     pe_f_e5_probe, pe_f_e6_probe, pe_f_e7_wit);
+            $display("PS4 WIT drain=%0d blocked=%0d rdy=%0d posctrl=%0d coll=%0d e5ok=%0d e6ok=%0d de=%0d rst1=%0d qto=%0d",
+                     w_ps_drain, w_ps_blocked, w_ps_rdy, w_ps_posctrl, pe_coll_wit,
+                     w_ps_e5ok, w_ps_e6ok, pe_de1 - pe_de0, w_ps_rst1, w_ps_quiet_to);
+            $display("PS5 STATE e5=%b e6=%b sn_first=%h sn_last=%h (win %h->%h) dstat=%0d dreq=%0d retxreq=%0d",
+                     pe_f_e5_state, pe_f_e6_state, pe_sn_first, pe_sn_last,
+                     pe_sndnxt0, pe_sndnxt1,
+                     pe_stat1 - pe_stat0, pe_req1 - pe_req0, w_ps_retx_req);
+            $display("PS6 BAD ladder=%0d stop=%0d field=%0d side=%0d sndnxt=%0d e2=%0d e3=%0d e4=%0d e5=%0d e6=%0d coll=%0d",
+                     e_ps_ladder, e_ps_stop, e_ps_field, e_ps_side, e_ps_sndnxt,
+                     e_ps_e2, e_ps_e3, e_ps_e4, e_ps_e5, e_ps_e6, e_ps_coll);
+            // ---- j5 (健康态零额外帧): episode 外探询必须为 0 ----
+            if (pe_probe_out != 0) begin tot_red = tot_red + 1;
+                $display("[FAIL] PS j5: episode 外出现探询 =%0d", pe_probe_out); end
+            // 非空判据 (见证): 本臂的 episode 内至少要出现探询 (臂 T 会失败 = 期望)
+            // (逐 episode 的"应有探询"由各自的正控/见证判据承担, 这里只兜底)
+            if (pe_probe_ep < 2) begin tot_red = tot_red + 1;
+                $display("[FAIL] PS 空判据: episode 内探询总数=%0d < 2", pe_probe_ep); end
+            if (pe_done != 1'b1) begin tot_red = tot_red + 1;
+                $display("[FAIL] PS 空判据: episode 序列未走完 (pe_st=%0d)", pe_st); end
+            // ---- j2 (逐字段): 探询帧的 IP 长度/plen/flags/seq/归属 ----
+            if (pe_probe_bad > 0) begin tot_red = tot_red + 1;
+                e_ps_field = pe_probe_bad;
+                $display("[FAIL] PS j2: 探询帧字段/归属不合规 =%0d", pe_probe_bad); end
+            // ---- j1 (阶梯): 恰好 3 条 + 间隔 = RTO / PS_BASE / 2·PS_BASE ----
+            if (pe_lad_n != 3) begin tot_red = tot_red + 1; e_ps_ladder = e_ps_ladder + 1;
+                $display("[FAIL] PS j1: 阶梯窗内探询数=%0d != 3", pe_lad_n); end
+            else begin
+                // visit 口径 (设计件 §3.1 的 `ps_timer` 单位 = 该连接的扫描访问数)
+                if (!in_band(pe_lad_dc, TB_RTO_LIM, 25, 1)) begin
+                    tot_red = tot_red + 1; e_ps_ladder = e_ps_ladder + 1;
+                    $display("[FAIL] PS j1: 首条探询延迟=%0d visits (want≈%0d; 拍口径 %0d)",
+                             pe_lad_dc, TB_RTO_LIM, pe_lad_t0 - pe_lad_close); end
+                if (!in_band(pe_lad_d1, TB_PS_BASE, 25, 1)) begin
+                    tot_red = tot_red + 1; e_ps_ladder = e_ps_ladder + 1;
+                    $display("[FAIL] PS j1: t2-t1=%0d visits (want≈%0d)",
+                             pe_lad_d1, TB_PS_BASE); end
+                if (!in_band(pe_lad_d2, TB_T_BASE2 / TB_VISIT, 25, 1)) begin
+                    tot_red = tot_red + 1; e_ps_ladder = e_ps_ladder + 1;
+                    $display("[FAIL] PS j1: t3-t2=%0d visits (want≈%0d)",
+                             pe_lad_d2, TB_T_BASE2 / TB_VISIT); end
+            end
+            // ---- j7 (停条件): 窗重开后 0 新探询 + 再关窗首档退回 RTO_LIM' ----
+            if (pe_lad_n2 != 0) begin tot_red = tot_red + 1; e_ps_stop = e_ps_stop + 1;
+                $display("[FAIL] PS j7: 窗重开期间新增探询 =%0d (阶梯计数 %0d)",
+                         pe_lad_n2, pe_lad_n); end
+            if (!in_band(pe_f_gap4_v, TB_RTO_LIM, 40, 2)) begin
+                tot_red = tot_red + 1; e_ps_stop = e_ps_stop + 1;
+                $display("[FAIL] PS j7: 再关窗后首探询间隔=%0d visits (want≈%0d ⇒ 首档未退回 RTO; 拍口径 %0d)",
+                         pe_f_gap4_v, TB_RTO_LIM, pe_f_reclose_gap); end
+            // ---- j3/j9 (无序列副作用 / 环安全): snd_nxt 逐位不变 + Δstat_retx ≤ 注入的请求数 ----
+            // 口径: **探询序列首/末之间**的 snd_nxt 逐位不变 (关窗边界上正在收的那一帧、
+            // 以及 E3 饱和后"补在飞"的合法数据流都会推进 snd_nxt —— 那是窗口外的量,
+            // 不是探询的副作用 ⇒ 只判序列内那一段)。窗首末 (pe_sndnxt0/1) 仅作显示。
+            if (pe_sn_first !== pe_sn_last) begin
+                tot_red = tot_red + 1; e_ps_sndnxt = e_ps_sndnxt + 1;
+                $display("[FAIL] PS j3: 探询序列内 conn1 的 snd_nxt 变了: first=%h last=%h (窗首末 %h -> %h)",
+                         pe_sn_first, pe_sn_last, pe_sndnxt0, pe_sndnxt1); end
+            if ((pe_stat1 - pe_stat0) > (pe_req1 - pe_req0)) begin
+                tot_red = tot_red + 1; e_ps_side = e_ps_side + 1;
+                $display("[FAIL] PS j9: Δstat_retx=%0d > TB 注入的 retx 请求数=%0d (探询引出会话?)",
+                         pe_stat1 - pe_stat0, pe_req1 - pe_req0); end
+            // ---- j6 (无在飞不发): 排空 + 关窗 ⇒ 0 ----
+            if (pe_f_e2_probe != 0) begin tot_red = tot_red + 1; e_ps_e2 = e_ps_e2 + 1;
+                $display("[FAIL] PS j6: 无在飞+窗0 时出现探询 =%0d", pe_f_e2_probe); end
+            if (w_ps_drain < 1) begin tot_red = tot_red + 1; e_ps_e2 = e_ps_e2 + 1;
+                $display("[FAIL] PS j6 空判据: 排空见证缺失 (drain=0)"); end
+            // ---- j8 (打第二把锁): epoch 饱和 (blocked) 后窗 0 仍要 ≥2 条 ----
+            if (pe_f_e3_probe < 2) begin tot_red = tot_red + 1; e_ps_e3 = e_ps_e3 + 1;
+                $display("[FAIL] PS j8: blocked 后窗内探询=%0d < 2", pe_f_e3_probe); end
+            if (w_ps_blocked < 1) begin tot_red = tot_red + 1; e_ps_e3 = e_ps_e3 + 1;
+                $display("[FAIL] PS j8 空判据: epoch 未饱和 (blocked 见证=0)"); end
+            // ---- j10 (重连清干净): 待发 + cfg_up ⇒ 0; 且同一构造的正控必须能出探询 ----
+            if (pe_f_e4_probe != 0) begin tot_red = tot_red + 1; e_ps_e4 = e_ps_e4 + 1;
+                $display("[FAIL] PS j10: cfg_up 后仍出现探询 =%0d", pe_f_e4_probe); end
+            if (w_ps_rdy < 1) begin tot_red = tot_red + 1; e_ps_e4 = e_ps_e4 + 1;
+                $display("[FAIL] PS j10 空判据: 未见暂存落地 (rdy 见证=0)"); end
+            if (w_ps_posctrl < 1) begin tot_red = tot_red + 1; e_ps_e4 = e_ps_e4 + 1;
+                $display("[FAIL] PS j10 空判据: 正控未出探询 (posctrl=0)"); end
+            // ---- j12 (FIN/RST 在飞 ⇒ 0 探询; v3 含 RST 角) ----
+            if (pe_f_e5_probe != 0) begin tot_red = tot_red + 1; e_ps_e5 = e_ps_e5 + 1;
+                $display("[FAIL] PS j12: FIN 在飞时出现探询 =%0d", pe_f_e5_probe); end
+            if (pe_f_e6_probe != 0) begin tot_red = tot_red + 1; e_ps_e6 = e_ps_e6 + 1;
+                $display("[FAIL] PS j12: RST 在飞时出现探询 =%0d", pe_f_e6_probe); end
+            if ((w_ps_e5ok < 1) || (w_ps_fin < 1)) begin
+                tot_red = tot_red + 1; e_ps_e5 = e_ps_e5 + 1;
+                $display("[FAIL] PS j12 空判据(E5): 构造条件未同真过 (e5ok=%0d fin_sent=%0d win0拍=%0d inflight=%0d)",
+                         w_ps_e5ok, w_ps_fin, w_ps_e5win, pe_f_e5_state[2]); end
+            if ((w_ps_e6ok < 1) || (w_ps_rst1 < 1)) begin
+                tot_red = tot_red + 1; e_ps_e6 = e_ps_e6 + 1;
+                $display("[FAIL] PS j12 空判据(E6): 构造条件未同真过 (e6ok=%0d rst1=%0d win0拍=%0d inflight=%0d)",
+                         w_ps_e6ok, w_ps_rst1, w_ps_e6win, pe_f_e6_state[2]); end
+            // ---- j13/j14 (多连接相撞; 本刀最重的那条缺陷) ----
+            if (e_coll_bad > 0) begin tot_red = tot_red + 1; e_ps_coll = e_ps_coll + 1;
+                $display("[FAIL] PS j13: E7 相撞窗内出现跨连接数据帧 =%0d", e_coll_bad); end
+            if (pe_f_e7_wit < 1) begin tot_red = tot_red + 1; e_ps_coll = e_ps_coll + 1;
+                $display("[FAIL] PS j13 空判据: 相撞条件从未成立 (wit=0)"); end
+            if ((pe_de1 - pe_de0) < 1) begin tot_red = tot_red + 1; e_ps_coll = e_ps_coll + 1;
+                $display("[FAIL] PS j13 空判据: E7 观察窗内无数据帧 (%0d)", pe_de1 - pe_de0); end
+`endif
             if (tot_red == 0) $display("TB_TCP_TX_OVL: OK");
             else              $display("TB_TCP_TX_OVL: FAIL reds=%0d", tot_red);
             $finish;
@@ -1570,7 +2499,13 @@ module tb_tcp_tx_ovl;
             $display("  (cycle budget %0d reached)", CY_MAX);
             summary_and_exit;
         end
-        if (rst_n && (n_data >= NF_TGT) && (phase == 2'd2))
+        // ⭐ P7B-PERSIST: 本臂要求 episode 序列**跑完**才允许收尾 (否则"目标帧数已到"
+        //   会在 episode 中途把仿真掐掉 ⇒ 判据全空); 非该臂 = 原条件逐字不变。
+        if (rst_n && (n_data >= NF_TGT) && (phase == 2'd2)
+`ifdef ARM_PERSIST
+            && pe_done
+`endif
+            )
             summary_and_exit;
     end
 endmodule

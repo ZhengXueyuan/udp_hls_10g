@@ -2141,7 +2141,13 @@ module wrapper_p4 (
         end
     end
 
-    tcp_tx_frame #(.RING_CAP(WIN_CAP_5)) u_tcp_tx (
+    // ⭐ P7B-PERSIST (2026-10-10): `.PERSIST_EN(1'b1)` = 本刀唯一打开的功能开关
+    //   (设计件 `_proj_10g/notes/P7B_PERSIST_DESIGN.md` v3 §2.5-⑩ / §7.1)。
+    //   · **不包 `ifdef`** (先例 `.TX_CONTINUOUS(1'b1)`, 见 :1196 一带) —— 默认构建下
+    //     它是"未使用参数"(逻辑体全在 `ifdef TCP_TX_OVL` 内) ⇒ 命名覆盖合法
+    //     (【推断·未跑工具】: 只报 warning 与否未验证; 设计件 §7.1 同款口径)。
+    //   · 回退点 = 这一处改回 `1'b0` (或删这一项) —— 参数默认值本身就是 `1'b0`。
+    tcp_tx_frame #(.RING_CAP(WIN_CAP_5), .PERSIST_EN(1'b1)) u_tcp_tx (
         .clk            (dp_clk),
         .rst_n          (dp_rst_n),
         .s_axis_tdata   (txin_tdata),
@@ -4049,7 +4055,13 @@ module wrapper_p4 (
 
     axi_regs #(
         .MAGIC_V    (32'h50360001),
-        .BUILD_ID_V (32'h0000001A),     // ⚠️ 每次改动自增 (前置闸读这一项认位流; 构建 F = 0x1A)
+        .BUILD_ID_V (32'h0000001B),     // ⚠️ 每次改动自增 (前置闸读这一项认位流; 构建 F = 0x1A)
+                                        //   ⭐ P7B-PERSIST (2026-10-10): **0x1A → 0x1B**。
+                                        //      内容 = 上面对 u_tcp_tx 加 `.PERSIST_EN(1'b1)`
+                                        //      (RTL 侧在 `ifdef TCP_TX_OVL` 内新增 persist 通路)。
+                                        //      ⚠️ 窗口字长/未实现地址**不变** (仍 70 字 / `0x138`)
+                                        //      ⇒ 读侧只需同步 `EXPECT_BID` (0x1A → 0x1B);
+                                        //      本次改动**未**触碰任何读侧文件 (阶段 1 边界)。
                                         //   26 = **P7B 构建 F** (2026-10-10): 快照 67 → **70 字**
                                         //        (三个**纯观测**仪器: W67 = `tcp_tx_frame.stat_winstall_cap`
                                         //         (板帽侧等窗拍数; 只需一个 16 位比较 —— `win_wnd_eff` 本来

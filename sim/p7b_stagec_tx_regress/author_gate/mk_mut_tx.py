@@ -67,16 +67,19 @@ add("mut_s0b", [(
 
 # ---- M-C1: 撞写口 (upd_wr_ctrl 与 upd_wr_data 同拍) ----
 add("mut_c1", [(
-    "    wire        upd_wr_ctrl = start_ack && (aq_syn | aq_fin | aq_rst);",
-    "    wire        upd_wr_ctrl = upd_wr_data || (start_ack && (aq_syn | aq_fin | aq_rst));",
+    "    wire        upd_wr_ctrl = start_ack && !probe_sel && (aq_syn | aq_fin | aq_rst);",
+    "    wire        upd_wr_ctrl = upd_wr_data || (start_ack && !probe_sel && (aq_syn | aq_fin | aq_rst));",
     1)], "M-C1 同拍撞写口 => $onehot0 红")
+#   [!!] 2026-10-10 (PERSIST 实施轮) 重新对齐: `upd_wr_ctrl` 那一行被 PERSIST 刀加了
+#      `!probe_sel` 门 (rtl/tcp_tx_frame.v 的 §2.4-4 (1)) => 旧锚点 0 命中 (MUTFAIL)。
+#      变异语义 (同拍撞写口) 一字未变。
 
 # ---- M-C2: 预留写寄存 8 拍 (形 A: (wr,val,id) 三件套一起延) ----
 #   s2/s3 锚点 = 2026-10-10 重新对齐 (RETXFIX 后 upd_id/upd_val 是**三级三目**,
 #   第三级 = `replay_jump ? retx_id_r/retx_hi : svc_id/rb_snd_una`;
 #   本变异只动第二级 ctrl 分支的取值来源, 语义与旧版声明完全一致)。
 add("mut_c2", [
-    ("    wire        upd_wr_ctrl = start_ack && (aq_syn | aq_fin | aq_rst);",
+    ("    wire        upd_wr_ctrl = start_ack && !probe_sel && (aq_syn | aq_fin | aq_rst);",
      "    // M-C2 形 A: (wr,val,id) 三件套一起寄存 8 拍\n"
      "    reg [3:0]  mcd; reg [3:0] mcd_id; reg [31:0] mcd_val;\n"
      "    always @(posedge clk or negedge rst_n) begin\n"
@@ -85,7 +88,7 @@ add("mut_c2", [
      "            mcd <= 4'd8; mcd_id <= start_id; mcd_val <= rb_snd_nxt + 32'd1;\n"
      "        end else if (mcd != 4'd0) mcd <= mcd - 4'd1;\n"
      "    end\n"
-     "    wire        upd_wr_ctrl = (mcd == 4'd1);", 1),
+     "    wire        upd_wr_ctrl = (mcd == 4'd1) && !probe_sel;", 1),
     ("    assign      upd_id  = upd_wr_data ? f_conn[rx_bank] :\n"
      "                          (upd_wr_ctrl ? start_id :",
      "    assign      upd_id  = upd_wr_data ? f_conn[rx_bank] :\n"
@@ -110,18 +113,23 @@ add("mut_c6", [(
 
 # ---- M-C7: 撤 start_ack 的 !ctrl_slot_busy ----
 add("mut_c7", [(
-    "    wire        start_ack = rx_idle && ack_pend_r && !ackq_empty && !rx_flush &&\n"
-    "                            !ctrl_slot_busy;          // ← 槽跨拍独占门 (C7/C8)",
-    "    wire        start_ack = rx_idle && ack_pend_r && !ackq_empty && !rx_flush;",
+    "    wire        start_ack = rx_idle && !rx_flush && !ctrl_slot_busy &&\n"
+    "                            ((ack_pend_r && !ackq_empty) || probe_sel);",
+    "    wire        start_ack = rx_idle && !rx_flush &&\n"
+    "                            ((ack_pend_r && !ackq_empty) || probe_sel);",
     1)], "M-C7 撤槽独占 => issued > transmitted => J6 红")
+#   [!!] 2026-10-10 (PERSIST 实施轮) 重新对齐: `start_ack` 的**写法**变了
+#      (探询支并入 + 子句次序重排, rtl §2.5-(5)) => 旧锚点 0 命中; 变异语义 (撤
+#      `!ctrl_slot_busy`) 一字未变。
 
 # ---- M-C8: 撤 start_ack 的 rx_idle ----
 add("mut_c8", [(
-    "    wire        start_ack = rx_idle && ack_pend_r && !ackq_empty && !rx_flush &&\n"
-    "                            !ctrl_slot_busy;          // ← 槽跨拍独占门 (C7/C8)",
-    "    wire        start_ack = ack_pend_r && !ackq_empty && !rx_flush &&\n"
-    "                            !ctrl_slot_busy;",
+    "    wire        start_ack = rx_idle && !rx_flush && !ctrl_slot_busy &&\n"
+    "                            ((ack_pend_r && !ackq_empty) || probe_sel);",
+    "    wire        start_ack = !rx_flush && !ctrl_slot_busy &&\n"
+    "                            ((ack_pend_r && !ackq_empty) || probe_sel);",
     1)], "M-C8 撤 rx_idle => 控制帧在收帧期装载 (混拼)")
+#   [!!] 2026-10-10 (PERSIST 实施轮) 重新对齐 (同 mut_c7 注)。
 
 # ---- W66-1 (构建 E): 窗口门停顿计数器**永不计数** (哑观测) ----
 #   判据 (tb_tcp_tx_ovl.v 的 W66 段) 逐拍复算同一个判据并要求两者**相等** ⇒
@@ -190,6 +198,44 @@ add("mut_w69_atstart", [(
     "            svc_id_r <= retx_req ? retx_id : prio_lo(rto_pend);\n",
     1)], "M-W69-2 锁存使能换成 start_data => 操作点相位错")
 
+
+# ===========================================================================
+# P7B-PERSIST 变异臂 (2026-10-10 实施轮; 判据在 tb/tb_tcp_tx_ovl.v 的 ARM_PERSIST 段)
+#   每个变异 = 1 处改动, 锚点逐字取自**现役** rtl/tcp_tx_frame.v。
+# ===========================================================================
+
+# ---- PS-MUT-1: 删掉武装条件里的 !fin_sent_r[scan_id] (D-5 的第五子句) ----
+#   判据 (j12-FIN): E5 窗内 (conn2 的 FIN 在飞 + 窗 0 + 有在飞) 必须 0 探询。
+add("mut_ps_noarmfin", [(
+    "    wire        ps_arm    = PERSIST_EN && scan_now && scan_estab &&\n"
+    "                            (rb_snd_wnd == 16'd0) && (rb_snd_nxt != rb_snd_una) &&\n"
+    "                            !fin_sent_r[scan_id] && !rst_sent_r[scan_id];",
+    "    wire        ps_arm    = PERSIST_EN && scan_now && scan_estab &&\n"
+    "                            (rb_snd_wnd == 16'd0) && (rb_snd_nxt != rb_snd_una) &&\n"
+    "                            !rst_sent_r[scan_id];",
+    1)], "PS-MUT-1 撤 !fin_sent_r => E5 冒出探询 => j12 红")
+
+# ---- PS-MUT-2: 删掉武装条件里的 !rst_sent_r[scan_id] (v3 #6 的 RST 角) ----
+add("mut_ps_noarmrst", [(
+    "    wire        ps_arm    = PERSIST_EN && scan_now && scan_estab &&\n"
+    "                            (rb_snd_wnd == 16'd0) && (rb_snd_nxt != rb_snd_una) &&\n"
+    "                            !fin_sent_r[scan_id] && !rst_sent_r[scan_id];",
+    "    wire        ps_arm    = PERSIST_EN && scan_now && scan_estab &&\n"
+    "                            (rb_snd_wnd == 16'd0) && (rb_snd_nxt != rb_snd_una) &&\n"
+    "                            !fin_sent_r[scan_id];",
+    1)], "PS-MUT-2 撤 !rst_sent_r => E6' 冒出探询 => j12 红")
+
+# ---- PS-MUT-3: 探询槽上线条件里删掉 ds_guard (v3 #1 / REVIEW2 blocking #1) ----
+#   判据 (j13/j14, **多连接**): E7 相撞窗内不得出现跨连接数据帧。
+#   [!] 单连接 (A==B) 时自洽 => 该变异**只有多连接臂能抓** (本轮的 H2 欠账)。
+add("mut_ps_nodsg", [(
+    "    wire        probe_sel = ps_stage_rdy && ps_stage_estab && rx_idle && !rx_flush &&\n"
+    "                            !ctrl_slot_busy && ackq_empty &&\n"
+    "                            !svc && !ring_eval && !scan_now && !retx_active && ds_guard;",
+    "    wire        probe_sel = ps_stage_rdy && ps_stage_estab && rx_idle && !rx_flush &&\n"
+    "                            !ctrl_slot_busy && ackq_empty &&\n"
+    "                            !svc && !ring_eval && !scan_now && !retx_active;",
+    1)], "PS-MUT-3 撤 ds_guard => E7 相撞 => 跨连接数据帧 => j13 红")
 
 def norm(s):
     """换行归一化: \\r\\n / 单独 \\r 一律成 \\n (幂等)."""

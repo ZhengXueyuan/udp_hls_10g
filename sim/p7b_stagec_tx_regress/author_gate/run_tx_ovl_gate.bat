@@ -21,7 +21,14 @@ REM       board-cap side is non-empty: cap 8192 is reachable, so W67 is NOT an e
 REM   P = M-W67-2  cap-side counter never counts (expect nonzero; teeth ONLY in arm O)
 REM   Q = M-W69-2  op-point latch enabled by start_data instead of the wait cycle
 REM   R = M-W69-1  op-point latch never updates
-REM Contract: A/B/O RC==0; C..R RC!=0 except J (KNOWN GAP, not counted).
+REM   --- P7B-PERSIST (2026-10-10) ---
+REM   S = CLEAN  -d TCP_TX_OVL -d ARM_PERSIST          expect RC 0 (all new judges green)
+REM   T = CLEAN  -d TCP_TX_OVL -d ARM_PERSIST -d PERSIST_NEGCTL
+REM       (same stimulus, DUT PERSIST_EN=0)             expect RC!=0 (negative control)
+REM   U = M-PS1  mut_ps_noarmfin (drop !fin_sent_r from ps_arm)      expect RC!=0
+REM   V = M-PS2  mut_ps_noarmrst (drop !rst_sent_r from ps_arm)      expect RC!=0
+REM   W = M-PS3  mut_ps_nodsg    (drop ds_guard from probe_sel)     expect RC!=0
+REM Contract: A/B/O/S RC==0; C..R + T..W RC!=0 except J (KNOWN GAP, not counted).
 REM =====================================================================
 set "HERE=%~dp0"
 if "%HERE:~-1%"=="\" set "HERE=%HERE:~0,-1%"
@@ -73,6 +80,17 @@ call :run Q "%HERE%\mut\mut_w69_atstart.v" "-d TCP_TX_OVL"
 set RCQ=%errorlevel%
 call :run R "%HERE%\mut\mut_w69_dead.v" "-d TCP_TX_OVL"
 set RCR=%errorlevel%
+REM --- P7B-PERSIST (2026-10-10) ---
+call :run S "%RTL%\tcp_tx_frame.v" "-d TCP_TX_OVL -d ARM_PERSIST"
+set RCS=%errorlevel%
+call :run T "%RTL%\tcp_tx_frame.v" "-d TCP_TX_OVL -d ARM_PERSIST -d PERSIST_NEGCTL"
+set RCT=%errorlevel%
+call :run U "%HERE%\mut\mut_ps_noarmfin.v" "-d TCP_TX_OVL -d ARM_PERSIST"
+set RCU=%errorlevel%
+call :run V "%HERE%\mut\mut_ps_noarmrst.v" "-d TCP_TX_OVL -d ARM_PERSIST"
+set RCV=%errorlevel%
+call :run W "%HERE%\mut\mut_ps_nodsg.v" "-d TCP_TX_OVL -d ARM_PERSIST"
+set RCW=%errorlevel%
 
 echo ==================== SUMMARY ====================
 echo   A default serial  RC=%RCA%  (expect 0)
@@ -93,6 +111,11 @@ echo   O CLEAN W67_CAP_SMALL   RC=%RCO% (expect 0; **cap-side arm** - W67 non-va
 echo   P M-W67-2 dead cap cnt  RC=%RCP% (expect nonzero; build F)
 echo   Q M-W69-2 latch@start   RC=%RCQ% (expect nonzero; build F)
 echo   R M-W69-1 dead latch    RC=%RCR% (expect nonzero; build F)
+echo   S PERSIST clean arm     RC=%RCS% (expect 0; ARM_PERSIST)
+echo   T PERSIST negctl        RC=%RCT% (expect nonzero; PERSIST_EN=0)
+echo   U M-PS1 no !fin_sent_r  RC=%RCU% (expect nonzero; ARM_PERSIST)
+echo   V M-PS2 no !rst_sent_r  RC=%RCV% (expect nonzero; ARM_PERSIST)
+echo   W M-PS3 no ds_guard     RC=%RCW% (expect nonzero; ARM_PERSIST)
 
 set FAILS=0
 if not "%RCA%"=="0" set /a FAILS+=1
@@ -112,13 +135,22 @@ if not "%RCO%"=="0" set /a FAILS+=1
 if "%RCP%"=="0" set /a FAILS+=1
 if "%RCQ%"=="0" set /a FAILS+=1
 if "%RCR%"=="0" set /a FAILS+=1
+if not "%RCS%"=="0" set /a FAILS+=1
+if "%RCT%"=="0" set /a FAILS+=1
+if "%RCU%"=="0" set /a FAILS+=1
+if "%RCV%"=="0" set /a FAILS+=1
+if "%RCW%"=="0" set /a FAILS+=1
 
 echo   ---- B key readings ----
 findstr /C:"FRAMES" /C:"COV " /C:"MINGAP" /C:"CYCRX" /C:"CYCTX" /C:"FRAMEPERIOD" /C:"OVL " /C:"REDS" /C:"T8 " /C:"W66" /C:"W67" /C:"W69" /C:"TB_TCP_TX_OVL" "runB\xs.log"
 echo   ---- arm O key readings (the W67_CAP_SMALL arm) ----
 findstr /C:"W66" /C:"W67" /C:"W69" /C:"REDS " /C:"FRAMES" /C:"TB_TCP_TX_OVL" "runO\xs.log"
+echo   ---- arm S key readings (P7B-PERSIST clean arm) ----
+findstr /C:"PS1" /C:"PS2" /C:"PS3" /C:"PS4" /C:"PS5" /C:"PS6" /C:"REDS " /C:"FRAMES" /C:"TB_TCP_TX_OVL" "runS\xs.log"
+echo   ---- arm T key readings (P7B-PERSIST negative control) ----
+findstr /C:"PS2" /C:"PS3" /C:"PS6" /C:"REDS " /C:"TB_TCP_TX_OVL" "runT\xs.log"
 echo   ---- mutant verdicts (REDS line + verdict + first FAIL lines) ----
-for %%M in (C D E F G H I J K L M N O P Q R) do (
+for %%M in (C D E F G H I J K L M N O P Q R S T U V W) do (
   echo   [%%M]:
   findstr /C:"REDS " /C:"TB_TCP_TX_OVL:" /C:"T8 " "run%%M\xs.log"
 )
