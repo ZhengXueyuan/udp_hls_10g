@@ -1,50 +1,77 @@
-# P7B-PERSIST 设计件：发送侧 persist / 零窗探询（2026-10-10）
+# P7B-PERSIST 设计件：发送侧 persist / 零窗探询（2026-10-10 · **v2**）
 
-- 角色：**协议栈设计工程师**（本轮只出设计件 + 判据设计）。**状态：纯纸面** —— 未改 `rtl/` `tb/` `sim/` `board/*.v` `board/*.tcl`、未启动 Vivado、未烧板、未跑 xsim、未 ssh 对端。
-- 唯一可写产物 = 本文件。全部行号 = **本件落笔时的工作树**（HEAD 见 §0.4），逐字可核。
-- 依据件（读原件、不照抄二手摘要）：`_proj_10g/notes/p7b_microwin_20261010/REPORT.md`（定位轮）· `rtl/tcp_tx_frame.v` · `rtl/tcb.v` · `rtl/retx_ram.v` · `rtl/tcp_rx.v` · `rtl/tx_arb.v` · `rtl/app_ctrl.v`（WU 先例）· `_proj_10g/notes/P7B_WU_FIX.md` · `_proj_10g/notes/P7B_BIZ_WINDOW.md` §1 · `_proj_10g/notes/P7B_A7_BUILD.md` §1.4 · `tb/tb_tcp_tx_ovl.v` · `sim/p7b_stagec_tx_regress/author_gate/run_tx_ovl_gate.bat`。
-- ⛔ **本件不下 PASS/FAIL 裁定**；⛔ 不写"时序已解决"；⛔ 不把"未观测到"写成"不存在"。所有"应当"都带证伪法。
+- 角色：**协议栈设计工程师**。**状态：纯纸面** —— 未改 `rtl/` `tb/` `sim/` `board/*.v` `board/*.tcl`、未启动 Vivado、未烧板、未跑 xsim、未 ssh 对端。
+- **v1** = `_proj_10g/notes/P7B_PERSIST_DESIGN.md` @ 提交 `61cc107`（521 行）。
+- **v2**（本件）= 对 v1 的**原地修订**：按对抗审查 `_proj_10g/notes/p7b_persist_review_20261010/FINDINGS.md`（含 TL 批注）逐条处置，**每条均回源码自核**再决定采纳与否；**改了什么、依据哪条、改前改后** = 下面 `## v2 修订记录`。
+- 全部行号 = 本件落笔时工作树，逐字可核。⛔ 本件不下 PASS/FAIL 裁定；【事实】/【推断】分开标；不写"已就绪 / 已收口 / 可以实施了"。
 
 ---
 
-## §0 一句话 + 现核到与派单描述不符的地方（先登记）
+## v2 修订记录（逐条：依据 FINDINGS 编号 / 改前 / 改后 / 处置）
 
-**一句话**：板在 `snd_wnd == 0` 时**两条标准逃生路同时被封**（`:1008-1018` 把 RTO 卸膛 + 全仓无 persist），
+| # | 依据 | 改前（v1） | 改后（v2） | 处置 |
+|---|---|---|---|---|
+| **1** | **D-1**（B-1，blocking）+ TL 裁定"取修法 (i)" | 三个新参数放在 `` `ifdef TCP_TX_OVL `` `:281` **段内**；wrapper `:2144` 无条件传 `.PERSIST_EN(1'b1)`；又称"默认构建 ⇒ 结构性无关" | 参数声明**移到宏外**（与 `RTO_LIM :219-223` / `RING_CAP :241` / `PLEN_MAX :247` / `ACKQ_* :258-259` / `RETX_SPAN :279` 同款，**全部在 `:281` 之前** —— 本件逐行核过）；wrapper 那行**不**包 `ifdef`；"结构性无关"改为两句口径（默认构建＝无该逻辑；有 OVL 无 `PERSIST_EN`＝有逻辑但不使能） | **采纳**（v1 自相矛盾之处成立；已核 `wrapper_p4.v:2144` 不在任何 `ifdef` 内，最近的 `ifdef APP_MODE` 在 `:2112-2126`，例化在 `:2144`） |
+| **2** | **D-2**（B-5(iii)(iv)，blocking） | `probe_sel = … && (rb_state == 4'd1)`（**组合读**）；`rb_id = probe_sel ? ps_stage_conn : (svc ? …)`（**插在最前**）；并写"守卫**免费**" | ① 守卫改**打拍暂存**：新增 `ps_stage_estab`（在扫描拍、`rb_id = scan_id` 时锁存的样本）⇒ `probe_sel` **不再含 `rb_state`**；② `probe_sel` 增互斥子句 `!svc && !ring_eval && !scan_now && !retx_active`；③ mux 的 `probe_sel` arm 挪到 `scan_now ? scan_id :` **之后**；④ 写成**成对不变量**（单改一个就破） | **采纳**（组合环与抢读槽坐实：`rtl/tcb.v:115-120` 的 `rb_*` 是 `assign`(组合) 读出；`tcp_rx`… 不涉及。"免费"删除并**反向登记**） |
+| **3** | **D-3**（B-2-③，blocking） | ⑦ 只写 `total_len 40→41` + 加载荷项 ⇒ "11 处" | 补第 12 处：`rtl/tcp_tx_frame.v:729` `ctl_aen_v1 = 18'd20 + …` 的 **`18'd20` = TCP 伪头长度项** ⇒ 探询必须 `18'd21`（**本件已逐字核**：`csum_init_ctrl :726-728` = src/dst ip + `32'h0006`(proto) ⇒ 伪头只剩 tcplen；TB 独立复算 `tb/tcp_tx_ovl.v:468` 用 `ip_len − 20`，纯控制帧 = 20 ⇒ 与 RTL 逐字吻合） | **采纳**（"11 处"→**12 处**） |
+| **4** | **D-4**（B-11，blocking） | 退避写"`ps_exp` … 第 3/4/5 次 = 10/20/40 s（`PS_BASE<<1..3`）\| exp = 1,2,3"+"≥第 6 次 exp≥4 取 `PS_MAX`"；**缺首档状态位** | 改为**单一编码 = `ps_phase`（3 位）**，语义 = "**当前已装载的那个间隔的序号**"；给出**全档真值表**（§3.1）与装载/推进规则；武装即 `phase=0 ∧ timer=RTO_LIM`；解除/cfg_up/复位 ⇒ `phase=0` | **采纳**（两条读法各自与件内一句冲突 ⇒ 编码未定，坐实） |
+| **5** | **D-5**（B-2-⑤，需裁定）+ 本件**自核新增** | 武装条件 = `wnd==0 && snd_nxt != snd_una`；停条件四条；未处理 FIN 在飞 | 武装条件加 **`!fin_sent_r[scan_id] && !rst_sent_r[scan_id]`**；并把 `rst_sent_r` 也纳入（**审查只点名 FIN —— 本件自核发现 RST 同机理**：`:801-802` 的 `rst_push` **不要求** `snd_nxt == snd_una`，而 `:534`/`:542` 的 RST 也走 `rb_snd_nxt + 1` 预留 ⇒ 同样是"`snd_una` 处无数据字节"）；§3.4 增第 5 条停条件 | **采纳 + 扩展**（并登记残留：SYN-ACK 预留/首窗为 0 的角落 —— 该角的探询 seq **低于**对端 `rcv_nxt` ⇒ 对端判"旧段"⇒ dup-ACK，**证明无害**） |
+| **6** | **D-6 前半**（B-6-L1） | L1 = "对 diff grep `svc` **0 命中**"（按字面**必红**）+ **无负对照** | L1 重写为三层可判形态：**白名单锚点** + **保序配对豁免**（机械可算）+ **新增禁用符号计数必须为 0**；并配**两条负对照**（§4.3） | **采纳**（按字面确不可满足：⑤b 必须改 `:547`，该行逐字含 `svc ? svc_id`） |
+| **7** | **D-6 后半**（B-6-L3） | L3 = "episode 全程 `ΔW55 == 0`"（判据），与 §4.4"预期 ≤1 次伪会话"**互相打架** | 拆成 **L3a（xsim，精确期望值，分两子相：0 / 1）** 与 **L3b（板级，可解释性判据：`ΔW55 ∈ {0,1}` 且取 1 时三条附带条件必须同时成立，且 episode 起点 = **注入时刻**）** | **采纳**（口径统一，无"待定"） |
+| **8** | **D-7**（B-4） | "最坏在飞 = 4095" ⇒ "余量 2 字节" | 现役**强制上界** = `PLEN_MAX = 12'd1500`（`:247`），强制链 = `:554 len_over` → `:1062 len_bad` → `:670 wr_tap` ⇒ 单帧最多写 `1500 + ≤8 = 1508` ⇒ `61439 + 1508 = 62947 < 65536` ⇒ **余量 ≈ 2589 B**（`4095` 的三处出处全是 `0xBFFE`/48KB 时代：`rtl/tcb.v:147` · `rtl/tcp_tx_frame.v:237` · `:1398`） | **采纳**（方向安全、数值失真 ~1300×） |
+| **9** | **D-8**（A-6） | §7.1 只说"默认构建行为不变"（= 覆盖性论证的**一半**） | 明写**双支约定**：**不镜像**（取 r6 `ack_seen` 先例：`tcp_tx_frame.v:503` 逐字"默认分支…不生效"），并补半句 —— **常驻 P4 矩阵（含 `p5_wrapper`）编的是默认支 ⇒ 对本刀零覆盖（#52 字面命中）**；同时登记"语义双支漂移"风险 | **采纳**（并给出与"构建 E/F 的 W66/W67/W69 双支镜像"先例的**取舍理由**） |
+| **10** | **D-9**（B-9） | S2 = "A vs 冻结锚 24 文件 `fc /b`"；把 `sim/**/frozen/**` 里的 `tcp_tx_frame.v` 称作"现役" | S2 重写：① **必须现冻**（现存 `sim/p7b_stagec_tx_regress/frozen/tcp_tx_frame_rev1a1f0439.v` = **118,054 B / 2026-10-07 16:01** ≠ 现役 **142,733 B**，**只能当 10-07 那版的负对照**）；② **"24 文件全同"这一形态已不成立**（`sim/p7b_longsend/run_cont_gate.bat:18` 逐字登记；现形态 = `:15-17` 的**19 文件全同 + 差集必须恰为 `{d7.hex,d8.hex,f7.txt,f8.txt}` + `stats.txt` 去掉 I7/I8 行后全同**）；③ 实施轮**先建 tcp_tx_frame 自己的 fc/b 门**（本仓现无） | **部分采纳**（"必须现冻"与"不能当现役锚"采纳；**"列清 24 文件"不采纳** —— 该清单是脚本**算出来的集合**且形态已换代，见右） |
+| **11** | **D-10-1** | 臂 1 只覆盖 `PS_BASE/PS_MAX` | 臂 S/T **必须显式覆盖 `.RTO_LIM(TB_RTO)`**（门**不定义 `DP_156MHZ`** ⇒ `RTO_LIM = 48828` ⇒ 首探询 12.5M 拍，**落不进观察窗**） | **采纳** |
+| **12** | **D-10-2** | 同时引"双实例同跑"（`tb_app_wu.v`）与"宏+双跑"（`ARM_ACKGATE`）两种先例，且未写两臂如何取 `PERSIST_EN` | **定型为"宏 + 双跑"**（与门既有的 A..R 臂机制同构：`run_tx_ovl_gate.bat:40-75` 每臂一次 `xsim` + `-d`）；`PERSIST_EN` 由 **TB 内 `ifdef` 选出的 localparam** 注入（**不经门传参**）；**不采用双实例同跑**（本 TB 判据大量用 `u_dut.*` 层次引用，复制两份的成本与自伤风险高） | **采纳** |
+| **13** | **D-10-3** | §8.3-3 写"覆盖率判据需重算" | **降级**：只有 `n_data`（下界）与 `cov_singlebeat`（下界）受影响、**只会被探询推高**；`cov_plen0` 要求 `plen==0` ⇒ 不受影响（探询 `plen=1`） | **采纳** |
+| **14** | **D-10-4** | 未登记 TB 的 J9 重放窗口连续性判据 | 三层处置：① `probe_sel` 加 `!retx_active`；② TB `tb_tcp_tx_ovl.v:503-519` 的 J9 分支加 **`&& !u_dut.tx_is_probe`**（**状态线**口径，与该分支已用的 `u_dut.retx_active/retx_id_r` 同类）+ **互核**：被排除帧数必须 == 新判据计到的探询帧数；③ 残留登记（探询帧在飞途中会话起来的同连接窗口） | **采纳**（并**修正审查的"不共存"诉求**：③ 的残留**不可**用 `!retx_active` 完全排除 —— 见 §2.4-6） |
+| **15** | **D-11**（6 小项） | `:1186-1187`（TX_CONTINUOUS）· §2.1"（§2.4-③）" · "≤33 帧/次" · §4.1"只出现两处" · `start_id` 恒等 `s_axis_tid` · `p7b_tcp_sink.cpp:306` | 逐条改：`:1196`（本件已核 `.TX_CONTINUOUS(1'b1),` 在 `board/wrapper_p4.v:1196`，`:1195` = `app_pattern #(.TX_BYTES(32'h0FFFFFFF), .TX_SEGSZ(12'd1460),`）· 校验和交叉引用改 **§2.5-⑦** · "≤42 帧/次（`0xF000÷1460 = 42.08`；RTL `:262` 注释的 `~33` 是 48KB 时代值）" · "**两处使用 + 1 处定义**（OVL 支）；**默认支另有同款 3 处** `:1502/:1503/:1514`" · `start_id :484` = `ack_pend_r ? ackq_dout[38:35] : s_axis_tid`（**非恒等**）· P-C 改引 `sink_connect_rcvbuf()` | **采纳**（6/6） |
+| **16** | **TL 跨件一致性**（审查未覆盖） | §6.1-P-C 行引 `p7b_tcp_sink.cpp:306` 并叙述"线上先 64240 **再塌**" | P-C 重写：① 旧行为**必须显式带 `--rcvbuf-after-connect`**（`p7b_tcp_sink.cpp:257/:272`，见证行 `:331-332` `SINK_RCVBUF_ORDER=after_connect_LEGACY`；默认已是 `before_connect` `:232-233`，已提交 `a03d227`）；② **不许把 P-C 判据建立在"先大窗再塌"上**（peer_verify `REPORT.md:18` 逐字"本次未观察到任何塌"+ TL 批注 §B 推断"通告窗 ≤ 空闲接收缓冲 ⇒ 要**灌满**才关窗"）；③ 补一条"灌满"造法 | **采纳**（v1 的"再塌"叙述**现核为不成立**） |
+| 17 | 本件**自核订正审查一条** | — | 审查 §B-9/§D-9 要求"列清 24 文件" ⇒ **该清单已不存在**（见 #10 右）；审查 §B-10"537 未含修法开销" ⇒ v2 已重算 = **538**（+1 位 `ps_stage_estab`） | 如实登记 |
+
+---
+
+## §0 一句话 + 现核到与派单/审查描述不符的地方（先登记）
+
+**一句话**：板在 `snd_wnd == 0` 时**两条标准逃生路同时被封**（`rtl/tcp_tx_frame.v:1008-1018` 把 RTO 卸膛 + 全仓无 persist），
 本刀**不动 RTO/重放机**，新增一条**独立、有退避、不进重放机**的 persist 通路：窗锁 0 且 `snd_nxt != snd_una` 时，
-按 `RTO 期 → 5 s → 10 → 20 → 40 → 60 s（封顶，永不放弃）` 发**1 字节旧数据的探询段**（seq = `snd_una`、flags 0x18、
+按 `RTO 期 → 5 s → 10 → 20 → 40 → 60 s（封顶，永不放弃）` 发**1 字节旧数据的探询段**（seq = `rb_snd_una`、flags 0x18、
 字节从 `retx_ram` 就地读），由此**逼出对端一条带真窗口的 ACK** ⇒ `rb_snd_wnd` 更新 ⇒ 数据流自愈。
 
-### 0.1 现核到与派单不符 / 需订正的四处（**逐条**）
+### 0.1 现核到与派单 / v1 描述不符 / 需订正的**六处**
 
-| # | 派单/摘要的说法 | 现核（本件行号） | 影响 |
+| # | 说法 | 现核（本件行号） | 影响 |
 |---|---|---|---|
-| 1 | 依据件 `_proj_10g/notes/p7b_readside_harden_20261010/REPORT.md` | ⛔ **该文件不存在**。目录里是 `FULL_TABLE.tsv`（771 行 / 149 文件）+ `assert_run1/2.txt` + `check_mode.txt` + `negctl_*.txt` + `scan/` + `mktable.py`/`_sweep_probe.py`。权威描述在 `udp_hls_10g/CLAUDE.md` 构建 F 块（⑦ 读侧加固）与 `_proj_10g/notes/p7b_buildF_review_20261010/FINDINGS.md` | 读侧同步清单格式改按 `FULL_TABLE.tsv` 的列口径引用（§5.4） |
-| 2 | "`epoch` **只在** `rb_snd_una` 有进展时清零（`:940-943`）" | 现核还有**两条**清零路径：**`cfg_up` 事件脉冲**清（`:892` `epoch[cfg_up_id] <= 4'd0;`，在建连收尾块 `:888-896` 内）与**复位**清（`:883`）。"只在"不成立；结论方向不变 | §4 的论证必须写成"进展 ∨ cfg_up ∨ 复位" |
-| 3 | "`rtl/tcp_tx_frame.v` 是 CRLF"（派单要求现核） | ✅ 成立且更强：**142,733 B / 2232 行 / CRLF 2232 / 裸 LF 0**（`P7B_A7_BUILD.md:79` 记的 2090 是那一版；本件引用行尾纪律用现值） | §8.4 |
-| 4 | 本缺口 = "本轮唯一的产品级功能缺口" | ⚠️ **功能名成立、覆盖面要打补丁**：同一定位件把"微窗 stall 家族"分两形态 —— `eff == 0`（9 跑）与 **`eff = 832`（MW9）**；本刀武装条件 = `snd_wnd == 0` ⇒ **只覆盖前者**。MW9 形态需要另一支（按窗分片），见 §9-②。⛔ 不许写成"微窗家族已收口" | §1.2 的范围围栏 |
+| 1 | 依据件 `p7b_readside_harden_20261010/REPORT.md` | ⛔ **不存在**。该目录 = `FULL_TABLE.tsv`（771 行 / 149 文件）+ `assert_run1/2.txt` + `check_mode.txt` + `face_table.txt` + `negctl_*.txt` + `scan/` + `mktable.py`/`_mdcount.py`/`_scan_fileset.txt`/`_sweep_probe.py`。权威描述 = `udp_hls_10g/CLAUDE.md` 构建 F 块 ⑦ + `p7b_buildF_review_20261010/FINDINGS.md` | 读侧清单口径按 `FULL_TABLE.tsv` 列引用（§5.4） |
+| 2 | "`epoch` **只在** `rb_snd_una` 有进展时清零（`:940-943`）" | OVL 支 **3 处写点**：`:883`（复位）/ `:892`（`cfg_up`）/ `:940-943`（svc）；**默认支另有 3 处同款**：`:1815` / `:1835` / `:1876-1879`（本件逐行核过） | §4 论证写成"进展 ∨ cfg_up ∨ 复位" |
+| 3 | 行尾/规模 | `rtl/tcp_tx_frame.v` = **142,733 B / 2232 行 / CRLF 2232 / 裸 LF 0** | §8.4 |
+| 4 | 本缺口 = "本轮唯一的产品级功能缺口" | ⚠️ **功能名成立、覆盖面要打补丁**：同一定位件把"微窗 stall 家族"分 `eff == 0`（9 跑）与 **`eff = 832`（MW9）**；本刀武装条件 = `snd_wnd == 0` ⇒ **只覆盖前者**（§9-②） | 不许写成"微窗家族已收口" |
+| 5 | v1 §6.1-P-C"线上先 64240 **再塌**" | ⛔ **"塌"未再现**：真 Linux 栈实测（`p7b_sinkfix_20261010/peer_verify/REPORT.md:18` 逐字）"**本次未观察到任何塌**"；且 sink 的 `SO_RCVBUF` **已默认落在 `connect()` 之前**（`:232-233`），旧行为需 `--rcvbuf-after-connect`（`:257/:272`，已提交 `a03d227`） | §6.1 重写（TL 跨件条） |
+| 6 | v1 §2.5-⑤b"守卫**免费**（同一 mux）" | ⛔ **方向反了**：`rtl/tcb.v:115-120` 的 `rb_*` 是**组合**读出 ⇒ `probe_sel ← g(rb_state)`、`rb_id ← f(probe_sel)`、`rb_state ← h(rb_id)` = **真组合环**；且 v1 的 `probe_sel` 无 `!svc` ⇒ 抢 svc 的读槽 ⇒ TCB 交叉污染 | §2.4-2/§2.5-⑤b 重写（D-2） |
 
-### 0.2 派单里**逐字复核成立**的三条（供对照，省得再核一遍）
+### 0.2 逐字复核**成立**的关键条（不必再核）
 
-- **第一把锁** = `rtl/tcp_tx_frame.v:1008-1018`：装表门第一子句 `(rb_snd_wnd != 16'd0 && rb_snd_nxt != rb_snd_una)`；
-  门为假 ⇒ `:1017-1018` `rto_timer[scan_id] <= 21'd0;` ⇒ **窗 0 时无 RTO / 无重传 / 无探询** ✅（`:1008` / `:1018` 逐字对上）。
-- **第二把锁** = `:509` `wire blocked = (epoch[svc_id] >= 4'd15);` ⇒ `:522 svc_rewind = … && !blocked` 被禁；
-  `:523 retx_deny = blocked && fin_sent_r[svc_id]`（FIN 在飞时连 `retx_begin` = `:524` 也被禁）✅。
-- **门**：`win_open` 来自 `rtl/tcb.v:151-157`（注册输出，`win_diff < min(snd_wnd, WIN_CAP)`）；数据帧启动门 `:557-565`
-  含 `wnd_open`，**控制帧门 `:518-519` 不含**（`start_ack = rx_idle && ack_pend_r && !ackq_empty && !rx_flush && !ctrl_slot_busy`）✅
-  ⇒ 探询**必须**走控制帧槽（这正是"另一条路"的字面落点）。
-- 实测双臂（定位轮）：注入 `win=1460` ⇒ 板 **0.158 s** 恢复（MW10）· 注入 `win=0` ⇒ **`board_frames_after_inject=0`、仍 stall**（MW11）✅。
-- 时序现状（构建 F）：全局 `WNS +0.111`（`async_default` **Recovery**）/ **DP 域 setup WNS `+0.281`** ✅。
+- **第一把锁** = `:1008-1018`（门第一子句 `(rb_snd_wnd != 16'd0 && rb_snd_nxt != rb_snd_una)`；假 ⇒ `:1017-1018` `rto_timer[scan_id] <= 21'd0;`）✅
+- **第二把锁** = `:509 blocked = (epoch[svc_id] >= 4'd15)` ⇒ `:522 svc_rewind = … && !blocked`、`:523 retx_deny = blocked && fin_sent_r[svc_id]` ✅
+- **控制帧门不含 `wnd_open`**（`:518-519`）vs **数据门含**（`:557-565`：`s_axis_tready` 与 `start_data` 逐字同门）✅
+- `win_open` 来自 `rtl/tcb.v:151-157`（**注册**输出，`win_diff < min(snd_wnd, WIN_CAP)`）✅
+- 实测双臂（定位轮）：注入 `win=1460` ⇒ **0.158 s** 恢复（MW10）· 注入 `win=0` ⇒ `board_frames_after_inject=0`、仍 stall（MW11）✅
+- 时序现状（构建 F）：全局 `WNS +0.111`（`async_default` **Recovery**）/ **DP 域 setup WNS `+0.281`** ✅
+- 门 `run_tx_ovl_gate.bat`：臂表 `:40-75`（A..R，**J = KNOWN GAP 不计**，见 `:24`/`:87`）；`:run` 子程序 `findstr "TB_TCP_TX_OVL: OK"` 未命中即 `exit /b 1`；末尾 `FAILS` 计数 ⇒ `exit /b 1` ✅
+- TB 判据合流 = `tb/tb_tcp_tx_ovl.v:1376-1380` 的 **23 项白名单和式** `tot_red`，`:1554-1555` 打印 OK/FAIL ✅
+- ⭐ **v1 引的全部行号里，唯一一处错 = `.TX_CONTINUOUS(1'b1)` 的行号**（v1 写 `:1186-1187`，实为 **`board/wrapper_p4.v:1196`**）—— 本件已核并订正（D-11）✅
 
-### 0.3 本刀纪律（照本工程惯例）
+### 0.3 本刀纪律
 
-① 参数**默认关** ⇒ 逐位退化（先例 `TX_CONTINUOUS` / `TX_TAILCARRY` / `WU_LEGACY`）；② 全部新逻辑落在
-`ifdef TCP_TX_OVL` 分支内（`:281` 起，默认分支 `:1248` `else` 一字不动）；③ **不进** `svc`/replay/`retx_*` 任何一行；
-④ 与"在跑回归"互斥（全局 #57）——实施轮必须先确认没有回归在跑、并核源文件 sha256。
+① 参数**默认关** ⇒ 逐位退化（先例 `TX_CONTINUOUS` / `TX_TAILCARRY` / `WU_LEGACY`）；
+② 全部新逻辑落在 `` `ifdef TCP_TX_OVL `` 分支内（`:281` … 默认分支 `` `else `` @ `:1248`，`` `endif `` @ `:2230`，`endmodule` @ `:2232`）；
+③ **不进** `svc`/replay/`retx_*` 任何一行（判据见 §4.3-L1）；
+④ **双支约定 = 不镜像**（§7.1），并明写"**常驻矩阵对本刀零覆盖**"；
+⑤ 与"在跑回归"互斥（全局 #57）：实施轮先确认没有回归在跑、并核源文件 sha256。
 
 ### 0.4 落笔基线
 
-`board/wrapper_p4.v` 现役 `BUILD_ID_V = 0x1A`（`:4052`，构建 F）· `WIN_CAP_5 = 16'hF000`（`:227`，单一真值源，
-`:1980` 下发 `tcb` / `:2144` 下发 `tcp_tx_frame.RING_CAP`）· 快照 70 字 / 未实现地址 `0x138`。
+`board/wrapper_p4.v` 现役 `BUILD_ID_V = 0x1A`（`:4052`）· `WIN_CAP_5 = 16'hF000`（`:227`；`:1980` 下发 `tcb`、`:2144` 下发 `tcp_tx_frame.RING_CAP`）· 快照 70 字 / 未实现地址 `0x138`。
 
 ---
 
@@ -52,470 +79,462 @@
 
 ### 1.1 候选 A：**纯 persist 定时器 + 独立探询段**（本件**选定**）
 
-**机制**：每连接一个独立 persist 计时器（与 `rto_timer` 分离）。武装条件 = `scan_estab && rb_snd_wnd == 16'd0 && rb_snd_nxt != rb_snd_una`；
+**机制**：每连接一个独立 persist 计时器（与 `rto_timer` 分离）。武装条件 = `scan_estab && rb_snd_wnd == 16'd0 && rb_snd_nxt != rb_snd_una && !fin_sent_r[scan_id] && !rst_sent_r[scan_id]`；
 到期 ⇒ 置**电平请求** `ps_want[conn]`；扫描器随即从 `retx_ram` **就地读**出 `seq = snd_una` 处的 1 个字节，
 放进一个**专用探询槽**（与 ACK 队列并列的第二控制帧来源）；槽上线 ⇒ 发 **1 字节旧数据段**
 （seq = `rb_snd_una`、ack = `rb_rcv_nxt`、flags = 0x18、window = `rb_rcv_wnd`）。
 
-- **与现役机器的耦合点**：只有 **控制帧通路的入口**（`start_ack` `:518` → 槽装载 `:1022-1039` → 校验和装载 `:929-932`
-  → `T_HDR` `:1123-1143` → `T_PAY` `:1144-1190`）与**扫描块新增段**（`:998-1020` 旁）与**cfg_up 清理块**（`:888-896`）。
-  **零处**触碰 `svc`/`svc_rewind`/`retx_deny`/`blocked`/`epoch`/`replay_*`/`retx_hi`/`ack_seen`。
-- **代价**：≈ **+500 FF**（全部 DP 域，明细 §8.1）+ 若干 mux；无新 BRAM。
-- **风险**：① 对端对"1 字节旧数据"的应答形态未实测（§9-①，但有两条独立依据指向"必回 ACK"，且**两条分支都回真窗**）；
-  ② 新增的 ring 读口仲裁（§2.3 给出结构性论证：读点与重放会话**结构性不共存**）。
+- **与现役机器的耦合点**：只有 **控制帧通路的入口**（`start_ack :518` → 槽装载 `:1022-1039` → 校验和装载 `:929-932`
+  → `T_HDR :1123-1143` → `T_PAY :1144-1190`）、**`rb_id` mux 的一条 arm**（`:547-548`）、**扫描块新增段**（`:998-1020` 旁）与
+  **cfg_up 清理块**（`:888-896`）。**零处**触碰 `svc`/`svc_rewind`/`retx_deny`/`blocked`/`epoch`/`replay_*`/`retx_hi`/`ack_seen`。
+- **代价**：≈ **+538 FF**（全 DP 域，明细 §8.1）+ 若干 mux；无新 BRAM。
+- **风险**：① 对端对"1 字节旧数据"的应答形态未实测（§9-①，但两条分支都回真窗）② ring 读口仲裁（§2.3 结构性论证）。
+- ⚠️ **本候选的"旧数据"前提有边界**：FIN/RST 在飞时 `snd_nxt = snd_una + 1` 而 `snd_una` 处**没有数据字节** ⇒ 武装条件已排除该角（D-5，§2.5-③/§3.4-5）。
 
 ### 1.2 候选 B：**让 RTO 在窗 0 时不卸膛，复用现役重传机**（RFC 1122 SHOULD「照常重传旧数据」）—— **不选**
 
-改法有两档：**(B1)** 只改 `:1008` 装表门（删 `rb_snd_wnd != 0` 子句），到期仍走 `rto_pend`；**(B2)** 再加
-"到期时按窗分流"（`wnd == 0` ⇒ 走探询、否则走 RTO）。
-
-- **B1 为什么不行 —— 三条，逐条有源码依据**：
-  1. **洪泛**：RTO 触发时 `replay_full = !retx_req` = 1（`:950`）⇒ **整窗重放**（≤33 帧 / 次），20 ms 一次 = **~1650 帧/s** 的重复流；
-     而 `W55`（`stat_retx`，`:954`）会被灌满 ⇒ **污染一个在册判据**（W55 是 `F5b` 的读数）。
-  2. **撞第二把锁**：每次无进展会话 `epoch++`（`:940-941`，封顶 15）⇒ **15 次 ≈ 300 ms 后 `blocked` ⇒ 回卷永久停摆** ⇒
-     它不是"persist"，是"15 发子弹的锤子"。
+- **B1（只改 `:1008` 装表门）为什么不行 —— 三条，逐条有源码依据**：
+  1. **洪泛**：RTO 触发时 `replay_full = !retx_req` = 1（`:950`）⇒ **整窗重放** ≤ **42 帧/次**（现役帽 `0xF000 ÷ 1460 = 42.08`；
+     ⚠️ `rtl/tcp_tx_frame.v:262` 注释里写的 "上限 ~33 帧" 是**48KB（0xBFFE）时代的历史值**，现役帽下应为 ≤42），
+     20 ms 一次 ⇒ **~2100 帧/s** 的重复流；且 `W55`（`stat_retx`，`:954`）被灌满 ⇒ **污染一个在册判据**（`F5b` 的读数）。
+  2. **撞第二把锁**：每次无进展会话 `epoch++`（`:940-941`，封顶 15）⇒ **15 次 ≈ 300 ms 后 `blocked` ⇒ 回卷永久停摆**。
   3. **正反馈面**：整窗重放发的是 `seq ≥ snd_una` 的**未确认数据**（对端视角是"窗外新数据"）⇒ 对端逐帧回 dup/challenge ACK
      ⇒ 直接喂 `rtl/tcp_rx.v:545-560` 的 dup 计数 ⇒ 与 RETXFIX 刚校准过的那条链**同一条输入**。
-- **B1/B2 都不选的理由一句话**：**"旧数据重传"在标准里是建议、不是义务；而在本机上它的实现粒度恰好是"整窗重放"**，
-  那条路已经被 RETXFIX/r5/r6 三轮**专门加过闸**（`RETX_SPAN` / `epoch` / `ack_seen`）。
+- **B1/B2 都不选的一句话**：**"旧数据重传"在标准里是建议、不是义务；而在本机上它的实现粒度恰好是"整窗重放"**，
+  而那条路已被 RETXFIX/r5/r6 三轮**专门加过闸**（`RETX_SPAN` / `epoch` / `ack_seen`）
   ⇒ 把窗 0 塞进那条路 = 既洪泛、又撞闸、又给环的输入加料；**收益（逼出窗口）用一条 55 B 的探询段就能拿到**。
 
-### 1.3 候选 C：**组合/折中**（本件保留为**备选**，不进本轮落地）
+### 1.3 候选 C：**组合/折中**（备选，不进本轮落地）
 
-两个折中形态，都**放弃**，但写清代价以便日后需要时可直接落地：
-
-- **C1 = 候选 A + 共享 `rto_timer`**（RFC 1122 §4.2.2.17 明文允许"两个过程可以合并"）：省 ~340 FF，但把
-  persist 的大数值（5–60 s）压进 RTO 倒计时 ⇒ 必须加**每连接模式位** `ps_sel`，在**模式切换拍整体重装**而不是递减
-  （否则窗口重开后 RTO 被污染成 60 s ⇒ **把洞修复延迟 3000×**）。这是**把风险从"新通路"换到"已调好的那条路"**，不划算。
-- **C2 = 候选 A + 探询携带"1 字节、按窗分片"** —— 面对的是相邻缺口（微窗，§9-②），**不是本刀**。
+- **C1 = A + 共享 `rto_timer`**（RFC 1122 §4.2.2.17 明文允许"两个过程可以合并"）：省 ~350 FF，但把 persist 的大数值
+  （5–60 s）压进 RTO 倒计时 ⇒ 必须加**每连接模式位** `ps_sel`，在**模式切换拍整体重装**而不是递减
+  （否则窗口重开后 RTO 被污染成 60 s ⇒ **把洞修复延迟 3000×**）。**把风险从"新通路"换到"已调好的那条路"**，不划算。
+- **C2 = A + 按窗分片** —— 面对的是相邻缺口（微窗，§9-②），**不是本刀**。
 
 ### 1.4 ⭐ 明确回答：**要不要动 `:1018` 那个 else 分支？**
 
-**不动 —— `:1018` 也不动 `:1008`。** 理由分三层，逐层可反驳但都需要先推翻前一层：
-
-1. **语义层**：`:1017-1018` 的语义是"**本连接当前没有可计时的事** ⇒ 卸膛"。在"窗锁 0 且无在飞数据"与"非 ESTAB"两档上，
-   这个语义**今天仍然正确**（我们只是新增了"窗锁 0 但在飞 > 0"这一档由**另一条计时器**接住）。若把它改成"窗 0 也计时"，
-   它立刻要为**两套互斥的时间表**（20 ms 级 RTO / 5–60 s 级 persist）服务 —— 见 C1 的代价。
+**不动 —— `:1018` 也不动 `:1008`。** 三层理由：
+1. **语义层**：`:1017-1018` = "本连接当前没有可计时的事 ⇒ 卸膛"。在"窗锁 0 且无在飞数据"与"非 ESTAB"两档上**今天仍正确**；
+   若改成"窗 0 也计时"，它立刻要为**两套互斥时间表**（20 ms 级 RTO / 5–60 s 级 persist）服务 —— 见 C1 的代价。
 2. **安全层**：`:1008`/`:1018` 是 `rto_pend → svc → svc_rewind → ring replays` 这条链的**唯一入口门**。
-   本刀的 §4 安全论证要成立，最强形态是"**这条链的源码一行未动**"（可机械核：`git diff` 里 0 命中
-   `svc|blocked|epoch|replay|retx_hi|ack_seen`），而不是"我改了它但想清楚了"。
-3. **纪律层**：RTO 的 `DP_156MHZ` 分叉（`:219-223`）与 20 ms 额定值是 r5 用**板级四轮**定下来的（`P7B_RETXFIX.md` §3.9），
-   动它的门 = 让那一轮的读数失去对照面。
+   §4 的最强论证 = "**这条链的源码一行未动**"（机械可核），而不是"我改了它但想清楚了"。
+3. **纪律层**：RTO 的 `DP_156MHZ` 分叉（`:219-223`）与 20 ms 额定值是 r5 用**板级四轮**定下来的。
 
-⇒ **第一把锁的解 = 旁路，不是开锁**；RTO 在窗 0 时**继续卸膛**（这是**有意保留**的行为，因为此时的"重传"在本机上是整窗洪泛）。
-⚠️ 由此产生一条**必须登记的偏离**：RFC 1122 §4.2.2.17 的 **SHOULD**（"SHOULD retransmit the old data normally"）
-在本机**未被字面采纳**，改用**同节的 MUST-36（必须支持零窗探询）** + 一条**有界**的旧数据探询段来满足它的**意图**
-（逼出窗口通告）。⚠️ 出处层级：MUST-36 的逐字见定位轮引文（`draft-ietf-tcpm-persist-07` / TCPM 议程页 / RFC 1122 全文页）；
-**"retransmit the old data" 一句本轮未能回 RFC 原文逐字复核**（WebFetch 被网络策略拒绝，见 §9-⑤）。
+⇒ **第一把锁的解 = 旁路，不是开锁**；RTO 在窗 0 时**继续卸膛**（有意保留）。
+⚠️ 由此产生的**必须登记的偏离**：RFC 1122 §4.2.2.17 的 **SHOULD**（"SHOULD retransmit the old data normally"）
+在本机**未被字面采纳**，改用同节的 **MUST-36（必须支持零窗探询）** + 一条**有界**的旧数据探询段满足其**意图**。
+⚠️ 出处层级见 §9-⑤。
 
 ---
 
-## §2 探询段的**精确形式**（本板的逐项选择）
+## §2 探询段的**精确形式**
 
 ### 2.1 逐项定案表
 
 | 项 | 定案 | 依据 / 理由 |
 |---|---|---|
-| 帧类 | **控制帧槽的第二来源**（与 ACK 队列并列），走同一条 `T_HDR/T_PAY` 路 | 控制帧门 `:518-519` **不含 `wnd_open`** ⇒ 窗锁 0 时唯一还能上线的帧类（`:557-565` 的数据门必须含它） |
-| TCP seq | **`rb_snd_una`**（**不是** `snd_una − 1`） | 已传过 ⇒ RFC 意义上是"旧数据"（**重传**，不是新数据）；对端视角：`rcv_nxt == snd_una`（恒等）⇒ 该段**恰在窗沿**：窗仍 0 ⇒ 对端丢+回 ACK；窗已开 ≥1 B ⇒ **被接收 ⇒ 真进展**（两种结果都拿到"带真窗的 ACK"，且第二种附送 1 字节进展） |
-| 载荷 | **1 字节**，取自 `retx_ram` 在 `seq = snd_una` 的读（`r_data[63:56]`） | ① 数据长度 = 0 的探询在 RFC 里合法、但应答弱（challenge-ACK 路径 + 限速，且 `tcpm-persist` 草案正是为"空探询可能不被应答"而建议带 1 字节）；② 1 字节**不推进 `snd_nxt`**（控制槽不消耗 seq：`upd_wr_ctrl = start_ack && (aq_syn\|aq_fin\|aq_rst)` `:534`，探询三标志全 0 **且** 探询槽在 `probe_sel` 时被显式门成 0，见 §2.4-④）；③ **不污染图案 LFSR**（ring 是**再读**，app 流一字不碰）；④ ring 是**只读**访问（见 2.3） |
-| flags | **0x18（PSH+ACK）** | 与数据段同形 ⇒ 对端按"数据段"处理（该路径**必回 ACK**）；⚠️ 也正因如此，**本工程的 OVL TB 会把它当数据帧** —— 这不是缺陷，而是**白送的内容 oracle**：`tb/tb_tcp_tx_ovl.v:545` 那条 `fr[54+kk] !== fb(CBASE*conn + (fseq−isn) + kk)` 会**独立校验探询字节的内容**（ring 读错位置/错 lane 立刻红） |
-| ack | `rb_rcv_nxt`（= 该连接当前通告的确认号） | 与任何 ctrl 帧同源（`:1028` 用 `ctrl_ack_now`） |
-| window | `rb_rcv_wnd`（`:1030`） | 白送一次窗口通告（与 wu 通路同源） |
-| IP total_len | **41**（= 40 + 1 字节载荷） | 校验和必须用 41（§2.4-③） |
-| 校验和 | IP / TCP 均由既有控制帧树算出（含新增的 1 个 16 位项） | TB 有**独立复算 oracle**（`tb_tcp_tx_ovl.v:458-479`，`csum=` 一类 REDS）⇒ 算错必红 |
+| 帧类 | **控制帧槽的第二来源**（与 ACK 队列并列），走同一条 `T_HDR/T_PAY` 路 | 控制帧门 `:518-519` **不含 `wnd_open`** ⇒ 窗锁 0 时唯一还能上线的帧类 |
+| TCP seq | **`rb_snd_una`**（**不是** `snd_una − 1`） | 已传过 ⇒ RFC 意义上是"旧数据"；对端视角：`rcv_nxt == snd_una`（恒等）⇒ 该段**恰在窗沿**：窗仍 0 ⇒ 丢+回 ACK；窗已开 ≥1 B ⇒ **被接收 ⇒ 真进展** |
+| 载荷 | **1 字节**，取自 `retx_ram` 在 `seq = snd_una` 的读（`r_data[63:56]`） | ① 空探询应答弱（challenge-ACK 路径 + 限速）；② 1 字节**不推进 `snd_nxt`**（控制槽不消耗 seq：`upd_wr_ctrl :534`，探询三标志全 0 **且** 探询槽被显式门成 0 —— **见 §2.4-4**）；③ **不污染图案 LFSR**（ring 是**再读**）；④ ring 是**只读**访问 |
+| flags | **0x18（PSH+ACK）** | 与数据段同形（`:1049 f_doff = 16'h5018`）⇒ 对端按数据段处理（**必回 ACK**）；⚠️ 也正因如此，**本工程的 OVL TB 会把它当数据帧**（`tb_tcp_tx_ovl.v:491 if (flags[3])`）—— 这不是缺陷，是**白送的内容 oracle**（`:541-542` 的 `fr[54+kk] !== fb(CBASE*t_conn + (fseq−isn)+kk)`） |
+| ack | `rb_rcv_nxt` | 与任何 ctrl 帧同源（`:723-725` 的 `ctrl_ack_now`） |
+| window | `rb_rcv_wnd`（`:1030`） | 白送一次窗口通告 |
+| **IP total_len** | **41** | 三处必须同时是 41：**头字段**（`:742 h_totlen`）、**IP 校验和的操作数**（`:737 ip_csum_calc(16'd40,…)`）、**TCP 伪头长度项**（`:729 ctl_aen_v1 = 18'd20 + …`） ← 第三处 = D-3 |
+| TCP 校验和 | 既有控制帧树 + **1 个 16 位载荷项** `{16'b0, ctrl_pld, 8'h00}` | 32 位上界 `0x10FFF8 + 0xFF00 < 2³²`（与 A7 §2-A-4 同口径）；TB 有**独立复算 oracle**（`:458-479`） |
+| 字节位序 | 末字 = `{hold48, ctrl_pld, 8'h00}`、`tkeep = 8'hFE` ⇒ 帧 = 48 B 头 + 7 B = **55 B** | 逐字节核过：`hold48 = {h_wnd, h_tcpcsum, 16'h0000}`（`:1138`）⇒ 第 7 个保留字节落在帧字节 index **54**，与 TB 复算 `:468`+`:557` 的 `fr[54]` **逐位对应** |
 
 ### 2.2 三条"不许"的逐条落点
 
-1. **不能推进 `snd_nxt`**：探询槽**不是 bank 帧** ⇒ 不进 `RX_FIN` 的推进写（`:533` `upd_wr_data` 只对 bank 帧成立），
-   也不进 `upd_wr_ctrl`（`:534` 要求 SYN/FIN/RST 标志）⇒ **结构性不可能推进**。判据见 §5.2-j3。
-2. **不能污染图案 LFSR**：字节来自 `retx_ram`（过去的写），app 侧 `app_pattern` 的读口**一个字都不取** ⇒
-   LFSR 相位不变。判据 = 探询时刻前后，"下一个数据帧的载荷字节序列"与"没有探询时"**逐字节相同**（§5.2-j4）。
+1. **不能推进 `snd_nxt`**：探询槽**不是 bank 帧** ⇒ 不进 `:533 upd_wr_data`；也不进 `:534 upd_wr_ctrl`（要求 `aq_syn|aq_fin|aq_rst`，
+   探询槽在 `probe_sel` 时被显式门成 0）⇒ **结构性不可能推进**。
+2. **不能污染图案 LFSR**：字节来自 `retx_ram`（过去的写），app 侧 `app_pattern` 的读口**一个字都不取**。
 3. **不能破坏 `retx_ram` 的 ring 语义**：
-   - 读地址 = `(snd_una)[15:0]`（16 位 ring 偏移，同 `retx_ram` 的口径 `rtl/retx_ram.v:3-4`）；
-   - **该字节一定在 ring 里**：ring 容量 64 KB/连接，而"最坏在飞" = `(RING_CAP−1) + plen_max`；现役 `RING_CAP = 0xF000 = 61440`
-     ⇒ `61439 + 4095 = 65534 < 65536` ⇒ `snd_nxt − snd_una ≤ 65534` ⇒ `snd_una` 距写游标 ≤ 65534 ⇒ **在 ring 内**
-     （⚠️ 该界是 `rtl/retx_ram.v:7-10` 登记的"现役帽下最坏在飞**未重算**"那一格 —— 本件按 0xF000 重算得 65534，**余量 2 字节**，请实施轮的对抗审查复核这条算术）；
-   - **读是稳定的**：我们要的字节 `seq = snd_una`。ring 的"同字重写"只可能由"写游标落进同一个 8 字节字"造成，
-     而那要求 `(snd_nxt − snd_una) mod 65536 < 8`；在飞 > 0 且 ≤ 65534 时**可以**出现（在飞 < 8 的小情形）——
-     但该字**当前的写早已发生**（写游标此刻写的是**更靠后的字**，因为字 = `seq[15:3]`，在飞 < 8 时二者同字，
-     **而该字的写内容在那一刻已经是**`snd_una` 处的字节，见 `rtl/retx_ram.v` 的 8 字节使能写分解）⇒ 读到的就是它；
-     ⚠️ 这一条是**结构性论证**（不是实测），实施轮请在 TB 里补一条"探询字节 == TB 自算图案字节"的判据（本件已在 §5.2-j2 给出）来把它变成**实测**。
-   - 读口**只读**：`rd_en` 不动 `wptr`/`rptr`，也不产生 `ovf` ⇒ 与 replay 的 ring 写/读语义正交。
+   - 读地址 = `(snd_una)[15:0]`（16 位 ring 偏移，同 `rtl/retx_ram.v:3-4` 口径）；
+   - **该字节一定在 ring 里**：ring = 64 KB/连接，"最坏在飞" = `(RING_CAP−1) + 单帧最大字节数`，现役
+     `RING_CAP = 0xF000 = 61440`、单帧最大 = **`PLEN_MAX + ≤8 = 1508`**（D-7：强制链 `:554 len_over` → `:1062 len_bad` → `:670 wr_tap`；
+     ⚠️ **`4095` 是 48KB 时代的无出处值**，三处旧注释 `rtl/tcb.v:147` / `rtl/tcp_tx_frame.v:237` / `:1398` 均已登记"未重算"）
+     ⇒ `61439 + 1508 = 62947 < 65536` ⇒ **余量 ≈ 2589 B**（不是 2 B）；
+   - **读是稳定的**：要的字节在 `seq = snd_una`；ring 的"同字重写"要求写游标落进同一个 8 字节字
+     （`(snd_nxt − snd_una) mod 65536 < 8`）—— 在飞 < 8 时二者同字，**但该字的写内容早已是 `snd_una` 附近那些字节**
+     （8 字节使能写分解，`rtl/retx_ram.v:128-135`）⇒ 读到就是它。⚠️ **本条是结构性论证、未实测**（与审查 B-3 同口径），
+     **判据化手段 = §5.2-j2 的 payload oracle**（TB 独立复算，读错位置/lane 立刻红）。
+   - 读口**只读**：`rd_en` 不动指针、不产生 `ovf`（`rtl/retx_ram.v:105-112` 只写地址寄存器；写/读口分离）。
 
 ### 2.3 读口仲裁（与 replay 会话**结构性互斥**）
 
-- 读请求在**扫描拍**发出（`scan_now`），其定义（`:516-517`）= `rx_idle && !ack_pend_r && !svc && !ring_eval && !rx_flush && scan_tick`；
-  而 `rd_tap = ring_start || (ring_act && …)`（`:658`），其中 `ring_start ⊆ ring_eval` 且 `ring_act = (rx_state == RX_RING)`。
-  ⇒ **在 `scan_now` 拍，`rd_tap == 0` 且 RX 引擎不在 RX_RING** ⇒ 两个读者**结构性不共存**，不需要仲裁器、只需要一个 mux：
+- 读请求在**扫描拍**发出（`scan_now`，`:516-517` = `rx_idle && !ack_pend_r && !svc && !ring_eval && !rx_flush && scan_tick`）；
+  而 `rd_tap = ring_start || (ring_act && …)`（`:658`），`ring_start ⊆ ring_eval`（`:651`）、`ring_act = (rx_state == RX_RING)`（`:635`）
+  ⇒ **在 `scan_now` 拍 `rd_tap == 0` 且 RX 引擎不在 RX_RING** ⇒ 两读者**结构性不共存**，只需 mux：
   `rd_en = rd_tap | ps_rd`，`r_conn = ps_rd ? ps_rd_conn : retx_id_r`，`r_seq = ps_rd ? ps_rd_seq : r_tap_seq`。
-- **读延迟**（`rtl/retx_ram.v:92-105,138-146`）= `rd_en` 拍后 **2 拍**出数 ⇒ 扫描拍 T 发请求、T+2 取 `r_data[63:56]`。
-  **seq/byte 同源锁存**：T 拍同时锁 `ps_stage_seq <= rb_snd_una`、`ps_stage_conn <= scan_id`；T+2 锁
-  `ps_stage_byte <= retx_ram.r_data[63:56]`、`ps_stage_rdy <= 1'b1` ⇒ (conn, seq, byte) 是**同一拍、同一地址**的一致三元组
-  （不需要把 32 位 seq 再延迟 2 拍）。
+- **读延迟 2 拍**（`rtl/retx_ram.v:92-105` + `:138-146`；审查独立重推同结论）：扫描拍 T 发请求、T+2 取 `r_data[63:56]`。
+  **seq/byte 同源锁存**：T 拍锁 `ps_stage_seq <= rb_snd_una`、`ps_stage_conn <= scan_id`、**`ps_stage_estab <= scan_estab`**（D-2 的守卫样本）；
+  T+2 锁 `ps_stage_byte <= r_data[63:56]`、`ps_stage_rdy <= 1'b1` ⇒ (conn, seq, byte, estab) 是**同一拍同一连接**的一致四元组。
 
-### 2.4 ⭐ `tx_arb` 仲裁 + 本帧器内部的优先级 + 争线（逐问逐答）
+### 2.4 ⭐ 仲裁与优先级（含 D-2/D-10-4 的修正）
 
-1. **帧器内部**：探询槽与数据 bank 帧竞争，仲裁键与 ctrl 帧**完全相同**（`T_IDLE` `:1114-1122` / `T_DONE` `:1222-1229` 的
-   `if (ctrl_tx_pend) … else if (bank_rdy[…])`）⇒ 探询**优先于数据帧**（与 ACK 同级）。这是有意的：探询是恢复路径，
-   窗口锁 0 时**本来也没有数据帧可发**（`:557-565` 的门关着）⇒ 实践中零竞争。
-2. **探询与 ACK 的优先级**：`probe_sel` 的取用条件是 **`ackq_empty`（组合判据，不是 `ack_pend_r`）**：
-   `probe_sel = probe_req && ackq_empty && !ctrl_slot_busy && (rb_state == 4'd1)`。ACK 队里有条目 ⇒ 探询**让位**
-   （ACK 时延敏感，且**必须**避免读到空 FIFO 的陈旧 `ackq_dout` ⇒ 见 ④）。
-3. **与 `tx_arb`（`rtl/tx_arb.v`）**：TCP 快路径**严格优先**于慢路径（`:1-3` 头注、`:43-47` 选择逻辑）⇒ 探询**能拿到线**。
-   反向：探询会不会饿死慢路径？**不会** —— 探询是**单帧有界**（55 B ≈ 7 拍）+ 节奏 ≥ 1/20 ms ⇒ 最坏占用 < 0.05%；
-   且"慢路径被饿死"这条结构断言**已被 2026-10-09 板级实测证伪**（UDP 泛洪 300 s 中 ping 5/5 + TCP 建连成功）。
-4. **一处必须显式门掉的坑（陈旧 `ackq_dout`）**：`fifo_sync` 的 `dout` 在空 FIFO 时**保持上一次读出的值**
-   （`:819-825` 的 `u_ackq` 例化）。探询槽取用时若 `ackq_dout` 残留着一条 **SYN/FIN/RST** 条目，会让 `:534` 的
-   `upd_wr_ctrl` 误发（**推进 `snd_nxt`**！）或让 `ctrl_ack_now`（`:723`）取错源。⇒ 三条显式门（实现必须逐字照写）：
+1. **帧器内部**：探询槽与数据 bank 帧竞争，仲裁键与 ctrl 帧**完全相同**（`:1114-1122` / `:1222-1229`）⇒ **优先于数据帧**；
+   窗锁 0 时本来也没有数据帧可发 ⇒ 实践中零竞争。
+2. ⭐ **`probe_sel` 的新定义（v2；互斥口径 + 守卫取打拍暂存）**：
+   ```verilog
+   probe_sel = ps_stage_rdy && ps_stage_estab && rx_idle && !rx_flush &&
+               !ctrl_slot_busy && ackq_empty &&
+               !svc && !ring_eval && !scan_now && !retx_active;
+   ```
+   - **`ps_stage_estab` = 扫描拍锁存的寄存器样本** ⇒ `probe_sel` **不含 `rb_state`** ⇒ **无组合环**（D-2 修法）。
+   - `!svc && !ring_eval && !scan_now && !retx_active` = **`rb_id` 读槽互斥**（D-2 + D-10-4）。
+   - `ackq_empty`（**组合**判据，不是 `ack_pend_r`）：ACK 有货 ⇒ 探询让位（ACK 时延敏感 + 防陈旧 `dout`，见 4）。
+   - 上述每个子句都**不含 `rb_id` 派生项**：`svc/ring_eval/scan_now` 只依赖 `rx_state/recv_first/寄存器/外部脉冲`
+     （`:510-517` 逐字核过），`ackq_empty` 来自 FIFO，`retx_active` 是寄存器 ⇒ **环断**。
+3. **`rb_id` mux 的成对不变量（D-2）**：`probe_sel` 的 arm 必须插在 `scan_now ? scan_id :` **之后**、`(rx_state == RX_IDLE) ? start_id :`
+   **之前**；且 `probe_sel` 定义里必须**保留** `!svc/!ring_eval/!scan_now`。
+   ⇒ **两者是一对**：只改 mux 顺序（或只删定义里的子句）都会静默地把**别的连接的 TCB 值**喂给 svc/replay 或喂给探询。
+   ⛔ **不许单独改任一半**（先例：`rtl/app_ctrl.v` F2 块对 `if/else if` 先后顺序的同款依赖性登记）。
+4. **陈旧 `ackq_dout` 必须显式门（三条，逐字照写）**：探询槽取用时 `ackq_dout` 可能残留**上一条** SYN/FIN/RST 条目
+   （`rtl/fifo_sync.v:18` 逐字"`empty` 时 `dout` = `mem[rptr]` **陈旧值**"；`u_ackq` 例化 `:819-825` 无例外）⇒
    ① `upd_wr_ctrl = start_ack && !probe_sel && (aq_syn | aq_fin | aq_rst);`
    ② `ctrl_is <= probe_sel ? 3'b000 : {aq_rst, aq_fin, aq_syn};`
    ③ `ctrl_ack_now = (probe_sel || aq_fin || aq_rst) ? rb_rcv_nxt : ackq_dout[31:0];`
-   （探询槽的 ack 用 `rb_rcv_nxt`，与 FIN/RST 同源，**不**消费 `ackq_dout`。）
-5. **探询与 `wu` 通路**：`wu` 走 ACK 队列（`:808-816`），探询走槽 ⇒ 不冲突；但两者都要 `ctrl_slot_busy` ⇒ 天然串行。
+5. **与 `tx_arb`**：TCP 快路径**严格优先**（`rtl/tx_arb.v:1-3`、`:43-47`）⇒ 探询能拿到线；反向：探询单帧 55 B（≈7 拍）
+   + 节奏 ≥ 1/20 ms ⇒ 不会饿死慢路径（"慢路径被无界饿死"这条断言已被 2026-10-09 板级实测**证伪**）。
+6. ⚠️ **D-10-4 的残留（本件**修正审查**的要求）**：`!retx_active` 只保证"**探询不与会话同拍启动**"，
+   **不能**保证"探询帧在飞期间会话不起来"（`svc` 的触发不检查 TX 引擎状态 `:510-511`）
+   ⇒ 残留窗口 = 探询帧在飞（≤9 拍）期间 `retx_active` 上升且同连接 ⇒ TB 的 J9 分支仍可能看到探询帧。
+   ⇒ **处置三层**：① `!retx_active`（缩小面）；② TB 显式排除（§5.2-Ⅳ）；③ 残留**登记为【未观测到】**（可达性未定，由 ② 的互核计数在门里**可见**）。
 
-### 2.5 涉及的精确改动点（**行号 = 落笔时工作树**；实施轮先 `git rev-parse HEAD` 对一遍）
+### 2.5 精确改动点（**12 处**；行号 = 落笔时工作树；实施轮先 `git rev-parse HEAD` 对一遍）
 
-> ⚠️ 行尾：`rtl/tcp_tx_frame.v` = **纯 CRLF**（2232 CRLF / 0 裸 LF）。**禁止**用按 `\n` 锚点的 sed/脚本改它
-> ——本工程已有前科（`run_tx_ovl_gate.bat` 的 `mut_c2` 锚点因 CRLF 失效）。改动一律走 Edit 原字符串替换，
-> 改完核 `git diff --stat` == `git diff --ignore-cr-at-eol --stat`（A7 的既有做法）。
+> ⚠️ 行尾：`rtl/tcp_tx_frame.v` = **纯 CRLF**（2232 CRLF / 0 裸 LF）⇒ **禁止**按 `\n` 锚点的脚本（本工程前科：`mut_c2` 锚点因 CRLF 失效）。
+> 改动一律 Edit 原字符串；改完核 `git diff --stat` == `git diff --ignore-cr-at-eol --stat`。
 
 | # | 位置 | 内容 |
 |---|---|---|
-| ① | `:281` 段内的 module-body 参数区 | 新增 `parameter PERSIST_EN = 1'b0;` · `PS_BASE = 26'd3_051_758`(≈5 s) · `PS_MAX = 26'd36_621_094`(≈60 s)（**默认关**；首档复用 `RTO_LIM`） |
-| ② | `:406` 附近的 reg 声明区 + `:836-885` 复位 + `:888-896` cfg_up 清理 | `ps_timer[15:0]`(26b) · `ps_exp[15:0]`(3b) · `ps_want[15:0]` · 暂存 `ps_stage_{rdy,conn,seq,byte}` · 请求流水 `ps_rd_d1/d2` · `probe_sel_r`/`tx_is_probe`/`ctrl_pld[7:0]`；cfg_up 分支按本工程事件清惯例加 `ps_want[cfg_up_id] <= 0; ps_exp[cfg_up_id] <= 0; ps_timer[cfg_up_id] <= 0;` + 暂存命中同 id 时清 |
-| ③ | `:998-1020` 扫描块（`scan_now` 内） | 新增 persist 计时段：武装/递减/到期置 `ps_want`；同时发 ring 读请求（`ps_rd`），T+2 收 (byte, seq, conn) |
-| ④ | `:781-786` `u_retx` 例化前 | `rd_en/r_conn/r_seq` 三根线改成 mux（§2.3） |
-| ⑤ | `:518-519` `start_ack` | 新增 `probe_sel` 取用支：`… && ((ack_pend_r && !ackq_empty) || probe_sel)`（默认关时 `probe_sel ≡ 0` ⇒ 表达式折回原样） |
-| **⑤b** | `:547-549` **`rb_id` / `cam_rd_id` 选择 mux** | ⚠️ **必须改**：探询帧的 `ctrl_dmac/ctrl_dip/ctrl_sport/ctrl_dport` 来自 `cam_rd_*`（`:1031-1034`），而 `cam_rd_id = rb_id`（`:549`），launch 拍的 `rb_id` 默认落到 `start_id`（= `s_axis_tid`，**不是** `ps_stage_conn`）⇒ 不改这一行，探询会带着**别的连接的四元组**上线（发错对端、静默无用）。加一条 arm：`rb_id = probe_sel ? ps_stage_conn : (svc ? … )`；同拍 TCB 读（`rb_state`/`rb_snd_una`/`rb_rcv_nxt`/`rb_rcv_wnd`）也随之为**本连接**的值 ⇒ §2.4-2 的 `rb_state == 4'd1` 守卫**免费**（同一 mux） |
-| ⑥ | `:1022-1039` 槽装载 | `ctrl_seq <= probe_sel ? rb_snd_una : rb_snd_nxt;` · `ctrl_doff <= probe_sel ? 16'h5018 : ctrl_doff_now;` · `ctrl_pld <= ps_stage_byte;`（新字段）· `tx_is_probe <= probe_sel;` |
-| ⑦ | `:723-737` 校验和树 + `:929-932` 装载 | `ctrl_ipcsum_now` 的 `total_len` 由 40 → **41**（探询时）· `ctrl_acc` 增一项 `{16'b0, ctrl_pld, 8'h00}`（32 位上界 0x10FFF8 + 0xFFFF < 2³²，**无溢出**，与 A7 §2-A-4 同一口径） |
+| ① | **宏外**参数区（`:219-279` 同段；**不在 `:281` 段内** —— D-1 修法 (i)） | `parameter PERSIST_EN = 1'b0;` · `PS_BASE = 26'd3_051_758`(≈5 s) · `PS_MAX = 26'd36_621_094`(≈60 s)（首档复用 `RTO_LIM`，不另立常数） |
+| ② | `:406` reg 区 + `:836-885` 复位 + `:888-896` cfg_up | `ps_timer[15:0]`(26b) · **`ps_phase[15:0]`(3b)** · `ps_want[15:0]` · **`ps_stage_estab`** · 暂存 `ps_stage_{rdy,conn,seq,byte}` · 请求流水 `ps_rd_d1/d2` · `probe_sel_r`/`tx_is_probe`/`ctrl_pld[7:0]`；cfg_up 分支按事件清惯例加 `ps_want/ps_phase/ps_timer[cfg_up_id] <= 0` + 暂存命中同 id 时清 |
+| ③ | `:998-1020` 扫描块 | persist 计时段：**武装 = `scan_estab && rb_snd_wnd == 16'd0 && rb_snd_nxt != rb_snd_una && !fin_sent_r[scan_id] && !rst_sent_r[scan_id]`**（D-5）；武装首拍 `phase <= 0` + `timer <= RTO_LIM`；到期置 `ps_want` 并按 §3.1 真值表推进 `phase`/装载；同时发 ring 读请求，T+2 收 (byte, seq, estab) |
+| ④ | `:781-786` `u_retx` 例化前的三根线 | `rd_en/r_conn/r_seq` 改 mux（§2.3） |
+| ⑤ | `:518-519` `start_ack` | 新增探询支：`… && ((ack_pend_r && !ackq_empty) || probe_sel)`（默认关时 `probe_sel ≡ 0` ⇒ 折回原样） |
+| ⑤b | `:547-548` `rb_id` mux | **必须改**（否则探询帧的 `cam_rd_*` 四元组取自别的连接，`:1031-1034`）：arm 插在 `scan_now ? scan_id :` 之后；**与 §2.4-3 的成对不变量同生共死** |
+| ⑥ | `:1022-1039` 槽装载 | `ctrl_seq <= probe_sel ? rb_snd_una : rb_snd_nxt;` · `ctrl_doff <= probe_sel ? 16'h5018 : ctrl_doff_now;` · `ctrl_pld <= ps_stage_byte;` · `tx_is_probe <= probe_sel;` |
+| ⑦ | `:723-737` 校验和树 + `:929-932` 装载 | **三处长度**（§2.1）：`h_totlen`(⑧) · `ip_csum_calc(16'd40→41,…)` · **`ctl_aen_v1 = 18'd20 → 18'd21`**（D-3）· `ctrl_acc` 增 `{16'b0, ctrl_pld, 8'h00}` |
 | ⑧ | `:739-753` `h_*` mux | `h_totlen = tx_is_probe ? 16'd41 : (h_ctrl ? 16'd40 : f_totlen[…]);`（`h_plen` 探询恒 0） |
-| ⑨ | `:1144-1151` `T_PAY` 零长支 | 探询支：`m_axis_tdata <= {hold48, ctrl_pld, 8'h00}; m_axis_tkeep <= 8'hFE; m_axis_tlast <= 1'b1;`（其余支一字不动） |
-| ⑩ | `board/wrapper_p4.v:2144` 例化 | `.PERSIST_EN(1'b1)` 一行（板级构建显式打开；**默认构建不带该宏 ⇒ 结构性无关**）+ `BUILD_ID_V` 自增（`:4052`，纪律：每次构建必 bump） |
+| ⑨ | `:1144-1151` `T_PAY` 零长支 | 探询支：`{hold48, ctrl_pld, 8'h00}` / `tkeep 8'hFE` / `tlast 1'b1`（其余支一字不动） |
+| ⑩ | `board/wrapper_p4.v:2144` + `:4052` | `.PERSIST_EN(1'b1)` 一行（**不包 `ifdef`** —— D-1）+ `BUILD_ID_V` 自增 |
+| ⑪ | 新增**门与 TB**（不属 RTL 但属交付面） | `tb/tb_tcp_tx_ovl.v` 的 `ifdef ARM_PERSIST` 判据组 + `run_tx_ovl_gate.bat` 的 S/T 两臂（§5.2） |
+| ⑫ | 新增**静态核对脚本**（S1/L1，§4.3/§7.2） | 白名单/豁免/禁用符号计数（对 `git diff -U0`）+ 参数默认值核对（§5.3） |
 
 **没有任何一处落在** `:504-505`（`acks_ok/tx_blk_sid`）· `:509/:522/:523/:524`（`blocked/svc_rewind/retx_deny`）·
-`:944-954`（svc 拍）· `:644-657`（`ring_delta/retx_ovf/ring_start/replay_jump`）——这是 §4 的机械证据。
+`:944-954`（svc 拍）· `:644-657`（`ring_delta/retx_ovf/ring_start/replay_jump`）—— 这是 §4.3-L1 要**机械核**的东西。
 
 ---
 
 ## §3 退避与上限
 
-### 3.1 具体序列（定案）+ 理由
+### 3.1 ⭐ 唯一编码：`ps_phase`（3 位）+ 全档真值表（D-4 修法）
 
-| 事件 | 间隔 | 计数单位换算（@156.25 MHz，扫描节拍 = 256 拍/连接/轮 ⇒ 1 visit = **1.6384 µs**） |
-|---|---|---|
-| 窗刚关（武装）→ **首次探询** | **`RTO_LIM` = 12207 visits** = **20.0 ms** | `12207 × 256 / 156.25e6 = 20.00 ms` ✅（与 `:203-223` 的现值逐字对得上） |
-| 第 2 次 | `PS_BASE` = **3,051,758 visits** = **5.0 s** | `5 × 156.25e6 / 256 = 3,051,757.8` ⇒ 取 3,051,758 |
-| 第 3 / 4 / 5 次 | **10 / 20 / 40 s**（`PS_BASE << 1..3`） | exp = 1,2,3 |
-| ≥ 第 6 次 | **`PS_MAX` = 36,621,094 visits** = **60.0 s**（封顶，**永不放弃**） | exp ≥ 4 一律取 `PS_MAX` |
+**语义**：`ps_phase` = **当前已装载的那个间隔的档位**（"装载"发生在武装拍与每次 fire 的推进拍）。
+**装载函数**：`Reload(p) = (p==0) ? RTO_LIM : (p<=4 ? (PS_BASE << (p-1)) : PS_MAX)`（**一份**，扫描拍共用）。
 
-⇒ 上线序列 = `20 ms, 5 s, 10 s, 20 s, 40 s, 60 s, 60 s, …`。计数器宽 **26 位**（`PS_MAX < 2²⁶ = 67.1M`）。
-`ps_exp` = 3 位（0..4 饱和）。
+| `ps_phase` | 本次装载的间隔 | 该档位对应的探询序号 | fire 后推进到 |
+|---|---|---|---|
+| **0**（武装档） | `RTO_LIM` = 12207 visits = **20.0 ms** | #1 | 1 |
+| 1 | `PS_BASE` = 3,051,758 visits = **5.0 s** | #2 | 2 |
+| 2 | `PS_BASE<<1` = **10 s** | #3 | 3 |
+| 3 | `PS_BASE<<2` = **20 s** | #4 | 4 |
+| 4 | `PS_BASE<<3` = **40 s** | #5 | 5 |
+| **5**（封顶） | `PS_MAX` = 36,621,094 visits = **60.0 s** | #6, #7, … | 5（饱和） |
 
-**理由**：① **"首次探询在 RTO 期之后"** 是 RFC 1122 §4.2.2.17 的 **SHOULD**（本件用 WebSearch 得到的 Open Group
-RFC 1122 复现页摘要，逐字："SHOULD send the first zero-window probe when a zero window has existed for the
-retransmission timeout period … SHOULD increase exponentially the interval between successive probes"；
-⚠️ 出处层级见 §9-⑤）⇒ 直接用现役 `RTO_LIM` 的**额定值**当首档，语义自证；
-② **指数退避**也是同节的 SHOULD（最大值 RFC 未规定 ⇒ 自选）；③ 5 s / 60 s 的档位 = 经典实现惯例（BSD/Linux 血统），
-**在本板的额外理由 = 判据可判定**：三档间隔都能写成"板侧离散读数"（见 §5.2-j1 与 §6.2-J-P4），
-而任意连续退避会让判据退化成一个区间比较。
+- 推进规则（fire 拍）：`next = (phase == 0) ? 1 : (phase < 5 ? phase + 1 : 5)`；`ps_timer <= Reload(next)`；`phase <= next`。
+- 武装（武装条件由假变真的那拍）：`phase <= 0; ps_timer <= RTO_LIM;`（= `Reload(0)`）。解除武装 / `cfg_up` / 复位：`phase <= 0`。
+- 3 位可表示 0..7 ⇒ **6/7 不可达**（写成"不可达；若出现按 5 处理"）。
+- **推导出的探询间隔序列** = `20 ms, 5 s, 10 s, 20 s, 40 s, 60 s, 60 s, …`（与 v1 的**意图**一致，但现在是**唯一**读法）。
+- 计数单位换算（@156.25 MHz；每连接每轮被扫一次，1 visit = 256 拍 = **1.6384 µs**）：
+  `12207 × 256 / 156.25e6 = 20.00 ms` ✅ · `5 × 156.25e6 / 256 = 3,051,757.8 ⇒ 取 3,051,758` · `60 s ⇒ 36,621,094 < 2²⁶ = 67.1M` ⇒ **26 位计数器**。
+
+**理由**：① "首次探询在 RTO 期之后" = RFC 1122 §4.2.2.17 的 SHOULD（出处层级 §9-⑤）⇒ 用现役 `RTO_LIM` 额定值当首档，语义自证；
+② 指数退避亦为同节 SHOULD（上限 RFC 未规定 ⇒ 自选）；③ 5 s / 60 s 档 = 经典实现惯例（BSD/Linux 血统），本板的额外理由是**判据可判定**（三档间隔都能写成板侧离散读数）。
+⚠️ **域限定**：首档 = `RTO_LIM`，在**非 DP 构建**下是 `48828 × 2.048 µs = 100 ms`（仍 ≈ RTO，语义不破；门臂里会被显式覆盖，见 §5.2）。
 
 ### 3.2 与 `RTO_LIM = 12207 × 256 拍`（`:219-220`）的关系：**复用额定值、另起阶梯常数**
 
-- **首档复用** `RTO_LIM`（**引用同一参数**，不写 12207 字面量）：这是"RFC 说首探询在 RTO 期之后"的**唯一直译**，
-  且 r5 若日后调整 RTO，首探询会跟着走（这是**想要**的耦合）。
-- **阶梯另起** `PS_BASE`/`PS_MAX`（26 位，独立参数）：**不**把 5–60 s 塞进 `RTO_LIM` —— 后者有 `DP_156MHZ` 分叉
-  （`:219-223`），且它的额定值是"洞修复延迟"这个**别的产品指标**的旋钮。两个指标不该共一个常数。
+- **首档复用** `RTO_LIM`（**引用同一参数**，不写字面量）：RFC "首探询在 RTO 期之后"的直译；r5 若调 RTO，首探询跟着走（**想要**的耦合）。
+- **阶梯另起** `PS_BASE`/`PS_MAX`（26 位，独立参数）：**不**把 5–60 s 塞进 `RTO_LIM`（它有 `DP_156MHZ` 分叉 `:219-223`，且额定值属"洞修复延迟"这个**别的**产品指标）。
 
 ### 3.3 ⭐ 上限到了之后：**继续探询（永不放弃）**，不放弃连接
 
-依据（同节 RFC 摘要逐字）："A TCP MAY keep its offered receive window closed indefinitely. **As long as the receiving
-TCP keeps sending acknowledgments in response to probe segments, the sending TCP MUST allow the connection to stay open.**"
-⇒ 板侧**不得**因"探询失败 N 次"拆除连接。
-⚠️ **登记一条边界（本刀不改）**：app 层另有自己的连接超时/拆除逻辑（`app_ctrl` 的时间常数那一路）——
-若 app 判定超时并 FIN/RST，这条 persist 仍会随之结束。**本刀不改 app 语义**，该交互登记在 §9-⑥。
+依据（同节 RFC 摘要）："A TCP MAY keep its offered receive window closed indefinitely. **As long as the receiving TCP keeps
+sending acknowledgments in response to probe segments, the sending TCP MUST allow the connection to stay open.**"
+⚠️ **登记边界（本刀不改）**：app 层另有自己的连接超时/拆除逻辑 ⇒ 若 app 判定超时并 FIN/RST，persist 随之结束。登记于 §9-⑥。
 
-### 3.4 什么时候停（四条，逐条可判）
+### 3.4 什么时候停（**五条**，逐条可判）
 
 | # | 停条件 | 机器落点 | 板级可判量 |
 |---|---|---|---|
-| 1 | **`rb_snd_wnd != 0`**（窗重开）⇒ 立即停 + `ps_exp <= 0` | 扫描拍的武装条件为假 ⇒ 计时器清零、`ps_want` 清 | pcap：探询帧停发 + 数据帧恢复（`ΔW20 > 0`）+ `ΔW14` 停止增长 |
-| 2 | **`rb_snd_nxt == rb_snd_una`**（无在飞）⇒ 停 | 同上（武装条件第二子句） | 板侧无探询帧（pcap） |
-| 3 | **非 ESTAB**（`rb_state != 4'd1`）⇒ 停 + 清 | 扫描拍 + 暂存命中同一 id 时清 | 连接拆除后 0 探询 |
-| 4 | **`cfg_up`（同槽重连）** ⇒ 清（继承旧会话的 (conn,seq,byte) 三元组**可能对不上新会话** ⇒ 必须清） | `:888-896` 块（本工程事件清惯例） | 重连后旧序列不残留（§5.2-j7 的门里覆盖） |
+| 1 | `rb_snd_wnd != 0`（窗重开）⇒ 立即停 + `phase <= 0` | 武装条件为假 | pcap：探询停 + 数据恢复（`ΔW20 > 0`） |
+| 2 | `rb_snd_nxt == rb_snd_una`（无在飞）⇒ 停 | 同上（第二子句） | 板侧无探询帧（pcap） |
+| 3 | 非 ESTAB（`rb_state != 4'd1`）⇒ 停 + 清 | 扫描拍 + 暂存命中同 id 时清 | 连接拆除后 0 探询 |
+| 4 | `cfg_up`（同槽重连）⇒ 清（旧三元组对新会话**必然无效**） | `:888-896` 块 | §5.2-j10 |
+| **5**（D-5） | **`fin_sent_r[scan_id] \|\| rst_sent_r[scan_id]`（FIN/RST 在飞）⇒ 停** | **武装条件第五/六子句** | `ΔW55`/pcap：FIN 阶段 0 探询 |
 
 ---
 
 ## §4 ⭐ 与**第二把锁**（`blocked`/`epoch`）的关系 + 环的防护不被退回
 
-### 4.1 探询会被 `blocked` 挡住吗？—— **不会被，而且是结构性的**
+### 4.1 探询会被 `blocked` 挡住吗？—— **不会，而且是结构性的**
 
-- `blocked` 在**全文只出现两处**：`:522`（`svc_rewind` 的一个合取项）与 `:523`（`retx_deny`）。二者都只在 **`svc` 拍**
-  （`:937-955`）被求值，而 `svc` 的触发 = `retx_req || rto_pend_any`（`:510-511`）——**探询两个都不是**（它有自己的 `ps_want`）。
-- 探询的通路 = `probe_sel → start_ack(:518) → 槽装载(:1022) → T_HDR/T_PAY`，**这四个节点里没有 `blocked`/`epoch`/`svc`**（可 grep 证）。
-- `epoch` 的**唯一**写点 = svc 拍（`:940-943`）+ `cfg_up`（`:892`）+ 复位（`:883`）⇒ **探询不写 epoch**（既不能推高、也不会清零）。
+- `blocked` 在 **OVL 支** = **1 处定义**（`:509`）+ **2 处使用**（`:522` `svc_rewind`、`:523` `retx_deny`）；
+  ⚠️ **默认支另有同款 3 处**（`:1502` 定义 / `:1503` / `:1514`）—— 本件逐行核过（D-11 订正措辞）。
+  OVL 支的 2 处使用都只在 **`svc` 拍**（`:937-955`）被求值，而 `svc = rx_idle && !ack_pend_r && !retx_active && !rx_flush && (retx_req || rto_pend_any)`（`:510-511`）
+  ⇒ **探询两个都不是**（它有自己的 `ps_want`）。
+- 探询通路 = `probe_sel → start_ack(:518) → 槽装载(:1022) → T_HDR/T_PAY`，**四个节点里没有 `blocked`/`epoch`/`svc`**。
+- `epoch` 的**全部**写点 = svc 拍（`:940-943`）+ `cfg_up`（`:892`）+ 复位（`:883`）⇒ **探询不写 epoch**。
 
-⇒ 结论：**探询天然绕过第二把锁，不需要为它开任何口子**；"绕过"的实现代价 = **0 行改动**（这正是选候选 A 的核心收益）。
+⇒ **探询天然绕过第二把锁，实现代价 = 0 行改动**（这正是候选 A 的核心收益）。
 
 ### 4.2 `epoch` 会不会因"探询换回了窗口"而自然清零？—— 会，但**不需要专门的清零路径**
 
-窗口换回 ⇒ 数据帧恢复（`:557-565` 的门重开）⇒ `snd_nxt` 前进、对端 ACK 推进 `snd_una` ⇒ 下一次 svc 拍（若有）
-走 `:942-943` 的 `epoch <= 4'd0` 支。探询本身**不碰** `epoch` ⇒ **不加清零路径**（加了反而多一条不得不守的路径）。
+窗口换回 ⇒ 数据帧恢复（`:557-565` 门重开）⇒ `snd_nxt` 前进、对端 ACK 推进 `snd_una` ⇒ 下一次 svc 拍走 `:942-943` 的 `epoch <= 4'd0`。
+探询本身**不碰** `epoch` ⇒ **不加清零路径**。
 
-### 4.3 可判定的判据：**怎么证明"本刀没有把环放回来"**（四层，逐层有落点）
+### 4.3 可判定的判据：**怎么证明"本刀没有把环放回来"**（四层；L1/L3 已按 D-6 重写）
 
-| 层 | 判据 | 强度 |
-|---|---|---|
-| L1 **机械（源码面）** | `git diff` 的**每一行**新代码都落在 §2.5 的 ⑩ 处锚点内；对 diff **grep** 下列标识符 **0 命中**：`svc` `svc_rewind` `retx_deny` `blocked` `epoch` `replay_full` `replay_left` `replay_jump` `ring_start` `ring_delta` `ack_seen` `acks_ok` `tx_blk_sid` `RETX_SPAN` | 最强（**结构性**）= "那条链的源码一行未动" |
-| L2 **行为等价（仿真，既有门）** | `sim/p7b_stagec_tx_regress/author_gate/run_tx_ovl_gate.bat` 的基线臂（A/B）：**15 行读数与改动前逐字相同**（照 A7 §3.2 的比对口径：`COV`/`CYCRX`/`CYCTX`/`FRAMEPERIOD`/`OVL wsrc`/`OVL RETXFIX`/`REDS`/`REDS2`/`T8`/`PACE`/`DUT stat_*`/`MINGAP`） | 强（该项目已把"15 行逐字相同"当等价证据的成例） |
-| L3 **探询不在环上（新门）** | 新臂（§5.2）里：探询 episode 全程 `stat_retx` 增量 **== 0**、`o_retx_active` **恒 0**、`o_retx_hi` 不更新、`REDS replay/stuck` 为 0 | 直接可判（**探询与重放机互斥**） |
-| L4 **板级** | 恢复 episode 内 **`ΔW55 == 0`**（W55 = `tcp_tx_frame.stat_retx`，`0xFC`）+ 长流（236 s）跑 `ΔW55` 与速率**逐字不变** | 板级直接读数 |
+| 层 | 判据（v2 形态） |
+|---|---|
+| **L1 机械（源码面）** | 对 `git diff -U0` 做**三项**机械核对（脚本 + 记档 sha256）：<br>**(a) 白名单锚点**：每个 `+` 行必须触及 §2.5 表列符号之一（`PERSIST_EN`/`PS_BASE`/`PS_MAX`/`ps_phase`/`ps_want`/`ps_stage_*`/`ps_rd_*`/`probe_sel`/`tx_is_probe`/`ctrl_pld`/`start_ack`/`rb_id`/`rd_en`/`r_conn`/`r_seq`/`ctrl_seq`/`ctrl_doff`/`ctrl_ack_now`/`ctrl_ipcsum`/`ctrl_tcpcsum`/`ctl_aen_v1`/`h_totlen`/`m_axis_tdata`/`m_axis_tkeep`/`upd_wr_ctrl`/`cam_rd_id`）；<br>**(b) 保序配对豁免**：对每个 `+` 行做**禁用符号**词边界计数（禁用表 = `svc_rewind` `retx_deny` `replay_full` `replay_left` `replay_jump` `ring_start` `ring_delta` `epoch` `blocked` `retx_hi` `acks_ok` `tx_blk_sid` `RETX_SPAN`），**减去**该 `+` 行在配对的 `-` 行里**已经存在**的命中数 ⇒ **"新增命中"必须为 0**（例：⑤b 的 `rb_id` 行 `-`/`+` 都含 `svc ? svc_id` ⇒ 配对豁免；而**新写**一句 `foo <= svc_rewind;` ⇒ 新增命中 = 1 ⇒ **红**）；<br>**(c) 负对照（两条，D-6 要求）**：**N1** = 注入 `assign zz = svc_rewind;` 的合成 diff ⇒ 必须红；**N2** = 关掉 (b) 的配对逻辑（让 ⑤b 行的 `svc` 计入）⇒ 必须红（证明配对逻辑**真的在干活**，不是空集豁免）。 |
+| **L2 行为等价（仿真，既有门）** | 臂 A/B 与改动前基线比 —— **必须直接 `diff` 两份 `runB/xs.log`**（门的 stdout 只 findstr 13 类键，**不含** `DUT stat_*`/`PACE`/`REDS2` ⇒ 只看 stdout 会漏）。比对清单（照 `P7B_A7_BUILD.md:178-179` 的**完整 15 行**，v1 漏了 3 项）：`FRAMES`（A7 自承"改动前没抄到 ⇒ 未比对"，本件照记）+ `COV` + `MINGAP` + `CYCRX` + `CYCTX` + `FRAMEPERIOD` + **`WIRE`** + `DUT stat_*` + **`OVL F1`** + **`OVL C6`** + `OVL wsrc` + `OVL RETXFIX` + `REDS` + `REDS2` + `T8`（两行）+ `PACE`。 |
+| **L3a 探询不在环上（xsim，精确期望值）** | 新臂 S 分两子相、**给精确数**：**子相 (ii)**（1–2 次探询且其间无推进 ACK）⇒ `Δstat_retx == 0`；**子相 (i)**（≥3 次探询且其间无推进 ACK）⇒ `Δstat_retx == 1`（**这正是 §4.4 登记的那次伪会话**）＋ `o_retx_active` 只在该会话时长内脉冲。⇒ **与 §4.4 不再打架**（同一份口径：**探询本身不进重放机；探询引发的 dup-ACK 至多引发 1 次伪会话**）。 |
+| **L3b 板级（可解释性判据）** | episode 内 **`ΔW55 ∈ {0, 1}`**；取 1 时**三条同时成立**：① `W58` 只在 ≤ 一个会话时长内为 1；② pcap 探询帧计数 **≥3**（伪会话可由 3 次探询解释）；③ 其后**仍有数据流恢复**（不自持）。**episode 起点 = 注入时刻**（⚠️ P-A 注入**前**的塌陷期本来就有 `ΔW55 = 18/24/37` ⇒ 不从头算）。 |
+| **L4 长流不变量** | 既有长流跑（A 臂 236 s / UDP 300 s）：探询帧 **0**（pcap）、`ΔW55` 与速率**逐字不变**。 |
 
 ### 4.4 ⚠️ 一条**确实存在**的间接耦合（登记，不掩盖）
 
-探询会被对端回 **dup-ACK**（是"旧/窗外数据"的自然应答）⇒ 进 `rtl/tcp_rx.v:545-560` 的 dup 计数。
-若同一连接在一段 stall 里累计 3 条这样的 dup-ACK（⇒ **≥3 次探询**，即 ≥5+10 s），会触发**一次伪快速重传会话**
-（`RETX_SPAN=3` 截断、`replay_full=0`、≤3 帧）。
+探询会被对端回 **dup-ACK**（"旧/窗外数据"的自然应答）⇒ 进 `rtl/tcp_rx.v:545-560` 的 dup 计数。
+若同一连接在一段 stall 里累计 3 条这样的 dup-ACK（⇒ ≥3 次探询），会触发**一次伪快速重传会话**（`RETX_SPAN=3` 截断、`replay_full=0`、≤3 帧）。
 
-- **量级**：每连接每次 stall **至多 1 次**（会话置 `in_retx` 后 dup 计数被"纪律"屏蔽到 `snd_una` 真进展为止 ——
-  `rtl/tcp_rx.v:562-583` 逐字："不再于授权拍复位 `in_retx`/`dup_cnt`"）⇒ 不可能成链。
-- **副作用**：`epoch` 被 +1（`:940-941`）⇒ 吃掉一格"15 发"预算，但窗口重开后 `snd_una` 进展会把它清零（`:942-943`）⇒ 自愈。
-- **本件处置**：**不在本刀实现屏蔽**（那要新增一条 `tcp_tx_frame → tcp_rx` 的"探询在飞"信号，+1 端口、+1 掩码域，
-  属于改动面的扩张）。**登记 + 预定义处置**：若板级 episode 实测 `ΔW55 > 0` 且判定为有害 ⇒ 下一轮按
-  "探询在飞期间屏蔽 dup 计数"实施（判据 = 同 episode `ΔW55 == 0`）。⛔ 不许把"预期 1 次"写成"不会发生"。
+- **量级**：每连接每次 stall **至多 1 次**（会话置 `in_retx` 后 dup 计数被"纪律"屏蔽到 `snd_una` 真进展为止 —— `rtl/tcp_rx.v:562-583`，
+  `:573-575` 授权拍只清 `retx_req`、`:576-578` 只有 `ack_adv_l` 才清 `in_retx/dup_cnt`）⇒ **不成链**（论证：有源码依据 + 一步推理）。
+- **副作用**：`epoch` +1（`:940-941`）⇒ 吃掉一格"15 发"预算；窗口重开后 `snd_una` 进展会清零（`:942-943`）⇒ 自愈。
+- **本件处置**：**不在本刀实现屏蔽**（要新增 `tcp_tx_frame → tcp_rx` 的"探询在飞"信号，+1 端口、+1 掩码域）；
+  **L3a/L3b 已把"预期"写成精确判据**（子相 (i) 期望 1；板级 `ΔW55 ∈ {0,1}` + 三条附带条件）。
+  ⛔ 不许把"预期 ≤1 次"写成"不会发生"。
 
 ---
 
 ## §5 观测量 / 判据 / 门
 
-### 5.1 计数器：**能不加字就不加 —— 本刀结论：不新增快照字**
+### 5.1 计数器：**不新增快照字**（本刀结论）
 
-- **板侧已有可用的字（现役 70 字窗口，`P7B_BIZ_WINDOW.md` §1 口径）**：
-  | 字 | 地址 | 用途（本刀） |
-  |---|---|---|
-  | **W14** `tcp_tx_frame.stat_frames` | `0x58` | 快路径**发帧数**（控制帧也计，`:1202`）⇒ stall 窗内 `ΔW14 > 0` 且 **`ΔW15 == 0`** = "发了纯控制帧"的板侧签名 |
-  | **W15** `tcp_tx_frame.stat_bytes` | `0x5C` | 快路径**发载荷字节**（= `h_plen` 累加，`:1203`）⇒ 探询 **+0**（`h_plen ≡ 0`） |
-  | **W55** `tcp_tx_frame.stat_retx` | `0xFC` | **§4.3-L4 的安全判据**（`ΔW55 == 0`） |
-  | W58 `o_retx_active` | `0x108` | 重放会话在飞的直接见证（应与 W55 同步为 0） |
-  | W66/W67/W69 `stat_winstall*`/`o_win_at_winstall` | `0x128/0x12C/0x134` | "等窗"拍数（探询期间**照涨**，是"窗确实是墙"的旁证；⚠️ W69 是锁存字，只在 `ΔW66 > 0` 时有效） |
-- **探询次数的精确口径 = pcap（对端侧、**独立于板**的 oracle）**：探询帧的线上签名是**唯一**的
-  （55 B 帧 = 54 B 头 + 1 B 载荷；TCP seq == 该时刻的 `snd_una`；payload = 图案流在 seq 处的字节）。
+| 字 | 地址 | 用途 |
+|---|---|---|
+| **W14** `tcp_tx_frame.stat_frames`（`:3914`） | `0x58` | 快路径发帧数（控制帧也计，`:1202`）⇒ stall 窗内 `ΔW14 > 0` 且 **`ΔW15 == 0`** = "发了纯控制帧"的板侧签名 |
+| **W15** `tcp_tx_frame.stat_bytes`（`:3913`） | `0x5C` | 发载荷字节（`h_plen` 累加，`:1203`）⇒ 探询 **+0** |
+| **W55** `tcp_tx_frame.stat_retx`（`:3856`） | `0xFC` | **L3a/L3b 的安全判据** |
+| W58 `o_retx_active`（`:3853`） | `0x108` | 重放会话在飞 |
+| W66/W67/W69（`:3845/:3844/:3842`） | `0x128/0x12C/0x134` | "等窗"拍数旁证（⚠️ W69 是锁存字，只在 `ΔW66 > 0` 时有效） |
+
+- ⭐ **补一条（审查 B-8 的独立发现）**：探询走 ctrl 支会让 `stat_ack` +1（`:1204-1206`），而 `stat_ack` **未进快照** ⇒ **无副作用**。
+- **探询次数的精确口径 = pcap（对端侧独立 oracle）**：探询帧的线上签名唯一（**55 B**；TCP seq == 该时刻 `snd_una`；payload == 图案流在 seq 处的字节）。
   板侧 `ΔW14` 只作**见证**（≥1），**不作计数**（stall 窗内可能混入 wu/其它控制帧）。
-- ⇒ **不加新字**、**同步表长/BID/未实现地址**这三件事本轮**不触发**。
-  ⚠️ 若实施轮的对抗审查坚持要板侧精确计数 ⇒ 才需要新字 **W70**（建议 = `tcp_tx_frame.stat_probe`），
-  那时**必须**走完整读侧面；本件把该清单预留在 §5.4（照 `p7b_readside_harden_20261010/FULL_TABLE.tsv` 的列为准）。
+- ⇒ 表长/BID/未实现地址**不触发**；若实施轮坚持要精确计数 ⇒ 才需要新字 **W70**（清单见 §5.4）。
 
-### 5.2 门（xsim）：设计 + 期望命中条数 + "改之前会红"的演示
+### 5.2 门（xsim）：设计 + 期望 + "改之前会红"（按 D-10 定型）
 
-**现成的门在哪**：⭐ `sim/p7b_stagec_tx_regress/author_gate/run_tx_ovl_gate.bat` + TB `tb/tb_tcp_tx_ovl.v`。
+**现成的门**：`sim/p7b_stagec_tx_regress/author_gate/run_tx_ovl_gate.bat` + TB `tb/tb_tcp_tx_ovl.v`。
 
-**该门有没有牙（现核，逐条）**：
-- ✅ 有牙，且是**硬**牙：`run_tx_ovl_gate.bat` 的 `:run` 子程序里 `findstr /C:"TB_TCP_TX_OVL: OK" xs.log`
-  **未命中即** `exit /b 1`；末尾 `if "%FAILS%"=="0" (echo TX_OVL_GATE: PASS & exit /b 0)` else `exit /b 1`。
-- ✅ TB 侧判据合流唯一入口 = `tb/tb_tcp_tx_ovl.v:1554-1555`：`if (tot_red == 0) $display("TB_TCP_TX_OVL: OK"); else …FAIL reds=N`。
-  ⛔ **新增判据必须计入 `tot_red`** —— 否则会出现"打了 `[FAIL]` 但末行 OK ⇒ 门绿"的**哑门新变种**（本工程前科：打 FAIL 却 `exit 0`）。
-  实施轮**必须**加一条自检：新臂里人为让新判据红一次，看 `TB_TCP_TX_OVL: FAIL` 是否出现（否则新判据无牙）。
-- ✅ 已含**独立校验和 oracle**（`:458-479`）、**独立复算 W66/W67/W69**（`:344-352` 明确"刻意不引用 DUT 判据线"）、
-  13 类 REDS、以及 `[FAIL] ctrl w/ payload`（`:573`）等结构性断言。
+**牙（现核）**：`:run` 子程序 `findstr /C:"TB_TCP_TX_OVL: OK"` 未命中即 `exit /b 1`；末尾 `FAILS` 计数 ⇒ `exit /b 1`；
+TB 判据合流 = `:1376-1380` 的 **23 项白名单和式** `tot_red`（`:1554-1555` 打印）。
+⛔ **新增判据必须计入 `tot_red`** —— 否则"打了 `[FAIL]` 但末行 OK"（全局 #53 字面形态）。
+**自检要求**：S 臂里人为让新判据红一次，确认 `TB_TCP_TX_OVL: FAIL` 出现（否则新判据无牙）。
 
-**新臂设计（一次仿真，两臂同波形 ⇒ 白送"改之前会红"）**：
-- **臂 1（新）**：`u_dut #(.RING_CAP(TB_WIN_CAP), .PERSIST_EN(1'b1), .PS_BASE(26'd300), .PS_MAX(26'd1200))`
-  （⚠️ TB 覆盖的是**节奏参数**，不是逻辑；生产值由 §5.3 的静态检查守）。
-- **臂 2（负对照）**：同一 TB、同一激励、`u_dut #(… .PERSIST_EN(1'b0))`（= 现役行为）—— 结构照 `tb/tb_app_wu.v` 的
-  "同一激励双跑"先例（`WU_LEGACY`）；宏照 `ARM_ACKGATE` 先例（`tb/tb_tcp_tx_ovl.v:353-359`）包成 `ifdef ARM_PERSIST`。
-- **激励（新 episode，插在既有覆盖率目标之前，不动既有激励）**：
-  1. ESTAB（既有建连激励）+ app 供数据到 `snd_nxt − snd_una ≥ ~3 KB`（在飞 > 0，ring 里有字节）；
-  2. 用既有 TCB 写口把 `snd_wnd` 写 **0**（`upd_sel=4`），并保持；
-  3. 观察 ≥ `RTO_LIM` + `PS_BASE` + `2×PS_BASE`（用小参数 ⇒ 数百拍量级）；
-  4. 再写 `snd_wnd = 1460`（模拟"对端回了真窗的 ACK"）；
-  5. （第二段）先让 **`epoch` 饱和**：给 `snd_wnd ≠ 0` 且在飞 > 0 且不给推进 ACK，让 RTO 打完 ≥15 次
-     （每次 `epoch++`），**再**把窗写 0 ⇒ 观察探询**照常发**（这是直接打"第二把锁"的用例）。
+**Ⅰ. 两臂定型（D-10-2）**：**宏 + 双跑**（与门既有 A..R 臂机制同构；**不**采用双实例同跑 —— 本 TB 判据大量用 `u_dut.*` 层次引用，复制两份成本与自伤风险高）。
 
-**期望命中条数（逐条给出，全部可机械核对）**：
-
-| 判据 | 期望值（臂 1） | 臂 2（负对照） | 说明 |
+| 臂 | 编译开关 | DUT 参数（TB 内 `ifdef` 选 localparam，**不经门传参**） | 期望 |
 |---|---|---|---|
-| **j1 探询数** | **恰好 3**（在 "RTO_LIM + PS_BASE + 2·PS_BASE" 的观察窗内） | **0** | 间隔必须**逐段可辨**：`RTO_LIM'`, `PS_BASE'`, `2×PS_BASE'`（TB 用小参数，**加倍关系**必须体现 ⇒ 退避是**被测**的，不是被断言的） |
-| **j2 探询帧逐字段** | seq == （发送时刻的）`snd_una` · flags == `8'h18` · `ip_len == 41` · payload[0] == `fb(CBASE*conn + (seq−isn))` · window == `RCV_WND` · ack == `RCV_NXT` · IP/TCP 校验和 == TB 独立复算 | n/a | ⭐ j2 的 payload 一条是**白送的内容 oracle**（`tb_tcp_tx_ovl.v:545` 那条判据自动覆盖 —— 探询被 TB 分类为数据帧，字节错位/读错 lane 立刻红） |
-| **j3 无序列副作用** | `snd_nxt` 前后**逐位相同** · `retx_hi`/`retx_active` **未变** · `stat_retx` **+0** · `stat_bytes` **+0** · `retx_ram` 写口计数**未变** | 同（本来就没动） | §2.2 三条"不许"的机器判据 |
-| **j4 图案流无洞** | 探询后**第一个数据帧**的载荷字节序列与"臂 2 同刻的下一帧"**逐字节相同**（LFSR 相位未动） | （基准） | 直接对撞"坑 23"（被中止的帧必须冻结 LFSR）的同族风险 |
-| **j5 健康态零额外帧** | `snd_wnd ≠ 0` 的相位里**探询数 == 0**（含高窗 20 轮） | 0 | "零额外帧"不变量（WU 修复的同款不变量） |
-| **j6 无在飞不发** | `snd_nxt == snd_una && snd_wnd == 0` ⇒ **0 探询**（登记：该档属 §9-③ 的范围外） | 0 | 防"无数据可探"的乱发 |
-| **j7 停条件** | 写回 `snd_wnd ≠ 0` 后：**0 新增探询** + 数据帧恢复 + 若再关窗，**首档退回 `RTO_LIM'`**（`ps_exp` 已清零） | n/a | §3.4-1 + `ps_exp` 复位 |
-| **j8 打第二把锁** | `epoch` 饱和（≥15）后写窗 0 ⇒ **仍发探询 ≥2 条** | **0** | ⭐ 直接打 `blocked`/`epoch`：臂 2 在这里**必红**（它没有 persist 通路） |
-| **j9 环安全** | 整个 episode：`REDS replay=0 stuck=0` · `o_retx_active` 恒 0 · `stat_retx` 增量 0 | 同 | §4.3-L3 |
-| **j10 重组/重连清干净** | 探询待发期间打 `cfg_up`（同槽重连）⇒ **0 探询**（暂存三元组被清） | 0 | §3.4-4 |
-| **j11 变异有牙** | 新增一个变异臂（`PS_MUT_NOARM`：把武装条件的 `rb_snd_wnd == 0` 去掉）⇒ j5/j8 至少一条**红** | — | 证明新判据不是"恒真" |
+| **A/B**（既有，不动） | 无 / `-d TCP_TX_OVL` | 不传新参数（取默认 `PERSIST_EN = 0`） | RC=0；读数与基线逐字相同（L2） |
+| **S**（新） | `-d TCP_TX_OVL -d ARM_PERSIST` | `.PERSIST_EN(1'b1)` + **`.RTO_LIM(TB_RTO)`** + `.PS_BASE(TB_PS_BASE)` + `.PS_MAX(TB_PS_MAX)` | RC=0，且新判据**全绿** |
+| **T**（新，负对照） | `-d TCP_TX_OVL -d ARM_PERSIST -d PERSIST_NEGCTL` | `.PERSIST_EN(1'b0)` + 其余同上 | **RC≠0**，且**门必须逐字记录"红的是哪几条新判据"**；其余 13 类 REDS 仍为 0（⇒ 红只来自新判据 = 判据有牙且不误伤） |
 
-**期望命中条数汇总**：臂 1 = **≥11 组判据、其中 j1 与 j8 是"计数精确"型**（3 条 / ≥2 条）；
-臂 2 = **j1/j5/j6/j8/j10 全为 0**（这是"改之前会红"的**字面实现**：同一 TB、同一激励、只换参数）。
-⚠️ **必须同时核**：既有 13 类 REDS 与 15 行读数在臂 1 与臂 2 之间**除新增项外逐字相同**（L2 层）。
+⚠️ **`RTO_LIM` 必须显式覆盖**（D-10-1）：门**不定义 `DP_156MHZ`** ⇒ `RTO_LIM = 48828` ⇒ 首探询 = 48828×256 = **12.5M 拍**，**落不进观察窗**（既有臂 cyc ≈ 355k）。
+⚠️ 判据组用 `ifdef ARM_PERSIST` 包（先例 `:353-359 ARM_ACKGATE`）⇒ **既有臂 A..R 结构性看不到新判据**（这是 L2"读数逐字相同"的前提）。
+⚠️ 门侧改动 = 两行 `call :run S/T …` + `FAILS` 计数两行（照 `:98-100` 的既有权重模式；S 期望 0、T 期望非 0）。
 
-### 5.3 参数与判据的"账实一致"守卫（防"门里跑的不是板上那份"）
+**Ⅱ. 参数账实一致（§5.3）**：S/T 覆盖的是**节奏参数**；生产值由静态断言守（核 `rtl/tcp_tx_frame.v` 的默认 `PERSIST_EN/PS_BASE/PS_MAX` 与 `RTO_LIM = 12207`）。
 
-- 门里覆盖 `PS_BASE/PS_MAX` ⇒ **必须**另有一条**静态断言**核对 `rtl/tcp_tx_frame.v` 的**参数默认值** = 生产值
-  （`PS_BASE == 26'd3_051_758` / `PS_MAX == 26'd36_621_094`），并核 `RTO_LIM = 12207`（`DP_156MHZ` 支）。
-  先例 = `tools/gen_stim_p5_adv.py` 的 `check_phys_margin` 按文本解析参数行的做法。
-- 板侧身份门照旧：`BID` 自增（本刀实施轮 = 下一号）+ **每次构建必 bump**（`P7B_HANDOFF.md` §4-#55）。
+**Ⅲ. 期望命中条数（臂 S）**：
 
-### 5.4 若最终决定"加新字"（本件**不推荐**，仅预留清单）
+| 判据 | 期望（精确值） | 臂 T（负对照） |
+|---|---|---|
+| **j1 探询序列** | 观察窗 = `RTO_LIM' + 3·PS_BASE'` 内**恰好 3 条**，且**间隔逐段 = {RTO_LIM', PS_BASE', 2·PS_BASE'}**（**退避受测**，不是被断言） | 0 条 ⇒ 红 |
+| **j2 逐字段** | seq == 该拍 `snd_una` · flags `8'h18` · `ip_len == 41` · payload[0] == `fb(CBASE*conn + (seq−isn))`（**白送的内容 oracle**，`:541-542`）· window == `RCV_WND` · ack == `RCV_NXT` · IP/TCP 校验和 == TB 独立复算（`:458-479`） | 0 条 ⇒ 红 |
+| **j3 无序列副作用** | `snd_nxt` 前后逐位同 · `retx_hi`/`retx_active` 未变 · `stat_retx` **+0**（子相 ii）· `stat_bytes` **+0** · ring 写口计数未变 | — |
+| **j4 图案流无洞** | 探询后第一个数据帧的载荷逐字节 == 臂 B 同刻的下一帧（LFSR 相位未动） | — |
+| **j5 健康态零额外帧** | `snd_wnd ≠ 0` 相位 20 轮 ⇒ 探询 **0** | 0 |
+| **j6 无在飞不发** | `snd_nxt == snd_una && wnd == 0` ⇒ **0** | 0 |
+| **j7 停条件** | 写回 `wnd ≠ 0` 后 0 新增 + 数据恢复 + 若再关窗**首档退回 `RTO_LIM'`**（`phase` 已清零） | — |
+| **j8 打第二把锁** | `epoch` 饱和（≥15）后写窗 0 ⇒ **仍发 ≥2 条** | 0 ⇒ 红 |
+| **j9 环安全（L3a）** | 子相 (ii) `stat_retx +0`；子相 (i) `stat_retx +1`（= 登记的伪会话） | — |
+| **j10 重连清干净** | 探询待发期间打 `cfg_up` ⇒ **0** 探询 | 0 |
+| **j11 变异有牙** | 加一个变异臂（`PS_MUT_NOARM_D5`：把武装条件的 `!fin_sent_r` 去掉）⇒ **FIN 在飞时发的探询必须被 j12 抓红** | — |
+| **j12（D-5 专用）** | FIN 在飞（`fin_sent_r=1`）且 `snd_nxt = snd_una+1` ⇒ **0 探询**（且 `ΔW55` 不增） | 0 |
 
-`tcp_tx_frame` 新增 `output reg [31:0] stat_probe`（探询帧确实上线数）⇒ 进快照 **W70**。清单（**照 `FULL_TABLE.tsv` 的口径复核**，本件**只给类目**、不给逐行）：
-①`SNAP_NW_P6E` 70→71 ② dp 束槽数 +1 ③ `_proj_pcie/rtl/axi_regs.v` 译码（7 位已够，未实现地址红线仍 **≥0x200**）
-④ `.SNAP_NW(...)` ⑤ 四个取数/验收脚本的 `NW`/`EXPECT_BID`/`UNIMPL_ADDR`（= 上一轮"20 文件 / 56 处"那一面，
-**必须用该轮的 `apply_readside.py` + 三条结构性断言复核**：A 表长 == NW / B 搜索面全扫 / C 默认值 == 权威源现读值）
-⑥ `check_window.py` + `tb_biz_win.v` 的几何判据 ⑦ 四套假板子自证（`*_selftest*.sh` / `*_livefake.sh` / `*_negctrl.sh`）
-⑧ `GEOM_TIERS` 档表加一行（`j6_r6fix.sh` / `tcpreg_j6.sh`）⑨ `p7b_chain` / `p6e_pcie` 两族 TB 的未实现地址读址**与判据名**（两处！—— 搬地址 = 两处编辑，全局 #80）。
-⚠️ 本件**未**逐条核 ⑨ 的所有文件（那不是本轮的授权写集合），实施轮以 `FULL_TABLE.tsv` 现扫为准。
+**Ⅳ. ⭐ J9 重放窗口连续性判据的**显式处置**（D-10-4）**：`tb/tb_tcp_tx_ovl.v:503-519` 的 J9 分支条件
+= `u_dut.retx_active && (u_dut.retx_id_r == t_conn) && ((fseq − rep_hi_w) >= 32'h8000_0000)`；探询（`fseq = snd_una < retx_hi`）**会满足它**，
+若为会话内首帧则 `rep_max` 被锚在 `snd_una`（`:505-507`），后续重放帧可能被计成 **gap**（`:508-510`）。**处置三层**：
+1. **设计侧**：`probe_sel` 加 `!retx_active`（§2.4-2）⇒ **探询不会在会话进行中被启动**；
+2. **TB 侧**：J9 分支条件加 **`&& !u_dut.tx_is_probe`**（**状态线**口径，与该分支已用的 `u_dut.retx_active/retx_id_r` 同类，**不是**判据线）——
+   ⛔ 必须配**互核**：`ifdef ARM_PERSIST` 下新增两个计数 `n_probe_by_dut`（按 `tx_is_probe` 落）与 `n_probe_by_judge`（j1/j2 计到的）
+   ⇒ **两者必须逐条相等**（不等即红）⇒ 排除面与判据面互为对照，`tx_is_probe` 不能"悄悄多排除"；
+3. **残留登记**（§2.4-6）：探询帧在飞（≤9 拍）期间会话起来的同连接窗口 —— **可达性未定**；由 2 的互核计数**在门里可见**（为 0 ⇒ 未观测到；非 0 ⇒ 可见其量）。**本件不给结论。**
+
+### 5.3 参数与判据的"账实一致"守卫
+
+- 静态断言：`rtl/tcp_tx_frame.v` 的**参数默认值** = 生产值（`PERSIST_EN==0` / `PS_BASE==26'd3_051_758` / `PS_MAX==26'd36_621_094` / `RTO_LIM==12207`（DP 支））。
+  先例 = `tools/gen_stim_p5_adv.py` 的 `check_phys_margin` 按文本解析。
+- 板侧身份门照旧：**每次构建必 bump `BUILD_ID_V`**（`board/wrapper_p4.v:4052`；`P7B_HANDOFF.md` §4-#55）。
+
+### 5.4 若最终决定"加新字"（**不推荐**，仅预留）
+
+`stat_probe` → **W70** ⇒ 走完整读侧面：①`SNAP_NW_P6E` 70→71 ②dp 束槽数 +1 ③`_proj_pcie/rtl/axi_regs.v` 译码（7 位已够；未实现地址红线仍 **≥0x200**）④`.SNAP_NW(...)`
+⑤ 取数/验收脚本的 `NW`/`EXPECT_BID`/`UNIMPL_ADDR`（= 上一轮"20 文件 / 56 处"那一面，**用 `apply_readside.py` + 三条结构性断言复核**：A 表长 == NW / B 搜索面全扫 / C 默认值 == 权威源现读值）
+⑥ `check_window.py` + `tb_biz_win.v` ⑦ 四套假板子自证 ⑧ `GEOM_TIERS` 档表 ⑨ `p7b_chain` / `p6e_pcie` 两族 TB 的**未实现地址读址 + 判据名（两处！全局 #80）**。
+⚠️ 本件**未**逐条核 ⑨ 的全部文件（不在本轮授权写集合），实施轮以 `FULL_TABLE.tsv` 现扫为准。
 
 ---
 
-## §6 ⭐ 板级怎么测（零窗怎么造 + 判据）
+## §6 ⭐ 板级怎么测（零窗造法 + 判据）
 
-### 6.1 零窗造法（**至少一条与台架开关无关** —— 本刀主测法）
+### 6.1 零窗造法
 
 | 路 | 做法 | 与台架开关的关系 | 现核状态 |
 |---|---|---|---|
-| **P-A（主）** | 对端 **raw 注入**若干"重复 ACK、`win=0`"（`_proj_10g/notes/p7b_microwin_20261010/_tools/stall_probe.py`） | **无关**（不改任何 socket 配置、不改 sysctl） | 定位轮 MW11 实测：对**现役** RTL 能造 stall（`board_frames_after_inject=0`）✅ |
-| P-B（正控对照） | 同法注入 `win=1460` | 无关 | 定位轮 MW10 实测：板 **0.158 s** 恢复 ✅（证明注入通路本身有效、且"板只缺一个窗口通告"） |
-| P-C | sink 侧 `SO_RCVBUF` **在 `connect()` 之后**设（`_proj_pcie/p7b_biz/p7b_tcp_sink.cpp:306`）⇒ 线上先 64240 再塌 | **有关**（另一 agent 正在把它改成 connect 前 + 留开关复现旧行为） | 定位轮：`rcvbuf=1460` 档 **7/7 stall**；`2920` 档 5/6 ⇒ 含竞态成分 |
+| **P-A（主）** | 对端 **raw 注入**若干"重复 ACK、`win=0`"（`_proj_10g/notes/p7b_microwin_20261010/_tools/stall_probe.py`；⚠️ 用**修好的版本** —— 其 `:70` 逐字登记"doff=5 ⇒ 头必须恰好 20 字节（多塞填充…MW9 实测该形态没上线）"） | **无关**（不改 socket 配置、不改 sysctl） | 定位轮 MW11 实测：对**现役** RTL 能造 stall（`board_frames_after_inject=0`）✅ |
+| P-B（正控对照） | 同法注入 `win=1460` | 无关 | 定位轮 MW10 实测：板 **0.158 s** 恢复 ✅ |
+| **P-C（⭐ 已按 TL 跨件条重写）** | sink 侧复现**历史小窗**：**必须显式带 `--rcvbuf-after-connect`**（`_proj_pcie/p7b_biz/p7b_tcp_sink.cpp:257/:272`；见证行 `:331-332` `SINK_RCVBUF_ORDER=after_connect_LEGACY`）。**默认已是 `before_connect`**（`:232-233`，已提交 `a03d227`） | **有关**（开关） | ⛔ **不许把 P-C 判据建立在"先大窗再塌"上**：真 Linux 栈实测（`p7b_sinkfix_20261010/peer_verify/REPORT.md:18`）"**本次未观察到任何塌**"，TL 批注 §B【推断】= **通告窗 ≤ 空闲接收缓冲 ⇒ 必须"灌满"才关窗**。<br>⇒ **两条可用的 P-C 形态**：**(c1) SYN 就小**（修复臂 `SYN.win = 2920`，`:59-60`）—— **天然的微窗/零窗构型**，最稳；**(c2) 灌满**：服务端**持续灌 ≥4×rcvbuf 的字节**而客户端不读 ⇒ 看窗关到 0（TL §B 的可判定法，**未跑**）； |
 
-**本刀的板级判据一律以 P-A 为主线**（可在"开关开/关"两种台架上跑同一套脚本）；P-C 作为**补充**（真·对端零窗 = 校验退避阶梯的**长节奏**）。
-⚠️ **仪器纪律（照定位轮教训）**：注入臂的"板没反应"必须**再对一台仪器**（MW12/13 的 `board_frames_after_inject=0` 曾是**仪器假阴性**）
-⇒ 判据必须 **pcap + 板侧计数**双向对账；注入脚本用**修好的版本**（MW9 那次失败是自己多塞 4 字节导致的）。
+**主测法 = P-A**（与台架开关无关、可跑在两种台架上）；P-C 只作补充（真·对端零窗 ⇒ 校验**退避阶梯**的长节奏）。
+⚠️ **仪器纪律**：注入臂的"板没反应"必须**再对一台仪器**（MW12/13 的 `board_frames_after_inject=0` 曾是**仪器假阴性**）⇒ 判据必须 **pcap + 板侧计数**双向对账。
 
-### 6.2 板级判据（逐条）
+### 6.2 板级判据
 
 | # | 判据 | 期望 |
 |---|---|---|
-| **J-P1** | 注入 `win=0`（在飞 > 0）后，**首次探询**出现 | pcap：一条 **55 B**、TCP `seq == 当时的 snd_una`、`len == 1`、flags `0x18` 的帧；时间 ≤ `20 ms + 3×RTT`（`RTO_LIM` 档）。**改前（现役位流）此帧数 == 0**（= 本刀的正控） |
-| **J-P2** | 探询逼出的对端 ACK 带**真窗** | pcap：探询后 ≤ RTT 内出现对端帧且 `win > 0`（P-A 路径下对端 socket 健康 ⇒ 必非 0）；板侧 `ΔW69`/`ΔW66` 语义随之变化；**数据流恢复**：`ΔW20 > 0`、`ΔW15 > 0`、sink 继续收 |
-| **J-P3** | **未进重放机** | 整个 episode `ΔW55 == 0` 且 `W58` 恒 0（⚠️ 若不成立 ⇒ 就是 §4.4 登记的伪会话，按该条的处置走，**不当作 PASS 的破坏**但要**如实登记**） |
-| **J-P4** | **退避阶梯**（用 P-C 真零窗档） | pcap 探询时刻差 ≈ `{20 ms, 5 s, 10 s, 20 s, 40 s, 60 s, 60 s…}`（每档容差按 RTT 与 256 拍量化；⚠️ 单调+封顶=**判据**，绝对档值=**门槛**，两者分开写） |
-| **J-P5** | **健康/长流不变量** | 既有长流跑（A 臂 236 s 或 UDP 300 s）：**探询帧数 == 0**（pcap）、速率与既有读数**逐字不变**、`mism_bytes=0`（"零额外帧"不变量） |
-| **J-P6** | 内容零伤害 | episode 内 `first_mismatch=-1` / `mism_bytes=0`（1 字节探询若被对端**接受**，它必须是**流里正确的那一字节** ⇒ 不产生洞/不错位） |
+| **J-P1** | 注入 `win=0`（在飞 > 0）后首次探询 | pcap：**55 B**、TCP `seq == 当时的 snd_una`、`len == 1`、flags `0x18`；时间 ≤ `20 ms + 3×RTT`。**改前（现役位流）此帧数 == 0**（正控） |
+| **J-P2** | 探询逼出的对端 ACK 带真窗 | 探询后 ≤ RTT 内对端帧 `win > 0`；**数据流恢复**：`ΔW20 > 0`、`ΔW15 > 0`、sink 继续收 |
+| **J-P3** | **环安全（L3b）** | **从注入时刻起算**：`ΔW55 ∈ {0,1}`；取 1 时三条件（`W58` 脉冲时长 / 探询帧 ≥3 / 其后仍恢复）同时成立 |
+| **J-P4** | **退避阶梯**（用 P-C(c1) 或 (c2) 的真零窗档） | pcap 探询时刻差 ≈ `{20 ms, 5 s, 10 s, 20 s, 40 s, 60 s, 60 s…}`（**单调 + 封顶 = 判据；绝对档值 = 门槛**，分开写） |
+| **J-P5** | 健康/长流不变量 | 既有长流跑：探询帧 **0**（pcap）、速率与既有读数**逐字不变**、`mism_bytes=0` |
+| **J-P6** | 内容零伤害 | episode 内 `first_mismatch=-1` / `mism_bytes=0` |
 
-### 6.3 板级测法的前置闸（照本工程纪律）
+### 6.3 前置闸
 
-重烧并核 sha256 与 `0x04`（BID）· 对端 sysctl/COALESCE **一字不动**（`Adaptive RX: off / rx-usecs 0` 逐跑见证）·
-`ip route get` 现取 · `nmcli device set enp1s0f1np1 managed no` 一次配好 · **板侧 `0x08`（SCRATCH/TX_DIS 门）现读** ·
-每次测量前重烧（⚠️ #58：换烧后"头几次读数"可低到 3× ⇒ **单次读数不作判据**，且**不要**用"第一跑"当锚）。
+重烧并核 sha256 与 `0x04`（BID）· 对端 sysctl/COALESCE **一字不动**（`Adaptive RX: off / rx-usecs 0` 逐跑见证）· `ip route get` 现取 ·
+`nmcli device set enp1s0f1np1 managed no` · **`0x08`（SCRATCH/TX_DIS 门）现读** · 每次测量前重烧（⚠️ #58：换烧后"头几次读数"可低到 3× ⇒ **单次读数不作判据**）。
 
 ---
 
 ## §7 回退与逐位退化
 
-### 7.1 开关形态（照先例）
+### 7.1 开关形态 + 双支约定
 
-- **参数**（不是宏）：`parameter PERSIST_EN = 1'b0`（默认**关** = 现役行为）。
-  板级构建由 `board/wrapper_p4.v:2144` 的例化显式传 `1'b1`（一行，先例 = `.TX_CONTINUOUS(1'b1)` `:1186-1187`）。
-- **回退点 = 两处、都可一键**：① 构建侧：`.PERSIST_EN(1'b0)`（或删该行 = 取默认）；② 板上：重烧上一个归档位流
-  （位流 sha256 + BID 进档；⚠️ 位流不进库的仓规照旧）。
-- **结构性隔离**：全部新逻辑在 `ifdef TCP_TX_OVL` 分支内 ⇒ **默认构建（不定义该宏）连编译都不编译它** ⇒
-  P4 常驻矩阵/仿真默认构建 **结构性不受影响**（这是最强的一层）。
+- **参数**（不是宏）：`parameter PERSIST_EN = 1'b0`（**默认关** = 现役行为）；**声明在宏外**（D-1 修法 (i)，与 `RING_CAP`/`PLEN_MAX`/`RETX_SPAN` 同款）；
+  板级构建由 `board/wrapper_p4.v:2144` 的例化显式传 `1'b1`（一行，**不包 `ifdef`**；先例 = `.TX_CONTINUOUS(1'b1)` **`:1196`**）。
+  ⚠️ 【推断·未跑工具】参数在**默认配置**下存在但未被使用 ⇒ 命名覆盖**合法**（不落"cannot find parameter"硬错）；**未跑 xvlog/xelab ⇒ 只报 warning 与否未验证**。
+- **回退点 = 两处**：① 构建侧 `.PERSIST_EN(1'b0)`（或删该行）；② 重烧上一归档位流（sha256 + BID 进档）。
+- **结构性隔离（两句，缺一不可）**：① 全部新逻辑在 `` `ifdef TCP_TX_OVL `` 内 ⇒ **默认构建连编都不编译它**；
+  ② ⭐ **但反面必须明写**：**常驻 P4 矩阵（含 `p5_wrapper`）编的是默认支 ⇒ 本刀对它零覆盖**（全局 #52 字面命中：
+  不是"没被破坏"，是"**没看见你**"）。覆盖来源 = §5.2 的 OVL 门（臂 S/T）+ 板级。
+- **双支约定 = 不镜像**（D-8）：取 r6 `ack_seen` 先例（`rtl/tcp_tx_frame.v:503` 逐字"默认分支…不生效: `acks_ok` 恒 1"）。
+  理由：① 默认支是 **1G 时代机器**（另一套 FSM：`S_IDLE/S_RECV/…`），persist 要在两套机器上各实现一遍 ⇒
+  **语义双支漂移**风险（全局 #80 的"两处同款只改一处"）；② 产品配置 = OVL 支（`board/build_p7b_ku5p.tcl:153` 逐字含 `TCP_TX_OVL=1`，本件核过）。
+  ⇒ **登记**：默认支不再接受功能演进（这是**约定**，不是缺陷）；与"构建 E/F 的 W66/W67/W69 双支镜像"先例的差别 = 那两个是**纯观测仪器**（双支各一份、零行为差），本刀是**功能**。
 
-### 7.2 "关掉时与 HEAD 逐位相同"的**做法**（三层，逐层给做法与强度）
+### 7.2 "关掉时与 HEAD 逐位相同"的**做法**（S2 已按 D-9 重写）
 
-| 层 | 做法 | 期望 | 强度 |
-|---|---|---|---|
-| **S1 静态（新增逻辑全在守卫内）** | 逐条列出新增信号，断言 `PERSIST_EN == 0` 时每一个都是**常量**：`ps_want ≡ 0` ⇒ `probe_sel ≡ 0` ⇒ ⑤的 `start_ack` 表达式折回原式、⑥⑦⑧⑨ 的每个 mux 折回原操作数、③ 的计时段不写任何寄存器（CE ≡ 0 ⇒ 综合剪枝）。做法 = 一个 20 行的静态检查脚本（列行号 + grep），**并入 §5.2 的新门** | 0 例外 | 中（论证 + 机械核对） |
-| **S2 行为（仿真）** | 照 `TX_CONTINUOUS` 的成例（`p7b_longsend/CONT_GATE_stdout.txt`：ARM A vs **冻结锚** 24 文件 `fc /b` 逐字节相同 + `compile-source witness`）：臂 A = 新 RTL（`PERSIST_EN` 默认 0），臂 G = **冻结锚**（`sim/**/frozen/**` 里的现役 `tcp_tx_frame.v`，本轮先冻结），比对**交付文件逐字节** | 逐字节相同 | 强（本工程既有的等价证据形态） |
-| **S3 读数（既有门基线臂）** | 臂 A/B 的 15 行读数（§4.3-L2 清单）与改动前**逐字相同** | 逐字相同 | 强 |
-| **S4 位流（可选、昂贵）** | 默认参数下重跑一次构建，与上一档位流比 `cmp -l`（预期：**前缀之外的全同**不可能 —— BID 与 PERSIST 相关逻辑虽被剪枝，但 **BID 常量改了就不逐位**）⇒ ⚠️ **本层不承诺逐位**，只承诺 S1–S3。写清楚，别让人误以为有个位流级的等价证明 | — | 低（登记） |
+| 层 | 做法 | 强度 |
+|---|---|---|
+| **S1 静态剪枝** | 逐条列新增信号，断言 `PERSIST_EN==0`（且在 OVL 支内）时每个都是常量 ⇒ ⑤/⑤b/⑥⑦⑧⑨ 的 mux 折回原操作数、③ 的计时段 CE≡0 ⇒ 综合剪枝。脚本并入 §4.3-L1 的白名单核对器 | 中 |
+| **S2 行为等价（已重写）** | ① ⭐ **锚必须现冻**：现役 `rtl/tcp_tx_frame.v`（**142,733 B**）冻成新锚并记 sha256；⚠️ **现存 `sim/p7b_stagec_tx_regress/frozen/tcp_tx_frame_rev1a1f0439.v` = 118,054 B（2026-10-07 16:01）≠ 现役 ⇒ 只能当"10-07 那版"的负对照，⛔ 不能当现役等价锚**。<br>② ⭐ **形态照 `sim/p7b_longsend/run_cont_gate.bat:14-22` 的现行三条**：**(a) 不受影响文件全同** · **(b) 差集必须恰为指定的那几个产物（多一个少一个都红）** · **(c) 计数/统计件去掉指定行后全同**。⚠️ **v1 与审查都说的"24 文件 `fc /b` 全同"这一形态已不成立**（该脚本 `:18` 逐字"原判据 = '24 files byte-identical' … **已不成立**"，换代原因 = 2026-10-10 构建 E 的 A3 是**无条件**行为修复）。<br>③ ⛔ **本仓现在没有** tcp_tx_frame 自己的 fc/b 等价门 ⇒ **S2 的实施 = 实施轮先建这条门**（TB 落盘产物集现取 + 冻锚 + 三条判据 + 负对照：拿 118 KB 的旧锚当"被测件"必须红）。 | 强（本工程既有形态） |
+| **S3 读数** | 臂 A/B 的 15 行（§4.3-L2 清单）与改动前**逐字相同**（**直接 diff `runA/runB/xs.log`**） | 强 |
+| **S4 位流（可选、昂贵）** | **不承诺位流级**（BID 自增即破逐位） | 低 |
 
 ### 7.3 退化面登记
 
-- **不退化面（诚实登记）**：① `wrapper_p4.v` 多一行例化参数 ⇒ **源码不同**（不是"文件逐字节相同"，是"行为等价"）；
-  ② 默认构建的位流**不会**与上一档逐位相同（BID 自增是纪律；且任何源码改动都不承诺位级）。
-  ⇒ 口径：**"参数默认关 ⇒ 逐位退化"= 行为/读数级 + 静态剪枝论证**（S1–S3），**不是**位流级。
+- **不退化面**：① `wrapper_p4.v` 多一行 ⇒ **源码不同**（行为等价，非文件相同）；② 默认构建位流**不会**逐位相同（BID 自增 + 任何源码改动都不承诺位级）。
+  ⇒ 口径：**"参数默认关 ⇒ 逐位退化" = 行为/读数级（S1–S3），不是位流级**。
 
 ---
 
 ## §8 代价与风险
 
-### 8.1 FF / LUT 估算（**给依据，不拍脑袋**）
+### 8.1 FF / LUT 估算（v2 重算，含 D-2 的 1 位）
 
 | 项 | 位宽 × 数 | FF | 依据 |
 |---|---|---|---|
-| `ps_timer[15:0]` | 26 × 16 | **416** | 26 位是 §3.1 的算术结果（`PS_MAX = 36.6M visits < 2²⁶`）；同构先例 = `rto_timer` 21 位 × 16（`:881`） |
-| `ps_exp[15:0]` | 3 × 16 | **48** | 0..4 饱和（3 位） |
-| `ps_want[15:0]` | 1 × 16 | **16** | 电平请求标志（同 `rto_pend` 惯例 `:869`） |
-| 暂存三元组 | rdy 1 + conn 4 + seq 32 + byte 8 | **45** | §2.3 的 (conn, seq, byte) 一致锁存 |
-| 读请求流水 | 2 | **2** | `rd_en` 拍后 2 拍出数（`retx_ram.v:92-105`） |
+| `ps_timer[15:0]` | 26 × 16 | **416** | §3.1 的算术（`PS_MAX = 36.6M visits < 2²⁶`）；同构先例 = `rto_timer` 21 × 16（`:881`） |
+| `ps_phase[15:0]` | 3 × 16 | **48** | 0..5 饱和（3 位，D-4 编码） |
+| `ps_want[15:0]` | 1 × 16 | **16** | 电平请求（同 `rto_pend` 惯例 `:869`） |
+| **`ps_stage_estab`** | 1 | **+1** | D-2：守卫取打拍暂存（环断的关键一位） |
+| 暂存三元组 | rdy 1 + conn 4 + seq 32 + byte 8 | **45** | §2.3 |
+| 读请求流水 | 2 | **2** | `rd_en` 拍后 2 拍出数（`rtx_ram`→`retx_ram.v:92-105`） |
 | 帧类/字段 | `tx_is_probe` 1 + `probe_sel_r` 1 + `ctrl_pld[7:0]` | **10** | §2.5-⑥⑨ |
-| **合计** | | **≈ 537 FF**（全 **DP 域**） | |
+| **合计** | | **≈ 538 FF**（全 **DP 域**） | |
 
-- **量级对照（别拍脑袋）**：构建 F 的三个纯观测仪器 = **+293 FF**；快照"每 +10 字 ≈ **960 FF**（其中 320 落在数据面域）"
-  （`P7B_WU_TIMING_DELTA.md` §5.3 的订正口径）。⇒ 本刀 ≈ **0.6 个"10 字扩窗"**。器件 FF 余量充裕（~50k/433k 已用），
-  **真正的成本在 DP 域的布线/布点**，不是一个容量问题。
-- **成本削减备选（供 TL 裁定，非默认）**：C1 共享 `rto_timer`（≈ +160 FF，风险 = 污染 RTO 倒计时，需模式位，§1.3-C1）；
-  或"全局预分频 + 10 位/连接"（≈ +240 FF，风险 = 引入两级计时新习惯 + 分辨力 107 ms）。**本件默认取"独立定时器"**（安全优先）。
-- **LUT**：给不出数字（未综合）。同构参照 = 现有 `rto_timer` 的 21 位 × 16 递减/比较网络 + `scan_id` 译码；本刀是它的
-  **平行复制 + 一个共享的 26 位变量移位**（`PS_BASE << exp`，**只需一份**，因为扫描器一拍只服务一个连接）。
+- **量级对照**：构建 F 三个纯观测仪器 = **+293 FF**；扩窗"每 +10 字 ≈ 960 FF（其中 320 在数据面域）" ⇒ 本刀 ≈ **0.56 个"10 字扩窗"**。器件余量充裕（~50k/433k）⇒ **真正的成本在 DP 域的布线/布点**。
+- **削减备选（供裁定）**：C1 共享 `rto_timer`（≈ +190 FF，风险见 §1.3）；"全局预分频 + 10 位/连接"（≈ +240 FF，代价 = 新两级计时习惯 + 分辨力 107 ms）。
+- **LUT**：给不出数字（未综合）。同构参照 = `rto_timer` 的 21 位 × 16 递减/比较网络 + `scan_id` 译码；**`Reload(p)` 的移位器只需一份**（扫描器一拍服务一个连接）。
 
-### 8.2 会不会落进已知最差锥？（**必须逐族定向查**）
+### 8.2 会不会落进已知最差锥？（**逐族定向查**）
 
-⚠️ 本工程前科（全局 #66）：**端点清单"藏族"** —— 某源最差在 2000 条清单里 **0 命中**（宿被更强驱动占住）⇒
-**只读 WNS 前 N 条 = 空证据**，必须 `-from`/`-to` **定向查询**。实施/构建轮**必须**跑下列定向查询（报告名 = 该轮构建的 routed 报告）：
+⚠️ 前科（全局 #66）：**端点清单"藏族"** ⇒ 只读 WNS 前 N 条 = 空证据；必须 `-from`/`-to` **定向查询**。
 
-| 族 | 查法 | 为什么是这一族 |
+| 族 | 查法 | 为什么 |
 |---|---|---|
-| ① **控制帧校验和 D 端** | `-to [get_cells u_tcp_tx/ctrl_tcpcsum_reg[*]/D]` + `-to […/ctrl_ipcsum_reg[*]/D]` | 本刀**往这条 D 网加了一个 16 位项**；而 A7 的 R-1 刚刚把它的**前端 7–11 级整段移走**（旧锥整体退出报告面）⇒ 它是"最有可能被我们推回去"的那一族 |
-| ② **`rb_id` 选择解码** | `-from [get_cells u_tcp_tx/svc_id_r_reg[*]/C]` + 全 `rb_id` 扇出（`-to` 上 TCB/CAM 读口） | ⚠️ 这条 mux **必须**加一条 arm（§2.5-**⑤b**，否则探询帧的四元组取自别的连接）⇒ 它是本刀对**既有组合链**的唯一一处加长（R-1 刚把校验和从这条链的下游移走 ⇒ 风险下降，但仍**必须量**） |
-| ③ **`retx_ram` 读地址族** | `-to [get_cells u_tcp_tx/u_retx/ra_e_r_reg[*]/D]` 与 `ra_o_r_reg[*]/D`（含 `max_fanout` 复制后的网） | 历史上这一族**出过事**（`rpe[*]` 扇出 128 / 布线 2.43 ns，见 `rtl/retx_ram.v:92-105` 的修复记录）；本刀在读地址入口**前**加了一层 mux（`ps_rd`）⇒ D 锥变长，必须量 |
-| ④ **扫描计时网络** | `-from [get_cells u_tcp_tx/scan_id_reg[*]/C]` / `-to [get_cells u_tcp_tx/ps_timer_reg[*][*]/D]` | 与既有 `rto_timer` 同族（平行复制）；对照法 = 看新族与旧族的**相对**位置，而不是绝对值 |
-| ⑤ **帧输出头/尾** | `-to [get_cells u_tcp_tx/m_axis_tdata_reg[*]/D]`（`:1129-1134` 的 `T_HDR` 表）与 `m_axis_tkeep_reg[*]/D`（`:1149-1150`） | ⑧⑨ 给这两处加了 mux |
-| ⑥ **全局基准（不可比，但必须记）** | 全局 WNS 的**检查类型 + 宿主**（构建 F = `async_default` **Recovery**，宿 `u_pcie_regs/snap_words_r_reg[1797]/CLR`；DP 域 setup = `+0.281`） | 全局 `+0.111` 与 DP setup **不是同一个检查类型/对象**（#66）⇒ 不许拿它们互比 |
+| ① 控制帧校验和 D 端 | `-to [get_cells u_tcp_tx/ctrl_tcpcsum_reg[*]/D]` + `…ctrl_ipcsum_reg[*]/D` | 本刀**往这条 D 网加了项**（长度 41 + 载荷项）；R-1 刚把它的前端 7–11 级移走 ⇒ **最可能被推回去**的一族 |
+| ② **`rb_id` 选择解码** | `-from` 全 `rb_id` 扇出、`-to` TCB/CAM 读口 | ⚠️ **本刀必加一条 arm**（§2.5-⑤b）⇒ 对**既有组合链**的加长 —— **不止这一处**（见 ⑤：`h_totlen`/末字 mux 也落在既有头/尾链上） |
+| ③ `retx_ram` 读地址族 | `-to […/u_retx/ra_e_r_reg[*]/D]` / `ra_o_r_reg[*]/D` | 历史出过事（`rpe[*]` 扇出 128 / 布线 2.43 ns，见 `rtl/retx_ram.v:92-105`）；本刀在入口前加 mux |
+| ④ 扫描计时网络 | `-from […/scan_id_reg[*]/C]` / `-to […/ps_timer_reg[*][*]/D]` | 与 `rto_timer` 同族（平行复制）；看**相对**位置 |
+| ⑤ 帧输出头/尾 | `-to […/m_axis_tdata_reg[*]/D]`（`:1129-1134`）/ `m_axis_tkeep_reg[*]/D`（`:1149-1150`） | ⑧⑨ 给这两处加 mux |
+| ⑥ 全局基准 | 全局 WNS 的**检查类型 + 宿主**（构建 F = `async_default` **Recovery**，宿 `u_pcie_regs/snap_words_r_reg[1797]/CLR`；DP setup = `+0.281`） | 两者不是同一检查类型/对象（#66）⇒ 不许互比 |
 
-**结论口径**：本件**未测**任何时序 ⇒ 只能说"要查哪几条"，**不许**写"不会落进最差锥"。
+**结论口径**：本件**未测**任何时序 ⇒ 只说"要查哪几条"，⛔ 不写"不会落进最差锥"。
 
-### 8.3 其它风险（逐条带证伪法）
+### 8.3 其它风险（带证伪法）
 
-| # | 风险 | 证伪/降级法 |
+| # | 风险 | 证伪/降级 |
 |---|---|---|
-| 1 | 探询帧的**校验和/长度字段算错** ⇒ 对端静默丢弃 ⇒ 探询"看起来发了但没用" | TB 的独立校验和 oracle（`:458-479`）**必红**；板级 pcap 里对端**应答**是最终判据 |
-| 2 | ring 读**取错字节**（lane/旋转/地址） | TB 的 payload 内容 oracle（`:545`）自动覆盖（§5.2-j2） |
-| 3 | 探询被 TB 当数据帧 ⇒ 扰动 **覆盖率判据**（`cov_replay_frames`/`n_data`/`w_data`） | 只在新臂发生（基线臂 `PERSIST_EN=0` ⇒ 0 探询）；新臂的阈值判据（`T5 witness`）需按"探询计入"重算一次**并写进臂注释** |
-| 4 | 探询与 `wu`/ACK 争槽导致 **ACK 时延** | 探询让位（`probe_sel` 要求 `ackq_empty`）；门里核 ACK 时延读数（`T8`/`ctrl_to`）与基线逐字一致 |
-| 5 | `cfg_up` 竞态（同槽重连后发旧会话探询） | §3.4-4 的清理 + §5.2-j10 |
-| 6 | 长 stall 被 app 超时拆连（§3.3 边界） | 登记（§9-⑥）；不改 app |
+| 1 | 探询帧校验和/长度算错（**三处长度**）⇒ 对端静默丢弃 | TB 独立校验和 oracle（`:458-479`）**必红**；板级 pcap 里对端**应答**是最终判据 |
+| 2 | ring 读取错字节（lane/旋转/地址） | TB payload oracle（`:541-542`）自动覆盖 |
+| 3 | 探询被 TB 当数据帧 ⇒ 扰动覆盖率判据 | **降级（D-10-3）**：只有 `n_data`/`cov_singlebeat` 受影响且**都是下界**（探询只推高）；`cov_plen0` 要求 `plen==0` ⇒ 不受影响 ⇒ **无需重算** |
+| 4 | 探询与 ACK 争槽 ⇒ ACK 时延 | `probe_sel` 要求 `ackq_empty`（让位）；门里核 `T8`/`ctrl_to` 与基线逐字一致 |
+| 5 | `cfg_up` 竞态 | §3.4-4 + j10 |
+| 6 | **D-10-4 的 J9 残留**（§2.4-6） | 三层处置 + 互核计数；**可达性未定**，门里可见 |
+| 7 | 长 stall 被 app 超时拆连 | 登记（§9-⑥）；不改 app |
 
-### 8.4 行尾/工具纪律（**现核**）
+### 8.4 行尾/工具纪律
 
-- `rtl/tcp_tx_frame.v` = **CRLF 2232 / 裸 LF 0**（本件 §0.1-#3）⇒ **任何按 `\n` 做锚点的脚本/变异器会 0 命中**
-  （本工程前科：`tcp_tx_frame.v` 的 2040 个 CR 曾废掉 `run_tx_ovl_gate.bat` 的一个变异臂）。
-  改动一律 Edit 原字符串；改完核 `git diff --stat` == `git diff --ignore-cr-at-eol --stat`。
-- 另一处**现核到的**关系：`board/wrapper_p4.v` 也有 CRLF 纪律且**位流不进库**；`BUILD_ID_V` 在 `:4052`。
+- `rtl/tcp_tx_frame.v` = **CRLF 2232 / 裸 LF 0** ⇒ 按 `\n` 锚点的脚本/变异器会 0 命中（前科：`mut_c2`）。
+- 改动一律 Edit 原字符串；改完核 `git diff --stat` == `git diff --ignore-cr-at-eol --stat`（A7 的既有做法）。
 
 ---
 
-## §9 未定 / 需裁定（**不许当已答**）
+## §9 未定 / 需裁定（⛔ 不许当已答）
 
-1. ⚠️ **对端对"1 字节旧数据"的精确应答形态未实测**：本件依据的是"对端栈对旧数据/窗外数据必回 ACK"这一**推断**
-   （Linux 的 `tcp_send_dupack`/challenge-ACK 分支 —— ⚠️ **本件未回内核源码逐字核它**：本轮禁 ssh，本机无内核源码；
-   定位轮回的是 `net/ipv4/tcp.c:1481` 那一段，**不是** `tcp_send_dupack` 本身）。
-   **两条分支都回真窗**（丢+dup-ACK / 接受+ACK），所以**主判据不依赖这个分叉**；但读数解释会不同
-   （后者会让 `snd_una +1`）。**证伪法**：P-A 注入后 pcap 里看"探询 → 对端应答"的**方向相反双臂**。
-2. ⛔ **微窗（`0 < snd_wnd < MSS`）不在本刀覆盖范围**：MW9 的 `eff = 832` 形态**不会**触发本刀（武装条件 = `snd_wnd == 0`）。
-   该形态的候选修法 = **重放/探询段按窗分片**（`plen_preset`（`:660`）由 `min(ring_delta, 1460)` 扩成
-   `min(ring_delta, 1460, eff)`，`win_wnd_eff` 输入**已经就位**但当前"仅供 debug"）—— 一行量级，**但动的是重放机**，
-   必须另立一轮（含自己的门与 §4 的安全论证）。⇒ **本刀 + 该支 = 家族收口；本刀单独 ≠ 家族收口**。
-3. **范围外一格**：`snd_nxt == snd_una`（无在飞）且 `snd_wnd == 0` 且 app 有数据 —— 本刀**不发探询**（无旧数据可重传；
-   发"1 字节新数据"要动 app 流/LFSR，风险不划算）。**登记理由**：该档在标准里**通常自愈**（对端 app 一旦读走数据，
-   `__tcp_cleanup_rbuf` 会发窗口更新 ⇒ 我们拿到真窗）。**证伪法**：若板级出现"该档下 ≥N 秒不恢复"的 stall ⇒ 本结论错，另立修法。
-4. **`blocked`/`epoch` 保持原样** ⇒ "第二把锁"在**重放侧**仍然存在（本刀**绕开**它，不修它）。若日后要做 RFC 的
-   "照常重传旧数据"那一支，按 §1.3-C1 落地（含模式位）。
-5. ⚠️ **依据出处层级（必须随引用一起走）**：RFC 1122 §4.2.2.17 的逐字条文，本件只拿到 **WebSearch 摘要**
-   （Open Group 的 RFC 1122 复现页 + TCPM 议程页 "Probing of zero (offered) windows MUST be supported (MUST-36)"，
-   以及"首探询在 RTO 期之后 / 指数退避"两句）；**本机 WebFetch 被网络策略拒绝**（`rfc-editor.org` / `datatracker.ietf.org` 均不通）
-   ⇒ **"5 s → 60 s"这一具体阶梯 = 经典实现惯例，不是 RFC 条文**；定位轮引的"SHOULD retransmit the old data normally"
-   一句本件**未能回原文复核**。引用时请带这一条。
-6. **app 层超时 vs "永不放弃"**（§3.3 边界）：本刀不改 `app_ctrl` 的连接拆除语义 ⇒ 长时间零窗时，
-   若 app 超时先拆连，persist 会随之结束。**是否应让 app 的超时对"正在 persist 的连接"让位 = 需裁定**（不在本刀范围）。
-7. **板级零窗造法的独立性**：P-A（raw 注入）**独立于台架开关** ✅，但它注入的是**伪造的** ACK（对端 socket 其实是健康的）
-   ⇒ 它测的是"探询机制 + 自愈"，**不是**"对端真的长时间零窗"（后者需 P-C）。⇒ 两条都要跑，**不许用 P-A 的结果替 P-C 的结论**。
-8. **本件全部数字为纸面**：无综合、无时序、无门、无板级；FF 估算 ±20%；`PS_BASE/PS_MAX` 的**具体档值**可否被 TL 改
-   （例如改成 1 s 起点以缩短验收时间）**属裁定项**（改档 = 改常量 ⇒ #64：会**确定性**改变网表/时序，需重新构建一次）。
-9. **我没解决的**：探询槽与 `wu` 通路的**优先级次序**（本件定"ACK 队 > 探询 > wu 由既有 mux 决定"，未逐表推演 wu 的
-   溢出/饥饿面）；`probe_sel` 上线时 `rb_state` 守卫给 `rb_id` mux 加 arm 的**时序代价未量**（§8.2-② 只给了查法）。
+1. ⚠️ **对端对"1 字节旧数据"的精确应答形态未实测**：依据 = "对端栈对旧/窗外数据必回 ACK"的**推断**
+   （Linux `tcp_send_dupack` / challenge-ACK 两条分支 —— ⚠️ **本件未回内核源码逐字核它**：本轮禁 ssh、本机无内核源码）。
+   **两条分支都回真窗** ⇒ **主判据不依赖该分叉**；但读数解释不同（后者会让 `snd_una +1`）。**证伪法**：P-A 注入后 pcap 看"探询 → 应答"两臂。
+2. ⛔ **微窗（`0 < snd_wnd < MSS`）不在本刀覆盖范围**（MW9 的 `eff = 832` 形态**不会**触发本刀）。
+   候选修法 = 重放/探询段**按窗分片**（`:660 plen_preset` 由 `min(ring_delta, 1460)` 扩成 `min(…, eff)`；`win_wnd_eff` 输入**已就位**但当前"仅供 debug"）
+   —— 一行量级、**但动重放机**，必须另立一轮（含自己的门 + §4 安全论证）。
+   ⭐ **新线索（本日 sinkfix 轮）**：修复臂的 sink **`SYN.win = 2920`**（`peer_verify/REPORT.md:59-60`）⇒ **"SYN 就小"是一条稳定的微窗/零窗造法**，比"先大窗再塌"可靠。
+   ⇒ **本刀 + 该支 = 家族收口；本刀单独 ≠ 家族收口**。
+3. **范围外一格**：`snd_nxt == snd_una`（无在飞）且 `wnd == 0` 且 app 有数据 —— 本刀**不发探询**（无旧数据可重传；发"1 字节新数据"要动 app 流/LFSR，风险不划算）。
+   理由：该档通常**自愈**（对端 app 读走数据 ⇒ `__tcp_cleanup_rbuf` 发窗口更新）。**证伪法**：板级出现"该档 ≥N 秒不恢复"的 stall ⇒ 本结论错。
+4. **`blocked`/`epoch` 保持原样** ⇒ "第二把锁"在**重放侧**仍存在（本刀**绕开**，不修）。
+5. ⚠️ **RFC 引文出处层级**：RFC 1122 §4.2.2.17 的逐字条文，本件只拿到 **WebSearch 摘要**（Open Group 的 RFC 1122 复现页 + TCPM 议程页 MUST-36 + "首探询在 RTO 期之后 / 指数退避"两句）；
+   **本机 WebFetch 被网络策略拒绝**（`rfc-editor.org` / `datatracker.ietf.org` 均不通）⇒ **"5 s→60 s" 具体阶梯 = 经典实现惯例、不是 RFC 条文**；
+   定位轮引的"S…D retransmit the old data normally"一句**未能回原文复核**。引用必须带这一条。
+6. **app 层超时 vs "永不放弃"**（§3.3 边界）：是否让 app 超时对"正在 persist 的连接"让位 = **需裁定**（不在本刀范围）。
+7. **板级零窗造法的独立性**：P-A 独立于台架开关 ✅，但注入的是**伪造的** ACK（对端 socket 健康）⇒ 它测"探询机制 + 自愈"，**不是**"对端真长时间零窗"。
+   **本刀定案后新增（TL 跨件条）**：P-C 的"历史小窗"**必须显式 `--rcvbuf-after-connect`**，且**不许依赖"事后会塌"** ⇒ 两条都要跑，**不许用 P-A 的结果替 P-C 的结论**。
+8. **本件全部数字为纸面**：无综合、无时序、无门、无板级；FF 估算 ±20%；`PS_BASE/PS_MAX` 的具体档值可否改（如改成 1 s 起点以缩短验收）**属裁定项**（#64：改常量会**确定性**改变网表/时序，需重新构建一次）。
+9. **我没解决的**：① **J9 残留**（§2.4-6/§5.2-Ⅳ）的可达性 = 未定，门里可见但本件不给结论；② 探询槽与 `wu` 通路的**优先级次序**我只写"由既有 mux 决定"，未逐表推演 wu 的饥饿/溢出面；
+   ③ `!fin_sent_r/!rst_sent_r` 之外的**第三类 seq 预留**（SYN-ACK 的 `+1`）只做到"证明无害"（seq < 对端 `rcv_nxt` ⇒ dup-ACK），未做构造性实验。
