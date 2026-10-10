@@ -5987,6 +5987,45 @@ unpaced 上行 **4,058.033 / 4142.682 / 4133.629 Mbps**（vs Build 1 锚 1110.87
   两处**陈旧注释**（`_proj_pcie/p7b_gate4_accept.sh:67-69` 与 `p7b_biz/p7b_snap.sh:55-58` 仍写"现役 = 65 字 / `0x17`"）**未清** —— 该两文件的**默认值**本身已同步（断言 C 全 OK），**注释与默认值自相矛盾**。
   逐条 = `_proj_10g/notes/P7B_OPEN_ITEMS.md`（由本轮并行文档轮刷新；⚠️ **引用前现读**）。
 
+## 2026-10-11 P7b 缺陷收口（重放越界 0x1C）+ persist 刀（0x1D）构建与板级 A/B + snd_wnd 守卫 + M1 设计
+
+> 四条线：**缺陷刀 0x1C**（重放越界缺陷 RTL 修复 + 构建 + 板级 S-0 轮）· **persist 刀 0x1D**（发送侧零窗探询 + P-1 修复 + 构建 + 板级 A/B **正结果**）·
+> **snd_wnd 守卫**（实施 + 门四臂）· **新里程碑 M1**（SFP+→板上栈→PCIe→驱动→PC 数据通路；设计件 v2 + 对抗审查）；另含**读侧同步链式落盘**与**台架 sinkfix 收尾**。
+> 原件 = `_proj_10g/notes/p7b_build_0x1C/REPORT.md` · `p7b_build_0x1D/REPORT.md` · `p7b_defect_board_20261011/REPORT.md` · `p7b_persist_board_20261011/REPORT.md` ·
+> 审查 = `p7b_persist_impl_review_20261011/{FINDINGS,FINDINGS_DYNAMIC}.md` · `p7b_sndwnd_review_20261011/FINDINGS.md` · `p7b_pcie_datapath_review_20261011/FINDINGS.md` ·
+> 设计件 = `P7B_PERSIST_DESIGN.md`(v3) / `P7B_SNDWND_GUARD_DESIGN.md` / `P7B_PCIE_DATAPATH_DESIGN.md`(v2) / `P7B_RETXHI_GHOST_DESIGN.md`(v3)；总记录 = `P7B_TL_LEDGER_20261010.md` **§9 + §10**。
+> 提交 = 缺陷刀全链 `fd880e2`→`8f8a727` · `420230e`（0x1C 构建）· `6b7d00e`（P-1 修复）· `bd44490`（S-0 板级）· `a38d4a4`（snd_wnd）· `1d28539`（读侧链式）· `49564a7`（0x1D 构建）· `29c333b`（persist 板级 A/B）。
+> **板上现役 = 0x1D（BID `0x1d`）+ `0x08 = 0` + `carrier = 1`**（收尾重烧 03:33）。
+
+- **① 缺陷刀（重放越界）全链收口，端点是"板级不可触发"**：缺陷本体 = 重放路径把"本圈未写过的环地址"当数据发出（线上出现【上一圈】字节；两个形态 = 顶部漂移 / 区间内洞）；
+  机制关死 = `rtl/tcp_tx_frame.v:636` 的 `upd_wr_ctrl ? (rb_snd_nxt + 32'd1)` 逐笔累积（决定性读数 `nxt_minus_wrhi = 21 = ctrl_n(22) − 1`）。
+  修复 = **双分支镜像**的 `whi_r`/`ring_hi` 写口高水位 + `ring_ovf` 钳位 + `ring_restore` 收尾恢复写；构建 **0x1C** = 位流 `09c280e464a4296ebaa531e777675ed88611534e6ddfdae02584d051b308ecbf`（15,431,261 B）/
+  `WNS +0.262 / WHS +0.010 / 三类失败端点 0/0/0` / 矩阵 17/17 FROZEN；⭐ **DP 新族**（`whi_r` 512 cell from 2.608 / `ring_hi` 39 cell from 2.101）**前 10 / 前 50 里 0 命中**。
+  ⚠️ **一条"看着像新族"的假线索被定向网查询判掉**：DP 路径里的网 `u_tcp_tx/ring_restore1` **不是** RTL 的 `ring_restore` —— 其驱动全是 `fc_rr_reg[3]_i_{10,9,8}` 的 **CARRY8 进位输出**、负载全是同一 LUT5 ⇒ **opt/synth 的网名归并产物**（机理未定位）⇒ **凭网名判"某族进关键路径"会错**（同族：`ring_ovf12_out[31]` · `ps_rd_d2` 挂到 `u_slow_cfg` 下）。
+- **② 板级 S-0 轮 = 重量级否定结果：abort(RST) 板不可达**：CMD 语义在（`rtl/app_ctrl.v:41` `0x06 W: CMD … 2 = abort`），**但总线没接** —— `board/wrapper_p4.v:1319-1322` 逐字（注释"板级无 CPU/AXI; **将来接 AXI-Lite 桥**" + `app_reg_addr=8'h00` / `app_reg_wr=1'b0` / `app_reg_wdata=32'd0`，全文件仅此三处赋值）；
+  另一条 `rst_req` 源（G2 关闭超时）要求 framer 真发过 FIN，而 build F 是 `TX_CONTINUOUS=1` ⇒ 永不 close ⇒ 不武装。
+  板级印证：S0A 全窗控制帧普查（53 s / tcpdump 自报 0 丢包）**21 包全是对端→板**、6 连接逐连 `fin=0 rst=0` ⇒ **板侧 FIN/RST = 0** ⇒ **形态①【未观测到】**（⛔ 不写"不存在"）。
+  正面读数 = 相位校正后 **400 MB / 274,391 段 `breaks=0`** + 同 seq 内容 0 变化 + 无洞 + 上一圈自比 = 随机率；⚠️ 但**触发缺席 ⇒ `mism_bytes=0` 对幽灵是空判据**。**处置 = 跳烧 0x1C**（触发不可达 ⇒ S-1 同构型必同结论，省一整轮板级）⇒ 内容面主判据 = xsim 侧。
+  ⚠️ **未来风险（新）**：M1 **若把 app 寄存器总线接上 ⇒ abort 变可达 ⇒ 幽灵重新板级可达** ⇒ **0x1C 的修复正是那道防线**（M1 实施时须复核）。
+- **③ persist 刀 = 实现 + P-1 修复 + 构建 0x1D + 板级 A/B 正结果**：RTL = `PERSIST_EN/PS_BASE/PS_MAX`（三参数、默认关）+ 探询段 + 退避阶梯（**RFC 1122 §4.2.2.17 MUST-36**）；P-1 修复 = 捕获块前移 + `cfg_up` 同 id 支清 `ps_rd_d1/d2`（D7A 实测 `rdy_survive` 7→0）。
+  构建 **0x1D** = 位流 `b48dc7ee7ddb7df2a057fdae324dbf302c5adc6f430a413e0bce0e3a25ee0b1f`（15,431,261 B）/ `WNS +0.067 / WHS +0.010 / 三类失败端点 0/0/0` / 矩阵 17/17 FROZEN；⭐ **全局 WNS 宿主换成 DP 域**（`tick_cnt_reg[2] → snd_wnd_r_reg[4][12]/CE`，lvl=16）⇒ DP setup `+0.300 → +0.067`。
+  **板级 A/B（P-A 构型 = 窗口锁 0 + 在飞 > 0 + 对端 raw 注入 win=0）**：**负臂 0x1C = 3 跑 0 条探询** vs **正臂 0x1D = P1 3 条 / P5 10 条**；探询帧全 **55 B**（去以太填充 = 14+IP 41）/ `len==1` / flags `0x18` / **`seq` 逐位 == 对端同期 ACK 的 `ack`** / **payload == 图案流该 seq 字节（3/3 MATCH）**；
+  每条探询后 **8.8 / 13.1 / 44.1 µs** 对端回 **`win=832`（非 0）**；**阶梯 = 20 ms/5/10/20/40/60 s** 单调 + 封顶 60 s = 设计真值表逐档命中（`5.000 s` 反证 `1 visit = 1.6384 µs`）；正臂 4 跑 `first_mismatch=-1 / mism_bytes=0`（相位 0）+ 4 GB 长流零失配。**两位流均无 snd_wnd 守卫（复核成立）**。
+  ⛔ **未观测项如实列**：注入→首探询不可测（探询落在开流竞态**天然窗**内；等价格 = 武装→首探询 20.00 ms）· `W58` 无有效见证（0.1 s 采样结构性看不见 µs 级会话）· 微窗 832 = **判据弱环** · capC 被 `-c 400` 截顶（在飞量只给下界）· 负臂阶梯对照 N4 未入武装态。
+- **④ snd_wnd 守卫 = 实施完成 + 门四臂全绿；⛔ 未进任何位流**：`rtl/tcp_rx.v` +21/−3（`SNDWND_GUARD = 1'b1` + `:526`/`:536` **成对**守卫；谓词 = `ackok_l`，**禁用 `ack_adv_l`（会打死零窗恢复）/ `dup_l`**）；提交 `a38d4a4`（cherry-pick 自 worktree；**在 0x1D 构建之后** ⇒ 0x1C/0x1D 均不含）。
+  门 `sim/p3sim_sw/run_sndwnd_gate.bat`（四臂 × 三模式，RC=0）：FIXED 全绿 · LEGACY **`XFAIL-REPRODUCED`**（`wnd1=0100 wnd2=1100`）· MUTANT（改 `ack_adv_l`）⇒ **腿 B1 红** · DROPA ⇒ **腿 A 红**；worktree 矩阵 **12/12 EXIT=0 + `gate4096` + FROZEN**。
+  ⚠️ **排批后果**：守卫默认 = 1 ⇒ 后续任何构建都带守卫 ⇒ `stall_probe.py` 注入器的 ack 必须先按"注入时刻的 `snd_una..snd_nxt`"改造（本轮已把注入的 (ack,win) 原始值落档备用）；⚠️ **`p3sim` 门 HEAD 即 `RC=1`（既存红）**，新门把它写成"签名不变"断言。
+- **⑤ 新里程碑 M1（用户 2026-10-11 指令）= SFP+ → 板上 IP 栈 → PCIe → 驱动 → PC 程序接收；⭐ 载荷不限于 TCP**：设计件 **`P7B_PCIE_DATAPATH_DESIGN.md` v2**（872 行 = v1 逐字保留 + v2 修订块 232 行；S1–S13 全处置）+ 对抗审查（45 项事实核：**对 40 / 需限定 5 / 错 0**；S1 = `rd_pop` 字号算错 8 个 = 阻断，v2 已采纳）。
+  ⭐ **端点事实 = XDMA 4.2 AXI-MM，1×H2C + 1×C2H 引擎本就在 IP 里、被 wrapper 钉死（`wrapper_p4.v:3995-4013`）⇒ 走 C2H 不用重生成 IP、不动 BAR、无许可缺口**；候选 = user BAR 窗口搬运（阶段一，≈4–10 MB/s）/ C2H DMA（阶段二，≈1.7 GB/s）；
+  M1 = "TCP 载荷镜像窗"（tap `app_rx_*` → XOR 0xA5 → `fifo_async` → `axi_regs` 新读口 → PC 轮询落盘 + 逐字节/计数对账）；**实施前"4 建 6 定"**（未实现地址 = **`0x148`**）；⚠️ **UDP 变体打到 8080 会被 HLS `udp_echo` 吞掉**（板 app UDP 口 = 8081）。
+- **⑥ 构建取证纪律又收两笔**：**F 档 dcp 欠账结项** —— 全盘找到 `wrapper_p4_routed.dcp`（60,011,449 B / sha `737a1418…`；归属双证 = impl_1 的 bit sha 与 `F/SHA256SUMS.txt` 逐字同 + 全盘尺寸唯一）抢救进 `p7b_buildF_build/F/`（17 件）；0x1C/0x1D 两轮预归档步（`ARCHIVE_DONE 20261011_002044 files=19` / `20261011_015829`）又与上一档重叠 15 条逐字相同（0x1D 轮内还核了 0x1C 位流逐字）⇒ **"每次构建摧毁上一轮取证"（#54）的防线本次实测生效**。
+- **⑦ 读侧同步链式落盘（`1d28539`）**：`EXPECT_BID 0x1A→0x1C→0x1D` 两阶段各 `APPLY_READSIDE_BID OK (24 edits / 0 fail)`（14 文件）；GEOM_TIERS 70 字代现 3 行。
+  ⭐ 顺带**抓到并修掉同步脚本自身的一处假 FAIL**：前置门假设"旧串必须消失"，而 GEOM_TIERS 是"**插入新行 + 逐字保留旧行**"型编辑 ⇒ **必然假红**；订正 = 判"前置已落盘"的充分条件改为 **`new_hits ≥ 1`**（old 命中只作信息打印）—— **对"插入型编辑"用"旧串必须消失"是错判据**。
+- **⑧ 台架侧两件收尾**：① **sinkfix**（`p7b_tcp_sink.cpp`）：`SO_RCVBUF` 原来落在 `connect()` **之后**（先通告大窗再塌 ⇒ 板初突发被对端自己授权 ⇒ 小缓冲被冲掉 = 微窗 stall 的最强候选触发变量）；修 = 新增 `--rcvbuf-after-connect`（**默认 = `before_connect`（修复后）**）+ `SINK_RCVBUF_ORDER` 见证行；本机 10 判据 + 7 对照全红/全绿、回环演示"旧臂 SYN win=65535 后塌"直接复现；`p7b_tcp_sink_rate.cpp` 同族修复（+42/−5，16/16 自检）。② **BUILD.md §3 指纹整表刷新**（8 失配全解释；新坑 = **源文件名是产物的一部分**）。
+- **⑨ ⛔ 未结项（不许当已收口）**：**snd_wnd 守卫待构建（0x1E）** · **F-3 未修** · **Build G 未做**（设计件 v2 未回写）· **缺陷刀 R1–R5 登记不修** · **`tick_cnt` 源族跨网表大移位**（0x1C `dp_top50` 0 命中 → 0x1D **141 命中**；**无拆刀臂 ⇒ 判不了**）· **`ctrl_probe` 网表无名（NOCELL）= 未定位** · **`p3sim` 既存红** · M1 全部未实施（零构建；mmap/pread 读法**先定再选 K**）· 缺陷刀 `TX_OVL_GATE: FAIL count=1`（S 臂 4 红已逐条归因，**未放宽任何判据**）。
+  逐条 = `_proj_10g/notes/P7B_OPEN_ITEMS.md`（2026-10-11 总订正轮已刷新，现 **34 行**；⚠️ **引用前现读**）。
+- ⚠️ **行号订正（现读 2026-10-11 / 0x1D 后）**：别名五行 = `board/wrapper_p4.v` **`:2788-2792`**（订正注释 `:2786-2787`）—— 上一节（构建 F 轮）写的 `:2784-2788` **已过时**（0x1D 构建的 `:2144-2158` 注释块又 +4 行）；完整位移链 = 修复前 `2771-2775` → `faee172` `2773-2777` → `fd671b6` `2779-2783` → 0x1C `+5` → **0x1D `+4` ⇒ `2788-2792`**。app 总线钉死 4 行 = `:1319-1322`（本轮现读）。
+
 ## 2026-09-30 README 重写时移出的历史内容 (原 README.md 全文逐条保留)
 
 > **本节是 README.md 结构性重写时的「移出件」，不是新的施工记录。**
