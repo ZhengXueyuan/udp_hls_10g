@@ -2173,8 +2173,14 @@ module tcp_tx_frame (
             // ⭐ 构建 F: W67 (板帽侧那一份) + W69 (操作点锁存)
             if (stat_winstall_cap_ev) stat_winstall_cap <= stat_winstall_cap + 32'd1;
             if (stat_winstall_ev) o_win_at_winstall <= {win_inflight, win_wnd_eff};
-            // ⭐ RETXHI-GHOST: 数据端高水位 (仅活帧; ring 重放帧 is_data_r 亦为 1 ⇒ 必须门掉)
-            if (upd_wr && is_data_r && !retx_active)
+            // ⭐ RETXHI-GHOST: 数据端高水位 —— 只在**数据推进写**那一支 (TL 裁定 ②):
+            //   对齐 OVL 支的 `upd_wr_data` 语义 (那支 = "该帧推进写那一拍"; 本支同构项 =
+            //   S_DONE 数据段 +(tvalid&tready) 落笔拍)。⛔ 不能用 `upd_wr`: 它含 `svc_rewind`
+            //   拍, 而那拍 `upd_val` 取 `rb_snd_una` (非数据支) ⇒ 会用**上一帧的 `seq_r+plen_r`**
+            //   刷 `whi_r[cur_id]` (与"环里真写出过的最高 seq"语义不符)。
+            //   ring 重放帧亦置 `is_data_r=1` ⇒ 仍靠 `!retx_active` 门掉 (会话期无活帧)。
+            if ((state == S_DONE) && is_data_r && m_axis_tvalid && m_axis_tready &&
+                !retx_active)
                 whi_r[cur_id] <= seq_r + {20'b0, plen_r};
             // svc 优先编码寄存器化 (P6 时序, 见 svc_id 声明注释): 每拍刷新,
             // svc 拍消费上拍编码 — rto_pend 置位到 svc 至少隔 1 拍 (扫描拍
