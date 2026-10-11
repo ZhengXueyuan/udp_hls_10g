@@ -3705,19 +3705,26 @@ module wrapper_p4 (
     // =====================================================================
     // ⭐ M1 (2026-10-11): 载荷镜像 (app_rx_mirror) —— **三层宏: APP_MODE ∧ PCIE_OBS ∧ DP_156MHZ**
     // ---------------------------------------------------------------------
-    // tap = UDP app RX 口 (`app_udp_rx_*`, 由 `u_udp_split` 驱动)。
-    //   ⚠️ **判据前置**: UDP app 端口 = **8081**; 8080 被 `udp_split.EXCL_PORT` 排除留给 HLS
-    //      udp_echo ⇒ **打到 8080 的 UDP 帧进不了本 tap**, 现象 = "镜像窗零字节"。
+    // tap = **可选的 app RX 口** —— 期 A 起由 `MIR_CTRL[2] = src_sel` 选 (默认 0 = UDP):
+    //   · src_sel=0 → **UDP** app RX 口 (`app_udp_rx_*`, 由 `u_udp_split` 驱动) = 阶段一行为;
+    //   · src_sel=1 → **TCP** app RX 口 (`app_rx_*` = `eco2_*`, `:1079-1085` 的别名) —— 结构同款
+    //     (64b + keep + last + tid; UDP 侧多 sof/len 两条边带, 镜像模块不消费它们)。
+    //   ⚠️ **判据前置 (UDP 路)**: UDP app 端口 = **8081**; 8080 被 `udp_split.EXCL_PORT` 排除留给
+    //      HLS udp_echo ⇒ **打到 8080 的 UDP 帧进不了本 tap**, 现象 = "镜像窗零字节"。
+    //   ⚠️ **同一时刻只镜像一路** (派单裁定; 同时双路 = 范围外)。切换协议 = 在 cap_en=0 下写 src_sel,
+    //      然后重走 `clr → cap_en=1` —— **cap_en=1 中途切换会让字节流跨源拼接** (累加器不 flush;
+    //      与 cap_en 中途开关同一已知语义边界, 登记)。
     // 链: 逐字节 ^0xA5 → 打包 32 位字 → fifo_async (dp_clk → pcie_axi_aclk; 两侧 reset_n)
     //     → `axi_regs` 的 MIR 读口 (MIR_STATUS/MIR_DATA 读=弹出/MIR_CTRL)。
-    // ⛔ **snoop**: 只采样 `app_udp_rx_tvalid && app_udp_rx_tready`, **不驱动**任何既有信号
+    // ⛔ **snoop**: 只采样**选中源**的 `tvalid && tready`, **不驱动**任何既有信号
     //   (s_tready 在镜像模块里是只读输入) ⇒ 对既有数据面逐位零影响。
     // ⛔ ¬(APP_MODE ∧ DP_156MHZ) ⇒ 全部接**常量** (v2 §V1.4 的 tie-off 常量表: level=0/empty=1/
     //   dout=0/any_drop=0/drop(W70)=0) —— "新增端口在默认路径上必须是常量"(CLAUDE.md 同款纪律)。
     //   ⚠️ 两个门各编一面: `board/run_lint_p6e.bat` (PCIE_OBS+APP_MODE, **无 DP_156MHZ**) 编 tie-off 支;
-    //      `sim/p6e_pcie/run_tb_p6e_pcie.bat` (+DP_156MHZ) 编真支并逐条判 S1 六条断言。
-    // ⚠️ 为什么不用 `app_rx_*` (TCP 口): 本阶段按用户裁定 **UDP 先做** (TCP 结构相同 ——
-    //   `app_rx_mirror` 是源无关的; 换 tap/加 tap 是同一个模块的另一个例化点, 见 M1 报告)。
+    //      `sim/p6e_pcie/run_tb_p6e_pcie.bat` (+DP_156MHZ) 编真支并逐条判 S1 六条断言 + M1-10 期 A 组。
+    // ⚠️ **src_sel 的 CDC**: `mir_ctrl` 在 pcie 域 (axi_regs) ⇒ 本块内 **2FF 电平同步**到 dp 域
+    //   (与 cap_en 同款; 单 bit 慢变电平 = 标准做法)。⛔ 同一条纪律: 新增 CDC 一律登记
+    //   (本条 + 阶段一的两条 = M1 的三条 dp↔pcie 控制 CDC; 载荷/level/sticky 各有自己的通道)。
     // =====================================================================
 `ifdef APP_MODE
 `ifdef DP_156MHZ
@@ -3726,16 +3733,28 @@ module wrapper_p4 (
     wire [31:0] mir_dout;           // = u_mir.dout (FWFT 头字)
     wire        mir_any_drop;       // = u_mir.any_drop_rd (dp sticky 的 rd 域 2FF 版)
     wire        mir_pop;            // ← axi_regs.mir_pop (读=弹出脉冲)
-    wire [31:0] mir_ctrl;           // ← axi_regs.mir_ctrl ([0]=cap_en [1]=clr toggle)
+    wire [31:0] mir_ctrl;           // ← axi_regs.mir_ctrl ([0]=cap_en [1]=clr toggle [2]=src_sel)
     wire [31:0] biz_w70;            // W70 = drop_bytes (dp 域寄存器输出 → p7bdp 槽 30)
+    // ---- ⭐ 期 A: src_sel 的 pcie→dp 2FF + 源 mux (snoop 五线: tdata/tkeep/tvalid/tready/tlast) ----
+    (* ASYNC_REG = "TRUE" *) reg [1:0] mir_src_sr;
+    always @(posedge dp_clk or negedge reset_n) begin
+        if (!reset_n) mir_src_sr <= 2'b00;
+        else          mir_src_sr <= {mir_src_sr[0], mir_ctrl[2]};
+    end
+    wire        mir_src_sel  = mir_src_sr[1];     // dp 域稳定电平 (复位默认 0 = UDP)
+    wire [63:0] mir_s_tdata  = mir_src_sel ? app_rx_tdata  : app_udp_rx_tdata;
+    wire [7:0]  mir_s_tkeep  = mir_src_sel ? app_rx_tkeep  : app_udp_rx_tkeep;
+    wire        mir_s_tvalid = mir_src_sel ? app_rx_tvalid : app_udp_rx_tvalid;
+    wire        mir_s_tready = mir_src_sel ? app_rx_tready : app_udp_rx_tready;   // ⚠️ 只读采样
+    wire        mir_s_tlast  = mir_src_sel ? app_rx_tlast  : app_udp_rx_tlast;
     app_rx_mirror #(.XORC(8'hA5)) u_mir (
         .clk          (dp_clk),
         .rst_n        (reset_n),
-        .s_tdata      (app_udp_rx_tdata),
-        .s_tkeep      (app_udp_rx_tkeep),
-        .s_tvalid     (app_udp_rx_tvalid),
-        .s_tready     (app_udp_rx_tready),   // ⚠️ snoop: 只读采样
-        .s_tlast      (app_udp_rx_tlast),
+        .s_tdata      (mir_s_tdata),
+        .s_tkeep      (mir_s_tkeep),
+        .s_tvalid     (mir_s_tvalid),
+        .s_tready     (mir_s_tready),        // ⚠️ snoop: 只读采样
+        .s_tlast      (mir_s_tlast),
         .ctrl_cap_en  (mir_ctrl[0]),
         .ctrl_clr_tgl (mir_ctrl[1]),
         .rd_clk       (pcie_axi_aclk),
@@ -3744,6 +3763,12 @@ module wrapper_p4 (
         .dout         (mir_dout),
         .empty        (mir_empty),
         .level        (mir_level),
+        // ---- ⭐ 期 B 的 aux 读口: **本期未接线** (停在"只接读通道是否安全"门, 见本轮报告 §④) ----
+        //   ⛔ 不接时**必须显式 tie 0**: 悬空输入 = Z ⇒ `dma_gnt_i` 变 X ⇒ `rd_go` 变 X ⇒
+        //      阶段一全部 level 判据翻红 (2026-10-11 实测: 悬空时 p6e 全链门 20 项失败)。
+        .dma_req      (1'b0),                // 期 B 未接线: 排空器不存在 ⇒ 恒 0
+        .dma_gnt      (),                    // (输出, 无消费者)
+        .clr_pulse_rd (),                    // (输出, 无消费者; 期 B 接环的清零)
         .drop_bytes   (biz_w70),
         .any_drop     (),                    // dp 域 sticky (无消费者; 读域版走 any_drop_rd)
         .any_drop_rd  (mir_any_drop)

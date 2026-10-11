@@ -113,6 +113,10 @@ module tb_p6e_pcie_wrapper;
     reg        mi_valid = 1'b0;
     integer    mi_i;
     reg [31:0] mi_w70a, mi_w70b;
+    // ---- ⭐ M1 期 A (2026-10-11): TCP 口 (app_rx_*) 注入驱动器 (src_sel 判据用) ----
+    reg [63:0] mt_data  = 64'd0;
+    reg [7:0]  mt_keep  = 8'd0;
+    reg        mt_valid = 1'b0;
 
     // M1 注入一拍 (dp 域; posedge + 非阻塞 ⇒ 与 DUT 采样的竞争为零, 工程坑 3/17)。
     //   ⚠️ 只由本 initial 块经 task 推进 —— **不另开 always 块驱同一批 reg** (多过程驱动铁律)。
@@ -120,6 +124,14 @@ module tb_p6e_pcie_wrapper;
         begin
             @(posedge u_dut.dp_clk); mi_data <= d; mi_keep <= k; mi_valid <= 1'b1;
             @(posedge u_dut.dp_clk); mi_valid <= 1'b0;
+            @(posedge u_dut.dp_clk);
+        end
+    endtask
+    // ⭐ 期 A: TCP 口注入 (同一驱动器风格, 独立 reg 组 —— 两路可以同拍打, 用来验"只镜像一路")
+    task tcp_beat(input [63:0] d, input [7:0] k);
+        begin
+            @(posedge u_dut.dp_clk); mt_data <= d; mt_keep <= k; mt_valid <= 1'b1;
+            @(posedge u_dut.dp_clk); mt_valid <= 1'b0;
             @(posedge u_dut.dp_clk);
         end
     endtask
@@ -497,7 +509,78 @@ module tb_p6e_pcie_wrapper;
         else begin $display("  [FAIL] M1-9a dW70 == 0 (爆发竟无拒收 => 计数字段或快照路径哑)"); fails = fails + 1; end
         u_dut.u_pcie_xdma.axil_read(32'h13C, v);
         chk("M1-9b any_drop_sticky == 1", {31'd0, v[17]}, 32'd1);
-        // 清场: clr → cap_en=0 (回退态) + 释放全部注入 force
+
+        // =====================================================================
+        // ⭐ M1 期 A (2026-10-11): src_sel 源选择 —— 正/负对照各半 (派单裁定文本)
+        // =====================================================================
+        // 判据设计 (每一条都带"该红时红"的对照):
+        //   M1-10a 读回: 写 MIR_CTRL[2] ⇒ MIR_STATUS[23] == 1 (源选择位真落进寄存器)
+        //   M1-10b 负对照: src_sel=1 (选 TCP) 时**打 UDP 口** ⇒ level 必须仍 0
+        //                  (未选中的那一源一个字节都不进镜像 —— 这就是"只镜像一路"的牙)
+        //   M1-10c 正:     src_sel=1 时打 TCP 口 ⇒ level==1 + 内容 == 手算锚
+        //   M1-10d 同拍双打: TCP+UDP **同拍** tvalid ⇒ 只有 TCP 进账 (1 字, 不是 2 字)
+        //   M1-10e 切回:   写回 src_sel=0 ⇒ 读回 bit23==0; TCP 被忽略 / UDP 进账
+        $display("  --- M1 期 A: src_sel source select (MIR_CTRL[2] / MIR_STATUS[23]) ---");
+        force u_dut.app_rx_tvalid = mt_valid;
+        force u_dut.app_rx_tkeep  = mt_keep;
+        force u_dut.app_rx_tdata  = mt_data;
+        force u_dut.app_rx_tlast  = 1'b0;
+        force u_dut.app_rx_tready = 1'b1;
+
+        // M1-10a: 切源协议 (cap_en=0 下切 → clr → cap_en=1) + 读回
+        u_dut.u_pcie_xdma.axil_write(32'h144, 32'h6);       // clr=1 + src_sel=1 (cap_en=0)
+        u_dut.u_pcie_xdma.axil_write(32'h144, 32'h5);       // cap_en=1 + src_sel=1
+        repeat (600) @(posedge u_dut.u_pcie_xdma.aclk);     // 等 clr 的排空式冲刷跑完 (≤256 字)
+        u_dut.u_pcie_xdma.axil_read(32'h13C, v);
+        chk("M1-10a1 src_sel readback == 1", {31'd0, v[23]}, 32'd1);
+        chk("M1-10a2 capture_on == 1", {31'd0, v[18]}, 32'd1);
+        chk("M1-10a3 clr 后的 level == 0", {16'd0, v[15:0]}, 32'd0);
+        // M1-10b: 负对照 —— 选 TCP 时打 UDP (3 字) ⇒ level 必须仍 0
+        mir_beat(64'h0102030405060708, 8'hF0);
+        mir_beat(64'h1112131415161718, 8'hF0);
+        mir_beat(64'h2122232425262728, 8'hF0);
+        repeat (60) @(posedge u_dut.u_pcie_xdma.aclk);
+        u_dut.u_pcie_xdma.axil_read(32'h13C, v);
+        chk("M1-10b UDP 未被选中 => level 仍 0", {16'd0, v[15:0]}, 32'd0);
+        // M1-10c: 正 —— 打 TCP (1 字: 01 02 03 04 ^A5 = a4 a7 a6 a1) ⇒ level==1 + 内容
+        tcp_beat(64'h0102030405060708, 8'hF0);
+        repeat (60) @(posedge u_dut.u_pcie_xdma.aclk);
+        u_dut.u_pcie_xdma.axil_read(32'h13C, v);
+        chk("M1-10c1 TCP 被选中 => level == 1", {16'd0, v[15:0]}, 32'd1);
+        u_dut.u_pcie_xdma.axil_read(32'h140, v);
+        chk("M1-10c2 TCP 载荷字 == 0xA1A6A7A4", v, 32'hA1A6A7A4);
+        // M1-10d: 同拍双打 (TCP 11 22 33 44 + UDP aa bb cc dd, 同拍 tvalid=1) ⇒ 只 TCP 进账
+        begin : m1both
+            @(posedge u_dut.dp_clk);
+            mt_data <= 64'h1122334400000000; mt_keep <= 8'hF0; mt_valid <= 1'b1;
+            mi_data <= 64'hAABBCCDD00000000; mi_keep <= 8'hF0; mi_valid <= 1'b1;
+            @(posedge u_dut.dp_clk);
+            mt_valid <= 1'b0; mi_valid <= 1'b0;
+            @(posedge u_dut.dp_clk);
+        end
+        repeat (60) @(posedge u_dut.u_pcie_xdma.aclk);
+        u_dut.u_pcie_xdma.axil_read(32'h13C, v);
+        chk("M1-10d1 同拍双打 => level == 1 (只 TCP 进账)", {16'd0, v[15:0]}, 32'd1);
+        u_dut.u_pcie_xdma.axil_read(32'h140, v);
+        chk("M1-10d2 同拍双打 => 内容是 TCP 侧", v, 32'hE19687B4);
+        // M1-10e: 切回 UDP —— 写 0x2 = clr=1 & cap_en=0 & src_sel=0; 再 0x1 = cap_en=1
+        u_dut.u_pcie_xdma.axil_write(32'h144, 32'h2);
+        u_dut.u_pcie_xdma.axil_write(32'h144, 32'h1);
+        repeat (600) @(posedge u_dut.u_pcie_xdma.aclk);
+        u_dut.u_pcie_xdma.axil_read(32'h13C, v);
+        chk("M1-10e1 src_sel readback == 0", {31'd0, v[23]}, 32'd0);
+        tcp_beat(64'h3132333400000000, 8'hF0);              // TCP 现在未被选中
+        repeat (60) @(posedge u_dut.u_pcie_xdma.aclk);
+        u_dut.u_pcie_xdma.axil_read(32'h13C, v);
+        chk("M1-10e2 切回后 TCP 不进账 => level 0", {16'd0, v[15:0]}, 32'd0);
+        mir_beat(64'h5556575800000000, 8'hF0);              // UDP 又进账 (55 56 57 58 ^A5)
+        repeat (60) @(posedge u_dut.u_pcie_xdma.aclk);
+        u_dut.u_pcie_xdma.axil_read(32'h13C, v);
+        chk("M1-10e3 切回后 UDP 进账 => level 1", {16'd0, v[15:0]}, 32'd1);
+        u_dut.u_pcie_xdma.axil_read(32'h140, v);
+        chk("M1-10e4 UDP 载荷字 == 0xFDF2F3F0", v, 32'hFDF2F3F0);
+
+        // 清场: clr → cap_en=0 (回退态) + 释放全部注入 force (两路都放)
         u_dut.u_pcie_xdma.axil_write(32'h144, 32'h2);
         u_dut.u_pcie_xdma.axil_write(32'h144, 32'h0);
         release u_dut.app_udp_rx_tvalid;
@@ -505,6 +588,11 @@ module tb_p6e_pcie_wrapper;
         release u_dut.app_udp_rx_tdata;
         release u_dut.app_udp_rx_tlast;
         release u_dut.app_udp_rx_tready;
+        release u_dut.app_rx_tvalid;
+        release u_dut.app_rx_tkeep;
+        release u_dut.app_rx_tdata;
+        release u_dut.app_rx_tlast;
+        release u_dut.app_rx_tready;
 
         if (fails == 0) $display("PASS_ALL  tb_p6e_pcie_wrapper: 全链门全过");
         else            $display("FAIL      tb_p6e_pcie_wrapper: %0d 项失败", fails);

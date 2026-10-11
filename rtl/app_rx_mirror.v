@@ -66,6 +66,15 @@ module app_rx_mirror #(
     output wire [31:0] dout,            // FWFT 头字 (empty 时不定 —— 消费者按 empty 选哨兵)
     output wire        empty,
     output wire [8:0]  level,           // = fifo_async.dbg_occ_r (读域悲观占用)
+    // ---- ⭐ 期 B (2026-10-11): 第二条读出口 = DMA 排空器 (与主机"读=弹出"**共享**同一读口) ----
+    //   语义: `dma_req` 拉高时, 只要 FIFO 非空且本拍**没有**主机弹出, 就弹出一字 (`dma_gnt`=1,
+    //   同拍 `dout` = 被弹出的那个字)。⇒ **主机弹出优先** (同时请求时 drainer 让位, 下拍重试)。
+    //   ⛔ 未接线 (dma_req 恒 0) 时 rd_go 与阶段一**逐位相同** ⇒ 零回归。
+    //   ⚠️ 语义边界 (登记): cap_en=1 且 dma_req 常高时, FIFO 被 drainer 持续抽干 ⇒ 主机侧
+    //      `level`/`MIR_DATA` 读到的字与 drainer 抢同一队列 ⇒ **两条读出口不许混用**。
+    input  wire        dma_req,         // pcie 域: 排空器请求 (推荐 = dma_en && 恒 1)
+    output wire        dma_gnt,         // 1 拍: 本拍弹出了 (dout 同拍有效 = 该字)
+    output wire        clr_pulse_rd,    // clr 的 rd 域脉冲 (→ DMA 环: 清计数/写指针)
     // ---- 观测 (dp 域寄存器输出 ⇒ 满足 snap_cdc 的 din_b 前提) ----
     output reg  [31:0] drop_bytes,      // 未进 FIFO 的字节数 (两类合一口径; 见头注释)
     output reg         any_drop,        // sticky (dp 域; clr 清)
@@ -242,7 +251,16 @@ module app_rx_mirror #(
         else if (clr_pulse_r)                flush_r <= 1'b1;
         else if (flush_r && fifo_empty)      flush_r <= 1'b0;
     end
-    assign rd_go = flush_r ? !fifo_empty : rd_en;   // 冲刷优先于主机读
+    // ⭐ 期 B: 两条读出口的仲裁 —— 冲刷 > 主机弹出 > DMA 排空器 (drainer 让位, 下拍重试)
+    wire host_gnt_i = rd_en && !fifo_empty;
+    wire dma_gnt_i  = dma_req && !fifo_empty && !rd_en && !flush_r;
+    assign dma_gnt  = dma_gnt_i;
+    assign rd_go = flush_r ? !fifo_empty : (host_gnt_i || dma_gnt_i);   // 冲刷优先于一切读
+    // ⚠️ 未接线时 (dma_req=0 ⇒ dma_gnt_i=0): rd_go = flush ? !empty : (rd_en && !empty)
+    //    与阶段一的 `flush ? !empty : rd_en` 等价 —— `rd_en` (= mir_pop) 在 axi_regs 侧本就
+    //    与 !empty 同门 (v2 §V1.1 TL 硬要求), 这里把同一条件写实, 逐位无差。
+    // ⭐ 期 B: `clr` 的 rd 域脉冲引出 (给 DMA 环: 清零字计数器 + 写指针 ⇒ "逻辑字 0" 从这一刻起算)
+    assign clr_pulse_rd = clr_pulse_r;
 
     (* ASYNC_REG = "TRUE" *) reg [1:0] adrop_sr;
     always @(posedge rd_clk or negedge rd_rst_n) begin

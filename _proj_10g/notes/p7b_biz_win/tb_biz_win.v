@@ -245,8 +245,10 @@ module tb_biz_win;
         //   这里验: 地址映射 + 空读哨兵/underflow sticky + MIR_CTRL 写/读回 + clr 清 sticky
         //   + 未实现地址边界。**活体镜像**那一半由 sim/p6e_pcie/run_tb_p6e_pcie.bat 的全链门覆盖。
         axil_rd(32'h13C, v, resp);
-        chk("11a MIR_STATUS: level==0 / ver==1 / cap==0 / unf==0",
-            {v[31:23], v[22:19], v[18], v[16], v[15:0]}, {9'd0, 4'd1, 1'b0, 1'b0, 16'd0});
+        // ⛔ 2026-10-11 (M1 期 A): ver 1 → **2** (MIR 寄存区块加了 src_sel 位)。本判据的
+        //    切片 {v[31:23]} 现在**含** bit23 = src_sel (复位 = 0) ⇒ 期望值仍为 0。
+        chk("11a MIR_STATUS: level==0 / ver==2 / cap==0 / unf==0 / src_sel==0",
+            {v[31:23], v[22:19], v[18], v[16], v[15:0]}, {9'd0, 4'd2, 1'b0, 1'b0, 16'd0});
         chkresp("11b MIR_STATUS 读 rresp = OKAY", resp, 2'b00);
         axil_rd(32'h140, v, resp);
         chk("11c 空读 MIR_DATA = 哨兵 0x5A5A5A5A (响亮值)", v, 32'h5A5A5A5A);

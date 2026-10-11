@@ -49,12 +49,17 @@
 //                          未实现 = 0x148; ⛔ 本文件里这些数字一律由 localparam 推导。)
 //
 //   ---- ⭐ M1 (2026-10-11): 载荷镜像窗 (设计件 P7B_PCIE_DATAPATH_DESIGN v2 §V1.1/§V1.3) ----
+//   ⭐ M1 期 A (2026-10-11): `src_sel` —— 镜像的**源选择位** (0 = UDP app 口 /
+//      1 = TCP app 口; 电平; 复位默认 0 = 阶段一行为). 同一时刻只镜像一路 (同时双路 = 范围外)。
+//      ⚠️ 切换源的协议 = 与 cap_en 同款: **在 cap_en=0 下切, 切完走 clr → cap_en=1**
+//         (cap_en=1 中途切换会让字节流跨源拼接 —— 登记边界, 见 wrapper 的 M1 块注释)。
 //   0x13C RO     MIR_STATUS = 载荷镜像状态 (恰好 32 位):
 //                  [15:0] level    (= fifo_async.dbg_occ_r; 读域悲观少报 ⇒ 读 level 个字不下溢)
 //                  [16]   unf_sticky  (空读 MIR_DATA 的 sticky; 权威证据 = 它; clr 写清)
 //                  [17]   any_drop_sticky (镜像侧丢字节 sticky 的读域版; clr 写清)
 //                  [18]   capture_on (= MIR_CTRL[0], 主机写的同一域)
-//                  [22:19] ver = 4'd1 ([31:23] = 0)
+//                  [22:19] ver = 4'd2 ([31:24] = 0; ver 1→2: 期 A 加 src_sel)
+//                  [23]   src_sel 读回 (= MIR_CTRL[2] 的同一域直引 ⇒ 零新增 CDC)
 //   0x140 RO     MIR_DATA  = **读=弹出**: 返回一个 32 位载荷字 (4 字节, 小端顺序:
 //                  w[7:0] = 该 4 字节里最先收到的那个字节)。
 //                  ⚠️ 空态读: 返回 `MIR_SENT` (32'h5A5A_5A5A) + unf_sticky 置位 + level 不变。
@@ -64,7 +69,10 @@
 //   0x144 RW     MIR_CTRL  = [0] cap_en (复位默认 0=关; 采集侧 2FF 电平同步)
 //                            [1] clr   (**toggle**: 写 1 翻转一次 ⇒ 跨域侧恰好 1 个清除脉冲:
 //                                       清 FIFO (排空式冲刷) + 字节累加器 + 两个 sticky)
+//                            [2] src_sel (⭐ 期 A: 0=UDP app 口 / 1=TCP app 口; 默认 0;
+//                                       采集侧 2FF 电平同步 (同 cap_en 风格))
 //                            其余位 0; 读回 = 当前值。起测协议: ① 写 clr → ② 写 cap_en=1 → ③ 发包。
+//                            切源协议: cap_en=0 下写 src_sel, 然后重走 ①→②。
 //   ⚠️ 未实现地址 (SLVERR) = `MIR_LAST_IDX+1` = 0x148 (word 82; 7 位译码红线: 绝不 ≥0x200)。
 //   ⚠️ 扩窗要**七处同改** (P6b 起; 前五处是 24 字版定的, ⑥⑦ 是双域之后新增的):
 //      ① `SNAP_NW` (单一来源: wrapper 的 `SNAP_NW_P6E`) ② 两束的拼接项数
@@ -201,6 +209,7 @@ module axi_regs #(
 
     // ---------------- M1: 载荷镜像窗的寄存器 (声明必须在写通道块之前 —— xvlog 先声明后用) ----
     reg [31:0] mir_ctrl_r;         // [0]=cap_en (电平; 复位默认 0 = 关) [1]=clr toggle (写 1 翻转)
+                                   // [2]=src_sel (⭐ 期 A: 0=UDP / 1=TCP; 电平; 复位默认 0)
     reg        mir_unf_sticky;     // 空读 MIR_DATA 的 sticky (权威证据; clr 写清)
 
     always @(posedge clk or negedge rst_n) begin
@@ -230,11 +239,13 @@ module axi_regs #(
                 end else if (w_word == 7'd6) begin               // 0x18 SNAP_CTRL (写侧触发)
                     s_axil_bresp <= 2'b00;                       // 数据位在 snap_clr 里用掉
                 end else if (w_word == MIR_CTRL_IDX) begin       // 0x144 MIR_CTRL (RW; M1 §V1.3)
-                    // [0] cap_en: 电平 (照 SCRATCH 的 wstrb 写法)
+                    // [0] cap_en : 电平 (照 SCRATCH 的 wstrb 写法)
                     // [1] clr    : **toggle** —— 写 1 翻转一次, 跨域侧 (2FF + 沿检测)
                     //              把它变成 dp/rd 域**恰好 1 个脉冲** (写 0 = 不动, 不产生脉冲)
+                    // [2] src_sel: ⭐ 期 A 电平 (0=UDP / 1=TCP; 采集侧 2FF)
                     if (wstrb_r[0]) begin
                         mir_ctrl_r[0] <= wdata_r[0];
+                        mir_ctrl_r[2] <= wdata_r[2];
                         if (wdata_r[1]) mir_ctrl_r[1] <= ~mir_ctrl_r[1];
                     end
                     s_axil_bresp <= 2'b00;
@@ -270,12 +281,14 @@ module axi_regs #(
         else if (mir_unf_evt) mir_unf_sticky <= 1'b1;
     end
 
-    // MIR_STATUS = {9'd0, ver[3:0], capture_on, any_drop_sticky, unf_sticky, level[15:0]}
-    //   = 9+4+1+1+1+16 = **恰好 32 位** (v2 §V2-S7-③; v1 的 38 位示例作废)
+    // MIR_STATUS = {8'd0, src_sel, ver[3:0], capture_on, any_drop_sticky, unf_sticky, level[15:0]}
+    //   = 8+1+4+1+1+1+16 = **恰好 32 位** (v2 §V2-S7-③; v1 的 38 位示例作废)
+    //   · src_sel (bit23) = ⭐ 期 A: MIR_CTRL[2] 的读回 (同一域直引 ⇒ 零新增 CDC)
+    //   · ver = 4'd2 (期 A: 1→2, 因为 MIR 寄存区块的位语义变了)
     //   · capture_on = 控制寄存器位 (主机写入的同一域 ⇒ 零新增 CDC)
     //   · any_drop_sticky = 镜像内 dp sticky 的读域 2FF 电平版
     //   · level = fifo_async.dbg_occ_r 直引 (读域 2FF 同步、**悲观少报** ⇒ 读 level 个字不可能下溢)
-    wire [31:0] mir_status = {9'd0, 4'd1, mir_ctrl_r[0], mir_any_drop, mir_unf_sticky,
+    wire [31:0] mir_status = {8'd0, mir_ctrl_r[2], 4'd2, mir_ctrl_r[0], mir_any_drop, mir_unf_sticky,
                               {7'd0, mir_level}};
 
     // ---------------- 数据面快照寄存器 (0x18-0x3C) ----------------

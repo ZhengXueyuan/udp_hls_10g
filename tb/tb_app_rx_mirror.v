@@ -81,6 +81,9 @@ module tb_app_rx_mirror;
     wire [8:0]  level;
     wire [31:0] drop_bytes;
     wire        any_drop, any_drop_rd;
+    // ---- ⭐ 期 B: aux 读口 (DMA 排空器) ----
+    reg         dma_req = 1'b0;
+    wire        dma_gnt, clr_pulse_rd;
 
     app_rx_mirror #(.XORC(8'hA5)) u_dut (
         .clk          (clk_w),
@@ -98,6 +101,9 @@ module tb_app_rx_mirror;
         .dout         (dout),
         .empty        (empty),
         .level        (level),
+        .dma_req      (dma_req),
+        .dma_gnt      (dma_gnt),
+        .clr_pulse_rd (clr_pulse_rd),
         .drop_bytes   (drop_bytes),
         .any_drop     (any_drop),
         .any_drop_rd  (any_drop_rd)
@@ -111,6 +117,7 @@ module tb_app_rx_mirror;
     integer    offered  = 0;           // sum of popcount(keep) over accepted beats
 
     integer bi, ob;
+    integer dcnt, dmis, dgt, tt;       // ⭐ 期 B: aux 口判据的计数
     always @(posedge clk_w) begin
         // same cycle/value as the DUT (both read pre-edge values => same handshake view)
         if (tv_valid && tv_ready) begin
@@ -392,6 +399,57 @@ module tb_app_rx_mirror;
         wait_r(40);
         chkc("G10a level == 0", level, 0);
         chk1("G10b empty == 1", empty, 1'b1);
+
+        // ================= ⭐ 期 B: aux 读口 (DMA 排空器) =================
+        //   合同: ① dma_req && !empty ⇒ 每拍弹 1 字 (dma_gnt=1, dout = 该字);
+        //         ② 与主机弹出同时请求时 **主机优先** (dma_gnt=0, 不双弹);
+        //         ③ 空态不弹 (dma_gnt=0)。
+        $display("  --- G12: aux pop port (dma_req/dma_gnt) + host-priority ---");
+        // 空态: req 高也不弹 (③)
+        dma_req = 1'b1;
+        wait_r(10);
+        chkc("G12a empty: dma_gnt == 0", dma_gnt, 0);
+        dma_req = 1'b0;
+        // 灌 4 字 (4 × 4B)
+        beat(64'h0102030405060708, 8'hF0, 0);
+        beat(64'h0102030405060708, 8'hF0, 0);
+        beat(64'h0102030405060708, 8'hF0, 0);
+        beat(64'h0102030405060708, 8'hF0, 0);
+        wait_w(20);
+        chkc("G12b level == 4", level, 4);
+        // aux 弹出 4 字: 计数 + 内容 (①)
+        dma_req = 1'b1;
+        dcnt = 0; dmis = 0;
+        for (tt = 0; tt < 400; tt = tt + 1) begin
+            @(posedge clk_r);
+            if (dma_gnt) begin
+                dcnt = dcnt + 1;
+                if (dout !== 32'hA1A6A7A4) dmis = dmis + 1;
+            end
+            if (dcnt == 4) tt = 4000;
+        end
+        chkc("G12c aux popped exactly 4 words", dcnt, 4);
+        chkc("G12d aux word content = 0xA1A6A7A4", dmis, 0);
+        wait_r(10);
+        chkc("G12e level == 0 after aux drain", level, 0);
+        // 主机优先 (②): 两路同时请求 ⇒ dma_gnt 必须恒 0 (主机吃掉), 且只消费 2 字 (不双弹)
+        dma_req = 1'b0;
+        beat(64'hA1B2C3D4E5F60718, 8'hF0, 0);
+        beat(64'h1112131415161718, 8'hF0, 0);
+        wait_w(20);
+        chkc("G12f level == 2", level, 2);
+        dma_req = 1'b1;
+        @(negedge clk_r); rd_en_r <= 1'b1;
+        dgt = 0;
+        for (tt = 0; tt < 6; tt = tt + 1) begin
+            @(posedge clk_r);
+            if (dma_gnt) dgt = dgt + 1;
+        end
+        @(negedge clk_r); rd_en_r <= 1'b0;
+        chkc("G12g host priority: dma_gnt == 0 while host requests", dgt, 0);
+        dma_req = 1'b0;
+        wait_r(10);
+        chkc("G12h exactly 2 words consumed (no double-pop)", level, 0);
 
         $display("");
         if (fails == 0) $display("APP_RX_MIRROR_GATE: PASS_ALL");
