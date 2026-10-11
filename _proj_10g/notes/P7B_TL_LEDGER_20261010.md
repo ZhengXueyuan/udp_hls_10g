@@ -584,3 +584,20 @@
 ### §10-15-3 TL 裁定：期 B 走 **P2**（已派接线轮）
 - **P1**（只接读通道、写通道留 tie-off）的风险 = 不可证（若前提错 ⇒ 主机 `pread` 挂在等完成）；**P2** = P1 + **一个新写"永远应答并丢弃"的最小写从机** ⇒ 把"内部仲裁是否依赖写通道握手"这个前提**结构性消除**（H2C 邮箱**功能**仍不在范围内）。选 P2。
 - 接线轮在飞：新 `rtl/aximm_h2c_discard.v` + 按清单接线（两处宏分支）+ `MIR_CTRL[3]=dma_en` + `MIR_DMA_CNT`@`0x148`（未实现地址 → **`0x14C`**，三处几何常量同改）+ p6e 门升级（**真驱动一次 C2H 读：AR→R→与环内容对账**）+ 写从机单元门 + synth 检查点；⛔ 仍不出位流/不 bump BID（构建轮统一做：读侧重生成 + BID）。
+
+---
+
+## §10-16 2026-10-11 10:50：**P2 接线轮收口（提交 `f6b37eb`，已推送）+ 读侧 0x1F 链在飞**
+
+### §10-16-1 P2 接线（报告 = `p7b_m1p2b_impl_20261011/REPORT.md`，TL 代落盘第 6 例）
+- **读通道** → `aximm_c2h_win` + `mir_dma_ring`；**写通道** → 新件 `rtl/aximm_h2c_discard.v`（AW/W/B 全握手、永远 ready、BRESP=OKAY、丢弃、B 只锚 WLAST、一次一笔、两通道独立就绪不假设到达顺序）⇒ 不可证前提**结构性消除**。
+- `board/wrapper_p4.v` 9 hunk：33 根共用网线声明放宏外（XDMA 在宏外 ⇒ 不许叉开端口表）· `u_mir` aux 三口改接 · 三件例化 · XDMA `m_axi` 读写两通道全接（11 响应 + 请求；prot/lock/cache 仍悬空=常量）· 两个 ¬ 分支各 12 行常数表（逐位等价旧 tie-off）· **全部在 `ifdef PCIE_OBS` 内**（`-only p5_wrapper` EXIT=0 实证）。⛔ `:1319-1322` app 总线 tie-off 未动、BID 仍 0x1E。
+- `axi_regs.v`：`MIR_CTRL[3]=dma_en` + `mir_dma_cnt` + `MIR_DMA_CNT`@0x148 ⇒ **未实现地址 = `0x14C`**；`MIR_STATUS.ver 2→3`（判断项；回退=1 字面量+1 判据）⇒ **TL 认可**（与文件既有规则一致）。工具加 `A_UNIMPL=0x14C` 身份门。
+- **门**：新从机单元门 **305 判据** + 3 突变全被捉（⚠️ `mut_bearly` 第一版逃逸、补"WLAST 前不许 B"后捉住 = "新判据第一版没牙是常态"又一例）· **p6e 全链 108 PASS/0 FAIL**（+31：真 AR→R 与环内容**手算锚逐拍对账**、窗外整笔 SLVERR 发满拍不挂、真 H2C 写握手、`dma_en` 门）· 期 A srcinv + 期 B `mut_bwire`（环数据钉 0 ⇒ 恰 5 条内容判据红、计数器绿 ⇒ 两组判据独立）· tb_mir_dma 45+3 突变 · tb_biz_win 40 + NEG_GATE 4/4 · check_window 92/0 · lint OK · 工具 `--selftest` T1–T7。
+- ⭐ **synth**：WNS `−0.377` / WHS `−0.661` 与 m1/m1p2 **四臂逐位同**（新逻辑不在临界区；DP 前 20 无新族；新锥最紧 **1.95 ns**；pcie 域墙全在 IP 内部）；净差 **+197 FF / +4 RAMB36E2**（环 4 bank）/ LUT −14。
+- 新登记（不修）：**既存缺陷 `PCIE_OBS ∧ ¬APP_MODE` 组合在 HEAD 就编不过**（4 条 `VRFC 10-2989`；现役无任何构建/门产生该组合）· `run_tb_p6e_pcie_counters` 1 条 FAIL = 已登记的落后常量（BID 期望 0x1D）。
+- ⚠️ **提交卫生事件（已修）**：首次提交误把 synth scratch `prj_m1p2b/`（**282 MB**）纳入（→606 文件/+318 万行）⇒ TL `reset --soft` + 剔除 + 补忽略规则 `_proj_10g/notes/p7b_m1*_synth/prj_*/` + 删盘上 scratch；重提交 `f6b37eb`（**78 文件/+51,289**）。教训：**agent 每轮应删 scratch，TL 收账时必须先看 `--stat` 的量级**。
+
+### §10-16-2 在飞与下一步
+- **读侧链扩到 `0x1F` 在飞**（`0x1D→0x1E` BID-only + `0x1E→0x1F` BID+几何（NW 70→71 + 未实现地址迁移 + 表/断言随代）；演练+负彩排+**链式 apply**）。
+- 之后 = **构建轮**（BID `0x1F` + 全量矩阵 + 完整构建 + 归档 + 读数），再板级（端到端 UDP 镜像演示）。
