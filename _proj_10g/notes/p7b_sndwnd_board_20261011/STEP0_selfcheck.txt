@@ -1,0 +1,83 @@
+### STEP0_BEGIN 2026-10-11T08:25:17+0800
+
+### A) 两个位流归档副本 (派单指定源; 只烧这两个目录里的 wrapper_p4.bit)
+--- 0x1E ---
+e489ae4a4b868695cff1c6dfc2fbdef70de29d391cdb9a43e0a08accd342be1a */d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_build_0x1E/wrapper_p4.bit
+BIT /d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_build_0x1E/wrapper_p4.bit size=15431261 mtime=2026-10-11 04:44:51.567291300 +0800
+18:e489ae4a4b868695cff1c6dfc2fbdef70de29d391cdb9a43e0a08accd342be1a *wrapper_p4.bit
+--- 0x1D ---
+b48dc7ee7ddb7df2a057fdae324dbf302c5adc6f430a413e0bce0e3a25ee0b1f */d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_build_0x1D/wrapper_p4.bit
+BIT /d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_build_0x1D/wrapper_p4.bit size=15431261 mtime=2026-10-11 02:30:33.958584800 +0800
+19:b48dc7ee7ddb7df2a057fdae324dbf302c5adc6f430a413e0bce0e3a25ee0b1f *wrapper_p4.bit
+WANT_0x1E=e489ae4a4b868695cff1c6dfc2fbdef70de29d391cdb9a43e0a08accd342be1a
+WANT_0x1D=b48dc7ee7ddb7df2a057fdae324dbf302c5adc6f430a413e0bce0e3a25ee0b1f
+
+### B) 对端可达 + 工具名册 (md5; 只读, 不动 /tmp/p7b_biz)
+PEER_OK
+a-MS-7850
+Sun Oct 11 08:25:18 AM CST 2026
+ 08:25:18 up 1 day, 10:47,  4 users,  load average: 0.05, 0.03, 0.00
+--- 现役工具 md5 (对端 /tmp/p7b_biz) ---
+c6b624205d64f1f4bd723d8fd5cc6414  /tmp/p7b_biz/p7b_tcp_sink
+ba2faf79f409302d1e542450db402975  /tmp/p7b_biz/p7b_snap.sh
+--- sinkfix 后编译件 (对端 /tmp/p7b_biz_refresh) ---
+6d9b14f24725fa326ffe5b169f77e30f  p7b_tcp_sink
+8d02ef6426d4ef6ad5fd2c514965c1e8  p7b_tcp_sink.cpp
+--- refresh sink 是否支持 --rcvbuf-after-connect (应 >=1) ---
+3
+2
+--- persist 轮遗留物 (只读; 本轮不碰) ---
+total 904
+drwxrwxrwx  2 root root   4096 Oct 11 02:52 .
+drwxrwxrwt 33 root root 892928 Oct 11 07:38 ..
+-rw-rw-r--  1 a    a      3319 Oct 11 02:52 persist_client.py
+-rw-rw-r--  1 a    a      9088 Oct 11 02:57 persist_run.sh
+-rw-rw-r--  1 a    a      6106 Oct 11 02:52 stall_probe.py
+2274c15975e78307dc9d9b286da03ffb  /tmp/p7b_persist/stall_probe.py
+3fef080c9a80e02d0b793cbb7919f920  /tmp/p7b_persist/persist_client.py
+--- 仓库侧对照 md5 (现核) ---
+e556b69da8c636ceda88c66f152a60bc */d/repo/XCKU5PMini/udp_hls_10g/_proj_pcie/p7b_biz/p7b_snap.sh
+cda810783c7659b64f4112a9b74f8aca */d/repo/XCKU5PMini/udp_hls_10g/tools/peer_ssh.py
+--- 对端 python3 / g++ 可用性 + /tmp 空间 ---
+Python 3.12.3
+/usr/bin/tcpdump
+/usr/bin/timeout
+/dev/sdb3       1.8T  205G  1.5T  12% /
+
+### C) 网络面 (每次测量前现取): /32 路由 + NetworkManager 托管位 + link + coalesce
+netlink error: Operation not permitted
+4: enp1s0f1np1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
+    inet 192.168.100.100/32 scope global enp1s0f1np1
+---
+GENERAL.STATE:                          10 (unmanaged)
+GENERAL.CONNECTION:                     --
+---
+192.168.100.2 dev enp1s0f1np1 src 192.168.100.100 uid 1000 
+    cache 
+---
+	Speed: 10000Mb/s
+	Link detected: yes
+---
+Coalesce parameters for enp1s0f1np1:
+Adaptive RX: off  TX: n/a
+rx-usecs:	0
+rx-usecs-irq:	0
+
+### D) 板上现态 (烧 0x1E 之前) —— 期望: persist 轮留下的 0x1D / 70 字 / 0x138 未实现
+BID_0x04=Read 32-bit value at address 0x4 (0x738bb53f2004): 0x0000001d
+MAGIC_0x00=Read 32-bit value at address 0x0 (0x766b9588e000): 0x50360001
+SCRATCH_0x08=Read 32-bit value at address 0x8 (0x75c3c4ae2008): 0x00000000
+UNIMPL_0x138=Read 32-bit value at address 0x138 (0x758c0631b138): 0xffffffff
+CARRIER=1
+	Region 0: Memory at df200000 (32-bit, non-prefetchable) [size=1M]
+	Region 1: Memory at df300000 (32-bit, non-prefetchable) [size=64K]
+		LnkSta:	Speed 5GT/s (downgraded), Width x4
+DEVS=/dev/xdma0_user
+
+### E) 残留进程 (对端: sink/tcpdump/python3 探针; 本地轮内脚本)
+4105101 sudo -S -p  bash -lc pgrep -a p7b_tcp_sink; pgrep -a tcpdump; pgrep -af 'stall_probe|persist_client'; echo '(空 = 无残留)'
+4105102 bash -lc pgrep -a p7b_tcp_sink; pgrep -a tcpdump; pgrep -af 'stall_probe|persist_client'; echo '(空 = 无残留)'
+(空 = 无残留)
+--- 本地 (只查 python/vivado/xsim) ---
+
+### STEP0_END 2026-10-11T08:25:25+0800

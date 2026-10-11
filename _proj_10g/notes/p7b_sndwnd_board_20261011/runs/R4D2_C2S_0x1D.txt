@@ -1,0 +1,99 @@
+### RUN_BEGIN tag=R4D2_C2S mode=c2s secs=40 rcvbuf=2920 inject_at=8.0 n=3 gap=0.15 1791679145.443943334
+### PROBE_CONFIG PROBE_WIN=65535 ACK_MODE=fresh_minus ACK_OFFSET=4194304 SNIFF_MS=20
+### KW='5 14 15 20 43 51 55 57 58 63 66 67 68 69' STALL_N=3 POLL_MS=5000 MAXBYTES=4000000000 SNAP_MAX=2000 SNAPGAP=0.1
+### SNAP_MD5 ba2faf79f409302d1e542450db402975  SINK_MD5 6d9b14f24725fa326ffe5b169f77e30f  CLIENT_MD5 3fef080c9a80e02d0b793cbb7919f920  PROBE_MD5 491698178ece2bb5fd974c7a659aa677
+### EXPECT_BID=0x0000001D NW=70
+--- 板侧身份闸 (跑前) ---
+ID_MAGIC 0x50360001   (want 0x50360001)
+ID_BID   0x0000001d   (want 0x0000001D = 本构建的 BUILD_ID)
+ID_MARKER 0xdeadbeef  (want 0xdeadbeef)
+ID_UNIMPL 0xffffffff  (want 0xffffffff: 未实现地址必须走 SLVERR)
+ID_OK 1791679145.465454063
+ID_RC=0
+BID=Read 32-bit value at address 0x4 (0x7d07b53c6004): 0x0000001d
+SCRATCH_0x08=Read 32-bit value at address 0x8 (0x73f138d7e008): 0x00000000
+CARRIER=1
+NETADDR=inet 192.168.100.100/32
+ROUTE=192.168.100.2 dev enp1s0f1np1 src 192.168.100.100 uid 0 
+--- 抓包 A: 板->对端 小帧 (<=100B, 全程) ---
+--- 抓包 B: 双向 小帧 (<=100B, -c 400000 限深) ---
+CAPA=130233 CAPB=130235
+--- 抓包 C: 板->对端 数据帧 (>100B; -s 96; -c 4000 全程: 初突发 + 注入后突发) ---
+CAPC=130237
+--- 板侧快照环 (后台; 0.1s/点; 上限 2000 点) ---
+SNAP_PID=130238
+--- 侧信道: ss 采样 (0.5s/点) ---
+SS_PID=130239
+--- 对端内核计数 (跑前) ---
+TcpInSegs                       2524000385         0.0
+TcpOutSegs                      741349274          0.0
+TcpRetransSegs                  7492               0.0
+TcpExtTCPFastRetrans            5020               0.0
+TcpExtTCPBacklogDrop            79                 0.0
+TcpExtTCPOFOQueue               16853              0.0
+TcpExtTCPZeroWindowDrop         113                0.0
+TcpExtTCPRcvQDrop               64                 0.0
+TcpExtTCPWqueueTooBig           0                  0.0
+--- 注入器 (stall_probe_u7; PROBE_WIN=65535; ACK_MODE=fresh_minus; 等 SYN 后 8.0s 注入 3 个) ---
+PROBE_PID=130250
+PROBE_ARMED (已给注入器 2 s 绑套接字窗口) 1791679147.479289455
+--- 主跑 (c2s) ---
+### CLIENT_RC=0
+### MAIN_DONE T0=1791679147.480106073 T1=1791679187.509726410 dur=40.029620337
+--- 对端内核计数 (跑后) ---
+TcpInSegs                       2524000603         0.0
+TcpOutSegs                      741349545          0.0
+TcpRetransSegs                  7492               0.0
+TcpExtTCPFastRetrans            5020               0.0
+TcpExtTCPBacklogDrop            79                 0.0
+TcpExtTCPOFOQueue               16853              0.0
+TcpExtTCPZeroWindowDrop         113                0.0
+TcpExtTCPRcvQDrop               65                 0.0
+TcpExtTCPWqueueTooBig           0                  0.0
+--- 收尾: 停快照环 + ss 采样 + 抓包 ---
+--- 抓包自报 (丢包 = 判据污染的见证) ---
+[capA]
+9 packets captured
+9 packets received by filter
+0 packets dropped by kernel
+[capB]
+161 packets captured
+162 packets received by filter
+0 packets dropped by kernel
+[capC]
+140 packets captured
+140 packets received by filter
+0 packets dropped by kernel
+-rw-r--r-- 1 tcpdump tcpdump   708 Oct 11 08:39 /tmp/sndwnd_R4D2_C2S_capA.pcap
+-rw-r--r-- 1 tcpdump tcpdump 11368 Oct 11 08:39 /tmp/sndwnd_R4D2_C2S_capB.pcap
+-rw-r--r-- 1 tcpdump tcpdump 15704 Oct 11 08:39 /tmp/sndwnd_R4D2_C2S_capC.pcap
+--- 探针日志 (注入的 (ack,win) 原始值 + ack_src) ---
+PROBE_START win=65535 inject_at=8.0s n=3 gap=0.15 ack_mode=fresh_minus ack_offset=4194304 sniff_ms=20.0 t=1791679145.500940
+SNIFF_SYN lport=41330 isn=1619027720 t=1791679147.503780
+PROBE_TARGET lport=41330 isn=1619027720 last_ack=305431577 last_win=0 (SYN+8.02s)
+PROBE_INJECT i=0 ack=301237273 win=65535 ack_src=held fresh_ack=305431577 fresh_win=0 t=1791679155.565234 (SYN+8.06s)
+PROBE_INJECT i=1 ack=301237273 win=65535 ack_src=held fresh_ack=305431577 fresh_win=0 t=1791679155.749183 (SYN+8.25s)
+PROBE_INJECT i=2 ack=301237273 win=65535 ack_src=held fresh_ack=305431577 fresh_win=0 t=1791679155.936173 (SYN+8.43s)
+PROBE_DONE board_frames_after_inject=0 t=10.189278
+--- sink 摘要 (逐字) ---
+--- client (不读档) ---
+CLIENT_START order=after rcvbuf_req=2920 t=1791679147.503631
+CLIENT_SO_RCVBUF_PRE_CONNECT 131072
+CLIENT_CONNECT_OK local=('192.168.100.100', 41330) remote=('192.168.100.2', 8080) dt=0.000133
+CLIENT_SO_RCVBUF_SET_AFTER_CONNECT req=2920 now=5840
+CLIENT_TICK t=1791679152.506 elapsed=5.002 noread=1
+CLIENT_TICK t=1791679157.509 elapsed=10.005 noread=1
+CLIENT_TICK t=1791679162.511 elapsed=15.007 noread=1
+CLIENT_TICK t=1791679167.513 elapsed=20.010 noread=1
+CLIENT_TICK t=1791679172.516 elapsed=25.012 noread=1
+CLIENT_TICK t=1791679177.518 elapsed=30.014 noread=1
+CLIENT_TICK t=1791679182.521 elapsed=35.017 noread=1
+CLIENT_TICK t=1791679187.504 elapsed=40.000 noread=1
+CLIENT_NOREAD_DONE elapsed=40.000 t=1791679187.503947
+CLIENT_CLOSE t=1791679187.503989
+--- 板侧态 (跑后) ---
+BID=Read 32-bit value at address 0x4 (0x74fd560cf004): 0x0000001d
+SCRATCH_0x08=Read 32-bit value at address 0x8 (0x7b4116a9b008): 0x00000000
+CARRIER=1
+(空=无残留进程)
+### RUN_END tag=R4D2_C2S 1791679188.993345649
