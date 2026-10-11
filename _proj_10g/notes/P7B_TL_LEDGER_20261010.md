@@ -547,3 +547,22 @@
 - **板子 = 0x1E（BID `0x1e`）**；对端无残留；推送面 = `3608a38`。
 - 在飞：**M1 阶段一实施 + 综合检查点**（未回）。
 - 队列不变：几何同步（0x1E 读侧默认值）· `*.backup.log` 规则 · M1 阶段二（C2H DMA）· F-3 / Build G。
+
+---
+
+## §10-14 2026-10-11 09:15：**M1 阶段一收口（提交 `74cbefe`，已推送）+ 阶段二已派**
+
+### §10-14-1 阶段一交付（UDP 载荷镜像窗）
+- 新件：`rtl/app_rx_mirror.v`（snoop→XOR 0xA5→32 位打包→`fifo_async` 32×256 FWFT(dp→pcie)→FWFT 读口；`cap_en` 2FF / `clr` toggle+排空式冲刷 / `drop_bytes`+`any_drop` sticky / 写门=组合 `wr_en=have&&!full`）· `tb/tb_app_rx_mirror.v`（46 判据 + 手算锚）· `sim/p7b_mir/`（三臂 + 2 突变均被捉）· `_proj_10g/notes/p7b_m1_synth/`（synth-only 检查点机制，自建 prj、**绝不碰 `vivado_prj`**）· `_proj_pcie/p7b_biz/p7b_mir_dump.cpp`（PC dump/verify/对账 + `--selftest` 三例含负对照）。
+- 改件：`_proj_pcie/rtl/axi_regs.v`（五 localparam 由 `SNAP_LAST_IDX` 推导；`MIR_CTRL` 写；读 mux+三字（空态哨兵 `0x5A5A5A5A`）；`rd_pop=mir_rd_sel&&!mir_empty`；unf sticky；SLVERR 边界→`MIR_LAST_IDX`）· `board/wrapper_p4.v`（`SNAP_NW_P6E 70→71` / `SNAP_P7BDP_NW 30→31`；M1 块三层宏 + ¬ 分支 tie-off 表；**`:1319-1322` app 总线 tie-off 逐字未动**；**未 bump BID**）· `build_p7b_ku5p.tcl`(+1 导入) · `tb_p6e_pcie_wrapper.v`（BID 0x1E / 未实现 `0x148` / `M1-*` 断言组）· `tb_fifo_async.v`（第 5 实例 + 比例 1.6 工况）· `check_window.py`（代际跟地图 + 判据 12b）· `tb_biz_win.v`（NW 71 + 判据 11）· neg 三突变按新源重生成。
+- **门**：单元门 46/46（2 突变被捉）· p6e 全链 65 PASS/0 FAIL（含"逐字读全 71 字 `level` 不变"= S1 回归牙、`0x148` SLVERR、空读哨兵+unf）· fifo_async 9 工况+6 突变全过 · `check_window` PASS=92/FAIL=0（3 突变全红）· lint OK · `-only p5_wrapper` EXIT=0 · `tb_biz_win` 35 判据 + NEG_GATE_PASS 4/4。
+- ⭐ **综合检查点（pre vs m1）**：资源 **+931 LUT / +352 FF**（BRAM 不变）；WNS `0.000→−0.377`（325 失败端点全在 DP 组）；**定向查：失败锥 45 行 cell 全为 `u_tcp_tx/u_app` 既有逻辑、`u_mir` 命中 0**（同对 pin：pre `+0.035`/20 级 ↔ m1 `−0.377`/22 级）；镜像自身锥 ≥1.7ns 余量、W70 快照束 `+5.183ns` ⇒ **新逻辑不在临界区**。⛔ 无拆刀臂 ⇒ 只登记不归因；**真判据 = 阶段二后布线构建**。
+- ⚠️ 如实订正/登记：① `rtl/axi_regs.v` 真路径 = `_proj_pcie/rtl/axi_regs.v`（TL 派单笔误）② "6 定"里 `SNDWND` 一条 v2 查无（事实面 = 未碰 `tcp_rx/tcp_tx_frame`）③ `tb_snap63.v`（旧 WU 门）会因新地址地图转红 ⇒ **登记**（不在常驻矩阵）④ `unf_cnt` 无读出通路（STATUS 恰好 32 位）⇒ sticky-only 登记 ⑤ `*.backup.log` 已设忽略 + 144 件已跟踪件退库（xsim 轮转产物）。
+
+### §10-14-2 TL 裁定（随阶段一报告）
+1. **TCP 源选择**：`MIR_CTRL` 加一位 **`src_sel`（0=UDP/1=TCP，默认 0）**；同时双路 = 范围外登记 ⇒ **这就是"TCP 同等重要"的落地形式**（一个 FIFO 不能吃两路，交织不可判）。
+2. **读侧重生成**：留给构建轮统一做（几何 + `EXPECT_BID` + 未实现地址 `0x148`）。
+3. `tb_snap63`/`tb_p6e_pcie_counters` 的落后常量：**登记不修**（前者不在矩阵；后者刀前就落后）。
+
+### §10-14-3 阶段二**已派**（在飞）
+- 期 A：TCP 源接入（`src_sel` + `app_rx_*` tap）+ 门；期 B：**C2H DMA**（`m_axi` **只放读通道** + 自写 AXI-MM 读从机 + PC 侧 `/dev/xdma0_c2h_*` 路径；⚠️ 写通道维持 tie-off，安全性要先在明文 `xdma_0_sim_netlist.v` 核，核不出就停下报告）；每期后跑门 + **synth 检查点**；⛔ 不出位流/不 bump BID/不做读侧同步（留给构建轮）。
