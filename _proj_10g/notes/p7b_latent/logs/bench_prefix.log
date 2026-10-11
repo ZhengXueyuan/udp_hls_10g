@@ -1,0 +1,21 @@
+--- tb_lat_wf (instance 1: slow_tx_adp u_wf) ---
+RESULT sent=8 frames=5 purge=3 words=512 tlasts=4 maxrun=128 dangling=1
+J1 FAIL: tlasts=4 != stat_frames=5 (committed frame never left the fifo intact)
+J2 FAIL: tlasts+purge=7 != sent=8
+J3 FAIL: dangling tail word(s) without tlast: runlen=127
+TB_LAT_WF: FAIL
+--- tb_lat_of cfg "2100 7 0" (instance 2: slow_rx_adp u_ofifo, over threshold) ---
+CFG np=2100 nb=7 free=0 keep=fe nw=300
+RESULT np=2100 nb=7 words=300 commit=1 drop=0 popped=2107 expect=2108 first_bad=2048
+PROBE maxocc=2049 full_seen=1 ovf_cyc=1
+TB_LAT_OF: FAIL (delivered != expected: popped=2107 expect=2108 first_bad_idx=2048)
+--- tb_lat_of cfg "1400 8 0" (negative control: under threshold) ---
+CFG np=1400 nb=8 free=0 keep=ff nw=175
+RESULT np=1400 nb=8 words=175 commit=1 drop=0 popped=1408 expect=1408 first_bad=-1
+PROBE maxocc=1408 full_seen=0 ovf_cyc=0
+TB_LAT_OF: PASS (byte-exact)
+--- tb_lat_of cfg "2100 7 1" (negative control: reader never starved) ---
+CFG np=2100 nb=7 free=1 keep=fe nw=300
+RESULT np=2100 nb=7 words=300 commit=1 drop=0 popped=2108 expect=2108 first_bad=-1
+PROBE maxocc=1 full_seen=0 ovf_cyc=0
+TB_LAT_OF: PASS (byte-exact)

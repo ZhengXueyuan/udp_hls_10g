@@ -1,0 +1,147 @@
+# gate   : p5c_rev_g2g3
+# bat    : sim\p5c_t3\rev\run_tb_rev_g2g3.bat
+# args   : []
+# expect : exit 0
+# desc   : P5c rev G2/G3
+# started: 2026-09-30 13:00:29
+
+Vivado Simulator v2025.2
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+Running: C:/AMDDesignTools/2025.2/Vivado/bin/unwrapped/win64.o/xelab.exe -debug typical -timescale 1ns/1ps -L xil_defaultlib xil_defaultlib.tb_rev_g2g3 -s tb_rev_g2g3 -log xelab_rev.log 
+Multi-threading is on. Using 18 slave threads.
+Starting static elaboration
+Pass Through NonSizing Optimizer
+WARNING: [VRFC 10-3645] port 'full_next' remains unconnected for this instance [D:/repo/XCKU5PMini/udp_hls_10g/rtl/app_ctrl.v:353]
+WARNING: [VRFC 10-3645] port 'full_next' remains unconnected for this instance [D:/repo/XCKU5PMini/udp_hls_10g/rtl/tcp_tx_frame.v:645]
+WARNING: [VRFC 10-3645] port 'dbg_wptr' remains unconnected for this instance [D:/repo/XCKU5PMini/udp_hls_10g/rtl/tcp_tx_frame.v:710]
+Completed static elaboration
+Starting simulation data flow analysis
+Completed simulation data flow analysis
+Time Resolution for simulation is 1ps
+Compiling module xil_defaultlib.tcb
+Compiling module xil_defaultlib.fifo_sync(W=102,D=16,AW=4)
+Compiling module xil_defaultlib.app_ctrl(FIN_TO_LIM=18'b0100)
+Compiling module xil_defaultlib.retx_ram
+Compiling module xil_defaultlib.checksum16
+Compiling module xil_defaultlib.fifo_sync(W=73,D=256,AW=8)
+Compiling module xil_defaultlib.fifo_sync(W=39,D=32,AW=5)
+Compiling module xil_defaultlib.tcp_tx_frame
+Compiling module xil_defaultlib.tb_rev_g2g3
+Built simulation snapshot tb_rev_g2g3
+
+****** xsim v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Wed Sep 30 13:00:31 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source xsim.dir/tb_rev_g2g3/xsim_script.tcl
+# xsim {tb_rev_g2g3} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+R1: G2 timeout, natural fc grant (slot 1) - RST expected now
+  PASS R1a FIN sent (o_fin_sent[1]=1)
+  PASS 1b timeout fired (to_fired[1]=1)
+  PASS t_req[1]=1 raised by the timeout
+DBG R1: cycles-to-timeout=1265 fin_to=5 pool=49152 winq1=0000
+    [12652000] o_ev_down EDGE   slot=1
+  PASS  wire (rst_frames delta >= 1) **
+  PASS R1e stat_rst >= 1
+  PASS 1f state[1] written 0 afterwards
+  PASS  RST frame BEFORE state=0 landed
+  PASS _DOWN pulse delivered for slot 1
+  PASS req self-cleared after non-ESTAB
+DBG R1: rst_frames=1 stat_rst=1 t_rst=14932000 t_state0=16756000
+R6: F1 regression - quota returned + fresh slot gets a window
+  PASS [1] released to 0 by the timeout
+  PASS ack to WIN_POOL (quota returned)
+  PASS R6c new slot got winq[7]=C000
+  PASS C000 (init correction), not 0 **
+DBG R6: winq[7]=c000 rcv_wnd[7]=c000 pool=0 (cfg wrote 1234)
+R2: F3 regression - window-write gnt must not eat st_pend (slot 0)
+    [25268000] o_ev_down EDGE   slot=7
+  PASS  (sel=3,id=0) loaded and STALLED
+  PASS R2b FIN sent (o_fin_sent[0]=1)
+  PASS 2c timeout fired (to_fired[0]=1)
+    [37100000] o_ev_down EDGE   slot=0
+  PASS nd[0]=1 (abort completion armed)
+  PASS 2e st_done[0] latched (one-shot)
+  PASS s still the window write (sel=3)
+DBG R2: after window gnt: st_pend=0001 fc_v=1 sel=5 id=0
+  PASS e window-write gnt (F3 fixed) **
+  PASS ten 0 by the retried state write
+  PASS t_pend[0] cleared by its own gnt
+  PASS R2j st_done[0] stays latched
+DBG R2: state0=0 st_pend=0000 st_done=0003 rst_frames=2
+R3: two simultaneous to_pend bits (forced) - isolated pulses
+    [40772000] o_ev_down EDGE   slot=2
+    [40788000] o_ev_down EDGE   slot=2
+    [40804000] o_ev_down EDGE   slot=3
+  PASS ev_down always 1-cycle isolated)
+  PASS ast two timeout events delivered
+  PASS c both slots delivered (2 and 3)
+DBG R3: to_pend=0000 edges=3 hidden=0
+R4: external ev_down vs pending timeout delivery
+  PASS _down wins (slot 5 on the pulse)
+    [40852000] o_ev_down EDGE   slot=5
+  PASS y 1 beat then delivered (slot 4)
+    [40868000] o_ev_down EDGE   slot=4
+    [40884000] o_ev_down EDGE   slot=4
+  PASS R4c no hidden edge
+  PASS both events seen, no slot mix-up
+DBG R4: last_down_slot=4 edges=3 hidden=0
+R5: same-slot reconnect (ev_down+ev_up) after a timeout
+    [40980000] o_ev_down EDGE   slot=0
+  PASS R5a st_done[6]=0
+  PASS R5b to_fired[6]=0
+  PASS R5c fin_to[6]=0
+  PASS R5d to_pend[6]=0
+  PASS R5e new session is ESTAB
+  PASS new session got a non-zero quota
+  PASS p_tx_ready[6]=1 (no stale fence)
+R7: F2 grace fallback - RST blocked by a full/held ackq (slot 8)
+    [42140000] o_ev_down EDGE   slot=6
+  PASS R7pre FIN sent for slot 8
+  PASS 7a timeout fired (to_fired[8]=1)
+    [54636000] o_ev_down EDGE   slot=8
+  PASS [8] saturated at LIM+GRACE (>=8)
+  PASS wrote state=0 (slot released) **
+  PASS s emitted (RST path was blocked)
+  PASS R7e quota of slot 8 returned
+DBG R7: state8=0 fin_to8=0 rst_delta=0 pool=49152
+  PASS R7f still no RST after release
+R8: pool accounting collision probe (pre-existing P5b)
+    [68828000] o_ev_down EDGE   slot=8
+  PASS  setup: slot 9 ESTAB with winq=0
+    [69620000] o_ev_down EDGE   slot=10
+  PASS R8b caught slot 9 pipeline beat
+DBG R8: sum(winq)=49152 (0000c000) pool=0 total=49152 WIN_POOL=49152 winq9=0000 winq11=c000
+  PASS )+pool == WIN_POOL (R8 fixed) **
+  PASS ev_up beat (no same-cycle grant)
+  PASS p (C18) grant landed for slot 11
+    [71524000] o_ev_down EDGE   slot=11
+  PASS e next scan visit (winq[9]=C000)
+  PASS ervation after the delayed grant
+DBG R8: deferral=210 cycles; final winq[9]=c000 pool=0 sum=49152
+R9: tx_blk rewrite sanity on start_data / s_axis_tready (slot 12)
+  PASS  slot: frame accepted (tready=1)
+  PASS  data frame emitted (flags 0x18)
+  PASS t (tx_blk did not alter framing)
+DBG R9: data frame l_b6=000044950000b1b2 l_b7=b3b4b5b6b7b80000 (payload b1b2b3b4b5b6b7b8)
+  PASS 9d fin_req[12]=1 (close pending)
+  PASS ready stayed 0 (fin_req term) **
+  PASS R9f no extra data frame
+  PASS ed (D4) - refusal = fin_req term
+DBG R9: data_frames=1 tready_wait=300 fin_sent=0000 fin_req=1000
+GATE tb_rev_g2g3: PASS (errs=0)
+SUMMARY rst_frames=2 fin_frames=3 data_frames=1 stat_rst=2
+$finish called at time : 76844 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/sim/p5c_t3/rev/tb_rev_g2g3.v" Line 659
+exit
+INFO: [Common 17-206] Exiting xsim at Wed Sep 30 13:00:33 2026...
+P5C-T3 REV TB: ALL CHECKS PASS 
+
+
+# ===== runner: EXIT=0  4.5s   =====

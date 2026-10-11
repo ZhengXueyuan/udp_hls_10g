@@ -1,0 +1,49 @@
+# gate   : p6e_pcie_cnt
+# bat    : sim\p6e_pcie\run_tb_p6e_pcie_counters.bat
+# args   : []
+# expect : exit 0
+# desc   : P6e PCIe è®¡æ•°é—¨
+# started: 2026-09-30 13:14:14
+
+  [PASS] 0a MAGIC (read path self-check) = 1345716225
+  [FAIL] 0b BUILD_ID (36-word P6b+F4 = 6) = 7 (æœŸæœ› 6)
+  [PASS] 0c hls_rx_tready æœ‰ç¡®å®šç”µå¹³ (= 1) â‡’ è¿™æ ¹çº¿ç¡®æœ‰é©±åŠ¨æº (é X/Z)
+  [INFO] A baseline: W16=0 (Î”0) W17=0 (Î”0) W5=158 W0=0 W19=0
+  [PASS] B0 producer force ä¼ åˆ° wrapper çº¿ (hls_rx_tvalid = 1)
+  [INFO] B after handshake: W16=200 (Î”200) W17=0 (Î”0) W5=342 W0=0 W19=0
+  [PASS] _RX (1 count per handshake beat) = 200
+  [PASS]  delta == 0 (watchdog untouched) = 0
+  [PASS] 0 delta == 0 (no frame injected) = 0
+  [PASS] W19 delta == 0 (no slow_rx drop) = 0
+  [PASS] B5 gmii åŸŸåœ¨è·‘ (W5 158 -> 342): ä¸Šé¢çš„ +200 ä¸æ˜¯åœæ‘†æ—¶é’Ÿä¸Šçš„å‡æ•°
+  [INFO] C1 after tvalid-only: W16=200 (Î”0) W17=0 (Î”0) W5=447 W0=0 W19=0
+  [PASS] ta == 0 (no count when tready=0) = 0
+  [INFO] C2 after tready-only: W16=200 (Î”0) W17=0 (Î”0) W5=551 W0=0 W19=0
+  [PASS] ta == 0 (no count when tvalid=0) = 0
+  [PASS] D0 producer force ä¼ åˆ° wrapper çº¿ (hls_rst_n = 0)
+  [INFO] D after watchdog-low: W16=200 (Î”0) W17=150 (Î”150) W5=696 W0=0 W19=0
+  [PASS]  == N_HR (1 count per low cycle) = 150
+  [PASS]  0 (rx fifo empty, no handshake) = 0
+  [INFO] E after release: W16=200 (Î”0) W17=150 (Î”0) W5=799 W0=0 W19=0
+  [PASS] delta == 0 (no count while high) = 0
+  [INFO] F æ€»è´¦: W16 0 -> 200 (Î”200, æœŸæœ› 200); W17 0 -> 150 (Î”150, æœŸæœ› 150)
+  [PASS] F1 W16 total delta == N_RX = 200
+  [PASS] F2 W17 total delta == N_HR = 150
+  [PASS] G0 txsrc_tvalid æœ‰ç¡®å®šç”µå¹³ä¸”è·Ÿç€ force èµ° (= 1) â‡’ çº¿æœ‰é©±åŠ¨æº
+  [INFO] G è¯»æ•°: W28=256 W29=90
+  [PASS] ÿÿÿŒÿÿÿåÿÿÿ³ÿÿÿ¼ÿÿÿåÿÿÿ´ÿÿÿ±ÿÿ¦) = 256
+  [PASS] G2 W29 = 90 (>0 ä¸” <= çŒå­—æ‹æ•° 400) â‡’ DP ç¡®å®è¢«çº¿é€Ÿå‹ä½
+  [PASS] H0 rxsrc_tvalid/vs_tready æœ‰ç¡®å®šç”µå¹³ä¸”è·Ÿç€ force èµ°
+  [INFO] H è¯»æ•°(çŒæ»¡å): W26=69 W27=256
+  [PASS] ÿÿÿŒÿÿÿåÿÿÿ³ÿÿÿ¼ÿÿÿåÿÿÿ´ÿÿÿ±ÿÿ¦) = 256
+  [PASS] H2 W26 = 69 (>0: FIFO æ»¡è¿‡, æ»¡æ‹æ•°è¢«è®°ä¸‹æ¥)
+  [INFO] H è¯»æ•°(æ’ç©ºå): W30=257 W31=2056 W0=0
+  [PASS] H3 W30 = 257 >= DEPTH â‡’ è¯»ä¾§ TLAST è®¡æ•°ä¸çŒæ»¡ä¸€è‡´
+  [PASS] ÿÿÿ­ÿÿÿ‚ÿÿÿåÿ, ÿ§7.ÿÿÿšÿÿÿ©ÿÿ±) = 2056
+  [PASS] ac_rÿÿÿ‡ÿÿÿ”ÿÿÿ§ÿÿÿçÿÿÿ¸ÿÿÿ¥ÿÿ¨) = 0
+FAIL      tb_p6e_pcie_counters: 1 é¡¹å¤±è´¥
+INFO: xsimkernel Simulation Memory Usage: 114300 KB (Peak: 114300 KB), Simulation CPU Usage: 1796 ms
+INFO: [Common 17-206] Exiting xsim at Wed Sep 30 13:14:29 2026...
+
+
+# ===== runner: EXIT=1  15.8s   =====

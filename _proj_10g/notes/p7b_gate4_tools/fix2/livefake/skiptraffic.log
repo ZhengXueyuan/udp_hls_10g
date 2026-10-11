@@ -1,0 +1,49 @@
+
+===== 0. 位流身份 (G1 的位流一半) 与前置 =====
+  [WARN] 找不到位流 /d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_gate4_tools/fix2/livefake/tree/vivado_prj/p7b_ku5p_prj.runs/impl_1/wrapper_p4.bit ⇒ G1 少了 sha256 那一半 (必须在验收报告里如实标注)
+  [INFO] **live 档**: 按判据需要取 **2 块**快照 (旧版恒取 1 块 ⇒ G2/G3/C 组被 SKIP)
+  [PASS] G1         位流身份 (块A) | 期望=MAGIC=0x50360001 BID=0x00000018 MARKER=0xdeadbeef | 实测=MAGIC=0x50360001 BID=0x00000018 MARKER=0xdeadbeef
+  [PASS] B_WIN      块A 窗口 66 字齐全且无 0xffffffff | 期望=0 个 F | 实测=0 个 F (SLVERR 没混进窗口)
+  [PASS] B_UNIMPL   块A 未实现地址 0x128 | 期望=0xffffffff | 实测=0xffffffff
+  (等 5 s 再取第 2 块 —— 频率与增量判据需要两点)
+  [PASS] G1         位流身份 (块B) | 期望=MAGIC=0x50360001 BID=0x00000018 MARKER=0xdeadbeef | 实测=MAGIC=0x50360001 BID=0x00000018 MARKER=0xdeadbeef
+  [PASS] B_WIN      块B 窗口 66 字齐全且无 0xffffffff | 期望=0 个 F | 实测=0 个 F (SLVERR 没混进窗口)
+  [PASS] B_UNIMPL   块B 未实现地址 0x128 | 期望=0xffffffff | 实测=0xffffffff
+  [PASS] G2-W5      前端域 gmii_free = 156.2500 MHz (Δ=855961590 / 5.478154s / ÷1) | 期望=156.25 ±1% | 实测=156.2500 MHz
+  [PASS] G2-W24     数据面域 dp_free = 156.2500 MHz (Δ=855961590 / 5.478154s / ÷1) | 期望=156.25 ±1% | 实测=156.2500 MHz
+  [PASS] G2-W50     TX 域 tx_clk_act = 156.2500 MHz (**÷1 口径命中**) | 期望=156.25 ±1% | 实测=÷1 ⇒ 156.2500 / ÷2 ⇒ 78.1250 (⇒ wrapper_p4.v:3389 的 '÷2' 注释需订正)
+  [PASS] B_CONS-a   W30 == W0 + W32 | 期望=100 | 实测=100
+  [PASS] B_CONS-b   W31 == W1 - 4*W0 + W33 | 期望=151400 | 实测=151400
+  [PASS] B_DIR      链式触发方向性 W0 - W30 >= -1 | 期望=>=-1 | 实测=0
+  [PASS] C1-C5      PCS: gtpowergood/block_lock/rx_status=1 且 hi_ber/local_fault=0 | 期望=全成立 | 实测=W39=0x2000100C
+  [PASS] C6-C7      rx_error/fifo_error/bad_code_valid/framing_err_valid 全 0 | 期望=全 0 | 实测=W39=0x2000100C
+  [PASS] C8         W40.valid_ctrl_code_cyc 非 0 且在涨 (⭐正证据) | 期望=> 102 | 实测=102 → 154
+  [PASS] C6-ev      W40 的 framing/bad_code/rx_error 事件计数恒 0 | 期望=0/0 | 实测=0/0
+
+===== NIC 侧: 基线窗 (教学前) —— 含**判别力自检** N_BASE =====
+  [PASS] N_BASE     基线: 速率判据**不成立** ⇒ 该判据有判别力 | 期望=< 100000 帧 | 实测=Δport_rx_good=3 / 5.452696s (背景)
+
+===== 测量窗 (教学 → 打流 → **板侧 C** → NIC C/D → **板侧 D**) =====
+  [SKIP] N_RATE     测量窗 | 期望=需要打流 | 实测=G4_SKIP_TRAFFIC=1 ⇒ 本段没跑 (按 P7B_GATE4_PLAN.md 步骤 5 打流后重跑)
+  [INFO] N_XCHK 未评估: 板侧 C 未取
+
+===== 汇总 =====
+  PASS|G1|位流身份 (块A)|MAGIC=0x50360001 BID=0x00000018 MARKER=0xdeadbeef
+  PASS|B_WIN|块A 窗口 66 字齐全且无 0xffffffff|0 个 F (SLVERR 没混进窗口)
+  PASS|B_UNIMPL|块A 未实现地址 0x128|0xffffffff
+  PASS|G1|位流身份 (块B)|MAGIC=0x50360001 BID=0x00000018 MARKER=0xdeadbeef
+  PASS|B_WIN|块B 窗口 66 字齐全且无 0xffffffff|0 个 F (SLVERR 没混进窗口)
+  PASS|B_UNIMPL|块B 未实现地址 0x128|0xffffffff
+  PASS|G2-W5|前端域 gmii_free = 156.2500 MHz (Δ=855961590 / 5.478154s / ÷1)|156.2500 MHz
+  PASS|G2-W24|数据面域 dp_free = 156.2500 MHz (Δ=855961590 / 5.478154s / ÷1)|156.2500 MHz
+  PASS|G2-W50|TX 域 tx_clk_act = 156.2500 MHz (**÷1 口径命中**)|÷1 ⇒ 156.2500 / ÷2 ⇒ 78.1250 (⇒ wrapper_p4.v:3389 的 '÷2' 注释需订正)
+  PASS|B_CONS-a|W30 == W0 + W32|100
+  PASS|B_CONS-b|W31 == W1 - 4*W0 + W33|151400
+  PASS|B_DIR|链式触发方向性 W0 - W30 >= -1|0
+  PASS|C1-C5|PCS: gtpowergood/block_lock/rx_status=1 且 hi_ber/local_fault=0|W39=0x2000100C
+  PASS|C6-C7|rx_error/fifo_error/bad_code_valid/framing_err_valid 全 0|W39=0x2000100C
+  PASS|C8|W40.valid_ctrl_code_cyc 非 0 且在涨 (⭐正证据)|102 → 154
+  PASS|C6-ev|W40 的 framing/bad_code/rx_error 事件计数恒 0|0/0
+  PASS|N_BASE|基线: 速率判据**不成立** ⇒ 该判据有判别力|Δport_rx_good=3 / 5.452696s (背景)
+  SKIP|N_RATE|测量窗|G4_SKIP_TRAFFIC=1 ⇒ 本段没跑 (按 P7B_GATE4_PLAN.md 步骤 5 打流后重跑)
+########## PASS=17 FAIL=0 SKIP=1 (窗口 66 字; 未实现地址 0x128; EXPECT_BID=0x00000018) ##########

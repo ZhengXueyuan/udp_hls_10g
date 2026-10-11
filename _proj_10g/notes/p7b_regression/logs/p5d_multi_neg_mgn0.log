@@ -1,0 +1,31 @@
+# gate   : p5d_multi_neg_mgn0
+# bat    : sim\p5d_multi\run_tb_p5_multi.bat
+# args   : ['neg_mgn0']
+# expect : exit !0
+# desc   : 负对照：裕度 0 ⇒ ⑦ FAIL
+# started: 2026-09-30 13:02:04
+
+multi_cmds.memh written (neg_mgn0)
+== P5d multi check: case=neg_mgn0 ==
+  裕度表: wrapper=[4096, 3516, 3328] TB=[4096, 3516, 3328] (N=1..3 -> [4096, 4096, 3516])
+  MULCFG acc_margin=0 n_estab=3 wq_cap=0x4000
+  ① 分池: [(0, 16384, 16384), (1, 16384, 16384), (2, 16384, 16384), (0, 16384, 0), (1, 16384, 0), (2, 16384, 0), (0, 16384, 16384), (1, 16384, 16384), (2, 16384, 16384), (0, 16384, 16384), (1, 16384, 16384), (2, 16384, 16384), (0, 16384, 16384), (1, 16384, 16384), (2, 16384, 16384), (0, 16384, 16384), (1, 16384, 16384), (2, 16384, 16384), (0, 16384, 16384), (1, 16384, 16384), (2, 16384, 16384)]
+  ③ mac_drop=0 occ_max=17400 mac_frames=86
+  ④ 契约界峰值=52170 物理界峰值=52170 (FIFO=65536, occ_max=17400)
+  [注] "occ+Σ通告窗=49152" 的瞬时值不能当判据: 通告窗是 TCB 寄存器值, 滞后占用 <=1 个扫描轮 (256 拍) ⇒ occ 与未收回的旧窗会同时计入 (双重计数)。判据用的是接受界推导 (见 tb_p5_multi.v 的 inv_phys 注释)。
+  ⑤ close: [(0, 0, 0), (1, 1, 0), (2, 1, 0)]
+FAIL ⑥ WAIT 超时行数 (['MULTO op23 want=73728']): got 1 want 0
+FAIL ⑥ MULDONE tmo=0 (got {'tmo': 1, 'k': 2558285})
+FAIL ⑦ tcp_rx stat_drop_seq (窗塌陷拒收的顺序/重复段): got 2 want 0
+FAIL ⑦ 对端 go-back-N 回卷重传次数: got 2 want 0
+  ⑦ drift: seq=2 rewind=2 tx_bytes=73728 pass=81 ack=81
+  ⑧ 完整性: sink=72600 occ=0 accepted=72600 miss=0
+  [neg_mgn0] 期望 ⑦ FAIL: seq=2 rewind=2
+== P5d multi: 112 checks, 4 FAIL ==
+   - ⑥ WAIT 超时行数 (['MULTO op23 want=73728']): got 1 want 0
+   - ⑥ MULDONE tmo=0 (got {'tmo': 1, 'k': 2558285})
+   - ⑦ tcp_rx stat_drop_seq (窗塌陷拒收的顺序/重复段): got 2 want 0
+   - ⑦ 对端 go-back-N 回卷重传次数: got 2 want 0
+
+
+# ===== runner: EXIT=1  166.5s   =====

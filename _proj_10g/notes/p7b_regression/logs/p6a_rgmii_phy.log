@@ -1,0 +1,22 @@
+# gate   : p6a_rgmii_phy
+# bat    : sim\p6a_ku5p\run_tb_rgmii_phy_model.bat
+# args   : []
+# expect : exit 0
+# desc   : RGMII PHY 模型门
+# started: 2026-09-30 13:18:09
+
+#-----------------------------------------------------------
+#-----------------------------------------------------------
+--- DUT = util_gmii_to_rgmii_us (KU5P 新前端) ---
+  [TX] recorded=200  best_d=0  data_mis=0  er_mis=0
+  [RX] recorded=200  best_d=0  data_mis=0  er_mis=0
+  RESULT: PAIR_PASS (TX d=0, RX d=0; 数据+ER+条数四项全过)
+  [TX] recorded=200  best_d=0  data_mis=0  er_mis=0
+  [RX] recorded=199  best_d=13  data_mis=180  er_mis=3
+  RESULT: PAIR_FAIL
+--- DUT = util_gmii_to_rgmii (K7 旧前端, 对照) ---
+VERDICT: KU5P 前端 PASS (TX d=0 / RX d=0)
+VERDICT: K7 前端 FAIL (data TX=0 RX=180)  <= 预期: RX 相位配方不适配 RXDLY=1
+
+
+# ===== runner: EXIT=0  5.1s   =====

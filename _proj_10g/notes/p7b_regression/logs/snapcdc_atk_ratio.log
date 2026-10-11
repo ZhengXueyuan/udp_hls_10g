@@ -1,0 +1,18 @@
+# gate   : snapcdc_atk_ratio
+# bat    : sim\snapcdc\atk\ratio\run_atk_ratio.bat
+# args   : []
+# expect : exit 0
+# desc   : CDC 攻击面 ratio
+# started: 2026-09-30 13:12:38
+
+[A] HA=2000ps HB=4000ps MODE=1 NVAL=200 KA=7
+# xsim {tb_atk_ratio} -testplusarg HA=2000 -testplusarg HB=4000 -testplusarg MODE=1 -testplusarg NVAL=200 -testplusarg KA=7 -testplusarg VLOG=0 -testplusarg WT=2000000000 -autoloadwcfg -runall
+  [NEG-OK] A6 负对照抓到撕裂 #1: tags=0004d000 0004d001 0004d002 0004d203 0004d004 0004d005 (cnt_b=0004d3)
+  [NEG-OK] A6 负对照抓到撕裂 #2: tags=0004d600 0004d601 0004d602 0004d803 0004d604 0004d605 (cnt_b=0004d9)
+  [NEG-OK] A6 负对照: 撕裂被抓到 4 次 => A1 有判别力
+  [INFO] 延迟(请求 toggle 翻转 -> valid 捕获) = 10/10/10 a拍 (min/avg/max)
+RATIO-RESULT HA=2000 HB=4000 MODE=1 valids=204 flips=204 fails=0 PASS
+INFO: [Common 17-206] Exiting xsim at Wed Sep 30 13:12:43 2026...
+
+
+# ===== runner: EXIT=0  4.3s   =====

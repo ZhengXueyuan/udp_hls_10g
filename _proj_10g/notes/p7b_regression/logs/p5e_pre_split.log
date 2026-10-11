@@ -1,0 +1,34 @@
+# gate   : p5e_pre_split
+# bat    : sim\p5e_pre\run_tb_p5_udp_split.bat
+# args   : []
+# expect : exit 0
+# desc   : P5e-T1 UDP 分流（pre）
+# started: 2026-09-30 13:03:25
+
+gen_stim_p5e_udp[round=1]: 13 帧 (match 8 / nonmatch 4 / ipcsum 1), stim=3855 拍 (256 空闲 + 字节流 + 64)
+gen_stim_p5e_udp[round=1]: 13 帧 (match 8 / nonmatch 4 / ipcsum 1), stim=3855 拍 (256 空闲 + 字节流 + 64)
+    udp_m16      交付   16/  16 B (声明 meta_len=16)  TLAST crc_ok=1
+    udp_m6       交付    6/   6 B (声明 meta_len=6)  TLAST crc_ok=1
+    udp_m7       交付    7/   7 B (声明 meta_len=7)  TLAST crc_ok=1
+    udp_m1000    交付 1000/1000 B (声明 meta_len=1000)  TLAST crc_ok=1
+    udp_badcrc   交付  100/ 100 B (声明 meta_len=100)  TLAST crc_ok=0
+    udp_m1472    交付 1472/1472 B (声明 meta_len=1472)  TLAST crc_ok=1
+    udp_m16b     交付   16/  16 B (声明 meta_len=16)  TLAST crc_ok=1
+  载荷字节流合计 2617 B (期望 2617), TLAST 表 OK
+  slow 帧 13 / 字 411 ; udp_rx 载荷 2617 B / TLAST 7 处 / meta 8 / fend 8
+  meta 实测 (src_mac src_ip src_port len) [帧名 / 期望 len]:
+    000A3501FEC0 0A000001 3039 16    [udp_m16 / 期望 16]
+    000A3501FEC0 0A000001 3039 0     [udp_m0 / 期望 0]
+    000A3501FEC0 0A000001 3039 6     [udp_m6 / 期望 6]
+    000A3501FEC0 0A000001 3039 7     [udp_m7 / 期望 7]
+    000A3501FEC0 0A000001 3039 1000  [udp_m1000 / 期望 1000]
+    000A3501FEC0 0A000001 3039 100   [udp_badcrc / 期望 100]
+    000A3501FEC0 0A000001 3039 1472  [udp_m1472 / 期望 1472]
+    000A3501FEC0 0A000001 3039 16    [udp_m16b / 期望 16]
+  udp_rx 统计 pass=7 nonmatch=4 ipcsum=1 crc=1 bytes=2517 | mac_drop=0 stall=0
+  fast 路径旁证: pat_tx_bytes=1048576 pat_tx_frames=719 pat_rx_bytes=100 pat_mismatch=0 pat_done=1
+  tx: frames=721 bytes=1048576 ack=2 drop_len=0 fin=1 rst=0 eend=0
+P5e UDP SPLIT GATE: PASS
+
+
+# ===== runner: EXIT=0  146.0s   =====

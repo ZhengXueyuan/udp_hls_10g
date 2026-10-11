@@ -1,0 +1,63 @@
+# gate   : p6a_ramb36e2
+# bat    : sim\p6a_ku5p\run_tb_ramb36e2_sem.bat
+# args   : []
+# expect : exit 0
+# desc   : RAMB36E2 语义门
+# started: 2026-09-30 13:17:58
+
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Wed Sep 30 13:18:02 2026
+# Process ID         : 27760
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/sim/p6a_ku5p
+# Command line       : xsim.exe -log xsim_sem.log -mode tcl -source {xsim.dir/tb_ramb36e2_sem/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/sim/p6a_ku5p/xsim_sem.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/sim/p6a_ku5p\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 45232 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_ramb36e2_sem/xsim_script.tcl
+# xsim {tb_ramb36e2_sem} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+=== tb_ramb36e2_sem: UltraScale+ RAMB36E2 端口语义复验 ===
+-- P1 基本写读 (读延迟逐拍实测) --
+  地址施加后第 1 拍 dout = 1122334455667788
+  地址施加后第 2 拍 dout = 1122334455667788
+  地址施加后第 3 拍 dout = 1122334455667788
+  [PASS] P1 read@5 ������� �����������) = 1122334455667788
+-- P2 [观察] 未写槽读回值 --
+  [OBS  ] P2 read@200 = 0 (INIT 默认全 0; 空态 dout 不定, 不得依赖)
+-- P3a ENBWREN=0 的写 (真正的写使能口) --
+  [MATCH] P3a 写丢失 (读回 0000000000000000) —— ENBWREN=0 确实丢写
+-- P3b ENARDEN=0 (读口使能) 的写 --
+  [OBS  ] P3b ENARDEN=0 **不影响写** (读回 12345678feedface) ⇒ 写使能只认 ENBWREN
+-- P4 同址碰撞 (WRITE_FIRST) --
+Error: [Unisim RAMB36E2-11] Memory Collision at time 395.001 ns.
+A simultaneous WRITE on port B (01c0) and READ on port A (01c0) occured.
+The WRITE was successful but the READ may be corrupted. Instance: tb_ramb36e2_sem.u_dut
+  碰撞拍输出 = xxxxxxxxxxxxxxxx     (X)
+  碰撞后一拍输出 = b1b1b1b1b1b1b1b1
+  [MATCH] P4 存储内容存活 = 新值 (与 7 系列一致)
+-- P5 字址位段 [14:6] 反证 --
+  [MATCH] P5 [5:0] 抖动不影响读出 ⇒ 字址确在 [14:6]
+SEM RESULT: E2_SEMANTICS_MATCH_7SERIES (判据项 P1/P3a/P4/P5 全一致, 0 DIFF)
+=== done ===
+$finish called at time : 460 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/tb/tb_ramb36e2_sem.v" Line 210
+exit
+INFO: [Common 17-206] Exiting xsim at Wed Sep 30 13:18:04 2026...
+
+
+# ===== runner: EXIT=0  5.8s   =====

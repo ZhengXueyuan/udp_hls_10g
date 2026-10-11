@@ -1,0 +1,26 @@
+# gate   : p4_chain_active_slow
+# bat    : sim\p4sim\run_tb_p4_chain_active_slow.bat
+# args   : []
+# expect : exit 0
+# desc   : P4 鍏ㄩ摼 active slow
+# started: 2026-09-30 13:15:51
+
+9 RX frames
+memh written
+9 RX frames
+PCA arp_req=0 arp_inj=0 syn=0 synack=0 ack=0 data=0 echo=0 ok=0 to=1 iss=00000000 k_syn=0 slow=1 syn_cnt=0 k_syn2=0
+  ARP query path: cache hit (no who-has)
+  frames TX=11 (arp=2) slow_rx=(5, 0) slow_tx=(5, 0)
+MISMATCH: 慢对端模式: 捕获 SYN 数 0 < 2 (T_SYN_SENT 重传路径未执行 — TCP_RTO_MIN 缩比失效?)
+MISMATCH: 未捕获板侧主动 SYN (sport 1F90/dport 2382/dst=C0A86463/flags 02)
+MISMATCH: 主动链中断: synack_inj=0
+MISMATCH: 主动链中断: ack_seen=0
+MISMATCH: 主动链中断: data_inj=0
+MISMATCH: 主动链中断: echo_seen=0
+MISMATCH: TB 尾窗超时 (250k 拍) — 主动链未完成
+MISMATCH: CAM 主动槽数 0 != 1 (全部槽: [(0, 3232261121, 3232261122, 12345, 8080, 18838586676582, 1, 1016, 305419913), (1, 167772169, 3232261129, 54321, 8081, 187723572702721, 1, 97, 920), (2, 0, 0, 0, 0, 0, 0, 0, 0)])
+MISMATCH: 主动 echo 帧数 0 != 1 (sport 8080/dport 9090/flags 18)
+PCACTIVE FAIL (9 errs)
+
+
+# ===== runner: EXIT=1  82.2s   =====

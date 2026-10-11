@@ -1,0 +1,44 @@
+# gate   : p5e_udp_portout
+# bat    : sim\p5e_udp\run_tb_app_udp.bat
+# args   : ['portout']
+# expect : exit 0
+# desc   : 负：端口过滤外
+# started: 2026-09-30 13:02:06
+
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Wed Sep 30 13:02:10 2026
+# Process ID         : 19404
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/sim/p5e_udp
+# Command line       : xsim.exe -log xsim_ua_portout.log -mode tcl -source {xsim.dir/tb_app_udp/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/sim/p5e_udp/xsim_ua_portout.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/sim/p5e_udp\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 45303 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_app_udp/xsim_script.tcl
+# xsim {tb_app_udp} -testplusarg PORTOUT -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+P5E UDP APP: splitoff=0 portout=1 badcrc=0 nopeer=0
+Memory Collision Error on RAMB36E1 : tb_app_udp.u_slow_rx.u_ff.gen_mem[0].u_main.gen_sdp.gen_wide.INT_RAMB_SDP.chk_for_col_msg at simulation time 24564.000 ns.
+A read was performed on address 803f (hex) of port A while a write was requested to the same address on port B.  The write will be successful however the read value on port A is unknown until the next CLKA cycle.
+  [dbg] neg: app_frames=0 drop_crc=0 drop_ovf=0 drop_part=0 hls_frames=1 hls_split=0 commit=1 srx_drop=0 nfr=0 ready=0 meta_cnt=0
+P5E UDP APP GATE: OK (neg mode)
+$finish called at time : 346340 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/tb/tb_app_udp.v" Line 645
+exit
+
+
+# ===== runner: EXIT=1  5.8s   =====

@@ -1,0 +1,46 @@
+=== check_window: P7B-BIZ 快照装配静态核对 (repo=D:\repo\XCKU5PMini\udp_hls_10g, mutate=declpatho) ===
+       [mutate=declpatho] 装配里把一个已声明网名换成未声明的拼写
+  [PASS] 1a SNAP_NW_P6E 声明存在 
+       SNAP_NW_P6E = 61
+  [PASS] 1b snap_dout_all 拼接存在 
+  [PASS] 1x (下一条按'总字数'判, 不按项数) 
+  [FAIL] 1a 每项的字数可解析 (不可解析: ['biz_w56_undeclared_typo'])
+  [FAIL] 1 **总字数 == SNAP_NW_P6E** (项数=26, 逐项字数之和=60, NW=61)
+  [PASS] 2a 最右一项是 snap_dout (实际 'snap_dout')
+  [PASS] 2b snap_dout 一项占 36 字 (FE14+DP22) 
+  [PASS] 3a 五个束宽 localparam 都在 (fe=14 dp=22 p7bfe=3 p7bdp=22 tx=4)
+  [PASS] 3b FE+DP = 36 (snap_seq 的两束) (14+22)
+  [PASS] 3 束宽等式 == NW (14+22+3+(22-4)+4 = 61)
+  [PASS] 4 * 旧字未移位 (HEAD 的项 == 新表的尾部) (HEAD 16 项, 新表 26 项 => 新增 10 项全在 MSB 端)
+  [FAIL] 5a 最上面 10 项 = W60..W51 的槽 (MSB 先写) (实际 ['p7bdp_dout[21*32 +: 32]', 'p7bdp_dout[20*32 +: 32]', 'p7bdp_dout[19*32 +: 32]', 'p7bdp_dout[18*32 +: 32]', 'biz_w56_undeclared_typo', 'p7bdp_dout[16*32 +: 32]', 'p7bdp_dout[15*32 +: 32]', 'p7bdp_dout[14*32 +: 32]', 'p7bdp_dout[13*32 +: 32]', 'p7bdp_dout[12*32 +: 32]'])
+  [PASS] 5b 槽号映射 W51 (p7bdp_din[12*32 +: 32] = biz_w51)
+  [PASS] 5b 槽号映射 W52 (p7bdp_din[13*32 +: 32] = biz_w52)
+  [PASS] 5b 槽号映射 W53 (p7bdp_din[14*32 +: 32] = biz_w53)
+  [PASS] 5b 槽号映射 W54 (p7bdp_din[15*32 +: 32] = biz_w54)
+  [PASS] 5b 槽号映射 W55 (p7bdp_din[16*32 +: 32] = biz_w55)
+  [PASS] 5b 槽号映射 W56 (p7bdp_din[17*32 +: 32] = biz_w56)
+  [PASS] 5b 槽号映射 W57 (p7bdp_din[18*32 +: 32] = biz_w57)
+  [PASS] 5b 槽号映射 W58 (p7bdp_din[19*32 +: 32] = biz_w58)
+  [PASS] 5b 槽号映射 W59 (p7bdp_din[20*32 +: 32] = biz_w59)
+  [PASS] 5b 槽号映射 W60 (p7bdp_din[21*32 +: 32] = biz_w60)
+  [PASS] 6a p7bdp generate 存在 
+  [PASS] 6 p7bdp_din 驱动项数 == SNAP_P7BDP_NW (generate 12 + 显式 10 = 22, NW=22)
+  [FAIL] 7 * 装配里的标识符全部'先声明后用' (扫描 5 个名字: p7bdp_dout,biz_w56_undeclared_typo,txsnap_dout,p7bfe_dout,snap_dout; 未声明/晚声明: biz_w56_undeclared_typo)
+  [PASS] 8a ar_word 声明可解析 
+  [PASS] 8 * 未实现地址不回绕 (addr=0x114 => word 69 < 2^7=128)
+  [PASS] 8b snap_base 声明可解析 
+  [PASS] 8c snap_base 装得下 (NW-1)<<5 (need=1920 < 2^12=4096)
+  [PASS] 8d SNAP_W0_IDX == 8 (窗口起点 0x20) 
+  [PASS] 9a app_udp_pattern 有 `output reg [31:0] stat_tx_ovf` 端口 
+  [PASS] 9b wrapper 把它接到 `udpapp_tx_ovf` 
+  [PASS] 9c `udpapp_tx_ovf` 已声明 (防隐式 1 位网) 
+  [PASS] 9d `biz_w56` (= W56) 由 `udpapp_tx_ovf` 驱动 
+  [PASS] 10 slow_tx_adp 有 `output reg [31:0] stat_fifo_ovf` 
+  [PASS] 10 slow_tx_adp.stat_fifo_ovf 接到 `stx_stat_fifo_ovf` (不是接反) 
+  [PASS] 10 `biz_w59` (= W59) 由 `stx_stat_fifo_ovf` 驱动 
+  [PASS] 10 slow_rx_adp 有 `output reg [31:0] stat_fifo_ovf` 
+  [PASS] 10 slow_rx_adp.stat_fifo_ovf 接到 `srx_stat_fifo_ovf` (不是接反) 
+  [PASS] 10 `biz_w60` (= W60) 由 `srx_stat_fifo_ovf` 驱动 
+----------------------------------------------------------
+PASS=36 FAIL=4
+FAILED: 1a 每项的字数可解析, 1 **总字数 == SNAP_NW_P6E**, 5a 最上面 10 项 = W60..W51 的槽 (MSB 先写), 7 * 装配里的标识符全部'先声明后用'

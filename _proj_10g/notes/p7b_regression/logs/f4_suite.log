@@ -1,0 +1,41 @@
+# gate   : f4_suite
+# bat    : sim\f4sim\run_f4_suite.bat
+# args   : []
+# expect : exit 0
+# desc   : F4 套件
+# started: 2026-09-30 13:07:47
+
+########## F4 GATE (main stimulus: 0..64 payload sweep + phase sweep + nodrain) ##########
+########## F4-2 PROBE (mini stimulus: TERM-wait vs new-frame phase) ##########
+########## MAC REGRESS ##########
+########## CHAIN ##########
+########## VERDICT (tripwire: running a gate is not judging it) ##########
+=== F4 VERDICT (stim=main) ===
+ok   new     main       = PASS
+ok   new     probe_ab   = PASS
+      new     主门=PASS(PASS_ALL (0 条判据)) 探针门=PASS | 探针A/B(old vs new)=PASS : TOTAL: DP_good 28 -> 28 | DP_goodbytes 1558 -> 1558 | ���� 20
+ok   old     main       = FAIL
+ok   old     probe_gate = FAIL
+      old     主门=FAIL(FAIL 346 条 (FAIL 行 348)) 探针门=FAIL | 探针A/B(old vs old)=None : TOTAL: DP_good 28 -> 28 | DP_goodbytes 1558 -> 1558 | ���� 20
+ok   mut     probe_ab   = FAIL
+      mut     主门=PASS(PASS_ALL (0 条判据)) 探针门=PASS | 探针A/B(old vs mut)=FAIL : TOTAL: DP_good 28 -> 22 | DP_goodbytes 1558 -> 1198 | ���� 20
+ok   nogate  main       = FAIL
+      nogate  主门=FAIL(FAIL 5 条 (FAIL 行 7)) 探针门=FAIL | 探针A/B(old vs nogate)=PASS : TOTAL: DP_good 28 -> 28 | DP_goodbytes 1558 -> 1558 | ���� 20
+ok   mutcrs  main       = FAIL
+      mutcrs  主门=FAIL(FAIL 181 条 (FAIL 行 183)) 探针门=FAIL | 探针A/B(old vs mutcrs)=FAIL : F4_AB: FAIL (1)
+F4_VERDICT: PASS (0 条期望不符)
+=== F4 VERDICT (stim=f2probe) ===
+ok   new     probe_ab   = PASS
+      new     主门=PASS(PASS_ALL (0 条判据)) 探针门=PASS | 探针A/B(old vs new)=PASS : TOTAL: DP_good 28 -> 28 | DP_goodbytes 1558 -> 1558 | ���� 20
+ok   old     probe_gate = FAIL
+      old     主门=FAIL(FAIL 48 条 (FAIL 行 50)) 探针门=FAIL | 探针A/B(old vs old)=None : TOTAL: DP_good 28 -> 28 | DP_goodbytes 1558 -> 1558 | ���� 20
+ok   mut     probe_ab   = FAIL
+      mut     主门=PASS(PASS_ALL (0 条判据)) 探针门=PASS | 探针A/B(old vs mut)=FAIL : TOTAL: DP_good 28 -> 22 | DP_goodbytes 1558 -> 1198 | ���� 20
+      nogate  主门=PASS(PASS_ALL (0 条判据)) 探针门=PASS | 探针A/B(old vs nogate)=PASS : TOTAL: DP_good 28 -> 28 | DP_goodbytes 1558 -> 1558 | ���� 20
+      mutcrs  主门=FAIL(FAIL 9 条 (FAIL 行 11)) 探针门=FAIL | 探针A/B(old vs mutcrs)=FAIL : F4_AB: FAIL (1)
+F4_VERDICT: PASS (0 条期望不符)
+F4-SUITE-VERDICT: PASS (positive PASS + all four mutants caught)
+SUITE DONE
+
+
+# ===== runner: EXIT=0  107.6s   =====

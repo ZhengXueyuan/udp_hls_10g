@@ -45,6 +45,12 @@ vivado_prj/
 .Xil/
 *.jou
 *.log
+# ⭐ 2026-10-11 政策订正（用户授权 TL 判「是否影响后续研读本工程」）：上面那条**裸** `*.log`
+#   把 `_proj_10g/notes/` 取证树里的证据 .log 一并吞掉（前科：多份报告引用过的决定性 .log
+#   从未入库，靠 `-f` 补录才发现；全树 1650 件 / 99.4 MB）。判决：**笔记树 = 策展过的证据面 ⇒ 放行**；
+#   其余（sim/board 的工具跑动日志 = 可再生）**维持忽略**。
+#   archive 子树在更下方有自己的规则（后定义胜）⇒ 不受此条影响；sim 侧同理不受影响。
+!_proj_10g/notes/**/*.log
 *.bit
 PktMon*
 Pkt2.txt
@@ -812,3 +818,12 @@ _proj_10g/notes/p7b_retxfix/negctl/xvlog.pb
 _proj_10g/notes/p7b_retxfix_salvage/*
 !_proj_10g/notes/p7b_retxfix_salvage/README.md
 !_proj_10g/notes/p7b_retxfix_salvage/SHA256SUMS.txt
+
+# ---- 2026-10-11 政策订正（补条，钉在**文件末尾**：后定义胜）----
+# 上方 `!. log` 放行条落在文件中部，会被**中间各轮的每目录 `dir/*` 块**重新吞掉
+# （实测仍有 ~849 件被吞，含本轮 `p7b_persist_impl_review_20261011` 的 12 件）。
+# ⇒ 把放行钉到末尾；两个「大盘/按约定只留索引」的子树**只对 .log 维持忽略**
+# （用 `**/*.log` 而不是 `dir/**`，以免连它们的 `SHA256SUMS.txt` 白名单一起压掉）。
+!_proj_10g/notes/**/*.log
+_proj_10g/notes/p7b_retxfix_salvage/**/*.log
+_proj_10g/notes/p7b_build_archive/**/*.log

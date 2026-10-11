@@ -1,0 +1,66 @@
+=== 1. 板侧最终读数 (PCIe 观测窗口**仍然活着**) ===
+MAGIC=0x50360001 BID=0x0000000a MARKER=0xdeadbeef UNIMPL=0xffffffff gen=5
+W0=0x00000000 W3=0x00000000 W8=0x00000000 W10=0x00000000 W13=0x00000000 W14=0x00000000 W20=0x00000004 W34=0x00000000 W39=0x2000100c W40=0x000000ff
+W51=0x00000000 W52=0x00000000 W53=0x00000000 W54=0x00000000 W55=0x00000000 W56=0x00000000 W57=0x00000000 W58=0x00000000 W59=0x00000000 W60=0x00000000  # P7B-BIZ 十字
+W61=0x00000000 W62=0x00000000  # P7B-WU 二轮新增 (stat_wu / rx_occ_bytes)
+=== 2. 对端机 /tmp 里本轮产物清单 (取回后删) ===
+-rw-r--r-- 1 tcpdump tcpdump    406314 Oct  7 00:01 /tmp/biz_j6.pcap
+-rw-rw-r-- 1 a       a             693 Oct  7 11:58 /tmp/mk.py
+-rw-rw-r-- 1 a       a             293 Oct  7 11:55 /tmp/p2.py
+-rw-rw-r-- 1 a       a             493 Oct  7 11:55 /tmp/p3.py
+-rw-rw-r-- 1 a       a             494 Oct  7 11:55 /tmp/p4.py
+-rw-rw-r-- 1 a       a            4576 Oct  6 22:43 /tmp/p7b_biz_tcp_badbyte_local.py
+-rw-r--r-- 1 tcpdump tcpdump    390878 Oct  7 00:12 /tmp/paced230_j6.pcap
+-rw-r--r-- 1 tcpdump tcpdump    817330 Oct  7 00:10 /tmp/paced2_j6.pcap
+-rw-r--r-- 1 tcpdump tcpdump  35943048 Oct  7 00:06 /tmp/paced_j6.pcap
+-rw-rw-r-- 1 a       a             594 Oct  7 11:55 /tmp/patch_kcf.py
+-rw-r--r-- 1 tcpdump tcpdump    383420 Oct  6 23:56 /tmp/rate_j6.pcap
+-rw-rw-r-- 1 a       a             606 Oct  7 12:02 /tmp/rpmlist2.py
+-rw-rw-r-- 1 a       a            1166 Oct  7 12:02 /tmp/rpmlist.py
+-rw-r--r-- 1 tcpdump tcpdump  69575204 Oct  6 23:07 /tmp/s2_bidir.pcap
+-rw-r--r-- 1 tcpdump tcpdump    459024 Oct  7 17:48 /tmp/s2_dl.pcap
+-rw-r--r-- 1 tcpdump tcpdump 398847714 Oct  6 23:07 /tmp/s2_tcp2.pcap
+-rw-r--r-- 1 tcpdump tcpdump 332613564 Oct  6 22:49 /tmp/s2_tcp.pcap
+-rw-r--r-- 1 tcpdump tcpdump   1827736 Oct  7 17:41 /tmp/STC_DL1_head.pcap
+-rw-r--r-- 1 tcpdump tcpdump 560559056 Oct  7 17:35 /tmp/STC_DL1.pcap
+-rw-r--r-- 1 tcpdump tcpdump  68105972 Oct  7 17:44 /tmp/STC_DL3.pcap
+-rw-r--r-- 1 tcpdump tcpdump 190737090 Oct  7 17:47 /tmp/stc_ul1.pcap
+-rw-r--r-- 1 tcpdump tcpdump 193425168 Oct  7 17:47 /tmp/stc_ul2.pcap
+-rw-r--r-- 1 tcpdump tcpdump    277478 Oct  7 02:23 /tmp/wu_dry.pcap
+-rw-r--r-- 1 tcpdump tcpdump 136666918 Oct  7 02:32 /tmp/wu_fix_P0_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump 136472410 Oct  7 02:33 /tmp/wu_fix_P0_r2.pcap
+-rw-r--r-- 1 tcpdump tcpdump 120851800 Oct  7 02:35 /tmp/wu_fix_P1000_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump 119920562 Oct  7 02:36 /tmp/wu_fix_P1000_r2.pcap
+-rw-r--r-- 1 tcpdump tcpdump  71748674 Oct  7 02:33 /tmp/wu_fix_P100_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump  71749450 Oct  7 02:34 /tmp/wu_fix_P100_r2.pcap
+-rw-r--r-- 1 tcpdump tcpdump  95990588 Oct  7 02:34 /tmp/wu_fix_P134_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump  96127302 Oct  7 02:34 /tmp/wu_fix_P134_r2.pcap
+-rw-r--r-- 1 tcpdump tcpdump 132694980 Oct  7 02:35 /tmp/wu_fix_P160_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump 131469972 Oct  7 02:35 /tmp/wu_fix_P160_r2.pcap
+-rw-r--r-- 1 tcpdump tcpdump  35859300 Oct  7 02:33 /tmp/wu_fix_P50_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump  35859944 Oct  7 02:33 /tmp/wu_fix_P50_r2.pcap
+-rw-r--r-- 1 root    root       459024 Oct  7 02:38 /tmp/wu_j0_s2prev.pcap
+-rw-r--r-- 1 tcpdump tcpdump   1281152 Oct  7 01:25 /tmp/wuloop_fin_p0.pcap
+-rw-r--r-- 1 tcpdump tcpdump    878480 Oct  7 01:25 /tmp/wuloop_fin_p160.pcap
+-rw-r--r-- 1 tcpdump tcpdump    413754 Oct  7 01:19 /tmp/wuloop_p0.pcap
+-rw-r--r-- 1 tcpdump tcpdump  35076116 Oct  7 01:22 /tmp/wuloop_p100.pcap
+-rw-r--r-- 1 tcpdump tcpdump    819298 Oct  7 01:21 /tmp/wuloop_p160.pcap
+-rw-r--r-- 1 tcpdump tcpdump    497060 Oct  7 02:24 /tmp/wu_neg_P0_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump    526004 Oct  7 02:24 /tmp/wu_neg_P0_r2.pcap
+-rw-r--r-- 1 tcpdump tcpdump    486992 Oct  7 02:27 /tmp/wu_neg_P1000_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump    514264 Oct  7 02:27 /tmp/wu_neg_P1000_r2.pcap
+-rw-r--r-- 1 tcpdump tcpdump  71744038 Oct  7 02:25 /tmp/wu_neg_P100_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump  71739336 Oct  7 02:25 /tmp/wu_neg_P100_r2.pcap
+-rw-r--r-- 1 tcpdump tcpdump  94970540 Oct  7 02:26 /tmp/wu_neg_P134_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump  94033542 Oct  7 02:26 /tmp/wu_neg_P134_r2.pcap
+-rw-r--r-- 1 tcpdump tcpdump   1427174 Oct  7 02:26 /tmp/wu_neg_P160_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump   1407178 Oct  7 02:27 /tmp/wu_neg_P160_r2.pcap
+-rw-r--r-- 1 tcpdump tcpdump  35859374 Oct  7 02:25 /tmp/wu_neg_P50_r1.pcap
+-rw-r--r-- 1 tcpdump tcpdump  35861184 Oct  7 02:25 /tmp/wu_neg_P50_r2.pcap
+=== 3. 网络配置复原 ===
+AFTER_CLEANUP addr: enp1s0f1np1      DOWN           
+AFTER_CLEANUP route: 192.168.100.2 dev enp3s0 src 192.168.100.1 uid 0 
+AFTER_CLEANUP /tmp: /tmp/biz_j6.pcap
+/tmp/paced230_j6.pcap
+hw_server=active ; uptime=up 19 hours, 20 minutes
+FINAL_DONE

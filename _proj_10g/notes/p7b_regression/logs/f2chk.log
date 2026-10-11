@@ -1,0 +1,131 @@
+# gate   : f2chk
+# bat    : sim\f2chk\run_f2chk.bat
+# args   : []
+# expect : exit 0
+# desc   : F-2 检查
+# started: 2026-09-30 13:07:03
+
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Wed Sep 30 13:07:05 2026
+# Process ID         : 21312
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/sim/f2chk
+# Command line       : xsim.exe -log xsim_f2chk.log -mode tcl -source {xsim.dir/tb_f2chk/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/sim/f2chk/xsim_f2chk.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/sim/f2chk\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 44623 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_f2chk/xsim_script.tcl
+# xsim {tb_f2chk} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+==== f2chk: pcount 跨帧泄漏指控复核 ====
+cfg: rcv_nxt=00001000 rcv_wnd=c000 state=1
+-- A) 长段(1460) -> 短段(304) -> 148 (rcv_wnd=0xC000) --
+NOMATCH k=44 st=1 wcnt=6 pcount=0 plen=1460 fsm=3 tdata=4000000000000001 tkeep=ff tlast=0 psnd=00002000  ||判定拍: state=0 wcnt=6 pcount=0 plen=1460 pay_r=1460 || rcv_nxt=00001000 rcv_wnd=c000
+  [DROPENTER] k=44 判定拍 state=0 wcnt=6 pcount=0 plen=1460 pay_r=1460  (→S_DROP)
+   after F1(1460): pcount=0 (残值), rcv_nxt=00001000
+NOMATCH k=247 st=1 wcnt=6 pcount=0 plen=304 fsm=3 tdata=400000000000b4b5 tkeep=ff tlast=0 psnd=00002000  ||判定拍: state=0 wcnt=6 pcount=0 plen=304 pay_r=304 || rcv_nxt=00001000 rcv_wnd=c000
+  [DROPENTER] k=247 判定拍 state=0 wcnt=6 pcount=0 plen=304 pay_r=304  (→S_DROP)
+   after F2(304):  pcount=0, rcv_nxt=00001000
+NOMATCH k=305 st=1 wcnt=6 pcount=0 plen=148 fsm=3 tdata=400000000000e4e5 tkeep=ff tlast=0 psnd=00002000  ||判定拍: state=0 wcnt=6 pcount=0 plen=148 pay_r=148 || rcv_nxt=00001000 rcv_wnd=c000
+  [DROPENTER] k=305 判定拍 state=0 wcnt=6 pcount=0 plen=148 pay_r=148  (→S_DROP)
+  ** A long1460->short304->148 LEN MISMATCH: delivered=0 expected=1912
+CASE A long1460->short304->148: FAIL  delivered=0 (exp 1912) rcv_nxt=00001000 (exp 00001778)
+  ** rcv_nxt MISMATCH: dut=00001000 tb=00001778
+-- B) 复现 NOMATCH 现场行 (前置 1460 长段 + rcv_wnd=0) --
+NOMATCH k=344 st=1 wcnt=6 pcount=0 plen=1460 fsm=3 tdata=4000000000007879 tkeep=ff tlast=0 psnd=00002000  ||判定拍: state=0 wcnt=6 pcount=0 plen=1460 pay_r=1460 || rcv_nxt=00001000 rcv_wnd=c000
+  [DROPENTER] k=344 判定拍 state=0 wcnt=6 pcount=0 plen=1460 pay_r=1460  (→S_DROP)
+   F4(1460) 后 pcount 残值 = 0 (对方日志里的 1458)
+   set rcv_wnd=0 -> 0000 ; 发 304B 顺序段 (seq=rcv_nxt=00001d2c) nm0=4 seq0=0
+NOMATCH k=555 st=1 wcnt=6 pcount=0 plen=304 fsm=3 tdata=4000000000002c2d tkeep=ff tlast=0 psnd=00002000  ||判定拍: state=0 wcnt=6 pcount=0 plen=304 pay_r=304 || rcv_nxt=00001000 rcv_wnd=0000
+  [DROPENTER] k=555 判定拍 state=0 wcnt=6 pcount=0 plen=304 pay_r=304  (→S_DROP)
+   seq==rcv_nxt 的 304B 段在 wnd=0 下的结果: d_nonmatch=5 d_seq=0
+   >>> 判定: 窗口=0 时顺序段被判 NONMATCH (与对方日志同为 nonmatch 计数路)
+   set rcv_wnd=0xC000 -> c000 ; 同一段 (同一 pcount 残值) 重发
+NOMATCH k=617 st=1 wcnt=6 pcount=0 plen=304 fsm=3 tdata=4000000000002c2d tkeep=ff tlast=0 psnd=00002000  ||判定拍: state=0 wcnt=6 pcount=0 plen=304 pay_r=304 || rcv_nxt=00001000 rcv_wnd=c000
+  [DROPENTER] k=617 判定拍 state=0 wcnt=6 pcount=0 plen=304 pay_r=304  (→S_DROP)
+  ** B wnd0-reject then wnd-ok-accept LEN MISMATCH: delivered=0 expected=1764
+CASE B wnd0-reject then wnd-ok-accept: FAIL  delivered=0 (exp 1764) rcv_nxt=00001000 (exp 00001e5c)
+  ** rcv_nxt MISMATCH: dut=00001000 tb=00001e5c
+-- C) 段长扫描 (每个长度前面都先来一个 1460 长段, 制造 pcount 残值) --
+   !! C 扫描前 rcv_nxt 已偏离 (dut=00001000 tb=00001e5c) - 中止扫描
+CASE C len-sweep (34x [1460 + L]): PASS  delivered=0 bytes, rcv_nxt=00001000 (exp 00001e5c) wnd=c000
+  ** rcv_nxt MISMATCH: dut=00001000 tb=00001e5c
+-- E) 前一帧被拒收(窗口外, S_DROP 中段) -> 紧跟短段 --
+NOMATCH k=675 st=1 wcnt=6 pcount=0 plen=1460 fsm=3 tdata=4000000000005c5d tkeep=ff tlast=0 psnd=00002000  ||判定拍: state=0 wcnt=6 pcount=0 plen=1460 pay_r=1460 || rcv_nxt=00001000 rcv_wnd=c000
+  [DROPENTER] k=675 判定拍 state=0 wcnt=6 pcount=0 plen=1460 pay_r=1460  (→S_DROP)
+   E0: 1460 交付后 pcount 残值=0 rcv_nxt=00001000
+NOMATCH k=874 st=1 wcnt=6 pcount=0 plen=1460 fsm=3 tdata=4000000000001011 tkeep=ff tlast=0 psnd=00002000  ||判定拍: state=0 wcnt=6 pcount=0 plen=1460 pay_r=1460 || rcv_nxt=00001000 rcv_wnd=c000
+  [DROPENTER] k=874 判定拍 state=0 wcnt=6 pcount=0 plen=1460 pay_r=1460  (→S_DROP)
+   E1: 窗口外 1460 帧 -> nonmatch=8, pcount 残值仍=0 (S_DROP 期间不重置)
+NOMATCH k=1073 st=1 wcnt=6 pcount=0 plen=304 fsm=3 tdata=4000000000001011 tkeep=ff tlast=0 psnd=00002000  ||判定拍: state=0 wcnt=6 pcount=0 plen=304 pay_r=304 || rcv_nxt=00001000 rcv_wnd=c000
+  [DROPENTER] k=1073 判定拍 state=0 wcnt=6 pcount=0 plen=304 pay_r=304  (→S_DROP)
+  ** E prev-frame-rejected -> short frame OK LEN MISMATCH: delivered=0 expected=1764
+CASE E prev-frame-rejected -> short frame OK: FAIL  delivered=0 (exp 1764) rcv_nxt=00001000 (exp 00002540)
+  ** rcv_nxt MISMATCH: dut=00001000 tb=00002540
+-- F) tuser 半帧中止 (S_PAY 中段) -> 后续短段 --
+NOMATCH k=1127 st=1 wcnt=6 pcount=0 plen=1460 fsm=3 tdata=4000000000004041 tkeep=ff tlast=0 psnd=00002000  ||判定拍: state=0 wcnt=6 pcount=0 plen=1460 pay_r=1460 || rcv_nxt=00001000 rcv_wnd=c000
+  [DROPENTER] k=1127 判定拍 state=0 wcnt=6 pcount=0 plen=1460 pay_r=1460  (→S_DROP)
+   F1: 半帧中止时 fsm=3 pcount=0 emit_l=0
+   F2: 中止后 fsm=0 pcount=0 rcv_nxt=00001000 (半帧未推进)
+NOMATCH k=1213 st=1 wcnt=6 pcount=0 plen=304 fsm=3 tdata=4000000000004041 tkeep=ff tlast=0 psnd=00002000  ||判定拍: state=0 wcnt=6 pcount=0 plen=304 pay_r=304 || rcv_nxt=00001000 rcv_wnd=c000
+  [DROPENTER] k=1213 判定拍 state=0 wcnt=6 pcount=0 plen=304 pay_r=304  (→S_DROP)
+  ** F after-tuser-abort short frame LEN MISMATCH: delivered=0 expected=304
+CASE F after-tuser-abort short frame: FAIL  delivered=0 (exp 304) rcv_nxt=00001000 (exp 00002670)
+  ** rcv_nxt MISMATCH: dut=00001000 tb=00002670
+-- G) 纯 ACK 帧 (S_PAD 路径) -> 紧跟短段 --
+NOMATCH k=1267 st=1 wcnt=6 pcount=0 plen=100 fsm=3 tdata=4000000000007071 tkeep=ff tlast=0 psnd=00002000  ||判定拍: state=0 wcnt=6 pcount=0 plen=100 pay_r=100 || rcv_nxt=00001000 rcv_wnd=c000
+  [DROPENTER] k=1267 判定拍 state=0 wcnt=6 pcount=0 plen=100 pay_r=100  (→S_DROP)
+   G1: 纯 ACK 后 pcount 残值=0 rcv_nxt=00001000 (不应推进)
+NOMATCH k=1313 st=1 wcnt=6 pcount=0 plen=304 fsm=3 tdata=400000000000d4d5 tkeep=ff tlast=0 psnd=00002000  ||判定拍: state=0 wcnt=6 pcount=0 plen=304 pay_r=304 || rcv_nxt=00001000 rcv_wnd=c000
+  [DROPENTER] k=1313 判定拍 state=0 wcnt=6 pcount=0 plen=304 pay_r=304  (→S_DROP)
+  ** G after-pure-ACK short frame LEN MISMATCH: delivered=0 expected=404
+CASE G after-pure-ACK short frame: FAIL  delivered=0 (exp 404) rcv_nxt=00001000 (exp 00002804)
+  ** rcv_nxt MISMATCH: dut=00001000 tb=00002804
+-- H) 在飞期间窗口塌陷 (wnd 0x130=304 -> 0) --
+NOMATCH k=1367 st=1 wcnt=6 pcount=0 plen=1460 fsm=3 tdata=4000000000000405 tkeep=ff tlast=0 psnd=00002000  ||判定拍: state=0 wcnt=6 pcount=0 plen=1460 pay_r=1460 || rcv_nxt=00001000 rcv_wnd=c000
+  [DROPENTER] k=1367 判定拍 state=0 wcnt=6 pcount=0 plen=1460 pay_r=1460  (→S_DROP)
+NOMATCH k=1574 st=1 wcnt=6 pcount=0 plen=304 fsm=3 tdata=400000000000b8b9 tkeep=ff tlast=0 psnd=00002000  ||判定拍: state=0 wcnt=6 pcount=0 plen=304 pay_r=304 || rcv_nxt=00001000 rcv_wnd=0000
+  [DROPENTER] k=1574 判定拍 state=0 wcnt=6 pcount=0 plen=304 pay_r=304  (→S_DROP)
+   H: 塌陷拍在飞 -> nonmatch=15 seq=0 rcv_nxt=00001000 (应停在 00002db8)
+NOMATCH k=1632 st=1 wcnt=6 pcount=0 plen=304 fsm=3 tdata=400000000000b8b9 tkeep=ff tlast=0 psnd=00002000  ||判定拍: state=0 wcnt=6 pcount=0 plen=304 pay_r=304 || rcv_nxt=00001000 rcv_wnd=c000
+  [DROPENTER] k=1632 判定拍 state=0 wcnt=6 pcount=0 plen=304 pay_r=304  (→S_DROP)
+  ** H window-collapse-in-flight LEN MISMATCH: delivered=0 expected=1764
+CASE H window-collapse-in-flight: FAIL  delivered=0 (exp 1764) rcv_nxt=00001000 (exp 00002ee8)
+  ** rcv_nxt MISMATCH: dut=00001000 tb=00002ee8
+-- D) 畸形帧 (声明 plen=304, 帧身 400B) = L753 唯一可达路径 --
+NOMATCH k=1686 st=1 wcnt=6 pcount=0 plen=1460 fsm=3 tdata=400000000000e8e9 tkeep=ff tlast=0 psnd=00002000  ||判定拍: state=0 wcnt=6 pcount=0 plen=1460 pay_r=1460 || rcv_nxt=00001000 rcv_wnd=c000
+  [DROPENTER] k=1686 判定拍 state=0 wcnt=6 pcount=0 plen=1460 pay_r=1460  (→S_DROP)
+   D1 畸形帧前 pcount 残值=0
+NOMATCH k=1885 st=1 wcnt=6 pcount=0 plen=304 fsm=3 tdata=4000000000009c9d tkeep=ff tlast=0 psnd=00002000  ||判定拍: state=0 wcnt=6 pcount=0 plen=304 pay_r=304 || rcv_nxt=00001000 rcv_wnd=c000
+  [DROPENTER] k=1885 判定拍 state=0 wcnt=6 pcount=0 plen=304 pay_r=304  (→S_DROP)
+   D1 畸形帧结果: nonmatch=18 trunc=0 pass=1
+NOMATCH k=1955 st=1 wcnt=6 pcount=0 plen=304 fsm=3 tdata=4000000000009c9d tkeep=ff tlast=0 psnd=00002000  ||判定拍: state=0 wcnt=6 pcount=0 plen=304 pay_r=304 || rcv_nxt=00001000 rcv_wnd=c000
+  [DROPENTER] k=1955 判定拍 state=0 wcnt=6 pcount=0 plen=304 pay_r=304  (→S_DROP)
+  ** D malformed-guard + recovery LEN MISMATCH: delivered=0 expected=304
+CASE D malformed-guard + recovery: FAIL  delivered=0 (exp 304) rcv_nxt=00001000 (exp 000035cc)
+  ** rcv_nxt MISMATCH: dut=00001000 tb=000035cc
+==== f2chk 收尾 ====
+STATS pass=1 nonmatch=19 trunc=0 ipcsum=0 crc=0 seq=0 ack=0 bytes=0
+TCB rcv_nxt=00001000 rcv_wnd=c000 snd_una=00002000 state=1
+delivered=0 expected=304
+$finish called at time : 16556 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/sim/f2chk/tb_f2chk.v" Line 621
+exit
+INFO: [Common 17-206] Exiting xsim at Wed Sep 30 13:07:07 2026...
+
+
+# ===== runner: EXIT=0  4.2s   =====

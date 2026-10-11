@@ -1,0 +1,17 @@
+--- MUT tb_lat_wf (gate reverted to same-cycle full) ---
+RESULT sent=8 frames=5 purge=3 words=512 tlasts=4 maxrun=128 dangling=1
+PROBE fifo_ovf=1 (拒写计数; 恒 0 = 无静默丢失)
+J1 FAIL: tlasts=4 != stat_frames=5 (committed frame never left the fifo intact)
+J2 FAIL: tlasts+purge=7 != sent=8
+J3 FAIL: dangling tail word(s) without tlast: runlen=127
+TB_LAT_WF: FAIL
+--- MUT tb_lat_of cfg "2100 7 0" (phase aligned, 1 byte lost) ---
+CFG np=2100 nb=7 free=0 keep=fe nw=300
+RESULT np=2100 nb=7 words=300 commit=1 drop=0 popped=2107 expect=2108 first_bad=2048
+PROBE maxocc=2049 full_seen=1 ovf_cyc=1 stat_fifo_ovf=1
+TB_LAT_OF: FAIL (delivered != expected: popped=2107 expect=2108 first_bad_idx=2048)
+--- MUT tb_lat_of cfg "3008 8 0" (PHASE control: reaches full 2048 yet loses NOTHING) ---
+CFG np=3008 nb=8 free=0 keep=ff nw=376
+RESULT np=3008 nb=8 words=376 commit=1 drop=0 popped=3016 expect=3016 first_bad=-1
+PROBE maxocc=2048 full_seen=1 ovf_cyc=0 stat_fifo_ovf=0
+TB_LAT_OF: PASS (byte-exact)

@@ -1,0 +1,21 @@
+# gate   : snapcdc_atk_req
+# bat    : sim\snapcdc\atk\req\run_atk_req.bat
+# args   : []
+# expect : exit 0
+# desc   : CDC 攻击面 req
+# started: 2026-09-30 13:12:43
+
+[D] HA=2000 HB=4000 STEP=100 NB2B=200
+  [INFO] D1 相位扫描 80 个相位: 请求 80 / valid 80
+  [PASS] D1 相位扫描: 80 个亚周期相位, 每请求恰好 1 valid, 数据全相干
+  [PASS] D2 50 个不覆盖 a 沿的窄脉冲 (含 1500ps 宽): 全部静默丢弃, 无 valid
+  [PASS] D2b 毛刺后正常请求仍工作
+  [INFO] D3 req 常高 200 拍: valid 增 25, 翻转增 25
+  [PASS] D3 req 恒高 = 连续重触发 (25 次, 与翻转 1:1); 注意这与'1 拍脉冲'契约不同
+  [INFO] D5 最小间隔背靠背: valid 增 200 (期望 200)
+  [INFO] D6 busy 落下拍数=306 (其中 valid 已高 0 / dout 已换 0) => busy 落下比 valid 早一拍
+REQ-RESULT HA=2000 HB=4000 valids=306 flips=306 reqs=331 fails=0 PASS
+INFO: [Common 17-206] Exiting xsim at Wed Sep 30 13:12:47 2026...
+
+
+# ===== runner: EXIT=0  4.2s   =====

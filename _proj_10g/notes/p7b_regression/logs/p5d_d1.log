@@ -1,0 +1,82 @@
+# gate   : p5d_d1
+# bat    : sim\p5d_d1\run_tb_p5d_d1.bat
+# args   : []
+# expect : exit 0
+# desc   : D1 abort 请求窗单元门
+# started: 2026-09-30 13:00:16
+
+Vivado Simulator v2025.2
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+Running: C:/AMDDesignTools/2025.2/Vivado/bin/unwrapped/win64.o/xelab.exe -debug typical -timescale 1ns/1ps -L xil_defaultlib xil_defaultlib.tb_p5d_d1 -s tb_p5d_d1 -log xelab_p5d.log 
+Multi-threading is on. Using 18 slave threads.
+Starting static elaboration
+Pass Through NonSizing Optimizer
+WARNING: [VRFC 10-3645] port 'full_next' remains unconnected for this instance [D:/repo/XCKU5PMini/udp_hls_10g/rtl/tcp_tx_frame.v:645]
+WARNING: [VRFC 10-3645] port 'dbg_wptr' remains unconnected for this instance [D:/repo/XCKU5PMini/udp_hls_10g/rtl/tcp_tx_frame.v:710]
+Completed static elaboration
+Starting simulation data flow analysis
+Completed simulation data flow analysis
+Time Resolution for simulation is 1ps
+Compiling module xil_defaultlib.retx_ram
+Compiling module xil_defaultlib.checksum16
+Compiling module xil_defaultlib.fifo_sync(W=73,D=256,AW=8)
+Compiling module xil_defaultlib.fifo_sync(W=39,D=32,AW=5)
+Compiling module xil_defaultlib.tcp_tx_frame
+Compiling module xil_defaultlib.tb_p5d_d1
+Built simulation snapshot tb_p5d_d1
+
+****** xsim v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Wed Sep 30 13:00:18 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source xsim.dir/tb_p5d_d1/xsim_script.tcl
+# xsim {tb_p5d_d1} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+D1a: baseline (rst_req=0) -- tid=0 data frame
+  PASS D1a-1 data frame sent (nfrm=1)
+  PASS D1a-2 flags=0x18 (PSH+ACK)
+  PASS D1a-3 stat_bytes=8 (plen ok)
+  PASS D1a-4 payload byte exact
+D1b: rst_req[0]=1 and keep pushing tid=0 -- tready must stay 0, no new data frame
+  PASS ort window (accept gate = fence)
+  PASS es (start gate is the same gate)
+  PASS does not block the ACK/RST path)
+  PASS D1b-4 o_rst_sent[0]=1 (RST sent)
+  PASS 5 stat_frames=2 (1 data + 1 RST)
+  PASS word swallowed while presenting)
+DBG D1b: tready_hi=0 n_data=1 n_rst=1 frames=2 rst_sent=0001
+D1c: clear rst_req + cfg_up -- tid=0 frame resumes
+  PASS 1c-1 cfg_up clears o_rst_sent[0]
+  PASS D1c-2 frame resumes (nfrm=3)
+  PASS D1c-3 flags=0x18
+  PASS ct (no shift, no swallowed word)
+  PASS  stat_bytes=16 (two data frames)
+  PASS =0 (no underrun/truncated frame)
+D2: clear fin_req[1] AT the fin_push beat + rb_state=0 -- no data frame before the FIN
+  PASS  wire (fence does not block FIN)
+  PASS the FIN (residual window closed)
+  PASS a frames (only the D1a/D1c ones)
+  PASS D2-4 stat_fin=1
+  PASS D2-5 payload FIFO empty
+DBG D2: n_data=2 n_fin=1 d2_bad=0 frames=4
+D2b: rb_state back to 1 + cfg_up -- tid=1 frame resumes (byte exact)
+  PASS 2b-1 cfg_up clears o_fin_sent[1]
+  PASS D2b-2 frame resumes (nfrm=5)
+  PASS D2b-3 flags=0x18
+  PASS D2b-4 payload byte exact
+  PASS D2b-5 stat_eend=0
+DBG D2b: frames=5 bytes=24 flags=18
+GATE tb_p5d_d1: PASS
+$finish called at time : 5628 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/sim/p5d_d1/tb_p5d_d1.v" Line 326
+exit
+INFO: [Common 17-206] Exiting xsim at Wed Sep 30 13:00:20 2026...
+P5D-D1 GATE PASS 
+
+
+# ===== runner: EXIT=0  4.2s   =====

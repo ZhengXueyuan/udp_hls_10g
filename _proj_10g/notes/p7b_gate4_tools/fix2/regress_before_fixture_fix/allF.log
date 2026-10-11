@@ -1,0 +1,61 @@
+
+===== 0. 位流身份 (G1 的位流一半) 与前置 =====
+  [INFO] 位流 = /d/repo/XCKU5PMini/udp_hls_10g/vivado_prj/p7b_ku5p_prj.runs/impl_1/wrapper_p4.bit
+  [INFO] sha256 = d1ddb3b44ba1dc94fa016b257b9f1b3ba9c49d16404aa881b7865d2dc47487aa
+  [INFO] size   = 15431261 ; mtime = 2026-09-30 09:55:52
+  [INFO] **离线/负对照模式**: 读数来自合成文本, 不碰板子/对端机
+  [PASS] G1         位流身份 (块A) | 期望=MAGIC=0x50360001 BID=0x00000007 MARKER=0xdeadbeef | 实测=MAGIC=0x50360001 BID=0x00000007 MARKER=0xdeadbeef
+  [FAIL] B_WIN      块A 窗口内不得出现 0xffffffff | 期望=0 个 F | 实测=1 个 F ⇒ 这些是**读失败**, 不是数据
+  [PASS] B_UNIMPL   块A 未实现地址 0xEC | 期望=0xffffffff | 实测=0xffffffff
+  [PASS] G1         位流身份 (块B) | 期望=MAGIC=0x50360001 BID=0x00000007 MARKER=0xdeadbeef | 实测=MAGIC=0x50360001 BID=0x00000007 MARKER=0xdeadbeef
+  [FAIL] B_WIN      块B 窗口内不得出现 0xffffffff | 期望=0 个 F | 实测=1 个 F ⇒ 这些是**读失败**, 不是数据
+  [PASS] B_UNIMPL   块B 未实现地址 0xEC | 期望=0xffffffff | 实测=0xffffffff
+  [FAIL] G2-W5      前端域 gmii_free 频率 | 期望=156.25 ±1% | 实测=125.0000 MHz (Δ=625000000 / 5.000000s / ÷1) ⇒ 该域没起 / 计数被钉死 / 窗口里回绕过
+  [PASS] G2-W24     数据面域 dp_free = 156.2500 MHz (Δ=781250000 / 5.000000s / ÷1) | 期望=156.25 ±1% | 实测=156.2500 MHz
+  [PASS] G2-W50     TX 域 tx_clk_act = 156.2500 MHz (**÷2 口径命中**) | 期望=156.25 ±1% | 实测=÷1 ⇒ 312.5000 / ÷2 ⇒ 156.2500 (⇒ 注释的 ÷2 成立, 本文档的分析需订正)
+  [PASS] B_CONS-a   W30 == W0 + W32 | 期望=1000 | 实测=1000
+  [PASS] B_CONS-b   W31 == W1 - 4*W0 + W33 | 期望=1514000 | 实测=1514000
+  [PASS] B_DIR      链式触发方向性 W0 - W30 >= -1 | 期望=>=-1 | 实测=0
+  [PASS] C1-C5      PCS: gtpowergood/block_lock/rx_status=1 且 hi_ber/local_fault=0 | 期望=全成立 | 实测=W39=0x2000100C
+  [PASS] C6-C7      rx_error/fifo_error/bad_code_valid/framing_err_valid 全 0 | 期望=全 0 | 实测=W39=0x2000100C
+  [FAIL] C8         W40.valid_ctrl_code_cyc 必须非 0 且在涨 | 期望=> 255 | 实测=255 → 255 (钉死 ⇒ 这条例数不是来自核)
+  [FAIL] C6-ev      W40 事件计数必须恒 0 | 期望=0/0 | 实测=16777215/16777215
+
+===== NIC 侧: 基线窗 (教学前) —— 含**判别力自检** N_BASE =====
+  [PASS] N_BASE     基线: 速率判据**不成立** ⇒ 该判据有判别力 | 期望=< 100000 帧 | 实测=Δport_rx_good=3 / 5.000000s (背景)
+
+===== 测量窗 (教学 → 打流 → NIC 两点 + 板侧洪泛两点) =====
+  [PASS] N_CRC      测量 Δrx_eth_crc_err == 0 | 期望=0 | 实测=0
+  [PASS] N_BAD      测量 Δport_rx_bad == 0 | 期望=0 | 实测=0
+  [PASS] N_RATE     测量 增量 + 速率阈值 | 期望=Δ>=100000 帧 且 >=800 Mbps | 实测=Δ=4060000 帧 / 5.000000s = 9860.93 Mbps
+  [PASS] N_UCAST    测量 Δport_rx_unicast 同步涨 (图案是单播) | 期望=>=0.9Δgood | 实测=Δuni=4060000 / Δgood=4060000
+  [PASS] N_LEN      测量 长度桶: 1518B 占绝对多数 | 期望=1024_15xx>=0.9Δgood 且 64<=0.1Δgood | 实测=1518桶=4060000 64桶=0 Δgood=4060000
+  [PASS] N_AVG      测量 Δbytes/Δpackets ≈ 1518.000000 | 期望=[1517.5,1518.5] | 实测=1518.000000
+  [PASS] N_SELF     测量 自洽: Δgood + Δbad == Δpackets | 期望=相等 | 实测=4060000 + 0 == 4060000
+
+===== 汇总 =====
+  PASS|G1|位流身份 (块A)|MAGIC=0x50360001 BID=0x00000007 MARKER=0xdeadbeef
+  FAIL|B_WIN|块A 窗口内不得出现 0xffffffff|1 个 F ⇒ 这些是**读失败**, 不是数据
+  PASS|B_UNIMPL|块A 未实现地址 0xEC|0xffffffff
+  PASS|G1|位流身份 (块B)|MAGIC=0x50360001 BID=0x00000007 MARKER=0xdeadbeef
+  FAIL|B_WIN|块B 窗口内不得出现 0xffffffff|1 个 F ⇒ 这些是**读失败**, 不是数据
+  PASS|B_UNIMPL|块B 未实现地址 0xEC|0xffffffff
+  FAIL|G2-W5|前端域 gmii_free 频率|125.0000 MHz (Δ=625000000 / 5.000000s / ÷1) ⇒ 该域没起 / 计数被钉死 / 窗口里回绕过
+  PASS|G2-W24|数据面域 dp_free = 156.2500 MHz (Δ=781250000 / 5.000000s / ÷1)|156.2500 MHz
+  PASS|G2-W50|TX 域 tx_clk_act = 156.2500 MHz (**÷2 口径命中**)|÷1 ⇒ 312.5000 / ÷2 ⇒ 156.2500 (⇒ 注释的 ÷2 成立, 本文档的分析需订正)
+  PASS|B_CONS-a|W30 == W0 + W32|1000
+  PASS|B_CONS-b|W31 == W1 - 4*W0 + W33|1514000
+  PASS|B_DIR|链式触发方向性 W0 - W30 >= -1|0
+  PASS|C1-C5|PCS: gtpowergood/block_lock/rx_status=1 且 hi_ber/local_fault=0|W39=0x2000100C
+  PASS|C6-C7|rx_error/fifo_error/bad_code_valid/framing_err_valid 全 0|W39=0x2000100C
+  FAIL|C8|W40.valid_ctrl_code_cyc 必须非 0 且在涨|255 → 255 (钉死 ⇒ 这条例数不是来自核)
+  FAIL|C6-ev|W40 事件计数必须恒 0|16777215/16777215
+  PASS|N_BASE|基线: 速率判据**不成立** ⇒ 该判据有判别力|Δport_rx_good=3 / 5.000000s (背景)
+  PASS|N_CRC|测量 Δrx_eth_crc_err == 0|0
+  PASS|N_BAD|测量 Δport_rx_bad == 0|0
+  PASS|N_RATE|测量 增量 + 速率阈值|Δ=4060000 帧 / 5.000000s = 9860.93 Mbps
+  PASS|N_UCAST|测量 Δport_rx_unicast 同步涨 (图案是单播)|Δuni=4060000 / Δgood=4060000
+  PASS|N_LEN|测量 长度桶: 1518B 占绝对多数|1518桶=4060000 64桶=0 Δgood=4060000
+  PASS|N_AVG|测量 Δbytes/Δpackets ≈ 1518.000000|1518.000000
+  PASS|N_SELF|测量 自洽: Δgood + Δbad == Δpackets|4060000 + 0 == 4060000
+########## PASS=19 FAIL=5 SKIP=0 (窗口 51 字; 未实现地址 0xEC; EXPECT_BID=0x00000007) ##########

@@ -1,0 +1,91 @@
+# gate   : p5e_win
+# bat    : sim\p5e_win\run_tb_p5e_win.bat
+# args   : []
+# expect : exit 0
+# desc   : 0 载荷 opener 窄窗门
+# started: 2026-09-30 13:00:20
+
+Vivado Simulator v2025.2
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+Running: C:/AMDDesignTools/2025.2/Vivado/bin/unwrapped/win64.o/xelab.exe -debug typical -timescale 1ns/1ps -L xil_defaultlib xil_defaultlib.tb_p5e_win -s tb_p5e_win -log xelab_p5e.log 
+Multi-threading is on. Using 18 slave threads.
+Starting static elaboration
+Pass Through NonSizing Optimizer
+WARNING: [VRFC 10-3645] port 'full_next' remains unconnected for this instance [D:/repo/XCKU5PMini/udp_hls_10g/rtl/tcp_tx_frame.v:645]
+WARNING: [VRFC 10-3645] port 'dbg_wptr' remains unconnected for this instance [D:/repo/XCKU5PMini/udp_hls_10g/rtl/tcp_tx_frame.v:710]
+Completed static elaboration
+Starting simulation data flow analysis
+Completed simulation data flow analysis
+Time Resolution for simulation is 1ps
+Compiling module xil_defaultlib.app_pattern(TX_BYTES=32'b0101101...
+Compiling module xil_defaultlib.axis_pipe
+Compiling module xil_defaultlib.retx_ram
+Compiling module xil_defaultlib.checksum16
+Compiling module xil_defaultlib.fifo_sync(W=73,D=256,AW=8)
+Compiling module xil_defaultlib.fifo_sync(W=39,D=32,AW=5)
+Compiling module xil_defaultlib.tcp_tx_frame
+Compiling module xil_defaultlib.tb_p5e_win
+Built simulation snapshot tb_p5e_win
+
+****** xsim v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Wed Sep 30 13:00:22 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source xsim.dir/tb_p5e_win/xsim_script.tcl
+# xsim {tb_p5e_win} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+  FRM t=16444000 seq=00001000 plen=1460 flags=18 sess=0
+WIN          1 hit: fsm=2, pipe-residual tkeep=00 (pop8=0)
+  FRM t=32556000 seq=000015b4 plen=1460 flags=18 sess=0
+SC1 ADD cycle app: active=1 closing=1 pw_valid=0 op_pend=0 op_sent=1 seg_sent=0
+  FRM t=32724000 seq=00009000 plen=0 flags=18 sess=1
+  FRM t=48836000 seq=00009000 plen=1460 flags=18 sess=1
+  FRM t=64948000 seq=000095b4 plen=1460 flags=18 sess=1
+  FRM t=81060000 seq=00009b68 plen=1460 flags=18 sess=1
+  FRM t=97172000 seq=0000a11c plen=1460 flags=18 sess=1
+  FRM t=113292000 seq=0000a6d0 plen=1460 flags=18 sess=1
+  FRM t=129404000 seq=0000ac84 plen=1460 flags=18 sess=1
+  FRM t=145516000 seq=0000b238 plen=1460 flags=18 sess=1
+  FRM t=161628000 seq=0000b7ec plen=1460 flags=18 sess=1
+SC1 session B done: bytes 11680 / frames 9 / first-seq 00009000
+WIN          2 hit: fsm=2, pipe-residual tkeep=00 (pop8=0)
+  FRM t=179436000 seq=00010000 plen=1460 flags=18 sess=2
+SC2 pre-ev_up cycle app: closing=0 pw_valid=0 op_sent=0 seg_sent=0 (pipe-ready(accepting))
+  FRM t=179604000 seq=00020000 plen=0 flags=18 sess=3
+  FRM t=195724000 seq=00020000 plen=1460 flags=18 sess=3
+  post-sc2+3000: act=1 opend=0 opsent=1 pwv=0 segsent=784 seglen=1460 remain=9436 cls=0 fw=0 pmv=0 prdy=1 fsm=1
+  FRM t=211836000 seq=000205b4 plen=1460 flags=18 sess=3
+  FRM t=227948000 seq=00020b68 plen=1460 flags=18 sess=3
+  FRM t=244060000 seq=0002111c plen=1460 flags=18 sess=3
+  FRM t=260172000 seq=000216d0 plen=1460 flags=18 sess=3
+  FRM t=276284000 seq=00021c84 plen=1460 flags=18 sess=3
+  FRM t=292396000 seq=00022238 plen=1460 flags=18 sess=3
+  FRM t=308508000 seq=000227ec plen=1460 flags=18 sess=3
+-----------------------------------------------
+residual tkeep: [1]=00 [2]=00 / wire frames 21
+B: 11680 bytes/9 frames/first-seq 00009000 | pre-DEL C: 1460 bytes | D: 11680 bytes/9 frames/first-seq 00020000
+payload 27740 / mismatch 0 / app stat_tx_bytes=27740 stat_tx_frames=21
+fsm stat_eend=0
+-----------------------------------------------
+  PASS w residual is 0-payload (opener)
+  PASS w residual is 0-payload (opener)
+  PASS n B first payload seq == new ISN
+  PASS yload seq == new ISN (collision)
+  PASS attern (zero cross-session leak)
+  PASS -1 session B payload == TX_BYTES
+  PASS  payload == TX_BYTES (collision)
+  PASS errun frame end (stat_eend == 0)
+GATE tb_p5e_win: PASS
+$finish called at time : 310112 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/sim/p5e_win/tb_p5e_win.v" Line 466
+exit
+INFO: [Common 17-206] Exiting xsim at Wed Sep 30 13:00:24 2026...
+P5E-WIN GATE PASS 
+
+
+# ===== runner: EXIT=0  4.4s   =====

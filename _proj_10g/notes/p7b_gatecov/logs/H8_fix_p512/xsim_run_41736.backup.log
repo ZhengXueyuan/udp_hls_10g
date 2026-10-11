@@ -1,0 +1,56 @@
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Wed Sep 30 19:21:10 2026
+# Process ID         : 41736
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_gatecov/logs/H8_fix_p512
+# Command line       : xsim.exe -log xsim_run.log -mode tcl -source {xsim.dir/tb_rate_g0p512/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_gatecov/logs/H8_fix_p512/xsim_run.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_gatecov/logs/H8_fix_p512\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 45690 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_rate_g0p512/xsim_script.tcl
+# xsim {tb_rate_g0p512} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+  [pre 0] cyc=531 d=531 wire=0 | app txs=1 gap=0 sent=0 bcnt=6 wr=0 fifo_full=0 utx_busy=1
+  [pre 1] cyc=1110 d=579 wire=565 | app txs=1 gap=0 sent=64 bcnt=7 wr=0 fifo_full=0 utx_busy=1
+  [pre 2] cyc=1689 d=579 wire=565 | app txs=1 gap=0 sent=136 bcnt=0 wr=1 fifo_full=0 utx_busy=1
+  [pre 3] cyc=2268 d=579 wire=565 | app txs=1 gap=0 sent=200 bcnt=1 wr=0 fifo_full=0 utx_busy=1
+  [pre 4] cyc=2847 d=579 wire=565 | app txs=1 gap=0 sent=264 bcnt=2 wr=0 fifo_full=0 utx_busy=1
+  [pre 5] cyc=3426 d=579 wire=565 | app txs=1 gap=0 sent=328 bcnt=3 wr=0 fifo_full=0 utx_busy=1
+  [pre 6] cyc=4005 d=579 wire=565 | app txs=1 gap=0 sent=392 bcnt=4 wr=0 fifo_full=0 utx_busy=1
+  [pre 7] cyc=4584 d=579 wire=565 | app txs=1 gap=0 sent=456 bcnt=5 wr=0 fifo_full=0 utx_busy=1
+  [pre 8] cyc=5163 d=579 wire=565 | app txs=1 gap=0 sent=8 bcnt=4 wr=0 fifo_full=0 utx_busy=1
+  [pre 9] cyc=5742 d=579 wire=565 | app txs=1 gap=0 sent=72 bcnt=5 wr=0 fifo_full=0 utx_busy=1
+  [pre 10] cyc=6321 d=579 wire=565 | app txs=1 gap=0 sent=136 bcnt=6 wr=0 fifo_full=0 utx_busy=1
+  [pre 11] cyc=6900 d=579 wire=565 | app txs=1 gap=0 sent=200 bcnt=7 wr=0 fifo_full=0 utx_busy=1
+--- tb_app_udp_rate: TXGAP=0 paylen=512 ---
+  frames on wire      = 41 (period samples 35)
+  mean frame period   = 579 cycles (4.632 us)
+  mean wire len       = 565 B
+  PAYLOAD RATE        = 884.3 Mbps
+  WIRE RATE           = 975.8 Mbps
+  app tx_frames=44 bytes=22672 | utx frames=40 bytes=20480 drop=0 | mac frames=40 abort=0
+  --- P7B-W9 判据 ---
+  C1 contract: txf_wr && txf_full on 0 cycles (first @cyc 0); checked pushes=2834
+  C2 framer frames=40 len min/max = 554/554 (exp 554)
+  C3 wire   samples=35 len min/max = 565/565 (exp 565)
+  coverage: full_cyc=949 (satreq=0 floor 20000)
+RATE GATE: OK (C1 ovf=0 over 2834 pushes; framer 554 x40; wire 565 x35; full_cyc=949)
+RATE TB DONE
+$finish called at time : 189716 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/tb/tb_app_udp_rate.v" Line 348
+exit
+INFO: [Common 17-206] Exiting xsim at Wed Sep 30 19:21:12 2026...

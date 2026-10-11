@@ -1,0 +1,23 @@
+# gate   : rxp_v3
+# bat    : sim\rxpdiag\run_tb_rxp_v3.bat
+# args   : []
+# expect : exit 0
+# desc   : rxp v3
+# started: 2026-09-30 13:11:21
+
+RXPV3 P1 mm=0 ds_v=0 seen=0 rc=0 vc=0 | cap: fn=0 fr=0 lr=0 sw=0000000000000000
+RXPV3 P2 mm=1 idx=2944 got=f1 exp=b1 | gw=f16f6681c8b9d5a4 ew=b16f6681c8b9d5a4
+RXPV3 P3 mm=1 idx=1875 (帧内 word=50 lane=3)
+RXPV3 P4 mm=1 idx=4408 (帧内 word=183 lane=0)
+RXPV3 P5 mm=1 idx=248 (帧 3 内 word=7 lane=0) | 失配帧号 3
+RXPV3 P6 rc=1 vc=0 drop_crc=1 frames=3 mm=2935 (mm>0 预期: 丢帧后图案流断)
+RXPV3 P7 rc=1 vc=0 drop_part=1 frames=3 mm=2935 (mm>0 预期)
+RXPV3 P8 rc=1 vc=1 vx=184 vs=0 vr=184 vn=1 | 冻结值=0 影子=0 wptr=0 rptr=184
+RXPV3 P9 mm=1 idx=2929 (帧内 byte=1464 word=183 lane=0) 同拍=1
+RXPV3 P10 mm=1467 (自算 1467) idx=1472 (帧 1 内 word=0 lane=0) 注入窗口命中=1
+RXPV3 P10 gw=4da3b9eb1c278c95 (期望 = 干净 e8f9e34e13d77c9a ^ 掩码 a55a5aa50ff0f00f = force 值 4da3b9eb1c278c95)
+RXPV3 P10 注入帧坏值=4da3b9eb1c278c95 该帧干净期望字(EW)=e8f9e34e13d77c9a | SW(写侧首字)=e8f9e34e13d77c9a SW==GW? 0 SW==EW? 1
+RXP-V3 GATE: OK
+
+
+# ===== runner: EXIT=0  5.9s   =====

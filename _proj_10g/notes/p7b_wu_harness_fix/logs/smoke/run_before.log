@@ -1,0 +1,26 @@
+########## P6b 冒烟门 (stage A) 2026-10-07 09:56:29  —— 针对**非最终位流** ##########
+
+===== A1 前置闸 (identity) =====
+  [RAW] 0x00 MACRO/裸值 = 0x50360001 | 0x04 = 0x00000008 | 0x14 = 0xdeadbeef
+  [PASS] A1a 判据=MAGIC | 期望=0x50360001 | 实测=0x50360001
+  [FAIL] A1b 判据=BUILD_ID | 期望=6 | 实测=0x00000008
+  [FATAL] BUILD_ID 不是 6 ⇒ 板上不是这一版位流 ⇒ 拒绝继续 (但**仍然继续读**下面两项, 供归因)
+  [PASS] A1c 判据=MARKER/地址译码 | 期望=0xdeadbeef | 实测=0xdeadbeef
+
+===== A2 未实现地址语义 (0xB0) =====
+  [SKIP] A2  判据=0xB0 (未实现) 读回 0xffffffff | 期望=0xffffffff | 实测=0xc7ca0efe (不是 ffffffff: 要么该地址已实现, 要么读法有别)
+
+===== A3 ⭐ MMCM locked (0x84 bit0; 快照字 ⇒ 先 snap) =====
+  [RAW] 0x84 = 0x00000001  (gen 自证: snap 成功)
+  [PASS] A3  判据=MMCM locked 位 (0x84 bit0) | 期望=1 | 实测=0x00000001 & 1 = 1 ⇒ **MMCM 锁了**
+
+===== A4 ⭐ 数据面频率 (0x80; 两次独立快照 + 真实墙钟) =====
+  [RAW] 起点: 0x80 = 0xc0dec880  t0=1791338191.061801
+  [RAW] 终点: 0x80 = 0x37d86640  t1=1791338203.832666
+  [RAW] 真实窗口长度 (墙钟, 非 sleep 名义值) = 12.770865s
+  [PASS] A4a 判据=窗口长度 ∈ [10,20)s | 期望=[10,20) | 实测=12.770865s (补偿 1 次回绕)
+  [PASS] A4b 判据=数据面域频率 = 156.25MHz ±1% | 期望=[154.69,157.81] MHz | 实测=156.2988 MHz  (Δ=1996070336 / 12.770865s)
+  [判决] 156.2988 MHz 更接近 **156.25MHz** ⇒ 数据面确实跑在新域上 ✓
+  [INFO] 对照 D5(0x34, 前端 gmii_free) 当前值 = 0x3975c360 (只报数)
+  [RAW] A4 结论: 频率 = 156.2988 MHz (Δ=1996070336 / 12.770865s)
+########## 冒烟门: PASS (可以继续 ping/图案)  PASS=5 FAIL=1 SKIP=1  日志: /d/repo/XCKU5PMini/udp_hls_10g/_proj_10g/notes/p7b_wu_harness_fix/logs/smoke/run_before.log ##########

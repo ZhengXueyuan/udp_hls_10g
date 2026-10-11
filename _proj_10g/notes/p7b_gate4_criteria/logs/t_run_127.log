@@ -1,0 +1,69 @@
+
+===== 0. 位流身份 (G1 的位流一半) 与前置 =====
+  [INFO] 位流 = /d/repo/XCKU5PMini/udp_hls_10g/vivado_prj/p7b_ku5p_prj.runs/impl_1/wrapper_p4.bit
+  [INFO] sha256 = b88b2beee1650a9ecdfd1196b01d9e84422374ea2a168dd1bb54bc7ceb05a64f
+  [INFO] size   = 15431261 ; mtime = 2026-10-10 06:42:07
+  [INFO] **离线/负对照模式**: 读数来自合成文本, 不碰板子/对端机
+  [PASS] G1         位流身份 (块A) | 期望=MAGIC=0x50360001 BID=0x0000001A MARKER=0xdeadbeef | 实测=MAGIC=0x50360001 BID=0x0000001A MARKER=0xdeadbeef
+  [PASS] B_WIN      块A 窗口 70 字齐全且无 0xffffffff | 期望=0 个 F | 实测=0 个 F (SLVERR 没混进窗口)
+  [PASS] B_UNIMPL   块A 未实现地址 0x138 | 期望=0xffffffff | 实测=0xffffffff
+  [PASS] G1         位流身份 (块B) | 期望=MAGIC=0x50360001 BID=0x0000001A MARKER=0xdeadbeef | 实测=MAGIC=0x50360001 BID=0x0000001A MARKER=0xdeadbeef
+  [PASS] B_WIN      块B 窗口 70 字齐全且无 0xffffffff | 期望=0 个 F | 实测=0 个 F (SLVERR 没混进窗口)
+  [PASS] B_UNIMPL   块B 未实现地址 0x138 | 期望=0xffffffff | 实测=0xffffffff
+  [PASS] G2-W5      前端域 gmii_free = 156.2500 MHz (Δ=781250000 / 5.000000s / ÷1) | 期望=156.25 ±1% | 实测=156.2500 MHz
+  [PASS] G2-W24     数据面域 dp_free = 156.2500 MHz (Δ=781250000 / 5.000000s / ÷1) | 期望=156.25 ±1% | 实测=156.2500 MHz
+  [PASS] G2-W50     TX 域 tx_clk_act = 156.2500 MHz (**÷1 口径命中**) | 期望=156.25 ±1% | 实测=÷1 ⇒ 156.2500 / ÷2 ⇒ 78.1250 (⇒ wrapper_p4.v:3389 的 '÷2' 注释需订正)
+  [PASS] B_CONS-a   W30 == W0 + W32 | 期望=1000 | 实测=1000
+  [PASS] B_CONS-b   W31 == W1 - 4*W0 + W33 | 期望=1514000 | 实测=1514000
+  [PASS] B_DIR      链式触发方向性 W0 - W30 >= -1 | 期望=>=-1 | 实测=0
+  [PASS] C1-C5      PCS: gtpowergood/block_lock/rx_status=1 且 hi_ber/local_fault=0 | 期望=全成立 | 实测=W39=0x2000100C
+  [PASS] C6-C7      rx_error/fifo_error/bad_code_valid/framing_err_valid 全 0 | 期望=全 0 | 实测=W39=0x2000100C
+  [PASS] C8         W40.valid_ctrl_code_cyc 非 0 且在涨 (⭐正证据) | 期望=> 102 | 实测=102 → 153
+  [PASS] C6-ev      W40 的 framing/bad_code/rx_error 事件计数恒 0 | 期望=0/0 | 实测=0/0
+
+===== NIC 侧: 基线窗 (教学前) —— 含**判别力自检** N_BASE =====
+  [PASS] N_BASE     基线: 速率判据**不成立** ⇒ 该判据有判别力 | 期望=< 100000 帧 | 实测=Δport_rx_good=0 / 5.000000s (背景)
+
+===== 测量窗 (教学 → 打流 → **板侧 C** → NIC C/D → **板侧 D**) =====
+  [PASS] N_CRC      测量 Δrx_eth_crc_err == 0 | 期望=0 | 实测=0
+  [PASS] N_BAD      测量 Δport_rx_bad == 0 | 期望=0 | 实测=0
+  [PASS] N_RATE     测量 增量 + 速率阈值 | 期望=Δ>=100000 帧 且 >=800 Mbps | 实测=Δ=2120000 帧 / 20.000000s = 1287.26 Mbps
+  [PASS] N_UCAST    测量 Δport_rx_unicast 同步涨 (图案是单播) | 期望=>=0.9Δgood | 实测=Δuni=2120000 / Δgood=2120000
+  [PASS] N_LEN      测量 长度桶: 1518B 占绝对多数 | 期望=1024_15xx>=0.9Δgood 且 64<=0.1Δgood | 实测=1518桶=2120000 64桶=0 Δgood=2120000
+  [PASS] N_AVG      测量 Δbytes/Δpackets ≈ 1518.000000 | 期望=[1517.5,1518.5] | 实测=1518.000000
+  [PASS] N_SELF     测量 自洽: Δgood + Δbad == Δpackets (±2) | 期望=端点内残差 ≤1 且 Δ残差 ≤2 | 实测=2120000 + 0 - 2120000 = 0 (端点内残差 A=0 B=0; ±1 = 两个计数点之间的在飞帧)
+  [FAIL] T_RUN      离线 激励命令本身没跑起来 (rc=127) | 期望=rc=0 | 实测=TRAFFIC_RC=127 (**先怀疑激励侧**: 命令没找到 / 不可执行 (rc=126/127) / 网卡没配好. 下面 NIC 的 FAIL **不得**当板子缺陷引用)
+  [SKIP] T_TOOL     离线 工具端到端 | 期望=rc=0 | 实测=命令没跑起来 ⇒ 无工具结论
+  [PASS] B_G6       洪泛窗 ΔW34 (rx_stat_drop_full) == 0 | 期望=0 | 实测=0
+  [PASS] N_XCHK     测量 跨设备帧率对账 (**旁证**: 主机侧非独立硬件计数) | 期望=偏差 < 10.00% | 实测=板侧 106000.000 fps vs 主机侧 106000.000 fps (偏差 0.00%; 同刻窗 板 20.000000s / 主机 20.000000s; 字节口径 板 1287.26 / 主机 1287.26 Mbps)
+
+===== 汇总 =====
+  PASS|G1|位流身份 (块A)|MAGIC=0x50360001 BID=0x0000001A MARKER=0xdeadbeef
+  PASS|B_WIN|块A 窗口 70 字齐全且无 0xffffffff|0 个 F (SLVERR 没混进窗口)
+  PASS|B_UNIMPL|块A 未实现地址 0x138|0xffffffff
+  PASS|G1|位流身份 (块B)|MAGIC=0x50360001 BID=0x0000001A MARKER=0xdeadbeef
+  PASS|B_WIN|块B 窗口 70 字齐全且无 0xffffffff|0 个 F (SLVERR 没混进窗口)
+  PASS|B_UNIMPL|块B 未实现地址 0x138|0xffffffff
+  PASS|G2-W5|前端域 gmii_free = 156.2500 MHz (Δ=781250000 / 5.000000s / ÷1)|156.2500 MHz
+  PASS|G2-W24|数据面域 dp_free = 156.2500 MHz (Δ=781250000 / 5.000000s / ÷1)|156.2500 MHz
+  PASS|G2-W50|TX 域 tx_clk_act = 156.2500 MHz (**÷1 口径命中**)|÷1 ⇒ 156.2500 / ÷2 ⇒ 78.1250 (⇒ wrapper_p4.v:3389 的 '÷2' 注释需订正)
+  PASS|B_CONS-a|W30 == W0 + W32|1000
+  PASS|B_CONS-b|W31 == W1 - 4*W0 + W33|1514000
+  PASS|B_DIR|链式触发方向性 W0 - W30 >= -1|0
+  PASS|C1-C5|PCS: gtpowergood/block_lock/rx_status=1 且 hi_ber/local_fault=0|W39=0x2000100C
+  PASS|C6-C7|rx_error/fifo_error/bad_code_valid/framing_err_valid 全 0|W39=0x2000100C
+  PASS|C8|W40.valid_ctrl_code_cyc 非 0 且在涨 (⭐正证据)|102 → 153
+  PASS|C6-ev|W40 的 framing/bad_code/rx_error 事件计数恒 0|0/0
+  PASS|N_BASE|基线: 速率判据**不成立** ⇒ 该判据有判别力|Δport_rx_good=0 / 5.000000s (背景)
+  PASS|N_CRC|测量 Δrx_eth_crc_err == 0|0
+  PASS|N_BAD|测量 Δport_rx_bad == 0|0
+  PASS|N_RATE|测量 增量 + 速率阈值|Δ=2120000 帧 / 20.000000s = 1287.26 Mbps
+  PASS|N_UCAST|测量 Δport_rx_unicast 同步涨 (图案是单播)|Δuni=2120000 / Δgood=2120000
+  PASS|N_LEN|测量 长度桶: 1518B 占绝对多数|1518桶=2120000 64桶=0 Δgood=2120000
+  PASS|N_AVG|测量 Δbytes/Δpackets ≈ 1518.000000|1518.000000
+  PASS|N_SELF|测量 自洽: Δgood + Δbad == Δpackets (±2)|2120000 + 0 - 2120000 = 0 (端点内残差 A=0 B=0; ±1 = 两个计数点之间的在飞帧)
+  FAIL|T_RUN|离线 激励命令本身没跑起来 (rc=127)|TRAFFIC_RC=127 (**先怀疑激励侧**: 命令没找到 / 不可执行 (rc=126/127) / 网卡没配好. 下面 NIC 的 FAIL **不得**当板子缺陷引用)
+  SKIP|T_TOOL|离线 工具端到端|命令没跑起来 ⇒ 无工具结论
+  PASS|B_G6|洪泛窗 ΔW34 (rx_stat_drop_full) == 0|0
+  PASS|N_XCHK|测量 跨设备帧率对账 (**旁证**: 主机侧非独立硬件计数)|板侧 106000.000 fps vs 主机侧 106000.000 fps (偏差 0.00%; 同刻窗 板 20.000000s / 主机 20.000000s; 字节口径 板 1287.26 / 主机 1287.26 Mbps)
+########## PASS=26 FAIL=1 SKIP=1 (窗口 70 字; 未实现地址 0x138; EXPECT_BID=0x0000001A) ##########

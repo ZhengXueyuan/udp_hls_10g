@@ -1,0 +1,50 @@
+gen_stim_p5_app: stim 256 拍空闲; bad_frame=0
+gen_stim_p5_app: close 门 (P5_CLOSE) -- TB 自带阶段驱动, 无额外 memh
+计时器: RTL 生产值 RTO_LIM=61035 / FIN_TO_LIM=244141 (比例 4)；本门缩放值 rto_lim=3 (RTO=768 拍) / fin_to_lim=12 (超时=3072 拍, = 4 x RTO)
+线上帧: 总 133 (FCS 坏 0) / conn0 数据 123 / FIN 4 / RST 3 / 其它 3
+  其它帧 #51 flags=10 seq=2234df5a plen=0
+  其它帧 #129 flags=10 seq=723461e2 plen=0
+  其它帧 #132 flags=10 seq=82345c2e plen=0
+阶段 A: 干净关闭 (①): 帧 d=24 f=1 r=0 (P5PH 24/1/0), 拍 [398,79762]
+判据①: FIN seq=1234df59 (= 基+35040 B), snd_nxt=snd_una=1234df5a (恰 +1), state=1, 阶段 A 仅此一个 FIN [OK]
+阶段 B: FIN 丢失+RTO+关闭超时 (②⑤): 帧 d=24 f=2 r=1
+判据②: FIN 重发与首发**逐字节一致** (差异仅 IP ID [18,19]/IP csum [24,25], 覆盖 4/4 帧尾 FCS; 本次实测差 2 字节)
+判据②: 重发间隔 1043 拍 ~= 1 x RTO (768 拍) -- RTO 路径触发 [OK]
+判据⑤: 超时到点 -> rst_req@161039 + RST 帧 #52 (flags 0x14)
+判据⑤: 配额归还 winq[0]=0 / pool=0xC000 (全池) [OK], CONN_DOWN 脉冲 1 次
+阶段 D1: 同时关闭, 我方 FIN 先 (④): 帧 d=24 f=1 r=0 (P5PH 24/1/0)
+判据④: D1 我方 FIN #77 (seq=3234df59) 后经 2505 拍观察窗无第二个 FIN [OK]
+阶段 D2: 同时关闭, DEL 先 (④): 帧 d=24 f=0 r=0 (P5PH 24/0/0)
+判据④: D2 (DEL 先到) FIN=0 [OK] -- 两种到达序都被接受 (规格 §0 ④)
+判据⑤: 新连接 winq[0]=0xC000 (非零 rcv_wnd) [OK] 其 24 个数据帧 window 字段全为 0xC000 [OK]
+阶段 C: abort (③): 帧 d=2 r=1 (P5PH 2/1)
+判据③: RST 帧 #128 (flags=0x14, seq=723461e1) 线上 [408842,408914]; 帧器发出 @408847; state=0 @409105 (晚 258 拍) -- 线上确有 RST [OK]
+判据③: RST 之后的观察窗 (1728 拍) 内无数据帧 [OK]
+  阶段 6 fence 判据非空: app 只上线 2/24 帧 (2920/35040 B), 收尾时 app2_tvalid=0 tready=0 => 其余帧被 tx_blk 挡住 [OK]
+阶段 G: abort fence 探针 (③): 帧 d=1 r=1 (P5PH 1/1)
+判据③: RST 帧 #131 (flags=0x14, seq=82345c2d) 线上 [414154,414226]; 帧器发出 @414159; state=0 @414225 (晚 66 拍) -- 线上确有 RST [OK]
+判据③: RST 之后的观察窗 (1537 拍) 内无数据帧 [OK]
+  阶段 7 fence 判据非空: app 只上线 1/24 帧 (1460/35040 B), 收尾时 app2_tvalid=0 tready=0 => 其余帧被 tx_blk 挡住 [OK]
+
+P5CLOSE: evdown=6 fin=4 finack=2 finreq=4 k=415789 oth=3 rst=3 rstreq=3 st0=7 tmo=0
+  阶段 1 A: 干净关闭 (①)                      base=12345679 数据=24 FIN=1 RST=0 EVDOWN=0 拍[398,79762]
+  阶段 2 B: FIN 丢失+RTO+关闭超时 (②⑤)          base=22345679 数据=24 FIN=2 RST=1 EVDOWN=1 拍[80261,163090]
+  阶段 3 D1: 同时关闭, 我方 FIN 先 (④)           base=32345679 数据=24 FIN=1 RST=0 EVDOWN=1 拍[163589,243979]
+  阶段 4 D2: 同时关闭, DEL 先 (④)              base=42345679 数据=24 FIN=0 RST=0 EVDOWN=1 拍[244005,323991]
+  阶段 5 F: 新连接窗口 (⑤)                     base=62345679 数据=24 FIN=0 RST=0 EVDOWN=0 拍[324017,401587]
+  阶段 6 C: abort (③)                     base=72345679 数据=2 FIN=0 RST=1 EVDOWN=0 拍[402213,410642]
+  阶段 7 G: abort fence 探针 (③)            base=82345679 数据=1 FIN=0 RST=1 EVDOWN=0 拍[410668,415763]
+  事件 ST0 @79802
+  事件 RSTREQ @161039
+  事件 ST0 @161553
+  事件 ST0 @241616
+  事件 ST0 @321622
+  事件 ST0 @401754
+  事件 RSTREQ @405603
+  事件 ST0 @409105
+  事件 RSTREQ @410744
+  事件 ST0 @414225
+
+MISMATCH: rtl/tcp_tx_frame.v RTO_LIM=61035 != 生产值 48828 (RTO 被改动)
+MISMATCH: rtl/app_ctrl.v FIN_TO_LIM=244141 != 生产值 195313 (关闭超时被改动)
+P5 CLOSE FAIL (2 项)
