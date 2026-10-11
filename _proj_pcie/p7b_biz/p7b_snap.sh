@@ -1,7 +1,10 @@
 #!/bin/bash
-# p7b_snap.sh -- 板侧快照窗口取数器 (**现役 = 70 字 / BID 0x1D**; 标题原文 = "板侧 **63** 字
+# p7b_snap.sh -- 板侧快照窗口取数器 (**现役 = 71 字 / BID 0x1F**; 标题原文 = "板侧 **63** 字
 #   快照窗口的取数器 (P7b Stage C: BID=10 / SNAP_NW=63)" —— 那一代已过时, 见下逐代订正)
-#   ⭐ persist 刀 (2026-10-11): 身份 0x1C → **0x1D** (**字长/未实现地址不变** = 70 字 / 0x138; PERSIST_EN=1'b1)。
+#   ⭐ M1 镜像窗 (2026-10-11): 70 → **71** (W70 = app_rx_mirror.drop_bytes) + 身份 0x1E → **0x1F**;
+#      未实现地址 **0x138 → 0x14C** (MIR_STATUS/DATA/CTRL/DMA_CNT 四字插在快照末字之后)。
+#   ⭐ snd_wnd 守卫 (2026-10-11): 身份 0x1D → **0x1E** (字长/未实现地址不变)。
+#   ⭐ persist 刀 (2026-10-11): 身份 0x1C → **0x1D** (PERSIST_EN=1'b1)。
 #   ⭐ 缺陷刀 (2026-10-11): 身份 0x1A → **0x1C** (字长/未实现地址不变; RETXHI-GHOST 重放越界修复)。
 #   ⭐ 构建 F (2026-10-10): 67 → **70** (W67/W68/W69 = 三个纯观测仪器; 未实现地址 0x12C → **0x138**)。
 #   ⭐ 构建 E (2026-10-10): 66 → **67** (W66 = tcp_tx_frame.stat_winstall; 未实现地址 0x128 → **0x12C**)。
@@ -44,13 +47,14 @@ set -u
 T=${P7B_TOOLS:-/home/a/xdma_test/dma_ip_drivers-patched/XDMA/linux-kernel/tools}
 D=/dev/xdma0_user
 # 几何与身份可从环境覆盖 —— **一旦往窗口里加字, 这三个值必须跟着改**
-# (NW 的单一真值源 = board/wrapper_p4.v 的 `SNAP_NW_P6E`; 未实现地址 = 0x20+4*NW)
+# (NW 的单一真值源 = board/wrapper_p4.v 的 `SNAP_NW_P6E`; 未实现地址 = **0x20+4*NW+16** (M1 起:
+#  快照末字后接 MIR_STATUS/DATA/CTRL/DMA_CNT 四个字) —— 70 字及更早**无** +16, 读旧位流须显式 `UNIMPL_ADDR=`)
 #   ⚠️ **NW 上限 = 119** (读侧译码 7 位 ⇒ 字 0..127; 快照从字 8 起; 负对照需留 1 个空字)。
 #      红线随之从"≥ 0x100 回绕" 改成 **"绝不能挑 ≥ 0x200"**
 #      (0x200 在 7 位译码下回绕到 word 0 = MAGIC ⇒ 假 FAIL)。
-NW=${NW:-70}
-UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW )))}   # 70 ⇒ 0x138 (67 ⇒ 0x12C; 65 ⇒ 0x124; 63 ⇒ 0x11C; 61 ⇒ 0x114; 51 ⇒ 0xEC)
-EXPECT_BID=${EXPECT_BID:-0x0000001D}
+NW=${NW:-71}
+UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*NW + 16 )))}   # 71 ⇒ 0x14C (M1 期B 起; 70 字及更早 = 0x138/0x12C/0x124/0x11C/0x114/0xEC —— 读旧位流须显式覆盖)
+EXPECT_BID=${EXPECT_BID:-0x0000001F}
 # ⛔ 2026-10-07 Stage C: 原默认值 = 0x00000009 (P7B-WU 二轮 = 9)。
 # ⛔ 2026-10-10 (构建 C 门同步轮): 再上一代的默认 = **0x0000000A** (Stage C 63 字) ——
 #    现役 = **0x00000017** (65 字; 源码 `board/wrapper_p4.v` 的 `BUILD_ID_V = 32'h00000017`)。
@@ -132,6 +136,8 @@ declare -A NAME=(
 #      W69 = tcp_tx_frame.o_win_at_winstall (最近一次等窗拍 {在飞, 有效窗} 锁存;
 #            ⚠️ **仅当同窗 ΔW66 > 0 时才有效** —— 否则是上一次的陈旧值)。
 [67]=tx_winstall_cap      [68]=rx_stat_ack_adv     [69]=tx_win_at_winstall
+# ⭐ M1 (2026-10-11): W70 —— 载荷镜像的拒收字节数 (真值源 = wrapper 装配段 `p7bdp_dout[30*32 +: 32]`):
+[70]=mir_drop_bytes
 )
 
 id_check(){

@@ -57,19 +57,20 @@ LOG=/tmp/p6e_snap_check.log
 #      BIZ 61 字 = `EXPECT_BID=0x00000008 SNAP_WORDS=61 UNIMPL_ADDR=0x114`。
 # ⚠️ 期望值按 **board/wrapper_p4.v 的 `.BUILD_ID_V`** 填 (源码是唯一权威); 以现场 0x04 读数为准,
 #    若与源码不符 ⇒ 先查是不是烧了别人的位流, 别改这里的数去"迁就"读数。
-EXPECT_BID=${EXPECT_BID:-0x0000001D}       # ⛔ 2026-10-11 persist 刀: 原默认 0x0000001C (缺陷刀) / 0x1A (构建 F) / 0x0A (Stage C)
+EXPECT_BID=${EXPECT_BID:-0x0000001F}       # ⛔ 2026-10-11 M1 镜像窗: 原默认 0x0000001E (snd_wnd 守卫) / 0x1D (persist 刀) / 0x0A (Stage C)
 
 # ---- 快照窗口几何 (**单一来源**: 只写"字数", 其他全部由它派生) -------------------------
 # ⚠️ 旧版把 44 个地址**手抄**成一行 ⇒ 只到 0xAC (漏 W36..W50) **且尾部 8 项重复** (36 字时代的笔误)。
-#    现在只改这一个数: 地址 = 0x20 + 4*i (i=0..SNAP_WORDS-1), 未实现地址 = 0x20 + 4*SNAP_WORDS。
+#    现在只改这一个数: 地址 = 0x20 + 4*i (i=0..SNAP_WORDS-1), 未实现地址 = 0x20 + 4*SNAP_WORDS
+#    **+ 16** (⭐ M1 起: 快照末字后接 MIR_STATUS/DATA/CTRL/DMA_CNT 四字; 70 字及更早**无** +16)。
 #    **63 = P7B-WU 二轮** (`wrapper_p4.v` 的 `SNAP_NW_P6E = 63`; 0x20..0x118, 未实现 0x11C);
 #    61 = P7B-BIZ (旧位流用 `SNAP_WORDS=61 EXPECT_BID=0x00000008 UNIMPL_ADDR=0x114` 覆盖);
 #    51 = P7b (→ `0xEC`); 36 = P6b (→ `0xB0`)。
 #    ⚠️ **未实现地址必须存在**: 它撑起读侧 SLVERR 负对照 (判据 6)。译码 7 位
 #       (`_proj_pcie/rtl/axi_regs.v`) ⇒ 地址每 512 字节才回绕,
 #       `0x11C` (word 71) 真正未实现 ✓ (上限 119 字); 红线 = **绝不能挑 ≥0x200**。
-SNAP_WORDS=${SNAP_WORDS:-70}
-UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS )))}   # 70 ⇒ 0x138 (67 ⇒ 0x12C; 65 ⇒ 0x124; 63 ⇒ 0x11C; 51 ⇒ 0xEC)
+SNAP_WORDS=${SNAP_WORDS:-71}
+UNIMPL_ADDR=${UNIMPL_ADDR:-$(printf '0x%X' $(( 0x20 + 4*SNAP_WORDS + 16 )))}   # 71 ⇒ 0x14C (M1 期B 起; 70 字及更早 = 0x138/0x12C/0x124/0x11C/0xEC —— 读旧位流须显式覆盖)
 snap_addr(){ printf '0x%X' $(( 0x20 + 4*$1 )); }                          # word 号 → 字节地址
 # W5 (前端域自由计数) 的**标称频率随构建而变** —— 它是判据的"期望值", 不跟上就是假 FAIL:
 #   · **P7B_10G 构建** (本脚本默认几何 63 字 / EXPECT_BID=10 —— ⛔ Stage C: 原句 = 9): 前端域 = PCS 的 CDR **恢复钟**
@@ -340,13 +341,14 @@ WLABEL=(
  "app_bp_cyc         (app_pattern 背压拍数)"
  # ---- 构建 D/E/F (2026-10-10) 新增 5 字 (66 → 67 → 70 字窗口) ----
  #    ⚠️ 名字**同源** = `_proj_pcie/p7b_biz/p7b_snap.sh` 的 `NAME[]`([65]..[69]);
- #       真值源 = `board/wrapper_p4.v` 的装配段注释。表长必须 == SNAP_WORDS (70),
- #       否则循环把它们打成 `<无标签>` (2026-10-10 加固轮: 本表原只到 W64 ⇒ W65..W69 无名)。
+ #       真值源 = `board/wrapper_p4.v` 的装配段注释。表长必须 == SNAP_WORDS (71),
+ #       否则循环把它们打成 `<无标签>` (2026-10-10 加固轮: 本表原只到 W64; M1 再补 W70)。
  "mac_tx_idle        (mac_tx_10g.stat_tx_idle: S_IDLE 拍数 = 线空闲; 构建 D)"
  "tx_stat_winstall   (tcp_tx_frame.stat_winstall: 帧器侧窗口门停顿拍数; 构建 E)"
  "tx_winstall_cap    (tcp_tx_frame.stat_winstall_cap: 板帽侧等窗拍数; 构建 F)"
  "rx_stat_ack_adv    (tcp_rx.stat_ack_adv: 推进 snd_una 的 ACK 次数; 构建 F)"
- "tx_win_at_winstall (tcp_tx_frame.o_win_at_winstall: 等窗拍锁存; 构建 F)" )
+ "tx_win_at_winstall (tcp_tx_frame.o_win_at_winstall: 等窗拍锁存; 构建 F)"
+ "mir_drop_bytes     (app_rx_mirror.drop_bytes: 载荷镜像拒收字节数; M1)" )
 for (( i = 0; i < SNAP_WORDS; i++ )); do
   v=$(rd "$(snap_addr $i)")
   W[$i]=$v

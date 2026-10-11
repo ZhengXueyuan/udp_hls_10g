@@ -28,7 +28,9 @@ DBYTES=$((DGOOD*1518))      # Δbytes
 BGOOD=1375                  # 基线 (背景) 起点
 
 # ---- 造一块**规范**快照文本 ---------------------------------------------------
-# 几何: **70 字 (W0..W69)** —— persist 刀 (2026-10-11, BID=0x1D / 未实现 0x138);
+# 几何: **71 字 (W0..W70)** —— M1 镜像窗 (2026-10-11, BID=0x1F / 未实现 0x14C);
+#       (原句: "70 字 (W0..W69) —— snd_wnd 守卫 (2026-10-11, BID=0x1E / 未实现 0x138)" = 历史代, 逐字保留于下)
+#       (原句: "70 字 (W0..W69) —— persist 刀 (2026-10-11, BID=0x1D / 未实现 0x138)" = 历史代, 逐字保留于下)
 #       (原句: "70 字 (W0..W69) —— 缺陷刀 (2026-10-11, BID=0x1C / 未实现 0x138)" = 历史代, 逐字保留于下)
 #       (原句: "70 字 (W0..W69) —— 构建 F (2026-10-10, BID=0x1A / 未实现 0x138)" = 历史代, 逐字保留于下)
 #       (原句: "67 字 (W0..W66) —— 构建 E (2026-10-10, BID=0x19 / 未实现 0x12C)" = 历史代, 逐字保留于下)
@@ -57,13 +59,13 @@ gen_snap(){  # gen_snap <文件> <第一块|第二块|洪泛A|洪泛B>
   { echo SNAP_BEGIN
     echo "TLATCH $tl"
     echo "GEN $gen"
-    echo "MAGIC 0x50360001"; echo "BID 0x0000001D"; echo "MARKER 0xdeadbeef"   # persist 刀: 原 0x1C = 缺陷刀 / 0x1A = 构建 F / 0x19 = 构建 E
+    echo "MAGIC 0x50360001"; echo "BID 0x0000001F"; echo "MARKER 0xdeadbeef"   # M1 镜像窗: 原 0x1E = snd_wnd 守卫 / 0x1D = persist 刀 / 0x1C = 缺陷刀
     local -a V=(1000 1518000 1518 0 0 $w5 998 998 0 0 0 0 0 0 0 0 0 0 0 0
                 $w20 0 0 0 $w24 1 0 0 0 0 1000 1514000 0 0 0 0
                 20000000 151800000 0 0x2000100C $vcc 0 0 0 0 0 0 0 0 0 $w50
                 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
-                0 0 0)   # W51..W69 (构建 F: W67/W68/W69 = 三个纯观测仪器)
-    local i; for (( i = 0; i < 70; i++ )); do printf 'W%d 0x%X\n' "$i" "${V[$i]}"; done
+                0 0 0 0)   # W51..W70 (M1: W70 = app_rx_mirror.drop_bytes)
+    local i; for (( i = 0; i < 71; i++ )); do printf 'W%d 0x%X\n' "$i" "${V[$i]}"; done
     echo "UNIMPL 0xffffffff"
     echo SNAP_END
   } > "$f"
@@ -139,7 +141,7 @@ run_case oldwindow 2 "窗口不完整: 缺 W36" "$S/s1.txt,$S/m_36word.txt" "$NI
 # 地址错一位: 每个 W<i> 里装的是 word i+1 的值 (末字回绕成 W0) —— 守恒律必然破
 awk '/^W[0-9]+ /{ split($1,a,"W"); idx=a[2]; val[idx]=$2; n++; next } { print }' "$S/s1.txt" > "$S/m_off_a.txt"
 awk '/^W[0-9]+ /{ split($1,a,"W"); idx=a[2]; val[idx]=$2; n++; next } { print }' "$S/s2.txt" > "$S/m_off_b.txt"
-shift1(){ awk -v NW=70 '/^W[0-9]+ /{ split($1,a,"W"); idx=a[2]+1; if(idx>NW-1) idx=0; printf "W%d %s\n", idx, $2; next } { print }' "$1" > "$2"; }
+shift1(){ awk -v NW=71 '/^W[0-9]+ /{ split($1,a,"W"); idx=a[2]+1; if(idx>NW-1) idx=0; printf "W%d %s\n", idx, $2; next } { print }' "$1" > "$2"; }
 shift1 "$S/s1.txt" "$S/m_off_a.txt"; shift1 "$S/s2.txt" "$S/m_off_b.txt"
 run_case offbyone 1 "B_CONS-a" "$S/m_off_a.txt,$S/m_off_b.txt" "$NIC"
 
