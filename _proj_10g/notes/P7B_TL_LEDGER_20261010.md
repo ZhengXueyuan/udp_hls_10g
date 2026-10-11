@@ -621,3 +621,20 @@
 - **几何（现役树）**：71 字（W70）· 未实现 `0x14C`；读侧已链式同步到 `0x1F`（提交 `00f439c`）。
 - **⏳ 在飞 = 构建轮 `0x1F`**（BID bump + 17 门矩阵 + 完整构建 + 归档 `p7b_build_0x1F/`；看点 = DP `−0.377` 的后布线真判决）。
 - **下一步 = P8 板级轮**（烧 0x1F → 身份门（BID / 71 字 / `0x14C` 回 `0xffffffff`）→ PCIe remove+rescan → 对端部署 `p7b_udp_src`+`p7b_mir_dump` → **① `--dma --src udp`**（判 `MIR_DMA_ACCT`：`clobber==0`/`short==0`/计数闭合 + 逐字节 `MIR_VERIFY rc=0`）**② BAR 路径**（阶段一机制首次上板）→ 端到端 UDP 镜像演示）；⚠️ 写通道"永远应答"板上无外部仪器（P2 结构性 + 仿真证据）。
+
+---
+
+## §10-18 2026-10-11 12:20：**P8 首个位流 `0x1F` 收口（提交 `527053b`）+ P8 板级轮在飞**
+
+### §10-18-1 构建读数（TL 独立复核 + 构建 agent 报告双证）
+- 位流 **`e365c5ca4fd25335f6713b2a960b4de5af5b42e0bda238c20d41011ca7460133` / 15,431,261 B**；`BUILD_ID_V = 0x1F`；窗口 **71 字** / 未实现 **`0x14C`**；读侧默认已是 `0x1F`。
+- `P7B_WNS 0.108 / WHS 0.011`；**三类失败端点 0/0/0**；`Slack (VIOLATED)=0`；硬门 12 键+3 标记全 0；route **0 错**；DRC 逐字同 0x1E（69 checks / 0 Error/Critical）。
+- ⭐⭐ **DP 域（= 全局最差）= `+0.108` / 0 失败端点**（0x1E `+0.034`，余量 0.53%→**1.69%**）⇒ **synth 面 `−0.377`/325 端点未在后布线兑现**（"失败锥 0 个 M1 cell"的预判成立）；**M1 自己最紧的族 = `+0.674`**（lvl 2，`u_mir` FIFO→环 BRAM）= 全局最差的 **6.2×**；M1 cell 在 `global_top5`/`dp_top10`/`dp_top50` **0 命中**。
+- 全局 WNS 身份 = DP 域 `u_retx/g_byte[1]…bram_0/CLKBWRCLK → u_tcp_tx/ring_d_r_reg[59]/D`（lvl 11，含 7 BRAM）——与 0x1E 对象不同（#66）。DP 前 50 源族**第 4 次整体换位**（`rptr_reg[6]_replica` 49/50→0；`u_retx` BRAM 0→11）⇒ 只登记不归因。
+- 资源（vs 0x1E，M1 整体 + P&R 合并量、无拆刀臂不归因）：LUT 75,558→**77,536**、FF 72,886→**74,657**、BRAM 348→**352**（**+4 = `u_mir_ring` 的 4×RAMB36E2，逐数吻合**）、URAM 0。
+- 矩阵 **17/17 EXIT=0 / 0 fail / FROZEN**；⚠️ **覆盖声明**：M1 各件不在任何 manifest、唯一编 wrapper 的 `p5_wrapper` 门是 `-d APP_MODE ONLY` ⇒ **17/17 对 M1 = 空证据**（M1 自己的门另在、本轮未跑）。
+- 归档 `p7b_build_0x1F/`（bit + routed dcp + query/ + SHA256SUMS 22 条 + REPORT.md 179 行，**无 scratch**）+ 预归档索引；`wrapper_p4.v:2144` 的 persist 注释头仍写"0x1E 沿用"（登记待下次编辑顺带）。
+
+### §10-18-2 P8 板级轮**在飞**（`p8_board_20261011/`，按 P8 命名）
+- 步骤：烧 0x1F（归档副本，sha 双核）→ 身份五判据（BID `0x1f` / 71 字 / `0x14C` 回 `0xffffffff` / x4 / 2 BARs）→ `remove`+`rescan` → 零构建项（`/dev/xdma*` 是否存在 `c2h_0`）→ 对端编 `p7b_mir_dump`（+发端）→ **① DMA 路径**（含"若 C2H 挂住 ⇒ 如实报挂、不绕过"）**② BAR 路径** **③（时间允许）TCP 源**。
+- 过程：该 agent 曾缺 `PEER_PW`（sudo 用）⇒ TL 按项目纪律给了口令（**只作命令前缀、绝不落盘**）并嘱"没 sudo 做不了的如实停下"。
