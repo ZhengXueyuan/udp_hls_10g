@@ -17,6 +17,17 @@
 //      sources_1/ip/xdma_0/xdma_0_stub.v 的 black_box 声明) —— 名字对不上 wrapper 就连不上,
 //      而"连不上"正是本门要抓的那类错, 所以不能靠猜。
 //   ⚠️ 本文件**只给仿真**, 绝不能出现在构建的文件清单里 (构建用真 IP)。
+//
+// ⭐ M1 期 B (2026-10-11) 扩展: `m_axi` 从"全 tie 0 不驱动"升级为**真的能发事务** ——
+//   两个层次任务 (仍与 axil_* 同款理由: TB 只能层次读子模块端口, 不能对 input wire
+//   做过程赋值):
+//       u_dut.u_pcie_xdma.m_axi_read (addr, len, id);   结果在 mrd_* (数组 mrd_buf / mrd_n /
+//                                                        mrd_resp0 / mrd_rlast_seen / mrd_to)
+//       u_dut.u_pcie_xdma.m_axi_write(addr, len, id);   结果在 mwr_* (mwr_bresp / mwr_bid /
+//                                                        mwr_bvalid_seen / mwr_nbeat / mwr_to)
+//   ⚠️ "只扩必要面": 不模仿真引擎的流水/多笔并发, 只发**单笔、INCR、16 B/拍**的突发 ——
+//      够驱动 `aximm_c2h_win` / `aximm_h2c_discard` 的合同 (其余形态由单元门覆盖)。
+//   ⚠️ 全部等待有界; 越界 ⇒ `*_to = 1` (TB 那边响红, 不许挂死)。
 //=============================================================================
 module xdma_0 (
     input  wire        sys_clk,
@@ -33,7 +44,7 @@ module xdma_0 (
     output wire [0:0]  usr_irq_ack,
     output wire        msi_enable,
     output wire [2:0]  msi_vector_width,
-    // ---- m_axi (本设计不用; 与真 IP 同名同位宽, 替身不驱动) ----
+    // ---- m_axi (⭐ M1 期 B 起真驱动: 层次任务 m_axi_read / m_axi_write; 见文件下半) ----
     input  wire        m_axi_awready,
     input  wire        m_axi_wready,
     input  wire [3:0]  m_axi_bid,
@@ -151,16 +162,128 @@ module xdma_0 (
     assign m_axil_arvalid = arvalid_r;
     assign m_axil_rready  = rready_r;
 
-    // m_axi 侧不驱动 (wrapper 里也没接) —— 显式 tie 0 免得 X 乱飘
-    assign m_axi_awid = 4'd0;    assign m_axi_awaddr = 64'd0; assign m_axi_awlen  = 8'd0;
-    assign m_axi_awsize = 3'd0;  assign m_axi_awburst = 2'd0; assign m_axi_awprot = 3'd0;
-    assign m_axi_awvalid = 1'b0; assign m_axi_awlock = 1'b0;  assign m_axi_awcache = 4'd0;
-    assign m_axi_wdata = 128'd0; assign m_axi_wstrb = 16'd0;  assign m_axi_wlast = 1'b0;
-    assign m_axi_wvalid = 1'b0;  assign m_axi_bready = 1'b0;
-    assign m_axi_arid = 4'd0;    assign m_axi_araddr = 64'd0; assign m_axi_arlen = 8'd0;
-    assign m_axi_arsize = 3'd0;  assign m_axi_arburst = 2'd0; assign m_axi_arprot = 3'd0;
-    assign m_axi_arvalid = 1'b0; assign m_axi_arlock = 1'b0;  assign m_axi_arcache = 4'd0;
-    assign m_axi_rready = 1'b0;
+    // ---------------- m_axi 主机 (⭐ M1 期 B 扩展: 层次任务驱动) ----------------
+    //   只扩必要面: 两个任务 + 两个结果面 (数组/标量, TB 层次读)。
+    //   ⚠️ 属性照抄 IP 的明文事实 (F3: arid≡0 / arsize∈{0,4} / arbust[1]≡0 /
+    //      arcache=4'h3 / arlock=0 / arprot=0) —— 从机**不依赖**这些常量 (它显式判合法),
+    //      这里只是"像真引擎那样发"。静默态 (无任务在跑) = 全 0 ⇒ 与旧 tie-off 同形。
+    reg [3:0]   m_arid_r = 4'd0;
+    reg [63:0]  m_araddr_r = 64'd0;
+    reg [7:0]   m_arlen_r = 8'd0;
+    reg         m_arvalid_r = 1'b0;
+    reg         m_rready_r  = 1'b0;
+    reg [3:0]   m_awid_r = 4'd0;
+    reg [63:0]  m_awaddr_r = 64'd0;
+    reg [7:0]   m_awlen_r = 8'd0;
+    reg         m_awvalid_r = 1'b0;
+    reg [127:0] m_wdata_r = 128'd0;
+    reg [15:0]  m_wstrb_r = 16'hFFFF;
+    reg         m_wlast_r = 1'b0;
+    reg         m_wvalid_r = 1'b0;
+    reg         m_bready_r = 1'b0;
+
+    assign m_axi_arid    = m_arid_r;
+    assign m_axi_araddr  = m_araddr_r;
+    assign m_axi_arlen   = m_arlen_r;
+    assign m_axi_arsize  = 3'd4;          // F3: size ∈ {0,4}; 本任务只发 16 B/拍
+    assign m_axi_arburst = 2'b01;         // F3: [1] 硬接 0 ⇒ 只可能 00/01
+    assign m_axi_arprot  = 3'd0;
+    assign m_axi_arvalid = m_arvalid_r;
+    assign m_axi_arlock  = 1'b0;
+    assign m_axi_arcache = 4'h3;          // F3: arcache = 4'b0011
+    assign m_axi_rready  = m_rready_r;
+    assign m_axi_awid    = m_awid_r;
+    assign m_axi_awaddr  = m_awaddr_r;
+    assign m_axi_awlen   = m_awlen_r;
+    assign m_axi_awsize  = 3'd4;
+    assign m_axi_awburst = 2'b01;
+    assign m_axi_awprot  = 3'd0;
+    assign m_axi_awvalid = m_awvalid_r;
+    assign m_axi_awlock  = 1'b0;
+    assign m_axi_awcache = 4'h3;
+    assign m_axi_wdata   = m_wdata_r;
+    assign m_axi_wstrb   = m_wstrb_r;
+    assign m_axi_wlast   = m_wlast_r;
+    assign m_axi_wvalid  = m_wvalid_r;
+    assign m_axi_bready  = m_bready_r;
+
+    // ---- 读任务的结果面 (TB 层次读: u_dut.u_pcie_xdma.mrd_*) ----
+    reg [127:0] mrd_buf [0:255];
+    integer     mrd_n = 0;            // 收到的 R 拍数
+    reg [1:0]   mrd_resp0 = 2'd0;     // 第一拍 rresp (每 R 拍同值; 抽首拍即可)
+    reg         mrd_rlast_seen = 1'b0;
+    integer     mrd_to = 0;           // 1 = 有等待越界 (AR 或 R)
+
+    task m_axi_read(input [63:0] addr, input [7:0] len, input [3:0] id);
+        integer i;
+        begin
+            mrd_n = 0; mrd_resp0 = 2'd0; mrd_rlast_seen = 1'b0; mrd_to = 0;
+            @(negedge aclk);
+            m_araddr_r <= addr; m_arlen_r <= len; m_arid_r <= id;
+            m_arvalid_r <= 1'b1; m_rready_r <= 1'b0;
+            i = 0;
+            while (!m_axi_arready && i < 1000) begin @(posedge aclk); i = i + 1; end
+            if (i >= 1000) mrd_to = 1;
+            @(negedge aclk); m_arvalid_r <= 1'b0; m_rready_r <= 1'b1;
+            i = 0;
+            while (!mrd_rlast_seen && i < 100000) begin
+                @(posedge aclk);
+                if (m_axi_rvalid && m_rready_r) begin
+                    if (mrd_n == 0) mrd_resp0 = m_axi_rresp;
+                    if (mrd_n < 256) mrd_buf[mrd_n] <= m_axi_rdata;
+                    if (m_axi_rlast) mrd_rlast_seen = 1'b1;
+                    mrd_n = mrd_n + 1;
+                end
+                i = i + 1;
+            end
+            if (!mrd_rlast_seen) mrd_to = 1;
+            @(negedge aclk); m_rready_r <= 1'b0;
+        end
+    endtask
+
+    // ---- 写任务的结果面 ----
+    integer   mwr_to = 0;             // 1 = 有等待越界
+    reg [1:0] mwr_bresp = 2'd0;
+    reg [3:0] mwr_bid = 4'd0;
+    reg       mwr_bvalid_seen = 1'b0;
+    integer   mwr_nbeat = 0;          // 本笔实际送出的 W 拍数
+
+    task m_axi_write(input [63:0] addr, input [7:0] len, input [3:0] id);
+        integer k, t;
+        begin
+            mwr_bresp = 2'd0; mwr_bid = 4'd0; mwr_bvalid_seen = 1'b0;
+            mwr_to = 0; mwr_nbeat = 0;
+            // AW 先发 (从机对到达顺序无关; 这里取"AW 先"这一支, "W 先"由单元门覆盖)
+            @(negedge aclk);
+            m_awaddr_r <= addr; m_awlen_r <= len; m_awid_r <= id; m_awvalid_r <= 1'b1;
+            m_bready_r <= 1'b1;
+            t = 0;
+            while (!m_axi_awready && t < 1000) begin @(posedge aclk); t = t + 1; end
+            if (t >= 1000) mwr_to = 1;
+            @(negedge aclk); m_awvalid_r <= 1'b0;
+            // W 拍逐拍送 (末拍 wlast)
+            for (k = 0; k <= len; k = k + 1) begin
+                @(negedge aclk);
+                m_wdata_r <= {96'd0, id, k[31:0]}; m_wstrb_r <= 16'hFFFF;
+                m_wlast_r <= (k == len); m_wvalid_r <= 1'b1;
+                t = 0;
+                while (!m_axi_wready && t < 1000) begin @(posedge aclk); t = t + 1; end
+                if (t >= 1000) mwr_to = 1;
+                @(negedge aclk); m_wvalid_r <= 1'b0; m_wlast_r <= 1'b0;
+                mwr_nbeat = mwr_nbeat + 1;
+            end
+            // 等 B (有界) 并收下
+            t = 0;
+            while (!m_axi_bvalid && t < 1000) begin @(posedge aclk); t = t + 1; end
+            if (t >= 1000) mwr_to = 1;
+            else begin
+                mwr_bresp = m_axi_bresp; mwr_bid = m_axi_bid;
+                mwr_bvalid_seen = 1'b1;
+                @(posedge aclk);                    // B 握手 (bready 已举)
+            end
+            @(negedge aclk); m_bready_r <= 1'b0;
+        end
+    endtask
 
     // AXI4-Lite 写: AW/W 同拍发, 等 B (与 tb_axi_regs 的主机同风格)
     task axil_write(input [31:0] a, input [31:0] d);

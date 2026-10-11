@@ -43,10 +43,10 @@
 //                           W61 **app_ctrl.stat_wu** (窗口重开通告入 ackq 的次数; 不是"已上线")
 //                           W62 **app_ctrl.rx_occ_bytes** (app RX 可读字节; 17 位 ⇒ 高位恒 0)
 //                         旧字 W0..W60 的语义与地址**逐位未变**。
-//                         未实现地址 = **末字之后第一格** = 0x20 + 4*SNAP_NW + 12 (M1 起;
-//                         因为 MIR 三个字插在快照末尾与它之间) ⇒ 读回 0xffffffff。
-//                         (如 SNAP_NW=71 ⇒ 快照 0x20..0x138, MIR 0x13C/0x140/0x144,
-//                          未实现 = 0x148; ⛔ 本文件里这些数字一律由 localparam 推导。)
+//                         未实现地址 = **末字之后第一格** = 0x20 + 4*SNAP_NW + 16 (⭐ 期 B 起;
+//                         因为 MIR 四个字插在快照末尾与它之间) ⇒ 读回 0xffffffff。
+//                         (如 SNAP_NW=71 ⇒ 快照 0x20..0x138, MIR 0x13C/0x140/0x144/0x148,
+//                          未实现 = 0x14C; ⛔ 本文件里这些数字一律由 localparam 推导。)
 //
 //   ---- ⭐ M1 (2026-10-11): 载荷镜像窗 (设计件 P7B_PCIE_DATAPATH_DESIGN v2 §V1.1/§V1.3) ----
 //   ⭐ M1 期 A (2026-10-11): `src_sel` —— 镜像的**源选择位** (0 = UDP app 口 /
@@ -58,7 +58,8 @@
 //                  [16]   unf_sticky  (空读 MIR_DATA 的 sticky; 权威证据 = 它; clr 写清)
 //                  [17]   any_drop_sticky (镜像侧丢字节 sticky 的读域版; clr 写清)
 //                  [18]   capture_on (= MIR_CTRL[0], 主机写的同一域)
-//                  [22:19] ver = 4'd2 ([31:24] = 0; ver 1→2: 期 A 加 src_sel)
+//                  [22:19] ver = 4'd3 ([31:24] = 0; ver 1→2: 期 A 加 src_sel;
+//                            ⭐ 期 B 2→3: MIR_CTRL 加 bit3 = dma_en + 新字 MIR_DMA_CNT)
 //                  [23]   src_sel 读回 (= MIR_CTRL[2] 的同一域直引 ⇒ 零新增 CDC)
 //   0x140 RO     MIR_DATA  = **读=弹出**: 返回一个 32 位载荷字 (4 字节, 小端顺序:
 //                  w[7:0] = 该 4 字节里最先收到的那个字节)。
@@ -71,9 +72,20 @@
 //                                       清 FIFO (排空式冲刷) + 字节累加器 + 两个 sticky)
 //                            [2] src_sel (⭐ 期 A: 0=UDP app 口 / 1=TCP app 口; 默认 0;
 //                                       采集侧 2FF 电平同步 (同 cap_en 风格))
+//                            [3] dma_en  (⭐ 期 B: 1 = 排空器把镜像 FIFO 搬进 C2H 环
+//                                       (mir_dma_ring); 复位默认 0 = 停采。
+//                                       ⚠️ **电平, 同域直引** (环 + 从机都在 pcie 域 ⇒
+//                                       零新增 CDC); 与 cap_en 独立)
 //                            其余位 0; 读回 = 当前值。起测协议: ① 写 clr → ② 写 cap_en=1 → ③ 发包。
 //                            切源协议: cap_en=0 下写 src_sel, 然后重走 ①→②。
-//   ⚠️ 未实现地址 (SLVERR) = `MIR_LAST_IDX+1` = 0x148 (word 82; 7 位译码红线: 绝不 ≥0x200)。
+//   0x148 RO     MIR_DMA_CNT = ⭐ 期 B 新加: C2H 环的**已写字数** (32 位, mod 2^32 自然回绕;
+//                  = `mir_dma_ring.wr_words`, 环是"逻辑字 L → 物理字 L mod 4096"的
+//                  16 KB 环)。主机侧协议 = 起读前取一份、每段重取 + clobber 检查
+//                  (见 `_proj_pcie/p7b_biz/p7b_mir_dump.cpp` 的 `--dma` 路径)。
+//                  ⚠️ 未接环的构建 (¬(APP_MODE∧PCIE_OBS∧DP_156MHZ)) 里此线 = 常量 0
+//                     ⇒ 读回 **0** (不是 0xffffffff —— 地址本身是**已实现**的);
+//                     0xffffffff 只在"整块 MIR 都不存在"的旧位流上出现 (read-side 身份门用)。
+//   ⚠️ 未实现地址 (SLVERR) = `MIR_LAST_IDX+1` = 0x14C (word 83; 7 位译码红线: 绝不 ≥0x200)。
 //   ⚠️ 扩窗要**七处同改** (P6b 起; 前五处是 24 字版定的, ⑥⑦ 是双域之后新增的):
 //      ① `SNAP_NW` (单一来源: wrapper 的 `SNAP_NW_P6E`) ② 两束的拼接项数
 //         (`fe_src`/`dp_src`; 项数必须 = wrapper 的 SNAP_FE_NW / SNAP_DP_NW)
@@ -165,13 +177,15 @@ module axi_regs #(
     input  wire [2:0] fe_state,   // {fe_busy, fe_seen, fe_done} → SNAP_STATUS[5:3]
     input  wire       locked_axi, // MMCM locked 的 axi 域同步版    → SNAP_STATUS[6]
     // ---- M1: 载荷镜像窗的读侧接口 (¬(APP_MODE∧DP_156MHZ) 构建由 wrapper 接常量:
-    //      level=0 / empty=1 / dout=0 / any_drop=0 —— v2 §V1.4 的 tie-off 常量表) ----
+    //      level=0 / empty=1 / dout=0 / any_drop=0 / **dma_cnt=0 (期 B 新增第 5 个)** ——
+    //      v2 §V1.4 的 tie-off 常量表 + 期 B 的 m_axi 响应线常量表) ----
     input  wire [8:0]  mir_level,     // fifo_async.dbg_occ_r (读域已 2FF 同步; **悲观少报**)
     input  wire        mir_empty,     // fifo_async.empty (读域)
     input  wire [31:0] mir_dout,      // fifo_async.dout (FWFT: !empty 时 = 头字)
     input  wire        mir_any_drop,  // drop sticky 的读域 2FF 电平版
+    input  wire [31:0] mir_dma_cnt,   // ⭐ 期 B: 环写字数 (MIR_DMA_CNT@0x148; ¬ 支 = 0)
     output wire        mir_pop,       // 1 拍: 读=弹出 (与"装载 rdata"同拍、每笔恰好一次)
-    output wire [31:0] mir_ctrl       // RW: [0]=cap_en, [1]=clr toggle (读回 = 当前值)
+    output wire [31:0] mir_ctrl       // RW: [0]=cap_en [1]=clr toggle [2]=src_sel [3]=dma_en
 );
 
     localparam integer SNAP_W0_IDX   = 8;                   // 快照字起始 word 号 (= 0x20)
@@ -179,13 +193,15 @@ module axi_regs #(
 
     // ---------------- M1 (2026-10-11): 载荷镜像窗 (设计件 v2 §V1.1/§V1.3) ----------------
     //   主机侧对齐: W70 = mir_drop_bytes (快照末字, dp 域) · MIR_STATUS · MIR_DATA (读=弹出)
-    //   · MIR_CTRL (RW)。⛔ **本文件一律用"地址字号"**, 且全部由 SNAP_LAST_IDX 推导 ——
-    //   不写裸字面量 (S1 的根因就是"W 编号 / 字号 / 字节地址"三把尺子混用:
-    //   W70 ↔ 字号 78 ↔ 0x138)。未实现地址 = MIR_LAST_IDX+1 = 0x148 (word 82)。
-    localparam integer MIR_STATUS_IDX = SNAP_LAST_IDX + 1;   // 0x13C = "W71" (文档口径)
-    localparam integer MIR_DATA_IDX   = SNAP_LAST_IDX + 2;   // 0x140 = "W72"
-    localparam integer MIR_CTRL_IDX   = SNAP_LAST_IDX + 3;   // 0x144 = "W73"
-    localparam integer MIR_LAST_IDX   = MIR_CTRL_IDX;        // 实现边界 (SLVERR 判据改用它)
+    //   · MIR_CTRL (RW) · **MIR_DMA_CNT (期 B 新加, 0x148)**。⛔ **本文件一律用"地址字号"**,
+    //   且全部由 SNAP_LAST_IDX 推导 —— 不写裸字面量 (S1 的根因就是"W 编号 / 字号 /
+    //   字节地址"三把尺子混用: W70 ↔ 字号 78 ↔ 0x138)。
+    //   未实现地址 = MIR_LAST_IDX+1 = 0x14C (word 83; 期 B 起 —— 之前是 0x148)。
+    localparam integer MIR_STATUS_IDX  = SNAP_LAST_IDX + 1;  // 0x13C = "W71" (文档口径)
+    localparam integer MIR_DATA_IDX    = SNAP_LAST_IDX + 2;  // 0x140 = "W72"
+    localparam integer MIR_CTRL_IDX    = SNAP_LAST_IDX + 3;  // 0x144 = "W73"
+    localparam integer MIR_DMA_CNT_IDX = SNAP_LAST_IDX + 4;  // 0x148 = "W74" (期 B: 环写字数)
+    localparam integer MIR_LAST_IDX    = MIR_DMA_CNT_IDX;    // 实现边界 (SLVERR 判据改用它)
     // 空读哨兵: **响亮值**, 不是"唯一性"保证 (数据可以是任何值) —— 权威证据 = unf_sticky。
     localparam [31:0]  MIR_SENT       = 32'h5A5A_5A5A;
 
@@ -243,9 +259,13 @@ module axi_regs #(
                     // [1] clr    : **toggle** —— 写 1 翻转一次, 跨域侧 (2FF + 沿检测)
                     //              把它变成 dp/rd 域**恰好 1 个脉冲** (写 0 = 不动, 不产生脉冲)
                     // [2] src_sel: ⭐ 期 A 电平 (0=UDP / 1=TCP; 采集侧 2FF)
+                    // [3] dma_en : ⭐ 期 B 电平 (1 = 排空器把镜像 FIFO 搬进 C2H 环; 复位默认 0)
+                    //              ⚠️ 与 cap_en 独立: 停了 dma_en 只停**采集进环**, 环里旧内容
+                    //              照常可读 (ring 的"幂等只读"合同, 见 mir_dma_ring.v 头注释)
                     if (wstrb_r[0]) begin
                         mir_ctrl_r[0] <= wdata_r[0];
                         mir_ctrl_r[2] <= wdata_r[2];
+                        mir_ctrl_r[3] <= wdata_r[3];
                         if (wdata_r[1]) mir_ctrl_r[1] <= ~mir_ctrl_r[1];
                     end
                     s_axil_bresp <= 2'b00;
@@ -284,11 +304,12 @@ module axi_regs #(
     // MIR_STATUS = {8'd0, src_sel, ver[3:0], capture_on, any_drop_sticky, unf_sticky, level[15:0]}
     //   = 8+1+4+1+1+1+16 = **恰好 32 位** (v2 §V2-S7-③; v1 的 38 位示例作废)
     //   · src_sel (bit23) = ⭐ 期 A: MIR_CTRL[2] 的读回 (同一域直引 ⇒ 零新增 CDC)
-    //   · ver = 4'd2 (期 A: 1→2, 因为 MIR 寄存区块的位语义变了)
+    //   · ver = 4'd3 (期 A: 1→2 [加 src_sel]; ⭐ 期 B: 2→3 [MIR_CTRL 加 bit3 = dma_en
+    //     + 新读字 MIR_DMA_CNT@0x148] —— 依"位语义变了就 bump"的既定规则, 见 v2 §V1.1)
     //   · capture_on = 控制寄存器位 (主机写入的同一域 ⇒ 零新增 CDC)
     //   · any_drop_sticky = 镜像内 dp sticky 的读域 2FF 电平版
     //   · level = fifo_async.dbg_occ_r 直引 (读域 2FF 同步、**悲观少报** ⇒ 读 level 个字不可能下溢)
-    wire [31:0] mir_status = {8'd0, mir_ctrl_r[2], 4'd2, mir_ctrl_r[0], mir_any_drop, mir_unf_sticky,
+    wire [31:0] mir_status = {8'd0, mir_ctrl_r[2], 4'd3, mir_ctrl_r[0], mir_any_drop, mir_unf_sticky,
                               {7'd0, mir_level}};
 
     // ---------------- 数据面快照寄存器 (0x18-0x3C) ----------------
@@ -385,6 +406,7 @@ module axi_regs #(
             MIR_STATUS_IDX: rdata_mux = mir_status;            // 0x13C RO
             MIR_DATA_IDX:   rdata_mux = mir_empty ? MIR_SENT : mir_dout;  // 0x140 读=弹出 (空态出哨兵)
             MIR_CTRL_IDX:   rdata_mux = mir_ctrl_r;            // 0x144 RW (读回 = 当前值)
+            MIR_DMA_CNT_IDX: rdata_mux = mir_dma_cnt;          // 0x148 RO (期 B: 环写字数, mod 2^32)
             // 快照字: word 8..(8+SNAP_NW-1) —— 用 if 按参数判范围 (case 的标签没法由参数生成),
             // 这样扩窗时只需要改 SNAP_NW 一个数, 不会漏掉某个标签 ⇒ 也就不会回绕读错字。
             default: rdata_mux = ((r_word >= SNAP_W0_IDX) && (r_word <= SNAP_LAST_IDX))
@@ -404,8 +426,9 @@ module axi_regs #(
             end
             if (!s_axil_arready && !s_axil_rvalid) begin
                 s_axil_rdata <= rdata_mux;
-                // M1: 边界改 `MIR_LAST_IDX` (= SNAP_LAST_IDX+3) —— 未实现地址 = 0x148 (word 82);
-                //     原判据 `<= SNAP_LAST_IDX` 会把 MIR 三个字判成 SLVERR (v2 §V1.1)。
+                // M1: 边界改 `MIR_LAST_IDX` (= SNAP_LAST_IDX+4) —— 未实现地址 = 0x14C (word 83);
+                //     原判据 `<= SNAP_LAST_IDX` 会把 MIR 四个字判成 SLVERR (v2 §V1.1;
+                //     期 B 起 MIR 块 = STATUS/DATA/CTRL/DMA_CNT 四个字)。
                 s_axil_rresp <= (r_word <= MIR_LAST_IDX) ? 2'b00 : 2'b10;   // 未实现 -> SLVERR
                 decode_err_r <= (r_word >  MIR_LAST_IDX);
                 s_axil_rvalid <= 1'b1;

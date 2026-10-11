@@ -372,9 +372,13 @@ def main():
     m8 = re.search(r"wire\s*\[(\d+):0\]\s*ar_word\s*=\s*s_axil_araddr\[(\d+):2\]", asrc)
     ck(m8 is not None, "8a ar_word 声明可解析")
     width = int(m8.group(2)) - 1 if m8 else 0
-    unimpl_word = (0x20 + 4 * NW) >> 2
+    # ⭐ M1 期 B (2026-10-11): MIR 块 = STATUS/DATA/CTRL/DMA_CNT **四个字** (0x13C..0x148)
+    #   插在快照末尾与未实现地址之间 ⇒ 偏移 12 → **16** (未实现地址 = 0x20+4*NW+16)。
+    MIR_BLOCK_BYTES = 16
+    unimpl_addr = 0x20 + 4 * NW + MIR_BLOCK_BYTES
+    unimpl_word = unimpl_addr >> 2
     ck(unimpl_word < (1 << width), "8 * 未实现地址不回绕",
-       "(addr=0x%X => word %d < 2^%d=%d)" % (0x20 + 4 * NW, unimpl_word, width, 1 << width))
+       "(addr=0x%X => word %d < 2^%d=%d)" % (unimpl_addr, unimpl_word, width, 1 << width))
     m9 = re.search(r"wire\s*\[(\d+):0\]\s*snap_base\s*=\s*\{snap_idx,\s*5'b0\}", asrc)
     ck(m9 is not None, "8b snap_base 声明可解析")
     w2 = int(m9.group(1)) + 1 if m9 else 0

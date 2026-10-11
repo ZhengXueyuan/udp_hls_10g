@@ -1,0 +1,12 @@
+GPP_RC=0
+GPP_EXE_OK
+MIR_SELFTEST T1 bytes=65536 words=16384 rc=0 first_mis=-1 OK
+MIR_SELFTEST T2 (corrupt byte 57) rc=1 first_mis=57 bytes=65536 OK
+MIR_SELFTEST T3 K%4 check: want=65536 want%4=0 OK(本例合法)
+MIR_SELFTEST T4 sentinel=5a5a5a5a (exp 5a5a5a5a) unf=1 OK
+MIR_SELFTEST T4b src_sel rb: set=1 clr=0 OK
+MIR_SELFTEST T5 (ring wrap, cnt0=3648) words=1024 bytes=4096 rc=0 fm=-1 clob=0 short=0 lag=128 OK
+MIR_SELFTEST T6 (corrupt first ring word) rc=1 fm=2 OK
+MIR_SELFTEST T7 (writer wraps during read) clob=1 OK
+MIR_SELFTEST PASS
+SELFTEST_RC=0

@@ -96,7 +96,9 @@ sec "P7B_ADD_OBS"
 import_files -norecurse ${root_dir}/rtl/snap_cdc.v ${root_dir}/_proj_pcie/rtl/axi_regs.v \
                          ${root_dir}/rtl/clk_gen_p6b.v ${root_dir}/rtl/fifo_async.v \
                          ${root_dir}/rtl/snap_seq.v \
-                         ${root_dir}/rtl/app_rx_mirror.v
+                         ${root_dir}/rtl/app_rx_mirror.v \
+                         ${root_dir}/rtl/aximm_c2h_win.v ${root_dir}/rtl/mir_dma_ring.v \
+                         ${root_dir}/rtl/aximm_h2c_discard.v
 sec "P7B_ADD_MAC"
 import_files -norecurse ${mac_dir}/crc32_64.v ${mac_dir}/mac_rx_10g.v ${mac_dir}/mac_tx_10g.v
 sec "P7B_ADD_BOARD"

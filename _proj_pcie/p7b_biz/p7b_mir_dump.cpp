@@ -7,6 +7,7 @@
 // 协议 (设计件 v2 §V1.1/§V1.3; 地址全部见 `axi_regs.v` 头注释 §M1):
 //   0x00 MAGIC (0x50360001) · 0x04 BUILD_ID (必须 == --bid) · 0x18 触发快照 (写 1)
 //   0x1C SNAP_STATUS (bit1 done) · 0x13C MIR_STATUS · 0x140 MIR_DATA (读=弹出) · 0x144 MIR_CTRL
+//   ⭐ 期 B: 0x148 MIR_DMA_CNT (环写字数) · **未实现地址 = 0x14C** (MIR 四字之后第一格)
 //   MIR_STATUS = {[31:24]=0, [23]src_sel, [22:19]ver, [18]capture_on, [17]any_drop_sticky,
 //                 [16]unf_sticky, [15:0]level}
 //   MIR_CTRL   = [0]cap_en [1]clr toggle [2]src_sel; 起测顺序 = ① 写 clr=1 → ② 写 cap_en=1 → ③ 发包
@@ -77,6 +78,7 @@ static const uint32_t A_W11 = 0x4C;            // W11 = app_udp_pattern.stat_rx_
 static const uint32_t A_W70 = 0x138;           // W70 = app_rx_mirror.drop_bytes (71 字窗口末字)
 static const uint32_t A_MIR_STATUS = 0x13C, A_MIR_DATA = 0x140, A_MIR_CTRL = 0x144;
 static const uint32_t A_MIR_DMA_CNT = 0x148;    // ⭐ 期 B: 环字计数器 (未接该环的构建 ⇒ 0xffffffff)
+static const uint32_t A_UNIMPL = 0x14C;         // ⭐ 期 B: 未实现地址 (MIR 四字之后第一格) ⇒ 0xffffffff
 static const uint32_t MIR_SENT = 0x5A5A5A5Au;
 static const uint32_t MAGIC = 0x50360001u;
 // ⭐ 期 B: 环几何 —— 必须与 `rtl/mir_dma_ring.v` 的 `ROW_AW` 参数同代 (16 KB = 4096 字 × 4 行/拍)
@@ -504,6 +506,16 @@ int main(int argc, char **argv) {
     snap_read(io, w11a, w70a);
     if (use_dma) {
         // ⭐⭐ 期 B: C2H 环读路径 —— 身份门 = MIR_DMA_CNT 可读 (未接该环的构建回 0xffffffff)
+        //   ⭐ 2026-10-11 接线轮: 再加一条**边界身份门** —— 未实现地址 (0x14C) 必须回 0xffffffff
+        //     (经真 XDMA 的 SLVERR⇒0xffffffff 行为; 见 sim/p6e_pcie/xdma_0_sim_stub.v 头注)。
+        //     它同时证明"MIR_DMA_CNT 的那个 0x148 是真字而不是别名" (两格一起判 ⇒ 边界不平移)。
+        uint32_t un = io.rd(A_UNIMPL);
+        printf("MIR_UNIMPL addr=%03x val=%08x (exp ffffffff)\n", A_UNIMPL, un);
+        if (un != 0xFFFFFFFFu) {
+            fprintf(stderr, "FATAL: 未实现地址 0x%03x 回 %08x != 0xffffffff —— 读侧几何不同代?\n",
+                    A_UNIMPL, un);
+            return 2;
+        }
         FdRingIo rio(dma_dev);
         DmaRes dr = run_dma(io, rio, want, secs, !noarm, src_sel);
         snap_read(io, w11b, w70b);
