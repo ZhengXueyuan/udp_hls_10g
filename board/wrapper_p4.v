@@ -4321,8 +4321,27 @@ module wrapper_p4 (
 
     axi_regs #(
         .MAGIC_V    (32'h50360001),
-        .BUILD_ID_V (32'h0000001E),     // ⚠️ 每次改动自增 (前置闸读这一项认位流; 构建 F = 0x1A)
-                                        //   ⭐ 本轮构建 (2026-10-11): **0x1D → 0x1E**。
+        .BUILD_ID_V (32'h0000001F),     // ⚠️ 每次改动自增 (前置闸读这一项认位流; 构建 F = 0x1A)
+                                        //   ⭐ 本轮构建 (2026-10-11): **0x1E → 0x1F**。
+                                        //      0x1F 内容 = **M1 载荷镜像窗** (UDP/TCP **`src_sel`** 双源;
+                                        //      tap = app RX 口 → XOR 0xA5 → 异步 FIFO → `axi_regs`
+                                        //      新读口) + **C2H DMA 环** (`rtl/mir_dma_ring.v`)
+                                        //      + **H2C 丢弃从机** (`rtl/aximm_h2c_discard.v`)。
+                                        //      模块五件套 = `rtl/app_rx_mirror.v` / `rtl/aximm_c2h_win.v` /
+                                        //      `rtl/mir_dma_ring.v` / `rtl/aximm_h2c_discard.v` +
+                                        //      `_proj_pcie/rtl/axi_regs.v` 的 MIR 寄存器组;
+                                        //      顶层 = 本文件 M1 块 + `m_axi` 双通道接线。
+                                        //      ⚠️ 窗口字长随之 70 → **71** (W70 =
+                                        //      `app_rx_mirror.drop_bytes`); 未实现地址 0x138 →
+                                        //      **0x14C** (末寄存器 = `MIR_DMA_CNT` @0x148)。
+                                        //      ⛔ 回退点 = **运行期写 `MIR_CTRL[0] = cap_en = 0`**
+                                        //      (复位默认即 0 = 关; 不需重烧), 或回滚 M1 提交 (源码面)。
+                                        //      历史链: 0x1E = snd_wnd 写入守卫 / 0x1D = persist 刀
+                                        //      (发送侧零窗探询 + P-1 修复) / 0x1C = 缺陷刀
+                                        //      (RETXHI-GHOST 修复) / 0x1B = 已分配、从未构建
+                                        //      (原定 persist) / 0x1A = 构建 F (70 字窗口)。
+                                        //   ---- (以下为历史, 逐字保留) ----
+                                        //   ⭐ 上一版 (2026-10-11): **0x1D → 0x1E**。
                                         //      0x1E 内容 = **snd_wnd 写入守卫** (`rtl/tcp_rx.v`:
                                         //      `pend_wnd` 的置位门与值锁存**成对**按"可接受 ACK"门控
                                         //      —— 谓词 `ackok_l` = `ack_ok` 锁存, 含等号 ⇒ 零推进的
