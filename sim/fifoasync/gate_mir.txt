@@ -1,0 +1,80 @@
+SHA256 �� D:\repo\XCKU5PMini\udp_hls_10g\rtl\fifo_async.v ��ϣ:
+898fa9a303ac3b01896e0bfea116f3fe8433e4fb62bb3e6a97b9a0ff30d19f75
+CertUtil: -hashfile ����ɹ���ɡ�
+SHA256 �� D:\repo\XCKU5PMini\udp_hls_10g\tb\tb_fifo_async.v ��ϣ:
+ae104eee4a6c26daaa9a2bf34e4b331ae95dc16020b03e6dfd9644e352ff6513
+CertUtil: -hashfile ����ɹ���ɡ�
+run at 2026/10/11 ����  8:33:29.94 
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Sun Oct 11 08:34:29 2026
+# Process ID         : 30940
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/sim/fifoasync/case_mir
+# Command line       : xsim.exe -log xsim_mir.log -mode tcl -source {xsim.dir/tb_fifo_async/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/sim/fifoasync/case_mir/xsim_mir.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/sim/fifoasync/case_mir\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26300
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 23115 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_fifo_async/xsim_script.tcl
+# xsim {tb_fifo_async} -testplusarg C_MIR -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+FIFO_ASYNC TB: case=MIR WH=8 RH=5 T_wr=12800ps T_rd=8000ps
+== case MIR: u_E = M1 实参 (32/256/FWFT=1) @ T_wr=12.8ns : T_rd=8.0ns (ratio 1.6) ==
+  ok: E1 复位后 empty=1 / full=0
+  ok: E2a 单写被观察到 (le0=53088000 le1=53113200)
+  ok: E2b empty 拉低延迟 > 3*T_rd (dt=25200ps > 24000ps)
+  ok: E3 灌到 full=1 (DEPTH=256)
+  info: E4 满态续写 200 拍, 拒写窗口 = 200
+  ok: E4 满态被拒的写被计数 (探针有牙)
+  ok: E5a 单弹被观察到 (lf0=61745200 lf1=61792000)
+  ok: E5b full 拉低延迟 > 3*T_wr (dt=46800ps > 38400ps)
+  ok: E6 排空到 done
+  info: E7 E_wr=2573 E_rd=2573 E_cmp=6182 E_err=0 E_gmon=0 E_gchk=5146 E_omax=256 E_omin=0 E_fblk=345 E_eblk=4448 E_ovf=345
+  ok: E7a 内容 0 错 (逐字 == 金标准)
+  ok: E7b 真做过对拍/写/读 (cmp/wr/rd 全 > 0)
+  ok: E7c 排空后 写-读 == 0
+  ok: E7d 灰码监视 0 违规 且 真验证过 (gmon==0 && gchk>0)
+  ok: E7e 占用探针非空且 >= 金标准峰值, 硬界 0 违规
+  ok: E7f 探针到过满量程 (omax == 256 ⇒ 灌满判据不是空判据)
+  ok: E8 DUT 拒写计数 == 门自己的挡写计数 (±2)
+
+== 判据表 (每实例) ==
+  inst WIDTH/DEPTH/FWFT   写    读   比较  内容错  灰码违规/验证  占用max/min  full挡/empty挡  fullUp/emptyUp  队列余
+  A    72/16/FWFT=1     2306 2306 5548 0 0/4612 16/0 587/4784 3/676 0
+  B    72/16/FWFT=0     2402 2402 2402 0 0/4804 16/0 584/4620 3/529 0
+  C    40/4/FWFT=1      1807 1807 4673 0 0/3614 4/0 1111/5224 492/930 0
+  D    40/4/FWFT=0      1816 1816 1816 0 0/3632 4/0 1126/5166 541/938 0
+  E    32/256/FWFT=1    2573 2573 6182 0 0/5146 256/0 345/4448 3/423 0
+  ok: 通用1: 四实例内容错 0 (无丢失/重复/重排)
+  ok: 通用2: 四实例都真做过 dout 对拍 (比较数 > 0)
+  ok: 通用3: 四实例都真有被接受的写
+  ok: 通用4: 四实例都真有弹出
+  ok: 通用5: 灰码监视零违规
+  ok: 通用6: 灰码监视真有被验证的指针变化 (判据非空)
+  [F-1] 拒写探针: A ovf=587/独立挡写=587 | B 584/584 | C 1111/1111 | D 1126/1126
+  ok: F1-1: DUT 拒写计数 == 门自己的挡写计数 (±2; 探针被拿掉/恒 0 会立刻 FAIL)
+  ok: F1-2: 探针有非零正证据 (真数到过被拒的写)
+  ok: 通用7: 收尾时 写-读 == 0 (排空后队列空)
+  [P6b] 占用探针: A occ_w_max=16/occ_r_max=16 (金标准 occ_max=16) | C occ_w_max=4/occ_r_max=4 (金标准 occ_max=4)
+  ok: P6b-1: 写域占用探针峰值 >= 金标准真实峰值 (A/C)
+  ok: P6b-2: 探针非空 (真有占用过 ⇒ 探针不是恒 0 的未连接线)
+  ok: P6b-3: 探针硬界 (占用永不 > DEPTH; 独立计数, 不计入 o_err)
+
+FIFO_ASYNC_GATE: PASS_ALL (case=MIR)
+$finish called at time : 142265750 ps : File "D:/repo/XCKU5PMini/udp_hls_10g/tb/tb_fifo_async.v" Line 1076
+exit
+INFO: [Common 17-206] Exiting xsim at Sun Oct 11 08:34:31 2026...

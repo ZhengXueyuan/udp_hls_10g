@@ -23,7 +23,10 @@
 //=============================================================================
 module tb_biz_win;
 
-    localparam integer NW = 70;  // = wrapper 的 SNAP_NW_P6E (构建 F, 2026-10-10; 原 61/63/65/66/67)
+    // ⭐ M1 (2026-10-11): 70 -> 71 (= wrapper 的 SNAP_NW_P6E; 新末字 W70 = app_rx_mirror.drop_bytes)。
+    //   ⚠️ 本 TB 的 NW 必须**跟住 wrapper 的地图** —— 它是『地址 <-> 字』这一半的单元门
+    //   (另一半 = check_window.py 的装配静态核对)。
+    localparam integer NW = 71;  // = wrapper 的 SNAP_NW_P6E (M1; 原 70 = 构建 F / 61/63/65/66/67)
 
     reg clk = 0, rst_n = 0;
     always #5 clk = ~clk;
@@ -41,6 +44,8 @@ module tb_biz_win;
     wire        decode_err;
 
     wire        snap_req;
+    wire        mir_pop;                       // M1: 读=弹出 (本 TB 只验空读路径)
+    wire [31:0] mir_ctrl;                      // M1: 控制寄存器读回
     reg         snap_busy  = 0;
     reg         snap_valid = 0;
     reg  [NW*32-1:0] snap_din = 0;
@@ -56,7 +61,10 @@ module tb_biz_win;
         .s_axil_rdata(rdata), .s_axil_rresp(rresp), .s_axil_rvalid(rvalid), .s_axil_rready(rready),
         .hw_status(hw_status), .scratch(scratch), .wr_count(wr_count), .decode_err(decode_err),
         .snap_req(snap_req), .snap_busy(snap_busy), .snap_valid(snap_valid), .snap_din(snap_din),
-        .fe_state(fe_state), .locked_axi(locked_axi)
+        .fe_state(fe_state), .locked_axi(locked_axi),
+        // ⭐ M1: 载荷镜像窗的 tie-off 常量 (v2 §V1.4 的 ¬DP_156MHZ 表: level=0/empty=1/dout=0/any_drop=0)
+        .mir_level(9'd0), .mir_empty(1'b1), .mir_dout(32'd0), .mir_any_drop(1'b0),
+        .mir_pop(mir_pop), .mir_ctrl(mir_ctrl)
     );
 
     integer fails = 0, npass = 0;
@@ -170,13 +178,16 @@ module tb_biz_win;
 
         // ---- 判据 5: 末字**恰好**是最后一个已实现字 (边界一侧) ----
         axil_rd(32'h20 + (NW-1)*4, v, resp);
-        chk("5a 末字 (0x20+4*(NW-1) = 0x134 @NW=70) 读得到", v, code_of(NW-1));
+        chk("5a 末字 (0x20+4*(NW-1) = 0x138 @NW=71) 读得到", v, code_of(NW-1));
         chkresp("5b 末字 rresp = OKAY", resp, 2'b00);
 
         // ---- 判据 6 (⭐): 下一个地址**恰好**未实现 (边界另一侧) ----
         //   两侧都判 ⇒ "边界差 1" 这种错必被抓 (只判一侧的话, 边界整体平移会漏)。
-        axil_rd(32'h20 + NW*4, v, resp);
-        chk("6a 未实现地址 (0x20+4*NW = 0x138 @NW=70) 回 0", v, 32'h0000_0000);
+        // ⭐ M1 (2026-10-11): 未实现地址 = 0x20+4*NW **+12** —— M1 在快照末尾之后插了
+        //   MIR_STATUS/MIR_DATA/MIR_CTRL 三个字 (0x13C/0x140/0x144) ⇒ 下一个空地址后移 12 B。
+        //   (旧公式 `0x20+4*NW` = 0x13C 现在是 MIR_STATUS **真字**, 照旧式判必然假红。)
+        axil_rd(32'h20 + NW*4 + 12, v, resp);
+        chk("6a 未实现地址 (0x20+4*NW+12 = 0x148 @NW=71) 回 0", v, 32'h0000_0000);
         chkresp("6b 未实现地址 rresp = SLVERR", resp, 2'b10);
 
         // ---- 判据 7: **回绕红线的实测位置** (本轮把译码 6 位 → 7 位的直接后果) ----
@@ -228,6 +239,29 @@ module tb_biz_win;
         // ---- 判据 10: 未触发 ⇒ 窗口冻结 (不自动刷新) ----
         axil_rd(32'h20 + 5*4, v, resp); axil_rd(32'h20 + 5*4, v2, resp);
         chk("10 两次读同一字相同 (窗口冻结)", v2, v);
+
+        // ---- 判据 11 (⭐ M1, 2026-10-11): 载荷镜像窗三个新字的**行为** (tie-off 常量版) ----
+        //   本 TB 的 axi_regs 实例把 mir_* 接成 v2 §V1.4 的常量 (level=0/empty=1/dout=0) ⇒
+        //   这里验: 地址映射 + 空读哨兵/underflow sticky + MIR_CTRL 写/读回 + clr 清 sticky
+        //   + 未实现地址边界。**活体镜像**那一半由 sim/p6e_pcie/run_tb_p6e_pcie.bat 的全链门覆盖。
+        axil_rd(32'h13C, v, resp);
+        chk("11a MIR_STATUS: level==0 / ver==1 / cap==0 / unf==0",
+            {v[31:23], v[22:19], v[18], v[16], v[15:0]}, {9'd0, 4'd1, 1'b0, 1'b0, 16'd0});
+        chkresp("11b MIR_STATUS 读 rresp = OKAY", resp, 2'b00);
+        axil_rd(32'h140, v, resp);
+        chk("11c 空读 MIR_DATA = 哨兵 0x5A5A5A5A (响亮值)", v, 32'h5A5A5A5A);
+        axil_rd(32'h13C, v, resp);
+        chk("11d 空读后 unf_sticky 置位 (权威证据)", {31'd0, v[16]}, 32'd1);
+        axil_wr(32'h144, 32'h3, 4'hF, resp);
+        chkresp("11e 写 MIR_CTRL=0x3 rresp = OKAY", resp, 2'b00);
+        axil_rd(32'h144, v, resp);
+        chk("11f MIR_CTRL 读回 == 0x3 ([0]cap [1]clr)", v, 32'h0000_0003);
+        axil_rd(32'h13C, v, resp);
+        chk("11g 写 0x3 后: capture_on==1 且 unf 已清", {v[18], v[16]}, 2'b10);
+        axil_rd(32'h148, v, resp);
+        chkresp("11h 读 0x148 (未实现) rresp = SLVERR", resp, 2'b10);
+        axil_wr(32'h148, 32'hDEAD_0000, 4'hF, resp);
+        chkresp("11i 写 0x148 = SLVERR (白名单仍只有 0x08/0x18/0x144)", resp, 2'b10);
 
         $display("----------------------------------------------------------");
         if (fails == 0) $display("PASS_ALL  tb_biz_win: %0d 项判据全过 (窗口 %0d 字)", npass, NW);

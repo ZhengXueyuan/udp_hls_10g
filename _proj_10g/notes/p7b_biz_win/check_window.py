@@ -224,8 +224,10 @@ def main():
     #      (它的源 `tcp_tx_frame.stat_winstall` 在 dp 域), 所以顶端两项 = p7bdp 的 W(NW-1)
     #      与 tx 束的 W65; 紧随其后才是历史那 14 项 (W64..W51)。
     #      ⚠️ "最上面 = tx 束槽" 这条**只对 P7B-A7 那一代成立**, 不是不变量 (就地订正)。
-    nnew_top = 4                              # 构建 F: W69/W68/W67/W66 (p7bdp 槽 29/28/27/26)
-    ntx = 1                                   # 其后的 tx 束项数 (W65) —— 现在排第 5 项
+    nnew_top = 5                              # ⭐ M1: W70/W69/W68/W67/W66 (p7bdp 槽 30/29/28/27/26)
+                                              #   —— 上一代 (构建 F) 是 4 (W69..W66); 新字 W70 落
+                                              #   在最上面 ⇒ 顶端段 +1 (本条**每代都要按该代接线核**)
+    ntx = 1                                   # 其后的 tx 束项数 (W65) —— 现在排第 6 项
     nnew = 14                                 # W64..W51 (槽 25..12) —— 历史段
     # ⭐ 2026-10-10 (构建 F): 顶端再变一次 —— 三个新字**全在 p7bdp 束里** (槽 27/28/29),
     #   加上 E 代的 W66 (槽 26) ⇒ 顶端**四项** = p7bdp 的 W69/W68/W67/W66, 第五项才是
@@ -283,13 +285,16 @@ def main():
     rrx = read(os.path.join(repo, "rtl", "tcp_rx.v"))
     w12 = [
         # (文件标签, 源文本, 端口, wrapper 线名, 字号, 槽号, 驱动式, 期望驱动次数)
-        ("tcp_tx_frame", ttf, "stat_winstall", "tx_stat_winstall", 66, pdp - 4,
+        # ⚠️ 槽号公式 = **字号 − 40** (与判据 5c 同款; W66→26 … W69→29) —— 上一代这里写的是
+        #    `pdp-4 .. pdp-1` (构建 F 口径, pdp=30 时恰好等于 26..29); M1 把 pdp 加到 31 后
+        #    那两个写法分道扬镳 ⇒ 改成**不随 pdp 漂**的公式 (扩窗时只需新增行, 不动旧行)。
+        ("tcp_tx_frame", ttf, "stat_winstall", "tx_stat_winstall", 66, 66 - 40,
          r"if \(stat_winstall_ev\) stat_winstall <= stat_winstall \+ 32'd1;", 2),
-        ("tcp_tx_frame", ttf, "stat_winstall_cap", "tx_stat_winstall_cap", 67, pdp - 3,
+        ("tcp_tx_frame", ttf, "stat_winstall_cap", "tx_stat_winstall_cap", 67, 67 - 40,
          r"if \(stat_winstall_cap_ev\) stat_winstall_cap <= stat_winstall_cap \+ 32'd1;", 2),
-        ("tcp_rx", rrx, "stat_ack_adv", "rx_stat_ack_adv", 68, pdp - 2,
+        ("tcp_rx", rrx, "stat_ack_adv", "rx_stat_ack_adv", 68, 68 - 40,
          r"if \(ack_adv_ev\) stat_ack_adv <= stat_ack_adv \+ 32'd1;", 1),
-        ("tcp_tx_frame", ttf, "o_win_at_winstall", "tx_win_at_winstall", 69, pdp - 1,
+        ("tcp_tx_frame", ttf, "o_win_at_winstall", "tx_win_at_winstall", 69, 69 - 40,
          r"if \(stat_winstall_ev\) o_win_at_winstall <= \{win_inflight, win_wnd_eff\};", 2),
     ]
     for flabel, fsrc, port, wire, word, slot, drv, n_inc in w12:
@@ -307,6 +312,24 @@ def main():
            "12 `biz_w%d` (= W%d) 由 `%s` 驱动" % (word, word, wire))
         ck(re.search(r"p7bdp_din\[%d\*32\s*\+\:\s*32\]\s*=\s*biz_w%d\s*;" % (slot, word), src0) is not None,
            "12 `p7bdp_din[%d*32 +: 32] = biz_w%d` (槽 ↔ 字)" % (slot, word))
+
+    # ---------- 判据 12b (⭐ M1, 2026-10-11): W70 = `app_rx_mirror.drop_bytes` 跨文件一致性 ----------
+    #   与判据 12 同款"三防" (端口 ↔ 接线 ↔ 槽位), 但**接线形态不同**: 镜像的 drop_bytes 是
+    #   **直连** `biz_w70` (没有中间 wrapper 线别名, 因为生产者就是模块输出端口本身) ⇒
+    #   第 5 条判据换成直连式。另加一条"装配段把 W70 放在最上面 (MSB 端)"。
+    mir = read(os.path.join(repo, "rtl", "app_rx_mirror.v"))
+    ck(re.search(r"output\s+reg\s+\[31:0\]\s+drop_bytes", mir) is not None,
+       "12b app_rx_mirror 有 `output reg [31:0] drop_bytes` 端口")
+    n_drv = len(re.findall(r"if \(drop_now\) begin", mir))
+    ck(n_drv == 1, "12b `drop_bytes` 的驱动块存在且唯一 (只有拒收才 +)", "(实测 %d 次)" % n_drv)
+    ck(re.search(r"\.drop_bytes\s*\(\s*biz_w70\s*\)", src0) is not None,
+       "12b wrapper 把 `drop_bytes` 直连到 `biz_w70` (镜像例化点)")
+    ck(re.search(r"wire\s+\[31:0\]\s+biz_w70", src0) is not None,
+       "12b `biz_w70` 已声明 (防隐式 1 位网)")
+    ck(re.search(r"p7bdp_din\[30\*32\s*\+\:\s*32\]\s*=\s*biz_w70\s*;", src0) is not None,
+       "12b `p7bdp_din[30*32 +: 32] = biz_w70` (槽 ↔ 字)")
+    ck(re.search(r"p7bdp_dout\[30\*32\s*\+\:\s*32\]", src0) is not None,
+       "12b 装配段把 W70 写在了最上面 (MSB 端; 旧字不移位的机器可判版)")
 
 
     # ---------- 判据 6: p7bdp_din 驱动项数 ----------

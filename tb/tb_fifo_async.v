@@ -107,7 +107,12 @@ module fifo_async_chk #(
     wire [39:0] rx2 = rx1 ^ (rx1 >> 17);
     wire [39:0] rx3 = rx2 ^ (rx2 << 5);
 
-    wire [WIDTH-1:0] din_n = {prng_w[WIDTH-33:0], seq_r};   // 要求 WIDTH>=33 (本门 72/40)
+    // ⚠️ 2026-10-11 (M1): 原式 `{prng_w[WIDTH-33:0], seq_r}` 要求 **WIDTH>=33** —— 新加的
+    //   u_E (M1 实参 WIDTH=32) 会让 WIDTH-33 变负 ⇒ `[-1:0]` 反向段选 ⇒ xelab 硬错
+    //   (VRFC 10-1219, 实测)。改成"先拼 72 位再截断": 对既有 72/40 两档**逐位等价**
+    //   (旧式两档都恰等于该拼接的低 WIDTH 位), 对 WIDTH=32 退化为纯 `seq_r`。
+    wire [71:0]      din_full = {prng_w, seq_r};
+    wire [WIDTH-1:0] din_n = din_full[WIDTH-1:0];
 
     // ---- DUT ----
     wire [AW:0]      occ_probe_w, occ_probe_r;   // P6b 占用探针 (必须先声明后使用)
@@ -415,13 +420,13 @@ endmodule
 
 // ---------------- 顶层: 时钟生成 + 场景脚本 + 判据汇总 ----------------
 module tb_fifo_async;
-    reg c_bal, c_wrfast, c_rdfast, c_bound, c_reset, c_clkstop, c_lat, c_early;
+    reg c_bal, c_wrfast, c_rdfast, c_bound, c_reset, c_clkstop, c_lat, c_early, c_mir;
     integer WH, RH;                        // 半周期步数 (步 = 0.8ns)
     integer TWR_PS, TRD_PS;                // 周期 (ps)
     reg     run_on_rd;                     // 长跑阶段等哪个时钟 (等快的那个)
 
     initial begin
-        c_bal=0; c_wrfast=0; c_rdfast=0; c_bound=0; c_reset=0; c_clkstop=0; c_lat=0; c_early=0;
+        c_bal=0; c_wrfast=0; c_rdfast=0; c_bound=0; c_reset=0; c_clkstop=0; c_lat=0; c_early=0; c_mir=0;
         if      ($test$plusargs("C_WRFAST"))  c_wrfast = 1;
         else if ($test$plusargs("C_RDFAST"))  c_rdfast = 1;
         else if ($test$plusargs("C_BOUND"))   c_bound  = 1;
@@ -429,17 +434,22 @@ module tb_fifo_async;
         else if ($test$plusargs("C_CLKSTOP")) c_clkstop= 1;
         else if ($test$plusargs("C_LAT"))     c_lat    = 1;
         else if ($test$plusargs("C_EARLY"))   c_early  = 1;
+        else if ($test$plusargs("C_MIR"))     c_mir    = 1;
         else                                   c_bal    = 1;
         if      (c_wrfast) begin WH =   4; RH = 400; end   // 写快读慢 100:1
         else if (c_rdfast) begin WH = 400; RH =   4; end   // 写慢读快 1:100
         else if (c_bound)  begin WH =   4; RH =   4; end
+        // ⭐ M1 (2026-10-11): 镜像 FIFO 的域对 = dp_clk(156.25MHz, 6.4ns) → pcie_axi_aclk(250MHz, 4.0ns)
+        //   ⇒ 周期比 = 1.6。0.8ns 步长表达不出 4.0ns (RH=2.5 非整数) ⇒ 取 **2× 缩放**:
+        //   12.8ns : 8.0ns = **比例精确 1.6** (FIFO 的全部契约都是按"周期数"写的 ⇒ 时间缩放等价)。
+        else if (c_mir)    begin WH =   8; RH =   5; end   // 12.8ns : 8.0ns = 2 x (6.4ns : 4.0ns)
         else                begin WH =   5; RH =   4; end   // 8ns : 6.4ns = 125MHz : 156.25MHz 的比
         TWR_PS = WH * 1600;
         TRD_PS = RH * 1600;
         run_on_rd = (TWR_PS > TRD_PS);
         $display("FIFO_ASYNC TB: case=%0s WH=%0d RH=%0d T_wr=%0dps T_rd=%0dps",
                  c_wrfast?"WRFAST":c_rdfast?"RDFAST":c_bound?"BOUND":c_reset?"RESET":
-                 c_clkstop?"CLKSTOP":c_lat?"LAT":c_early?"EARLY":"BAL", WH, RH, TWR_PS, TRD_PS);
+                 c_clkstop?"CLKSTOP":c_lat?"LAT":c_early?"EARLY":c_mir?"MIR":"BAL", WH, RH, TWR_PS, TRD_PS);
     end
 
     // ---- 时钟 ----
@@ -537,6 +547,32 @@ module tb_fifo_async;
     //      写侧看到的读指针还没离开"满"位, 读侧看到的写指针已回到"空" —— 排空瞬间必然出现) ----
     reg [31:0] both_a = 32'd0;
     always @(posedge wr_clk) if (A_full && A_empty) both_a <= both_a + 32'd1;
+
+    // ---- ⭐ M1 (2026-10-11): 第 5 个被测实例 = **M1 实参** (WIDTH=32/DEPTH=256/FWFT=1/AW=8) ----
+    //   动机 (设计件 v2 §V3/§V5-A-3): 镜像的新 FIFO 例化 = `fifo_async #(.WIDTH(32), .DEPTH(256),
+    //   .FWFT(1), .AW(8))` —— 由 dp(6.4ns) 写、pcie(4.0ns) 读。既有 4 个实例的参数集
+    //   (72/16, 72/16, 40/4, 40/4) **一个都不覆盖**这组参数 ⇒ 必须有一条它自己的门。
+    //   ⚠️ 只在 `c_mir` 工况里**参与激励** (其余工况 g_* 全部钉 0 ⇒ 只在复位里待着):
+    //      否则 RESET/CLKSTOP 等工况的"单侧脏复位"会让 E 的记账噪声进日志, 且那些
+    //      工况的断言本来就不是为它写的。E 自己的断言全部写在 c_mir 分支里。
+    wire e_gate = c_mir;
+    wire [31:0] E_wr,E_rd,E_cmp,E_err,E_gmon,E_gchk,E_omax,E_omin,E_fblk,E_eblk,E_frise,E_erise,
+                E_dpop,E_dwr,E_sqc,E_swm,E_hseq,E_fpseq,E_le0,E_le1,E_lf0,E_lf1;
+    wire        E_full,E_empty,E_done;
+    wire [31:0] E_ovf;
+    wire        E_ovfp;
+    fifo_async_chk #(.WIDTH(32), .DEPTH(256), .FWFT(1), .TAGID(4)) u_E (
+        .wr_clk(wr_clk), .rd_clk(rd_clk), .g_wr_rst_n(g_wr_rst_n), .g_rd_rst_n(g_rd_rst_n),
+        .g_run(g_run & e_gate), .g_fill(g_fill & e_gate), .g_drain(g_drain & e_gate),
+        .g_pause(g_pause | ~e_gate), .g_duty(g_duty),
+        .g_dirty(g_dirty & e_gate), .g_onewr(g_onewr & e_gate), .g_onepop(g_onepop & e_gate),
+        .g_early(g_early & e_gate),
+        .o_wr(E_wr), .o_rd(E_rd), .o_cmp(E_cmp), .o_err(E_err), .o_gmon(E_gmon), .o_gmon_chk(E_gchk),
+        .o_occ_max(E_omax), .o_occ_min(E_omin), .o_full_blk(E_fblk), .o_empty_blk(E_eblk),
+        .o_full_rise(E_frise), .o_empty_rise(E_erise), .o_dirty_pop(E_dpop), .o_dirty_wr(E_dwr),
+        .o_snap_qcnt(E_sqc), .o_snap_wmod(E_swm), .o_head_seq(E_hseq), .o_first_pop_seq(E_fpseq),
+        .o_lat_e0(E_le0), .o_lat_e1(E_le1), .o_lat_f0(E_lf0), .o_lat_f1(E_lf1),
+        .o_full(E_full), .o_empty(E_empty), .o_ovf_cnt(E_ovf), .o_ovf_pulse(E_ovfp), .o_done(E_done));
 
     // ---- 判据累加器 (消息直接写在 $display 的字面量里: xsim 会把"当表达式传递"的非 ASCII
     //      字符串逐字节损坏 (实测), 所以不用任务入参, 也不用 %0s 传中文) ----
@@ -879,6 +915,80 @@ module tb_fifo_async;
             $display("  %0s: EARLY-4: 窗口后数据逐字正确 (金标准)", (A_err==0 && B_err==0 && C_err==0 && D_err==0) ? "ok" : "FAIL-DETAIL");
             if ((A_err==0 && B_err==0 && C_err==0 && D_err==0) !== 1'b1) fails = fails + 1;
         end
+        else if (c_mir) begin
+            // ============ case MIR: u_E = M1 实参实例 ==================================
+            // 被测 = u_E (WIDTH=32/DEPTH=256/FWFT=1/AW=8), 时钟比 12.8ns:8.0ns = **1.6**
+            //   (= dp 156.25MHz 写 → pcie 250MHz 读 的 2x 缩放; 0.8ns 步长表达不出 4.0ns)。
+            // 判据 (E 专属; A..D 在本工况只吃通用判据):
+            //   E1 复位后空/不满      E2 单写 ⇒ empty 拉低延迟 > 3*T_rd (硬契约, 与 case LAT 同式)
+            //   E3 灌到满 (DEPTH=256) E4 满态续写 ⇒ 拒写被计数 (ovf 探针有牙; F-1 同族)
+            //   E5 单弹 ⇒ full 拉低延迟 > 3*T_wr
+            //   E6 随机占空长跑 + 排空 (E_done) ⇒ E7 内容/灰码/记账汇总 (逐字 0 错)
+            //   E8 拒写探针 == 门自己的挡写计数 (±2; 探针被拿掉/恒 0 立刻 FAIL)
+            $display("== case MIR: u_E = M1 实参 (32/256/FWFT=1) @ T_wr=12.8ns : T_rd=8.0ns (ratio 1.6) ==");
+            g_pause = 1'b1; wait_wr_n(20);
+            $display("  %0s: E1 复位后 empty=1 / full=0", (E_empty && !E_full) ? "ok" : "FAIL-DETAIL");
+            if ((E_empty && !E_full) !== 1'b1) fails = fails + 1;
+            // ---- E2 单写延迟契约 ----
+            @(posedge wr_clk); #0.15; g_onewr = 1'b1;
+            wait_wr_n(6);
+            g_onewr = 1'b0;
+            wait_rd_n(20);
+            $display("  %0s: E2a 单写被观察到 (le0=%0d le1=%0d)", (E_le0 != 0 && E_le1 != 0) ? "ok" : "FAIL-DETAIL", E_le0, E_le1);
+            if ((E_le0 != 0 && E_le1 != 0) !== 1'b1) fails = fails + 1;
+            $display("  %0s: E2b empty 拉低延迟 > 3*T_rd (dt=%0dps > %0dps)", ((E_le1 - E_le0) > (TRD_PS*3)) ? "ok" : "FAIL-DETAIL", E_le1 - E_le0, TRD_PS*3);
+            if (!((E_le1 - E_le0) > (TRD_PS*3))) fails = fails + 1;
+            g_drain = 1'b1; wait_rd_n(30); g_drain = 1'b0; wait_wr_n(20);
+            // ---- E3 灌满 (256 深) ----
+            g_pause = 1'b0; g_fill = 1'b1; wait_wr_n(400);
+            $display("  %0s: E3 灌到 full=1 (DEPTH=256)", (E_full) ? "ok" : "FAIL-DETAIL");
+            if ((E_full) !== 1'b1) fails = fails + 1;
+            // ---- E4 满态续写 ⇒ 拒写计数 ----
+            prev_ovf = E_ovf;
+            wait_wr_n(200);
+            ovf_win = E_ovf - prev_ovf;
+            $display("  info: E4 满态续写 200 拍, 拒写窗口 = %0d", ovf_win);
+            $display("  %0s: E4 满态被拒的写被计数 (探针有牙)", (ovf_win > 0) ? "ok" : "FAIL-DETAIL");
+            if ((ovf_win > 0) !== 1'b1) fails = fails + 1;
+            // ---- E5 单弹延迟契约 (满态弹一字 ⇒ full 落) ----
+            g_fill = 1'b0; g_pause = 1'b1; wait_wr_n(20);
+            @(posedge rd_clk); #0.15; g_onepop = 1'b1;
+            wait_rd_n(6);
+            g_onepop = 1'b0;
+            wait_wr_n(20);
+            $display("  %0s: E5a 单弹被观察到 (lf0=%0d lf1=%0d)", (E_lf0 != 0 && E_lf1 != 0) ? "ok" : "FAIL-DETAIL", E_lf0, E_lf1);
+            if ((E_lf0 != 0 && E_lf1 != 0) !== 1'b1) fails = fails + 1;
+            $display("  %0s: E5b full 拉低延迟 > 3*T_wr (dt=%0dps > %0dps)", ((E_lf1 - E_lf0) > (TWR_PS*3)) ? "ok" : "FAIL-DETAIL", E_lf1 - E_lf0, TWR_PS*3);
+            if (!((E_lf1 - E_lf0) > (TWR_PS*3))) fails = fails + 1;
+            // ---- E6 随机占空长跑 + 排空 ----
+            g_pause = 1'b0; g_run = 1'b1; g_duty = 2'd1;
+            wait_run_n(6000);
+            g_run = 1'b0; g_duty = 2'd0; g_drain = 1'b1;
+            wait_rd_n(4000);
+            // ⚠️ E_done 的判据式 = `g_drain && empty && !rd_ok` ⇒ **必须在 g_drain 还高时查**
+            //   (清掉 g_drain 的下一拍 o_done 就被清 — 本相位第一版就是这么假红的)。
+            $display("  %0s: E6 排空到 done", (E_done) ? "ok" : "FAIL-DETAIL");
+            if ((E_done) !== 1'b1) fails = fails + 1;
+            g_drain = 1'b0; wait_wr_n(20);
+            // ---- E7 汇总 ----
+            $display("  info: E7 E_wr=%0d E_rd=%0d E_cmp=%0d E_err=%0d E_gmon=%0d E_gchk=%0d E_omax=%0d E_omin=%0d E_fblk=%0d E_eblk=%0d E_ovf=%0d",
+                     E_wr, E_rd, E_cmp, E_err, E_gmon, E_gchk, E_omax, E_omin, E_fblk, E_eblk, E_ovf);
+            $display("  %0s: E7a 内容 0 错 (逐字 == 金标准)", (E_err == 0) ? "ok" : "FAIL-DETAIL");
+            if ((E_err == 0) !== 1'b1) fails = fails + 1;
+            $display("  %0s: E7b 真做过对拍/写/读 (cmp/wr/rd 全 > 0)", (E_cmp>0 && E_wr>0 && E_rd>0) ? "ok" : "FAIL-DETAIL");
+            if ((E_cmp>0 && E_wr>0 && E_rd>0) !== 1'b1) fails = fails + 1;
+            $display("  %0s: E7c 排空后 写-读 == 0", ((E_wr-E_rd)==0) ? "ok" : "FAIL-DETAIL");
+            if (((E_wr-E_rd)==0) !== 1'b1) fails = fails + 1;
+            $display("  %0s: E7d 灰码监视 0 违规 且 真验证过 (gmon==0 && gchk>0)", (E_gmon==0 && E_gchk>0) ? "ok" : "FAIL-DETAIL");
+            if ((E_gmon==0 && E_gchk>0) !== 1'b1) fails = fails + 1;
+            $display("  %0s: E7e 占用探针非空且 >= 金标准峰值, 硬界 0 违规", (u_E.occ_w_max > 0 && u_E.occ_w_max >= E_omax && u_E.occ_bad_cnt == 0) ? "ok" : "FAIL-DETAIL");
+            if ((u_E.occ_w_max > 0 && u_E.occ_w_max >= E_omax && u_E.occ_bad_cnt == 0) !== 1'b1) fails = fails + 1;
+            $display("  %0s: E7f 探针到过满量程 (omax == 256 ⇒ 灌满判据不是空判据)", (E_omax == 256) ? "ok" : "FAIL-DETAIL");
+            if ((E_omax == 256) !== 1'b1) fails = fails + 1;
+            // ---- E8 拒写探针 vs 门自己的挡写计数 ----
+            $display("  %0s: E8 DUT 拒写计数 == 门自己的挡写计数 (±2)", ((E_ovf+2 >= E_fblk) && (E_fblk+2 >= E_ovf)) ? "ok" : "FAIL-DETAIL");
+            if (((E_ovf+2 >= E_fblk) && (E_fblk+2 >= E_ovf)) !== 1'b1) fails = fails + 1;
+        end
         else begin
             // ============ case BAL / WRFAST / RDFAST: 常规对拍 (含极端时钟比) ============
             $display("== case %0s: 金标准对拍 (随机占空比, 不同周期) ==",
@@ -916,6 +1026,9 @@ module tb_fifo_async;
                  C_wr,C_rd,C_cmp,C_err,C_gmon,C_gchk,C_omax,C_omin,C_fblk,C_eblk,C_frise,C_erise,(C_wr-C_rd));
         $display("  D    40/4/FWFT=0      %0d %0d %0d %0d %0d/%0d %0d/%0d %0d/%0d %0d/%0d %0d",
                  D_wr,D_rd,D_cmp,D_err,D_gmon,D_gchk,D_omax,D_omin,D_fblk,D_eblk,D_frise,D_erise,(D_wr-D_rd));
+        // ⭐ M1: u_E (只在 c_mir 工况参与激励; 其余工况全 0 = 预期)
+        $display("  E    32/256/FWFT=1    %0d %0d %0d %0d %0d/%0d %0d/%0d %0d/%0d %0d/%0d %0d",
+                 E_wr,E_rd,E_cmp,E_err,E_gmon,E_gchk,E_omax,E_omin,E_fblk,E_eblk,E_frise,E_erise,(E_wr-E_rd));
 
         // ---- 通用判据 (所有 case) ----
         $display("  %0s: 通用1: 四实例内容错 0 (无丢失/重复/重排)", (A_err==0 && B_err==0 && C_err==0 && D_err==0) ? "ok" : "FAIL-DETAIL");
@@ -958,7 +1071,7 @@ module tb_fifo_async;
 
         $display("");
         if (fails == 0) $display("FIFO_ASYNC_GATE: PASS_ALL (case=%0s)",
-                 c_wrfast?"WRFAST":c_rdfast?"RDFAST":c_bound?"BOUND":c_reset?"RESET":c_clkstop?"CLKSTOP":c_lat?"LAT":c_early?"EARLY":"BAL");
+                 c_wrfast?"WRFAST":c_rdfast?"RDFAST":c_bound?"BOUND":c_reset?"RESET":c_clkstop?"CLKSTOP":c_lat?"LAT":c_early?"EARLY":c_mir?"MIR":"BAL");
         else            $display("FIFO_ASYNC_GATE: FAIL (%0d 条判据不成立)", fails);
         $finish;
     end

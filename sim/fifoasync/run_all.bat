@@ -19,7 +19,7 @@ certutil -hashfile "%ROOT%\tb\tb_fifo_async.v" SHA256 >> "%HERE%fingerprint.txt"
 echo run at %DATE% %TIME% >> "%HERE%fingerprint.txt"
 type "%HERE%fingerprint.txt"
 echo ================= fifo_async gate: positive cases =================
-for %%C in (bal wrfast rdfast bound reset clkstop lat early) do (
+for %%C in (bal wrfast rdfast bound reset clkstop lat early mir) do (
   echo ---- case %%C
   call "%HERE%run_tb_fifo_async.bat" %%C
   if errorlevel 1 (echo CASE-%%C-FAIL & set BAD=1) else (echo CASE-%%C-PASS)

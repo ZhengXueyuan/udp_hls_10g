@@ -1,0 +1,94 @@
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Sun Oct 11 08:31:21 2026
+# Process ID         : 27004
+# Current directory  : D:/repo/XCKU5PMini/udp_hls_10g/sim/p7b_mir/xdir_mut_gate
+# Command line       : xsim.exe -log xsim.log -mode tcl -source {xsim.dir/tb_app_rx_mirror/xsim_script.tcl}
+# Log file           : D:/repo/XCKU5PMini/udp_hls_10g/sim/p7b_mir/xdir_mut_gate/xsim.log
+# Journal file       : D:/repo/XCKU5PMini/udp_hls_10g/sim/p7b_mir/xdir_mut_gate\xsim.jou
+# Running On         : xyz-intel
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26300
+# Processor Detail   : Intel(R) Core(TM) Ultra 7 265K
+# CPU Frequency      : 3878 MHz
+# CPU Physical cores : 20
+# CPU Logical cores  : 20
+# Host memory        : 68053 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 72348 MB
+# Available Virtual  : 35566 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_app_rx_mirror/xsim_script.tcl
+# xsim {tb_app_rx_mirror} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+=== tb_app_rx_mirror: M1 payload mirror unit gate ===
+  --- G0: reset state ---
+  [PASS] G0a empty == 1 = 1
+  [PASS] G0b level == 0 = 0
+  [PASS] G0c drop_bytes == 0 = 00000000
+  [PASS] G0d any_drop == 0 = 0
+  [PASS] G0e any_drop_rd == 0 = 0
+  --- G1: cap_en=0, inject beats, capture must stay off ---
+  [PASS] level == 0 (cap_en=0 no capture) = 0
+  [PASS] G1b drop_bytes == 0 = 00000000
+  [PASS] G1c empty == 1 = 1
+  --- G2: cap_en=1, one full beat => 2 words (anchors) ---
+  [PASS] a level == 2 (8 bytes = 2 words) = 2
+  [PASS] G2b anchor: word_a == 0xF0C3D22D = f0c3d22d
+  [PASS] G2c level == 1 after first pop = 1
+  [PASS] G2d anchor: word_b == 0xB48796E1 = b48796e1
+  [PASS] G2e level == 0 after both pops = 0
+  --- G3: keep=0x0F partial beat => 1 word (anchor) ---
+  [PASS] G3a level == 1 = 1
+  [PASS] G3b anchor: word == 0xE19687B4 = e19687b4
+  --- G4: accumulator across beats (1+0+2+1) ---
+  [PASS] ats, still <1 word => level == 0 = 0
+  [PASS] G4b complete => level == 1 = 1
+  [PASS] r: cross-beat word == 0x78691E0F = 78691e0f
+  [PASS] G4d offered == 4 = 4
+  [PASS] G4e gold_n == 4 = 4
+  --- G5: tlast=1 mid-stream does not break the byte stream ---
+  [PASS]  level == 1 (tlast is not flush) = 1
+  [PASS] G5b anchor: word == 0xF01E0FB4 = f01e0fb4
+  [PASS] evel == 0 (FIFO empty before G6) = 0
+  --- G6: tready=0 beats must not be captured ---
+  [PASS] el == 0 (tready=0 => no capture) = 0
+  [PASS] G6b empty == 1 = 1
+  --- G7: byte account, offered == 4*words ---
+  [INFO] G7 offered=12 gold_n=12 level=3 drop=0
+  [PASS] 7a drop_bytes == 0 in this phase = 0
+  [PASS] G7b level == 3 = 3
+  [PASS] G7c drained words == 3 = 3
+  [PASS] G7d words*4 == offered = 12
+  [PASS] G7e level == 0 after drain = 0
+  --- G8: 8B/cycle burst => drop_bytes>0 and any_drop=1 ---
+  [INFO] G8 offered=2420 drop_bytes=1200 level=256
+  [PASS] G8a drop_bytes > 0 (burst was counted)
+  [PASS] G8b any_drop == 1 (sticky) = 1
+  [PASS] G8c still drainable (level == 0) = 0
+  --- G11: write gate under full: byte identity holds (no silent loss) ---
+  [PASS] IFO reached full (state witness) = 1
+  [PASS] G11b paced fill added no drops = 000004b0
+  [INFO] G11 offered=1040 drained_words=256 d_drop=0 level=0
+  [FAIL] y: offered == 4*drained + d_drop = 1024 (exp 1040)
+  [PASS] G11d level == 0 after drain = 0
+  --- G9: clr (toggle) ---
+  [PASS] = 1 (1 word + 2B residue in acc) = 1
+  [PASS] er clr: level == 0 (drain flush) = 0
+  [PASS] G9c after clr: any_drop == 0 = 0
+  [PASS] drop_rd == 0 (clear crossed CDC) = 0
+  [PASS] op_bytes (not in v2 freeze list) = 000004b0
+  [PASS] G9f post-clr: level == 1 = 1
+  [PASS] word == 0xA1A6A7A4 (acc cleared) = a1a6a7a4
+  --- G10: final state ---
+  [PASS] G10a level == 0 = 0
+  [PASS] G10b empty == 1 = 1
+
+APP_RX_MIRROR_GATE: FAIL (1 checks failed)
+$finish called at time : 11250 ns : File "D:/repo/XCKU5PMini/udp_hls_10g/tb/tb_app_rx_mirror.v" Line 399
+exit
+INFO: [Common 17-206] Exiting xsim at Sun Oct 11 08:31:23 2026...

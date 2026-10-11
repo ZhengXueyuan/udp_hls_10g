@@ -1,0 +1,398 @@
+=== check_window: P7B-BIZ 快照装配静态核对 (repo=D:\repo\XCKU5PMini\udp_hls_10g, mutate=none) ===
+  [PASS] 1a SNAP_NW_P6E 声明存在 
+       SNAP_NW_P6E = 71
+  [PASS] 1b snap_dout_all 拼接存在 
+  [INFO] 1x 下一条按'总字数'判, 不按项数 (说明行, 非判据; 不计入 PASS/FAIL) 
+  [PASS] 1a 每项的字数可解析 (不可解析: 无)
+  [PASS] 1 **总字数 == SNAP_NW_P6E** (项数=36, 逐项字数之和=71, NW=71)
+  [PASS] 2a 最右一项是 snap_dout (实际 'snap_dout')
+  [PASS] 2b snap_dout 一项占 36 字 (FE14+DP22) 
+  [PASS] 3a 五个束宽 localparam 都在 (fe=14 dp=22 p7bfe=3 p7bdp=31 tx=5)
+  [PASS] 3b FE+DP = 36 (snap_seq 的两束) (14+22)
+  [PASS] 3 束宽等式 == NW (14+22+3+(31-4)+5 = 71)
+  [PASS] 4 * 旧字未移位 (HEAD 的项 == 新表的尾部) (HEAD 35 项, 新表 36 项 => 新增 1 项全在 MSB 端)
+  [PASS] 5a 最上面 5 项 = W70/W69/W68/W67 (p7bdp 束槽 30/29/28/27; 构建 F) (实际 ['p7bdp_dout[30*32 +: 32]', 'p7bdp_dout[29*32 +: 32]', 'p7bdp_dout[28*32 +: 32]', 'p7bdp_dout[27*32 +: 32]', 'p7bdp_dout[26*32 +: 32]'], 期望 ['p7bdp_dout[30*32 +: 32]', 'p7bdp_dout[29*32 +: 32]', 'p7bdp_dout[28*32 +: 32]', 'p7bdp_dout[27*32 +: 32]', 'p7bdp_dout[26*32 +: 32]'])
+  [PASS] 5a' 第 6 项 = W65 (tx 束槽 4; P7B-A7) (实际 'txsnap_dout[4*32 +: 32]', 期望 'txsnap_dout[4*32 +: 32]')
+  [PASS] 5b 紧随其后 14 项 = W64..W51 的槽 (MSB 先写; p7bdp) (实际 ['p7bdp_dout[25*32 +: 32]', 'p7bdp_dout[24*32 +: 32]', 'p7bdp_dout[23*32 +: 32]', 'p7bdp_dout[22*32 +: 32]', 'p7bdp_dout[21*32 +: 32]', 'p7bdp_dout[20*32 +: 32]', 'p7bdp_dout[19*32 +: 32]', 'p7bdp_dout[18*32 +: 32]', 'p7bdp_dout[17*32 +: 32]', 'p7bdp_dout[16*32 +: 32]', 'p7bdp_dout[15*32 +: 32]', 'p7bdp_dout[14*32 +: 32]', 'p7bdp_dout[13*32 +: 32]', 'p7bdp_dout[12*32 +: 32]'])
+  [PASS] 5c 槽号映射 W51 (p7bdp_din[12*32 +: 32] = biz_w51)
+  [PASS] 5c 槽号映射 W52 (p7bdp_din[13*32 +: 32] = biz_w52)
+  [PASS] 5c 槽号映射 W53 (p7bdp_din[14*32 +: 32] = biz_w53)
+  [PASS] 5c 槽号映射 W54 (p7bdp_din[15*32 +: 32] = biz_w54)
+  [PASS] 5c 槽号映射 W55 (p7bdp_din[16*32 +: 32] = biz_w55)
+  [PASS] 5c 槽号映射 W56 (p7bdp_din[17*32 +: 32] = biz_w56)
+  [PASS] 5c 槽号映射 W57 (p7bdp_din[18*32 +: 32] = biz_w57)
+  [PASS] 5c 槽号映射 W58 (p7bdp_din[19*32 +: 32] = biz_w58)
+  [PASS] 5c 槽号映射 W59 (p7bdp_din[20*32 +: 32] = biz_w59)
+  [PASS] 5c 槽号映射 W60 (p7bdp_din[21*32 +: 32] = biz_w60)
+  [PASS] 5c 槽号映射 W61 (p7bdp_din[22*32 +: 32] = biz_w61)
+  [PASS] 5c 槽号映射 W62 (p7bdp_din[23*32 +: 32] = biz_w62)
+  [PASS] 5c 槽号映射 W63 (p7bdp_din[24*32 +: 32] = biz_w63)
+  [PASS] 5c 槽号映射 W64 (p7bdp_din[25*32 +: 32] = biz_w64)
+  [PASS] 5c 槽号映射 W66 (p7bdp_din[26*32 +: 32] = biz_w66)
+  [PASS] 5c 槽号映射 W67 (p7bdp_din[27*32 +: 32] = biz_w67)
+  [PASS] 5c 槽号映射 W68 (p7bdp_din[28*32 +: 32] = biz_w68)
+  [PASS] 5c 槽号映射 W69 (p7bdp_din[29*32 +: 32] = biz_w69)
+  [PASS] 5c 槽号映射 W70 (p7bdp_din[30*32 +: 32] = biz_w70)
+  [PASS] 5d mac_tx_10g 有 `output reg [31:0] stat_tx_idle` 端口 
+  [PASS] 5d wrapper 把它接到 `mtx_stat_tx_idle` (mac_tx_10g 例化点) 
+  [PASS] 5d `mtx_stat_tx_idle` 已声明 (防隐式 1 位网) 
+  [PASS] 5d `txsnap_din` 的第一个拼接项 = `mtx_stat_tx_idle` (槽 4 → W65, tx 束最高槽) (实际 'mtx_stat_tx_idle')
+  [PASS] 12 tcp_tx_frame 有 `output reg [31:0] stat_winstall` 端口 
+  [PASS] 12 `stat_winstall` 的驱动块在每个 ifdef 分支里都有 (= 2 次) (实测 2 次)
+  [PASS] 12 wrapper 把 `stat_winstall` 接到 `tx_stat_winstall` 
+  [PASS] 12 `tx_stat_winstall` 已声明 (防隐式 1 位网) 
+  [PASS] 12 `biz_w66` (= W66) 由 `tx_stat_winstall` 驱动 
+  [PASS] 12 `p7bdp_din[26*32 +: 32] = biz_w66` (槽 ↔ 字) 
+  [PASS] 12 tcp_tx_frame 有 `output reg [31:0] stat_winstall_cap` 端口 
+  [PASS] 12 `stat_winstall_cap` 的驱动块在每个 ifdef 分支里都有 (= 2 次) (实测 2 次)
+  [PASS] 12 wrapper 把 `stat_winstall_cap` 接到 `tx_stat_winstall_cap` 
+  [PASS] 12 `tx_stat_winstall_cap` 已声明 (防隐式 1 位网) 
+  [PASS] 12 `biz_w67` (= W67) 由 `tx_stat_winstall_cap` 驱动 
+  [PASS] 12 `p7bdp_din[27*32 +: 32] = biz_w67` (槽 ↔ 字) 
+  [PASS] 12 tcp_rx 有 `output reg [31:0] stat_ack_adv` 端口 
+  [PASS] 12 `stat_ack_adv` 的驱动块在每个 ifdef 分支里都有 (= 1 次) (实测 1 次)
+  [PASS] 12 wrapper 把 `stat_ack_adv` 接到 `rx_stat_ack_adv` 
+  [PASS] 12 `rx_stat_ack_adv` 已声明 (防隐式 1 位网) 
+  [PASS] 12 `biz_w68` (= W68) 由 `rx_stat_ack_adv` 驱动 
+  [PASS] 12 `p7bdp_din[28*32 +: 32] = biz_w68` (槽 ↔ 字) 
+  [PASS] 12 tcp_tx_frame 有 `output reg [31:0] o_win_at_winstall` 端口 
+  [PASS] 12 `o_win_at_winstall` 的驱动块在每个 ifdef 分支里都有 (= 2 次) (实测 2 次)
+  [PASS] 12 wrapper 把 `o_win_at_winstall` 接到 `tx_win_at_winstall` 
+  [PASS] 12 `tx_win_at_winstall` 已声明 (防隐式 1 位网) 
+  [PASS] 12 `biz_w69` (= W69) 由 `tx_win_at_winstall` 驱动 
+  [PASS] 12 `p7bdp_din[29*32 +: 32] = biz_w69` (槽 ↔ 字) 
+  [PASS] 12b app_rx_mirror 有 `output reg [31:0] drop_bytes` 端口 
+  [PASS] 12b `drop_bytes` 的驱动块存在且唯一 (只有拒收才 +) (实测 1 次)
+  [PASS] 12b wrapper 把 `drop_bytes` 直连到 `biz_w70` (镜像例化点) 
+  [PASS] 12b `biz_w70` 已声明 (防隐式 1 位网) 
+  [PASS] 12b `p7bdp_din[30*32 +: 32] = biz_w70` (槽 ↔ 字) 
+  [PASS] 12b 装配段把 W70 写在了最上面 (MSB 端; 旧字不移位的机器可判版) 
+  [PASS] 6a p7bdp generate 存在 
+  [PASS] 6 p7bdp_din 驱动项数 == SNAP_P7BDP_NW (generate 12 + 显式 19 = 31, NW=31)
+  [PASS] 7 * 装配里的标识符全部'先声明后用' (扫描 4 个名字: p7bdp_dout,txsnap_dout,p7bfe_dout,snap_dout; 未声明/晚声明: 无)
+  [PASS] 8a ar_word 声明可解析 
+  [PASS] 8 * 未实现地址不回绕 (addr=0x13C => word 79 < 2^7=128)
+  [PASS] 8b snap_base 声明可解析 
+  [PASS] 8c snap_base 装得下 (NW-1)<<5 (need=2240 < 2^12=4096)
+  [PASS] 8d SNAP_W0_IDX == 8 (窗口起点 0x20) 
+  [PASS] 9a app_udp_pattern 有 `output reg [31:0] stat_tx_ovf` 端口 
+  [PASS] 9b wrapper 把它接到 `udpapp_tx_ovf` 
+  [PASS] 9c `udpapp_tx_ovf` 已声明 (防隐式 1 位网) 
+  [PASS] 9d `biz_w56` (= W56) 由 `udpapp_tx_ovf` 驱动 
+  [PASS] 10 slow_tx_adp 有 `output reg [31:0] stat_fifo_ovf` 
+  [PASS] 10 slow_tx_adp.stat_fifo_ovf 接到 `stx_stat_fifo_ovf` (不是接反) 
+  [PASS] 10 `biz_w59` (= W59) 由 `stx_stat_fifo_ovf` 驱动 
+  [PASS] 10 slow_rx_adp 有 `output reg [31:0] stat_fifo_ovf` 
+  [PASS] 10 slow_rx_adp.stat_fifo_ovf 接到 `srx_stat_fifo_ovf` (不是接反) 
+  [PASS] 10 `biz_w60` (= W60) 由 `srx_stat_fifo_ovf` 驱动 
+  [PASS] 11 app_pattern 有 `output reg [31:0] stat_frmwait_cyc` 端口 
+  [PASS] 11 wrapper 把 stat_frmwait_cyc 接到 `app_frmwait_cyc` (app_pattern 例化点) 
+  [PASS] 11 `app_frmwait_cyc` 已声明 (防隐式 1 位网) 
+  [PASS] 11 `biz_w63` (= W63) 由 `app_frmwait_cyc` 驱动 
+  [PASS] 11 app_pattern 有 `output reg [31:0] stat_bp_cyc` 端口 
+  [PASS] 11 wrapper 把 stat_bp_cyc 接到 `app_bp_cyc` (app_pattern 例化点) 
+  [PASS] 11 `app_bp_cyc` 已声明 (防隐式 1 位网) 
+  [PASS] 11 `biz_w64` (= W64) 由 `app_bp_cyc` 驱动 
+----------------------------------------------------------
+PASS=92 FAIL=0 INFO=1
+CHECK_WINDOW_PASS
+=== check_window: P7B-BIZ 快照装配静态核对 (repo=D:\repo\XCKU5PMini\udp_hls_10g, mutate=drop) ===
+  [PASS] 1a SNAP_NW_P6E 声明存在 
+       SNAP_NW_P6E = 71
+  [PASS] 1b snap_dout_all 拼接存在 
+       [mutate=drop] 去掉最右一项 (模拟'少一项')
+  [INFO] 1x 下一条按'总字数'判, 不按项数 (说明行, 非判据; 不计入 PASS/FAIL) 
+  [PASS] 1a 每项的字数可解析 (不可解析: 无)
+  [FAIL] 1 **总字数 == SNAP_NW_P6E** (项数=35, 逐项字数之和=35, NW=71)
+  [FAIL] 2a 最右一项是 snap_dout (实际 'p7bfe_dout[0*32 +: 32]')
+  [FAIL] 2b snap_dout 一项占 36 字 (FE14+DP22) 
+  [PASS] 3a 五个束宽 localparam 都在 (fe=14 dp=22 p7bfe=3 p7bdp=31 tx=5)
+  [PASS] 3b FE+DP = 36 (snap_seq 的两束) (14+22)
+  [PASS] 3 束宽等式 == NW (14+22+3+(31-4)+5 = 71)
+  [FAIL] 4 * 旧字未移位 (HEAD 的项 == 新表的尾部) (HEAD 35 项, 新表 35 项 => 新增 0 项全在 MSB 端)
+       第一处不同: 新表 'p7bdp_dout[30*32 +: 32]' vs HEAD 'p7bdp_dout[29*32 +: 32]'
+  [PASS] 5a 最上面 5 项 = W70/W69/W68/W67 (p7bdp 束槽 30/29/28/27; 构建 F) (实际 ['p7bdp_dout[30*32 +: 32]', 'p7bdp_dout[29*32 +: 32]', 'p7bdp_dout[28*32 +: 32]', 'p7bdp_dout[27*32 +: 32]', 'p7bdp_dout[26*32 +: 32]'], 期望 ['p7bdp_dout[30*32 +: 32]', 'p7bdp_dout[29*32 +: 32]', 'p7bdp_dout[28*32 +: 32]', 'p7bdp_dout[27*32 +: 32]', 'p7bdp_dout[26*32 +: 32]'])
+  [PASS] 5a' 第 6 项 = W65 (tx 束槽 4; P7B-A7) (实际 'txsnap_dout[4*32 +: 32]', 期望 'txsnap_dout[4*32 +: 32]')
+  [PASS] 5b 紧随其后 14 项 = W64..W51 的槽 (MSB 先写; p7bdp) (实际 ['p7bdp_dout[25*32 +: 32]', 'p7bdp_dout[24*32 +: 32]', 'p7bdp_dout[23*32 +: 32]', 'p7bdp_dout[22*32 +: 32]', 'p7bdp_dout[21*32 +: 32]', 'p7bdp_dout[20*32 +: 32]', 'p7bdp_dout[19*32 +: 32]', 'p7bdp_dout[18*32 +: 32]', 'p7bdp_dout[17*32 +: 32]', 'p7bdp_dout[16*32 +: 32]', 'p7bdp_dout[15*32 +: 32]', 'p7bdp_dout[14*32 +: 32]', 'p7bdp_dout[13*32 +: 32]', 'p7bdp_dout[12*32 +: 32]'])
+  [PASS] 5c 槽号映射 W51 (p7bdp_din[12*32 +: 32] = biz_w51)
+  [PASS] 5c 槽号映射 W52 (p7bdp_din[13*32 +: 32] = biz_w52)
+  [PASS] 5c 槽号映射 W53 (p7bdp_din[14*32 +: 32] = biz_w53)
+  [PASS] 5c 槽号映射 W54 (p7bdp_din[15*32 +: 32] = biz_w54)
+  [PASS] 5c 槽号映射 W55 (p7bdp_din[16*32 +: 32] = biz_w55)
+  [PASS] 5c 槽号映射 W56 (p7bdp_din[17*32 +: 32] = biz_w56)
+  [PASS] 5c 槽号映射 W57 (p7bdp_din[18*32 +: 32] = biz_w57)
+  [PASS] 5c 槽号映射 W58 (p7bdp_din[19*32 +: 32] = biz_w58)
+  [PASS] 5c 槽号映射 W59 (p7bdp_din[20*32 +: 32] = biz_w59)
+  [PASS] 5c 槽号映射 W60 (p7bdp_din[21*32 +: 32] = biz_w60)
+  [PASS] 5c 槽号映射 W61 (p7bdp_din[22*32 +: 32] = biz_w61)
+  [PASS] 5c 槽号映射 W62 (p7bdp_din[23*32 +: 32] = biz_w62)
+  [PASS] 5c 槽号映射 W63 (p7bdp_din[24*32 +: 32] = biz_w63)
+  [PASS] 5c 槽号映射 W64 (p7bdp_din[25*32 +: 32] = biz_w64)
+  [PASS] 5c 槽号映射 W66 (p7bdp_din[26*32 +: 32] = biz_w66)
+  [PASS] 5c 槽号映射 W67 (p7bdp_din[27*32 +: 32] = biz_w67)
+  [PASS] 5c 槽号映射 W68 (p7bdp_din[28*32 +: 32] = biz_w68)
+  [PASS] 5c 槽号映射 W69 (p7bdp_din[29*32 +: 32] = biz_w69)
+  [PASS] 5c 槽号映射 W70 (p7bdp_din[30*32 +: 32] = biz_w70)
+  [PASS] 5d mac_tx_10g 有 `output reg [31:0] stat_tx_idle` 端口 
+  [PASS] 5d wrapper 把它接到 `mtx_stat_tx_idle` (mac_tx_10g 例化点) 
+  [PASS] 5d `mtx_stat_tx_idle` 已声明 (防隐式 1 位网) 
+  [PASS] 5d `txsnap_din` 的第一个拼接项 = `mtx_stat_tx_idle` (槽 4 → W65, tx 束最高槽) (实际 'mtx_stat_tx_idle')
+  [PASS] 12 tcp_tx_frame 有 `output reg [31:0] stat_winstall` 端口 
+  [PASS] 12 `stat_winstall` 的驱动块在每个 ifdef 分支里都有 (= 2 次) (实测 2 次)
+  [PASS] 12 wrapper 把 `stat_winstall` 接到 `tx_stat_winstall` 
+  [PASS] 12 `tx_stat_winstall` 已声明 (防隐式 1 位网) 
+  [PASS] 12 `biz_w66` (= W66) 由 `tx_stat_winstall` 驱动 
+  [PASS] 12 `p7bdp_din[26*32 +: 32] = biz_w66` (槽 ↔ 字) 
+  [PASS] 12 tcp_tx_frame 有 `output reg [31:0] stat_winstall_cap` 端口 
+  [PASS] 12 `stat_winstall_cap` 的驱动块在每个 ifdef 分支里都有 (= 2 次) (实测 2 次)
+  [PASS] 12 wrapper 把 `stat_winstall_cap` 接到 `tx_stat_winstall_cap` 
+  [PASS] 12 `tx_stat_winstall_cap` 已声明 (防隐式 1 位网) 
+  [PASS] 12 `biz_w67` (= W67) 由 `tx_stat_winstall_cap` 驱动 
+  [PASS] 12 `p7bdp_din[27*32 +: 32] = biz_w67` (槽 ↔ 字) 
+  [PASS] 12 tcp_rx 有 `output reg [31:0] stat_ack_adv` 端口 
+  [PASS] 12 `stat_ack_adv` 的驱动块在每个 ifdef 分支里都有 (= 1 次) (实测 1 次)
+  [PASS] 12 wrapper 把 `stat_ack_adv` 接到 `rx_stat_ack_adv` 
+  [PASS] 12 `rx_stat_ack_adv` 已声明 (防隐式 1 位网) 
+  [PASS] 12 `biz_w68` (= W68) 由 `rx_stat_ack_adv` 驱动 
+  [PASS] 12 `p7bdp_din[28*32 +: 32] = biz_w68` (槽 ↔ 字) 
+  [PASS] 12 tcp_tx_frame 有 `output reg [31:0] o_win_at_winstall` 端口 
+  [PASS] 12 `o_win_at_winstall` 的驱动块在每个 ifdef 分支里都有 (= 2 次) (实测 2 次)
+  [PASS] 12 wrapper 把 `o_win_at_winstall` 接到 `tx_win_at_winstall` 
+  [PASS] 12 `tx_win_at_winstall` 已声明 (防隐式 1 位网) 
+  [PASS] 12 `biz_w69` (= W69) 由 `tx_win_at_winstall` 驱动 
+  [PASS] 12 `p7bdp_din[29*32 +: 32] = biz_w69` (槽 ↔ 字) 
+  [PASS] 12b app_rx_mirror 有 `output reg [31:0] drop_bytes` 端口 
+  [PASS] 12b `drop_bytes` 的驱动块存在且唯一 (只有拒收才 +) (实测 1 次)
+  [PASS] 12b wrapper 把 `drop_bytes` 直连到 `biz_w70` (镜像例化点) 
+  [PASS] 12b `biz_w70` 已声明 (防隐式 1 位网) 
+  [PASS] 12b `p7bdp_din[30*32 +: 32] = biz_w70` (槽 ↔ 字) 
+  [PASS] 12b 装配段把 W70 写在了最上面 (MSB 端; 旧字不移位的机器可判版) 
+  [PASS] 6a p7bdp generate 存在 
+  [PASS] 6 p7bdp_din 驱动项数 == SNAP_P7BDP_NW (generate 12 + 显式 19 = 31, NW=31)
+  [PASS] 7 * 装配里的标识符全部'先声明后用' (扫描 4 个名字: p7bdp_dout,txsnap_dout,p7bfe_dout,snap_dout; 未声明/晚声明: 无)
+  [PASS] 8a ar_word 声明可解析 
+  [PASS] 8 * 未实现地址不回绕 (addr=0x13C => word 79 < 2^7=128)
+  [PASS] 8b snap_base 声明可解析 
+  [PASS] 8c snap_base 装得下 (NW-1)<<5 (need=2240 < 2^12=4096)
+  [PASS] 8d SNAP_W0_IDX == 8 (窗口起点 0x20) 
+  [PASS] 9a app_udp_pattern 有 `output reg [31:0] stat_tx_ovf` 端口 
+  [PASS] 9b wrapper 把它接到 `udpapp_tx_ovf` 
+  [PASS] 9c `udpapp_tx_ovf` 已声明 (防隐式 1 位网) 
+  [PASS] 9d `biz_w56` (= W56) 由 `udpapp_tx_ovf` 驱动 
+  [PASS] 10 slow_tx_adp 有 `output reg [31:0] stat_fifo_ovf` 
+  [PASS] 10 slow_tx_adp.stat_fifo_ovf 接到 `stx_stat_fifo_ovf` (不是接反) 
+  [PASS] 10 `biz_w59` (= W59) 由 `stx_stat_fifo_ovf` 驱动 
+  [PASS] 10 slow_rx_adp 有 `output reg [31:0] stat_fifo_ovf` 
+  [PASS] 10 slow_rx_adp.stat_fifo_ovf 接到 `srx_stat_fifo_ovf` (不是接反) 
+  [PASS] 10 `biz_w60` (= W60) 由 `srx_stat_fifo_ovf` 驱动 
+  [PASS] 11 app_pattern 有 `output reg [31:0] stat_frmwait_cyc` 端口 
+  [PASS] 11 wrapper 把 stat_frmwait_cyc 接到 `app_frmwait_cyc` (app_pattern 例化点) 
+  [PASS] 11 `app_frmwait_cyc` 已声明 (防隐式 1 位网) 
+  [PASS] 11 `biz_w63` (= W63) 由 `app_frmwait_cyc` 驱动 
+  [PASS] 11 app_pattern 有 `output reg [31:0] stat_bp_cyc` 端口 
+  [PASS] 11 wrapper 把 stat_bp_cyc 接到 `app_bp_cyc` (app_pattern 例化点) 
+  [PASS] 11 `app_bp_cyc` 已声明 (防隐式 1 位网) 
+  [PASS] 11 `biz_w64` (= W64) 由 `app_bp_cyc` 驱动 
+----------------------------------------------------------
+PASS=88 FAIL=4 INFO=1
+FAILED: 1 **总字数 == SNAP_NW_P6E**, 2a 最右一项是 snap_dout, 2b snap_dout 一项占 36 字 (FE14+DP22), 4 * 旧字未移位 (HEAD 的项 == 新表的尾部)
+=== check_window: P7B-BIZ 快照装配静态核对 (repo=D:\repo\XCKU5PMini\udp_hls_10g, mutate=swap) ===
+  [PASS] 1a SNAP_NW_P6E 声明存在 
+       SNAP_NW_P6E = 71
+  [PASS] 1b snap_dout_all 拼接存在 
+       [mutate=swap] 交换最上面两项 (模拟'新增字错位')
+  [INFO] 1x 下一条按'总字数'判, 不按项数 (说明行, 非判据; 不计入 PASS/FAIL) 
+  [PASS] 1a 每项的字数可解析 (不可解析: 无)
+  [PASS] 1 **总字数 == SNAP_NW_P6E** (项数=36, 逐项字数之和=71, NW=71)
+  [PASS] 2a 最右一项是 snap_dout (实际 'snap_dout')
+  [PASS] 2b snap_dout 一项占 36 字 (FE14+DP22) 
+  [PASS] 3a 五个束宽 localparam 都在 (fe=14 dp=22 p7bfe=3 p7bdp=31 tx=5)
+  [PASS] 3b FE+DP = 36 (snap_seq 的两束) (14+22)
+  [PASS] 3 束宽等式 == NW (14+22+3+(31-4)+5 = 71)
+  [FAIL] 4 * 旧字未移位 (HEAD 的项 == 新表的尾部) (HEAD 35 项, 新表 36 项 => 新增 1 项全在 MSB 端)
+       第一处不同: 新表 'p7bdp_dout[30*32 +: 32]' vs HEAD 'p7bdp_dout[29*32 +: 32]'
+  [FAIL] 5a 最上面 5 项 = W70/W69/W68/W67 (p7bdp 束槽 30/29/28/27; 构建 F) (实际 ['p7bdp_dout[29*32 +: 32]', 'p7bdp_dout[30*32 +: 32]', 'p7bdp_dout[28*32 +: 32]', 'p7bdp_dout[27*32 +: 32]', 'p7bdp_dout[26*32 +: 32]'], 期望 ['p7bdp_dout[30*32 +: 32]', 'p7bdp_dout[29*32 +: 32]', 'p7bdp_dout[28*32 +: 32]', 'p7bdp_dout[27*32 +: 32]', 'p7bdp_dout[26*32 +: 32]'])
+  [PASS] 5a' 第 6 项 = W65 (tx 束槽 4; P7B-A7) (实际 'txsnap_dout[4*32 +: 32]', 期望 'txsnap_dout[4*32 +: 32]')
+  [PASS] 5b 紧随其后 14 项 = W64..W51 的槽 (MSB 先写; p7bdp) (实际 ['p7bdp_dout[25*32 +: 32]', 'p7bdp_dout[24*32 +: 32]', 'p7bdp_dout[23*32 +: 32]', 'p7bdp_dout[22*32 +: 32]', 'p7bdp_dout[21*32 +: 32]', 'p7bdp_dout[20*32 +: 32]', 'p7bdp_dout[19*32 +: 32]', 'p7bdp_dout[18*32 +: 32]', 'p7bdp_dout[17*32 +: 32]', 'p7bdp_dout[16*32 +: 32]', 'p7bdp_dout[15*32 +: 32]', 'p7bdp_dout[14*32 +: 32]', 'p7bdp_dout[13*32 +: 32]', 'p7bdp_dout[12*32 +: 32]'])
+  [PASS] 5c 槽号映射 W51 (p7bdp_din[12*32 +: 32] = biz_w51)
+  [PASS] 5c 槽号映射 W52 (p7bdp_din[13*32 +: 32] = biz_w52)
+  [PASS] 5c 槽号映射 W53 (p7bdp_din[14*32 +: 32] = biz_w53)
+  [PASS] 5c 槽号映射 W54 (p7bdp_din[15*32 +: 32] = biz_w54)
+  [PASS] 5c 槽号映射 W55 (p7bdp_din[16*32 +: 32] = biz_w55)
+  [PASS] 5c 槽号映射 W56 (p7bdp_din[17*32 +: 32] = biz_w56)
+  [PASS] 5c 槽号映射 W57 (p7bdp_din[18*32 +: 32] = biz_w57)
+  [PASS] 5c 槽号映射 W58 (p7bdp_din[19*32 +: 32] = biz_w58)
+  [PASS] 5c 槽号映射 W59 (p7bdp_din[20*32 +: 32] = biz_w59)
+  [PASS] 5c 槽号映射 W60 (p7bdp_din[21*32 +: 32] = biz_w60)
+  [PASS] 5c 槽号映射 W61 (p7bdp_din[22*32 +: 32] = biz_w61)
+  [PASS] 5c 槽号映射 W62 (p7bdp_din[23*32 +: 32] = biz_w62)
+  [PASS] 5c 槽号映射 W63 (p7bdp_din[24*32 +: 32] = biz_w63)
+  [PASS] 5c 槽号映射 W64 (p7bdp_din[25*32 +: 32] = biz_w64)
+  [PASS] 5c 槽号映射 W66 (p7bdp_din[26*32 +: 32] = biz_w66)
+  [PASS] 5c 槽号映射 W67 (p7bdp_din[27*32 +: 32] = biz_w67)
+  [PASS] 5c 槽号映射 W68 (p7bdp_din[28*32 +: 32] = biz_w68)
+  [PASS] 5c 槽号映射 W69 (p7bdp_din[29*32 +: 32] = biz_w69)
+  [PASS] 5c 槽号映射 W70 (p7bdp_din[30*32 +: 32] = biz_w70)
+  [PASS] 5d mac_tx_10g 有 `output reg [31:0] stat_tx_idle` 端口 
+  [PASS] 5d wrapper 把它接到 `mtx_stat_tx_idle` (mac_tx_10g 例化点) 
+  [PASS] 5d `mtx_stat_tx_idle` 已声明 (防隐式 1 位网) 
+  [PASS] 5d `txsnap_din` 的第一个拼接项 = `mtx_stat_tx_idle` (槽 4 → W65, tx 束最高槽) (实际 'mtx_stat_tx_idle')
+  [PASS] 12 tcp_tx_frame 有 `output reg [31:0] stat_winstall` 端口 
+  [PASS] 12 `stat_winstall` 的驱动块在每个 ifdef 分支里都有 (= 2 次) (实测 2 次)
+  [PASS] 12 wrapper 把 `stat_winstall` 接到 `tx_stat_winstall` 
+  [PASS] 12 `tx_stat_winstall` 已声明 (防隐式 1 位网) 
+  [PASS] 12 `biz_w66` (= W66) 由 `tx_stat_winstall` 驱动 
+  [PASS] 12 `p7bdp_din[26*32 +: 32] = biz_w66` (槽 ↔ 字) 
+  [PASS] 12 tcp_tx_frame 有 `output reg [31:0] stat_winstall_cap` 端口 
+  [PASS] 12 `stat_winstall_cap` 的驱动块在每个 ifdef 分支里都有 (= 2 次) (实测 2 次)
+  [PASS] 12 wrapper 把 `stat_winstall_cap` 接到 `tx_stat_winstall_cap` 
+  [PASS] 12 `tx_stat_winstall_cap` 已声明 (防隐式 1 位网) 
+  [PASS] 12 `biz_w67` (= W67) 由 `tx_stat_winstall_cap` 驱动 
+  [PASS] 12 `p7bdp_din[27*32 +: 32] = biz_w67` (槽 ↔ 字) 
+  [PASS] 12 tcp_rx 有 `output reg [31:0] stat_ack_adv` 端口 
+  [PASS] 12 `stat_ack_adv` 的驱动块在每个 ifdef 分支里都有 (= 1 次) (实测 1 次)
+  [PASS] 12 wrapper 把 `stat_ack_adv` 接到 `rx_stat_ack_adv` 
+  [PASS] 12 `rx_stat_ack_adv` 已声明 (防隐式 1 位网) 
+  [PASS] 12 `biz_w68` (= W68) 由 `rx_stat_ack_adv` 驱动 
+  [PASS] 12 `p7bdp_din[28*32 +: 32] = biz_w68` (槽 ↔ 字) 
+  [PASS] 12 tcp_tx_frame 有 `output reg [31:0] o_win_at_winstall` 端口 
+  [PASS] 12 `o_win_at_winstall` 的驱动块在每个 ifdef 分支里都有 (= 2 次) (实测 2 次)
+  [PASS] 12 wrapper 把 `o_win_at_winstall` 接到 `tx_win_at_winstall` 
+  [PASS] 12 `tx_win_at_winstall` 已声明 (防隐式 1 位网) 
+  [PASS] 12 `biz_w69` (= W69) 由 `tx_win_at_winstall` 驱动 
+  [PASS] 12 `p7bdp_din[29*32 +: 32] = biz_w69` (槽 ↔ 字) 
+  [PASS] 12b app_rx_mirror 有 `output reg [31:0] drop_bytes` 端口 
+  [PASS] 12b `drop_bytes` 的驱动块存在且唯一 (只有拒收才 +) (实测 1 次)
+  [PASS] 12b wrapper 把 `drop_bytes` 直连到 `biz_w70` (镜像例化点) 
+  [PASS] 12b `biz_w70` 已声明 (防隐式 1 位网) 
+  [PASS] 12b `p7bdp_din[30*32 +: 32] = biz_w70` (槽 ↔ 字) 
+  [PASS] 12b 装配段把 W70 写在了最上面 (MSB 端; 旧字不移位的机器可判版) 
+  [PASS] 6a p7bdp generate 存在 
+  [PASS] 6 p7bdp_din 驱动项数 == SNAP_P7BDP_NW (generate 12 + 显式 19 = 31, NW=31)
+  [PASS] 7 * 装配里的标识符全部'先声明后用' (扫描 4 个名字: p7bdp_dout,txsnap_dout,p7bfe_dout,snap_dout; 未声明/晚声明: 无)
+  [PASS] 8a ar_word 声明可解析 
+  [PASS] 8 * 未实现地址不回绕 (addr=0x13C => word 79 < 2^7=128)
+  [PASS] 8b snap_base 声明可解析 
+  [PASS] 8c snap_base 装得下 (NW-1)<<5 (need=2240 < 2^12=4096)
+  [PASS] 8d SNAP_W0_IDX == 8 (窗口起点 0x20) 
+  [PASS] 9a app_udp_pattern 有 `output reg [31:0] stat_tx_ovf` 端口 
+  [PASS] 9b wrapper 把它接到 `udpapp_tx_ovf` 
+  [PASS] 9c `udpapp_tx_ovf` 已声明 (防隐式 1 位网) 
+  [PASS] 9d `biz_w56` (= W56) 由 `udpapp_tx_ovf` 驱动 
+  [PASS] 10 slow_tx_adp 有 `output reg [31:0] stat_fifo_ovf` 
+  [PASS] 10 slow_tx_adp.stat_fifo_ovf 接到 `stx_stat_fifo_ovf` (不是接反) 
+  [PASS] 10 `biz_w59` (= W59) 由 `stx_stat_fifo_ovf` 驱动 
+  [PASS] 10 slow_rx_adp 有 `output reg [31:0] stat_fifo_ovf` 
+  [PASS] 10 slow_rx_adp.stat_fifo_ovf 接到 `srx_stat_fifo_ovf` (不是接反) 
+  [PASS] 10 `biz_w60` (= W60) 由 `srx_stat_fifo_ovf` 驱动 
+  [PASS] 11 app_pattern 有 `output reg [31:0] stat_frmwait_cyc` 端口 
+  [PASS] 11 wrapper 把 stat_frmwait_cyc 接到 `app_frmwait_cyc` (app_pattern 例化点) 
+  [PASS] 11 `app_frmwait_cyc` 已声明 (防隐式 1 位网) 
+  [PASS] 11 `biz_w63` (= W63) 由 `app_frmwait_cyc` 驱动 
+  [PASS] 11 app_pattern 有 `output reg [31:0] stat_bp_cyc` 端口 
+  [PASS] 11 wrapper 把 stat_bp_cyc 接到 `app_bp_cyc` (app_pattern 例化点) 
+  [PASS] 11 `app_bp_cyc` 已声明 (防隐式 1 位网) 
+  [PASS] 11 `biz_w64` (= W64) 由 `app_bp_cyc` 驱动 
+----------------------------------------------------------
+PASS=90 FAIL=2 INFO=1
+FAILED: 4 * 旧字未移位 (HEAD 的项 == 新表的尾部), 5a 最上面 5 项 = W70/W69/W68/W67 (p7bdp 束槽 30/29/28/27; 构建 F)
+=== check_window: P7B-BIZ 快照装配静态核对 (repo=D:\repo\XCKU5PMini\udp_hls_10g, mutate=declpatho) ===
+       [mutate=declpatho] 装配里把一个已声明网名换成未声明的拼写
+  [PASS] 1a SNAP_NW_P6E 声明存在 
+       SNAP_NW_P6E = 71
+  [PASS] 1b snap_dout_all 拼接存在 
+  [INFO] 1x 下一条按'总字数'判, 不按项数 (说明行, 非判据; 不计入 PASS/FAIL) 
+  [FAIL] 1a 每项的字数可解析 (不可解析: ['biz_w56_undeclared_typo'])
+  [FAIL] 1 **总字数 == SNAP_NW_P6E** (项数=36, 逐项字数之和=70, NW=71)
+  [PASS] 2a 最右一项是 snap_dout (实际 'snap_dout')
+  [PASS] 2b snap_dout 一项占 36 字 (FE14+DP22) 
+  [PASS] 3a 五个束宽 localparam 都在 (fe=14 dp=22 p7bfe=3 p7bdp=31 tx=5)
+  [PASS] 3b FE+DP = 36 (snap_seq 的两束) (14+22)
+  [PASS] 3 束宽等式 == NW (14+22+3+(31-4)+5 = 71)
+  [FAIL] 4 * 旧字未移位 (HEAD 的项 == 新表的尾部) (HEAD 35 项, 新表 36 项 => 新增 1 项全在 MSB 端)
+       第一处不同: 新表 'biz_w56_undeclared_typo' vs HEAD 'p7bdp_dout[17*32 +: 32]'
+  [PASS] 5a 最上面 5 项 = W70/W69/W68/W67 (p7bdp 束槽 30/29/28/27; 构建 F) (实际 ['p7bdp_dout[30*32 +: 32]', 'p7bdp_dout[29*32 +: 32]', 'p7bdp_dout[28*32 +: 32]', 'p7bdp_dout[27*32 +: 32]', 'p7bdp_dout[26*32 +: 32]'], 期望 ['p7bdp_dout[30*32 +: 32]', 'p7bdp_dout[29*32 +: 32]', 'p7bdp_dout[28*32 +: 32]', 'p7bdp_dout[27*32 +: 32]', 'p7bdp_dout[26*32 +: 32]'])
+  [PASS] 5a' 第 6 项 = W65 (tx 束槽 4; P7B-A7) (实际 'txsnap_dout[4*32 +: 32]', 期望 'txsnap_dout[4*32 +: 32]')
+  [FAIL] 5b 紧随其后 14 项 = W64..W51 的槽 (MSB 先写; p7bdp) (实际 ['p7bdp_dout[25*32 +: 32]', 'p7bdp_dout[24*32 +: 32]', 'p7bdp_dout[23*32 +: 32]', 'p7bdp_dout[22*32 +: 32]', 'p7bdp_dout[21*32 +: 32]', 'p7bdp_dout[20*32 +: 32]', 'p7bdp_dout[19*32 +: 32]', 'p7bdp_dout[18*32 +: 32]', 'biz_w56_undeclared_typo', 'p7bdp_dout[16*32 +: 32]', 'p7bdp_dout[15*32 +: 32]', 'p7bdp_dout[14*32 +: 32]', 'p7bdp_dout[13*32 +: 32]', 'p7bdp_dout[12*32 +: 32]'])
+  [PASS] 5c 槽号映射 W51 (p7bdp_din[12*32 +: 32] = biz_w51)
+  [PASS] 5c 槽号映射 W52 (p7bdp_din[13*32 +: 32] = biz_w52)
+  [PASS] 5c 槽号映射 W53 (p7bdp_din[14*32 +: 32] = biz_w53)
+  [PASS] 5c 槽号映射 W54 (p7bdp_din[15*32 +: 32] = biz_w54)
+  [PASS] 5c 槽号映射 W55 (p7bdp_din[16*32 +: 32] = biz_w55)
+  [PASS] 5c 槽号映射 W56 (p7bdp_din[17*32 +: 32] = biz_w56)
+  [PASS] 5c 槽号映射 W57 (p7bdp_din[18*32 +: 32] = biz_w57)
+  [PASS] 5c 槽号映射 W58 (p7bdp_din[19*32 +: 32] = biz_w58)
+  [PASS] 5c 槽号映射 W59 (p7bdp_din[20*32 +: 32] = biz_w59)
+  [PASS] 5c 槽号映射 W60 (p7bdp_din[21*32 +: 32] = biz_w60)
+  [PASS] 5c 槽号映射 W61 (p7bdp_din[22*32 +: 32] = biz_w61)
+  [PASS] 5c 槽号映射 W62 (p7bdp_din[23*32 +: 32] = biz_w62)
+  [PASS] 5c 槽号映射 W63 (p7bdp_din[24*32 +: 32] = biz_w63)
+  [PASS] 5c 槽号映射 W64 (p7bdp_din[25*32 +: 32] = biz_w64)
+  [PASS] 5c 槽号映射 W66 (p7bdp_din[26*32 +: 32] = biz_w66)
+  [PASS] 5c 槽号映射 W67 (p7bdp_din[27*32 +: 32] = biz_w67)
+  [PASS] 5c 槽号映射 W68 (p7bdp_din[28*32 +: 32] = biz_w68)
+  [PASS] 5c 槽号映射 W69 (p7bdp_din[29*32 +: 32] = biz_w69)
+  [PASS] 5c 槽号映射 W70 (p7bdp_din[30*32 +: 32] = biz_w70)
+  [PASS] 5d mac_tx_10g 有 `output reg [31:0] stat_tx_idle` 端口 
+  [PASS] 5d wrapper 把它接到 `mtx_stat_tx_idle` (mac_tx_10g 例化点) 
+  [PASS] 5d `mtx_stat_tx_idle` 已声明 (防隐式 1 位网) 
+  [PASS] 5d `txsnap_din` 的第一个拼接项 = `mtx_stat_tx_idle` (槽 4 → W65, tx 束最高槽) (实际 'mtx_stat_tx_idle')
+  [PASS] 12 tcp_tx_frame 有 `output reg [31:0] stat_winstall` 端口 
+  [PASS] 12 `stat_winstall` 的驱动块在每个 ifdef 分支里都有 (= 2 次) (实测 2 次)
+  [PASS] 12 wrapper 把 `stat_winstall` 接到 `tx_stat_winstall` 
+  [PASS] 12 `tx_stat_winstall` 已声明 (防隐式 1 位网) 
+  [PASS] 12 `biz_w66` (= W66) 由 `tx_stat_winstall` 驱动 
+  [PASS] 12 `p7bdp_din[26*32 +: 32] = biz_w66` (槽 ↔ 字) 
+  [PASS] 12 tcp_tx_frame 有 `output reg [31:0] stat_winstall_cap` 端口 
+  [PASS] 12 `stat_winstall_cap` 的驱动块在每个 ifdef 分支里都有 (= 2 次) (实测 2 次)
+  [PASS] 12 wrapper 把 `stat_winstall_cap` 接到 `tx_stat_winstall_cap` 
+  [PASS] 12 `tx_stat_winstall_cap` 已声明 (防隐式 1 位网) 
+  [PASS] 12 `biz_w67` (= W67) 由 `tx_stat_winstall_cap` 驱动 
+  [PASS] 12 `p7bdp_din[27*32 +: 32] = biz_w67` (槽 ↔ 字) 
+  [PASS] 12 tcp_rx 有 `output reg [31:0] stat_ack_adv` 端口 
+  [PASS] 12 `stat_ack_adv` 的驱动块在每个 ifdef 分支里都有 (= 1 次) (实测 1 次)
+  [PASS] 12 wrapper 把 `stat_ack_adv` 接到 `rx_stat_ack_adv` 
+  [PASS] 12 `rx_stat_ack_adv` 已声明 (防隐式 1 位网) 
+  [PASS] 12 `biz_w68` (= W68) 由 `rx_stat_ack_adv` 驱动 
+  [PASS] 12 `p7bdp_din[28*32 +: 32] = biz_w68` (槽 ↔ 字) 
+  [PASS] 12 tcp_tx_frame 有 `output reg [31:0] o_win_at_winstall` 端口 
+  [PASS] 12 `o_win_at_winstall` 的驱动块在每个 ifdef 分支里都有 (= 2 次) (实测 2 次)
+  [PASS] 12 wrapper 把 `o_win_at_winstall` 接到 `tx_win_at_winstall` 
+  [PASS] 12 `tx_win_at_winstall` 已声明 (防隐式 1 位网) 
+  [PASS] 12 `biz_w69` (= W69) 由 `tx_win_at_winstall` 驱动 
+  [PASS] 12 `p7bdp_din[29*32 +: 32] = biz_w69` (槽 ↔ 字) 
+  [PASS] 12b app_rx_mirror 有 `output reg [31:0] drop_bytes` 端口 
+  [PASS] 12b `drop_bytes` 的驱动块存在且唯一 (只有拒收才 +) (实测 1 次)
+  [PASS] 12b wrapper 把 `drop_bytes` 直连到 `biz_w70` (镜像例化点) 
+  [PASS] 12b `biz_w70` 已声明 (防隐式 1 位网) 
+  [PASS] 12b `p7bdp_din[30*32 +: 32] = biz_w70` (槽 ↔ 字) 
+  [PASS] 12b 装配段把 W70 写在了最上面 (MSB 端; 旧字不移位的机器可判版) 
+  [PASS] 6a p7bdp generate 存在 
+  [PASS] 6 p7bdp_din 驱动项数 == SNAP_P7BDP_NW (generate 12 + 显式 19 = 31, NW=31)
+  [FAIL] 7 * 装配里的标识符全部'先声明后用' (扫描 5 个名字: p7bdp_dout,txsnap_dout,biz_w56_undeclared_typo,p7bfe_dout,snap_dout; 未声明/晚声明: biz_w56_undeclared_typo)
+  [PASS] 8a ar_word 声明可解析 
+  [PASS] 8 * 未实现地址不回绕 (addr=0x13C => word 79 < 2^7=128)
+  [PASS] 8b snap_base 声明可解析 
+  [PASS] 8c snap_base 装得下 (NW-1)<<5 (need=2240 < 2^12=4096)
+  [PASS] 8d SNAP_W0_IDX == 8 (窗口起点 0x20) 
+  [PASS] 9a app_udp_pattern 有 `output reg [31:0] stat_tx_ovf` 端口 
+  [PASS] 9b wrapper 把它接到 `udpapp_tx_ovf` 
+  [PASS] 9c `udpapp_tx_ovf` 已声明 (防隐式 1 位网) 
+  [PASS] 9d `biz_w56` (= W56) 由 `udpapp_tx_ovf` 驱动 
+  [PASS] 10 slow_tx_adp 有 `output reg [31:0] stat_fifo_ovf` 
+  [PASS] 10 slow_tx_adp.stat_fifo_ovf 接到 `stx_stat_fifo_ovf` (不是接反) 
+  [PASS] 10 `biz_w59` (= W59) 由 `stx_stat_fifo_ovf` 驱动 
+  [PASS] 10 slow_rx_adp 有 `output reg [31:0] stat_fifo_ovf` 
+  [PASS] 10 slow_rx_adp.stat_fifo_ovf 接到 `srx_stat_fifo_ovf` (不是接反) 
+  [PASS] 10 `biz_w60` (= W60) 由 `srx_stat_fifo_ovf` 驱动 
+  [PASS] 11 app_pattern 有 `output reg [31:0] stat_frmwait_cyc` 端口 
+  [PASS] 11 wrapper 把 stat_frmwait_cyc 接到 `app_frmwait_cyc` (app_pattern 例化点) 
+  [PASS] 11 `app_frmwait_cyc` 已声明 (防隐式 1 位网) 
+  [PASS] 11 `biz_w63` (= W63) 由 `app_frmwait_cyc` 驱动 
+  [PASS] 11 app_pattern 有 `output reg [31:0] stat_bp_cyc` 端口 
+  [PASS] 11 wrapper 把 stat_bp_cyc 接到 `app_bp_cyc` (app_pattern 例化点) 
+  [PASS] 11 `app_bp_cyc` 已声明 (防隐式 1 位网) 
+  [PASS] 11 `biz_w64` (= W64) 由 `app_bp_cyc` 驱动 
+----------------------------------------------------------
+PASS=87 FAIL=5 INFO=1
+FAILED: 1a 每项的字数可解析, 1 **总字数 == SNAP_NW_P6E**, 4 * 旧字未移位 (HEAD 的项 == 新表的尾部), 5b 紧随其后 14 项 = W64..W51 的槽 (MSB 先写; p7bdp), 7 * 装配里的标识符全部'先声明后用'

@@ -3243,7 +3243,14 @@ module wrapper_p4 (
     //   `tcp_tx_frame`、W68 的源在 `tcp_rx` —— **都在 `dp_clk` 域**, 且都是**寄存器输出**
     //   (`stat_winstall_cap` / `o_win_at_winstall` / `stat_ack_adv` 都是 reg)
     //   ⇒ 满足 snap_cdc 的前提 ("b 域寄存器输出, 只在 clk_b 沿变化")。
-    localparam SNAP_NW_P6E = 70;        // 总字数 W0..W69 (未实现地址 = 0x138 = word 78)
+    // ⭐ M1 (2026-10-11): 70 → **71** —— **W70 = `app_rx_mirror.drop_bytes`** (载荷镜像被拒收的
+    //   字节数; 源 = 镜像模块的 dp 域寄存器输出 ⇒ 进 **p7bdp 束** (SNAP_P7BDP_NW 30 → 31, 槽 30))。
+    //   预算复算: 71 ≤ 119 (7 位译码上限) ✓; W70 落在 **0x138** (= 0x20+4*70, 旧"未实现地址",
+    //   现在是真字); `{snap_idx,5'b0}` 最大 = (71-1)<<5 = 2240 < 4096 ⇒ `axi_regs.snap_base`
+    //   仍是 [11:0] (**不动**); `snap_idx = r_word[6:0]-8` 最大 70 ⇒ 7 位 ✓ (回绕红线仍 ≥0x200)。
+    //   ⚠️ **新未实现地址 = 0x148** (word 82) —— MIR_STATUS/MIR_DATA/MIR_CTRL 三个字
+    //   (0x13C/0x140/0x144) 插在快照末尾与它之间 (见 axi_regs.v 头注释 §M1)。
+    localparam SNAP_NW_P6E = 71;        // 总字数 W0..W70 (未实现地址 = 0x148 = word 82)
     // ⭐ P7B-GAP9-TX (2026-10-10): 63 → **65** (W63/W64 = app_pattern 的两个停滞计数器)。
     //   预算复算: 65 ≤ 119 (7 位译码上限) ✓; 未实现地址 = 0x20+4*65 = **0x124** (word 73, 真正未实现);
     //   `{snap_idx,5'b0}` 最大 = (65-1)<<5 = 2048 < 4096 ⇒ `axi_regs.snap_base` 仍是 [11:0] (**不动**);
@@ -3264,12 +3271,14 @@ module wrapper_p4 (
     localparam SNAP_DP_NW  = 22;        // DP 束字数 (b 域 = dp_clk)
     // P7b 三条新束的字数 (与上面同源: 装配段 `snap_dout_all` 的项数必须与之对账)
     localparam SNAP_P7BFE_NW = 3;       // W36..W38 (b 域 = gmii_clk)
-    localparam SNAP_P7BDP_NW = 30;      // W39/W40, W45..W50 + W51..W60 (BIZ) + W61/W62 (WU)
+    localparam SNAP_P7BDP_NW = 31;      // W39/W40, W45..W50 + W51..W60 (BIZ) + W61/W62 (WU)
                                         //   + **W63/W64 (P7B-GAP9-TX 的两个停滞计数器)**
                                         //   + **W66 (构建 E: tcp_tx_frame.stat_winstall)**
                                         //   + **W67/W68/W69 (构建 F: 三个纯观测仪器 —— 板帽侧
-                                        //     等窗拍数 / 推进 ACK 事件数 / 等窗拍操作点锁存)** (b 域 = dp_clk)
-                                        //   ⚠️ 槽号 ↔ 字号**不连续**是刻意的 (W65 在 tx 束槽 4):
+                                        //     等窗拍数 / 推进 ACK 事件数 / 等窗拍操作点锁存)**
+                                        //   + **W70 (M1: app_rx_mirror.drop_bytes, 槽 30)** (b 域 = dp_clk)
+                                        //   ⚠️ 槽号 ↔ 字号**不连续**是刻意的 (W65 在 tx 束槽 4;
+                                        //      槽 2..5 是给 W41..W44 留的**占位**(由 tx 束搬) ⇒ 不驱动真值):
                                         //      新字一律落窗口 MSB 端, 旧字逐项不动。
     localparam SNAP_TX_NW    = 5;       // W41..W44 (b 域 = tx_mii_clk) + **W65 (P7B-A7-LINE:
                                         //   `mac_tx_10g.stat_tx_idle` 线占空计数)** —— 槽 4
@@ -3621,7 +3630,7 @@ module wrapper_p4 (
     //    端口的拼接上在 xsim 里**读回 z** (本门实测: seen 全 1 而
     //    dout 全 z) —— 这种错只有逐字读回的门能抓。
     wire [95:0]  p7bfe_dout;    // [2:0] → 槽 0/1/2
-    wire [SNAP_P7BDP_NW*32-1:0] p7bdp_dout;  // [0..29] → 槽 0..29 (BIZ 12→16; WU 16→24; GAP9-TX 24→26; 构建 E 26→27; 构建 F 27→30)
+    wire [SNAP_P7BDP_NW*32-1:0] p7bdp_dout;  // [0..30] → 槽 0..30 (BIZ 12→16; WU 16→24; GAP9-TX 24→26; 构建 E 26→27; 构建 F 27→30; **M1 30→31**)
     wire [SNAP_TX_NW*32-1:0] txsnap_dout;  // [4:0] → 槽 0..4 (槽 4 = W65; P7B-A7-LINE)
     wire        p7bfe_valid, p7bdp_valid, txsnap_valid;
     wire        p7bfe_busy,  p7bdp_busy,  txsnap_busy;
@@ -3693,6 +3702,72 @@ module wrapper_p4 (
     wire [31:0] biz_w67 = tx_stat_winstall_cap; // 槽 27 → W67 板帽侧等窗拍数 (构建 F)
     wire [31:0] biz_w68 = rx_stat_ack_adv;      // 槽 28 → W68 推进 snd_una 的 ACK 次数 (构建 F)
     wire [31:0] biz_w69 = tx_win_at_winstall;   // 槽 29 → W69 等窗拍 {在飞, 有效窗} 锁存 (构建 F)
+    // =====================================================================
+    // ⭐ M1 (2026-10-11): 载荷镜像 (app_rx_mirror) —— **三层宏: APP_MODE ∧ PCIE_OBS ∧ DP_156MHZ**
+    // ---------------------------------------------------------------------
+    // tap = UDP app RX 口 (`app_udp_rx_*`, 由 `u_udp_split` 驱动)。
+    //   ⚠️ **判据前置**: UDP app 端口 = **8081**; 8080 被 `udp_split.EXCL_PORT` 排除留给 HLS
+    //      udp_echo ⇒ **打到 8080 的 UDP 帧进不了本 tap**, 现象 = "镜像窗零字节"。
+    // 链: 逐字节 ^0xA5 → 打包 32 位字 → fifo_async (dp_clk → pcie_axi_aclk; 两侧 reset_n)
+    //     → `axi_regs` 的 MIR 读口 (MIR_STATUS/MIR_DATA 读=弹出/MIR_CTRL)。
+    // ⛔ **snoop**: 只采样 `app_udp_rx_tvalid && app_udp_rx_tready`, **不驱动**任何既有信号
+    //   (s_tready 在镜像模块里是只读输入) ⇒ 对既有数据面逐位零影响。
+    // ⛔ ¬(APP_MODE ∧ DP_156MHZ) ⇒ 全部接**常量** (v2 §V1.4 的 tie-off 常量表: level=0/empty=1/
+    //   dout=0/any_drop=0/drop(W70)=0) —— "新增端口在默认路径上必须是常量"(CLAUDE.md 同款纪律)。
+    //   ⚠️ 两个门各编一面: `board/run_lint_p6e.bat` (PCIE_OBS+APP_MODE, **无 DP_156MHZ**) 编 tie-off 支;
+    //      `sim/p6e_pcie/run_tb_p6e_pcie.bat` (+DP_156MHZ) 编真支并逐条判 S1 六条断言。
+    // ⚠️ 为什么不用 `app_rx_*` (TCP 口): 本阶段按用户裁定 **UDP 先做** (TCP 结构相同 ——
+    //   `app_rx_mirror` 是源无关的; 换 tap/加 tap 是同一个模块的另一个例化点, 见 M1 报告)。
+    // =====================================================================
+`ifdef APP_MODE
+`ifdef DP_156MHZ
+    wire [8:0]  mir_level;          // = u_mir.level (fifo_async.dbg_occ_r; 读域悲观占用)
+    wire        mir_empty;          // = u_mir.empty
+    wire [31:0] mir_dout;           // = u_mir.dout (FWFT 头字)
+    wire        mir_any_drop;       // = u_mir.any_drop_rd (dp sticky 的 rd 域 2FF 版)
+    wire        mir_pop;            // ← axi_regs.mir_pop (读=弹出脉冲)
+    wire [31:0] mir_ctrl;           // ← axi_regs.mir_ctrl ([0]=cap_en [1]=clr toggle)
+    wire [31:0] biz_w70;            // W70 = drop_bytes (dp 域寄存器输出 → p7bdp 槽 30)
+    app_rx_mirror #(.XORC(8'hA5)) u_mir (
+        .clk          (dp_clk),
+        .rst_n        (reset_n),
+        .s_tdata      (app_udp_rx_tdata),
+        .s_tkeep      (app_udp_rx_tkeep),
+        .s_tvalid     (app_udp_rx_tvalid),
+        .s_tready     (app_udp_rx_tready),   // ⚠️ snoop: 只读采样
+        .s_tlast      (app_udp_rx_tlast),
+        .ctrl_cap_en  (mir_ctrl[0]),
+        .ctrl_clr_tgl (mir_ctrl[1]),
+        .rd_clk       (pcie_axi_aclk),
+        .rd_rst_n     (reset_n),             // 两侧复位同源 (硬规则; 释放不同步允许)
+        .rd_en        (mir_pop),
+        .dout         (mir_dout),
+        .empty        (mir_empty),
+        .level        (mir_level),
+        .drop_bytes   (biz_w70),
+        .any_drop     (),                    // dp 域 sticky (无消费者; 读域版走 any_drop_rd)
+        .any_drop_rd  (mir_any_drop)
+    );
+`else
+    // ¬DP_156MHZ: tie-off 常量表 (v2 §V1.4)。MIR_CTRL 写仍被接收, 只落一个死寄存器
+    // (mir_ctrl 在此分支无消费者 ⇒ axi_regs 里对应逻辑被 opt 修剪; 读 MIR_CTRL 照旧回当前值)。
+    wire [8:0]  mir_level    = 9'd0;
+    wire        mir_empty    = 1'b1;
+    wire [31:0] mir_dout     = 32'd0;
+    wire        mir_any_drop = 1'b0;
+    wire        mir_pop;
+    wire [31:0] mir_ctrl;
+    wire [31:0] biz_w70      = 32'd0;     // drop = 0
+`endif
+`else
+    wire [8:0]  mir_level    = 9'd0;
+    wire        mir_empty    = 1'b1;
+    wire [31:0] mir_dout     = 32'd0;
+    wire        mir_any_drop = 1'b0;
+    wire        mir_pop;
+    wire [31:0] mir_ctrl;
+    wire [31:0] biz_w70      = 32'd0;
+`endif
     // ---- 追加 B (2026-09-30): 重传**会话**的定性观测 (都不新增状态) --------------
     //   来源 = `tcp_tx_frame` 的两个**已有寄存器输出** (`o_retx_hi`/`o_retx_active`
     //   = 本文件 `:2144-2145` 的接线), 它们是 `reg retx_hi`/`reg retx_active`
@@ -3802,6 +3877,7 @@ module wrapper_p4 (
     assign p7bdp_din[27*32 +: 32] = biz_w67;   // 槽 27 → W67 tcp_tx_frame.stat_winstall_cap (构建 F)
     assign p7bdp_din[28*32 +: 32] = biz_w68;   // 槽 28 → W68 tcp_rx.stat_ack_adv (构建 F)
     assign p7bdp_din[29*32 +: 32] = biz_w69;   // 槽 29 → W69 tcp_tx_frame.o_win_at_winstall (构建 F)
+    assign p7bdp_din[30*32 +: 32] = biz_w70;   // 槽 30 → W70 app_rx_mirror.drop_bytes (M1; dp 域寄存器输出)
 
     snap_cdc #(.W(32), .NW(SNAP_P7BFE_NW)) u_snap_p7bfe (
         .clk_a(pcie_axi_aclk), .rst_n(pcie_axi_aresetn), .req_a(snap_req),
@@ -3847,14 +3923,15 @@ module wrapper_p4 (
     //   ⭐ 构建 F: 新增 W67/W68/W69 落在**最上面** (= MSB 端); 旧 67 项逐项未动。
     //   ⭐ 构建 E: 新增 W66 落在**最上面** (= MSB 端); 旧 66 项逐项未动。
     //   ⚠️ 这条总线是 axi 域的组合量, 源全是 snap_cdc 的 `dout_a` 寄存器 ⇒ 采集沿稳定。
-    //   ⚠️ 非 P7B 构建里三条新束的 din 全是常量 ⇒ 后 **34** 个字读回恒 0
-    //      (3 + (30-4) + 5 = 34; 预期, 不是缺陷 —— 原注写 27 是 24 槽时代的口径, 就地订正
-    //       + 构建 E 把 26→27 槽 ⇒ 30→31 + 构建 F 把 27→30 槽 ⇒ 33→34);
+    //   ⚠️ 非 P7B 构建里三条新束的 din 全是常量 ⇒ 后 **35** 个字读回恒 0
+    //      (3 + (31-4) + 5 = 35; 预期, 不是缺陷 —— 原注写 27 是 24 槽时代的口径, 就地订正
+    //       + 构建 E 把 26→27 槽 ⇒ 30→31 + 构建 F 把 27→30 槽 ⇒ 33→34 + **M1 把 30→31 槽 ⇒ 34→35**);
     //      非 APP_MODE 构建里 W51..W54 / W56 同理 (逐字源 = 常量), 但 **W55/W57/W58 仍真**
     //      (它们的源 = tcp_tx_frame, 在任何构建里都例化)。
     //   ⚠️ **新增项一律写在最上面 (= 向量 MSB 端 = 最高槽号)**: 这样 W0..W50 的槽号
     //      逐项不动 (已入库的板级读数不受影响)。写错位置 = 全体旧字平移 = 假读数。
     wire [SNAP_NW_P6E*32-1:0] snap_dout_all = {
+        p7bdp_dout[30*32 +: 32],   // W70 app_rx_mirror.drop_bytes (M1 载荷镜像拒收字节数; 槽 30)
         p7bdp_dout[29*32 +: 32],   // W69 tcp_tx_frame.o_win_at_winstall (等窗拍 {在飞, 有效窗} 锁存; 构建 F)
         p7bdp_dout[28*32 +: 32],   // W68 tcp_rx.stat_ack_adv (推进 snd_una 的 ACK 次数; 构建 F)
         p7bdp_dout[27*32 +: 32],   // W67 tcp_tx_frame.stat_winstall_cap (板帽侧等窗拍数; 构建 F)
@@ -4326,7 +4403,14 @@ module wrapper_p4 (
         .snap_din       (snap_dout_all),
         // P6b: SNAP_STATUS 的两个新字段 (加位不改已有位 ⇒ 既有脚本的取位方式不受影响)
         .fe_state       (snap_fe_state),          // [5:3] = {fe_busy, fe_seen, fe_done}
-        .locked_axi     (mmcm_locked_sr_axi[1])   // [6]   = MMCM locked (axi 域同步版)
+        .locked_axi     (mmcm_locked_sr_axi[1]),  // [6]   = MMCM locked (axi 域同步版)
+        // ---- ⭐ M1: 载荷镜像窗 (¬(APP_MODE∧DP_156MHZ) 时上面接的是 tie-off 常量) ----
+        .mir_level      (mir_level),
+        .mir_empty      (mir_empty),
+        .mir_dout       (mir_dout),
+        .mir_any_drop   (mir_any_drop),
+        .mir_pop        (mir_pop),               // 输出: 读=弹出 (与 !empty 同门)
+        .mir_ctrl       (mir_ctrl)               // 输出: [0]=cap_en [1]=clr toggle
     );
 `endif
 

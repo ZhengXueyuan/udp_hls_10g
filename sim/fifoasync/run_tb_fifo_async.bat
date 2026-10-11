@@ -23,6 +23,7 @@ if /i "%CASE%"=="reset"   set PA=C_RESET
 if /i "%CASE%"=="clkstop" set PA=C_CLKSTOP
 if /i "%CASE%"=="lat"     set PA=C_LAT
 if /i "%CASE%"=="early"   set PA=C_EARLY
+if /i "%CASE%"=="mir"     set PA=C_MIR
 set CASEDIR=%~dp0case_%CASE%
 if not exist "%CASEDIR%" mkdir "%CASEDIR%"
 cd /d "%CASEDIR%"
